@@ -8,10 +8,10 @@ AR=$(BINPATH)/arm-none-eabi-ar
 vpath %.c src
 
 CFLAGS  = -g -O2 -Wall
-CFLAGS += -DSTM32F746xx -DREENTRANT_SYSCALLS_PROVIDED -DARM_MATH_CM4 -DUSE_STDPERIPH_DRIVER
+CFLAGS += -DSTM32F746xx -DREENTRANT_SYSCALLS_PROVIDED -DARM_MATH_CM7 -DUSE_STDPERIPH_DRIVER
 CFLAGS += -mlittle-endian -mthumb -mthumb-interwork -mcpu=cortex-m7
 CFLAGS += -fsingle-precision-constant -Wdouble-promotion
-CFLAGS += -mfpu=fpv4-sp-d16 -mfloat-abi=hard
+CFLAGS += -mfpu=fpv5-sp-d16 -mfloat-abi=hard
 CFLAGS += -ffreestanding -nostdlib
 
 # Includes
@@ -32,6 +32,7 @@ all: $(LIBNAME)
 	$(CC) $(CFLAGS) -c -o $@ $^
 
 $(LIBNAME): $(OBJS)
+	$(CC) -o option.o src/option/*.c $(CFLAGS)
 	$(AR) -r ../../../$@ $(OBJS)
 
 clean:

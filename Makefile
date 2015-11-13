@@ -67,11 +67,11 @@ CFLAGS += -DHSE_VALUE=$(EXT_CLK_RATE)
 # This will cause us to ignore the external OSC!!
 CFLAGS += -DRUN_WITH_HSI
 
-CFLAGS += -DSTM32F746xx -DREENTRANT_SYSCALLS_PROVIDED -DARM_MATH_CM4 -DUSE_STDPERIPH_DRIVER
+CFLAGS += -DSTM32F746xx -DREENTRANT_SYSCALLS_PROVIDED -DARM_MATH_CM7 -DUSE_STDPERIPH_DRIVER
 CFLAGS += -DUSE_USB_OTG_FS
 CFLAGS += -mlittle-endian -mthumb -mthumb-interwork -mcpu=cortex-m7
 CFLAGS += -fsingle-precision-constant -Wdouble-promotion
-CFLAGS += -mfpu=fpv4-sp-d16 -mfloat-abi=hard
+CFLAGS += -mfpu=fpv5-sp-d16 -mfloat-abi=hard
 CFLAGS += -ffreestanding
 
 
@@ -103,8 +103,9 @@ CFLAGS += $(CPP_FLAGS)
 ###########################################################################
 SRCS    = src/*.c
 SRCS   += lib/Drivers/CMSIS/Device/ST/STM32F7xx/Source/Templates/gcc/startup_stm32f746xx.s
+SRCS   += lib/Drivers/CMSIS/Device/ST/STM32F7xx/Source/Templates/system_stm32f7xx.c
 
-CPP_SRCS  = src/*.cpp
+#CPP_SRCS  = src/*.cpp
 
 #SRCS   += $(CPP_SRCS)
 
@@ -115,7 +116,6 @@ vpath %.cpp src
 vpath %.c src
 vpath %.a lib
 
-OBJS = $(SRCS:.c=.o)
 
 ###########################################################################
 # Rules for building the firmware follow...
@@ -131,12 +131,12 @@ all: lib $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 lib:
 	$(MAKE) -C lib
 
-
 $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: $(SRCS)
 	$(shell mkdir $(OUTPUT_PATH))
 	$(CPP_CROSS) $(CFLAGS) $^ -o $@ $(LIBPATHS) $(LIBS)
 	$(CP_CROSS) -O ihex $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 	$(CP_CROSS) -O binary $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin
+
 
 program: $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 #	$(TOOLCHAIN)/arm-none-eabi-gdb $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf --eval-command="tar extended-remote :4242" --eval-command="load"

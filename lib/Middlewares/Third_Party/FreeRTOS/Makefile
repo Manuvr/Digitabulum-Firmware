@@ -8,10 +8,10 @@ AR=$(BINPATH)/arm-none-eabi-ar
 vpath %.c src
 
 CFLAGS  = -g -O2 -Wall
-CFLAGS += -DSTM32F746xx -DREENTRANT_SYSCALLS_PROVIDED -DARM_MATH_CM4 -DUSE_STDPERIPH_DRIVER
+CFLAGS += -DSTM32F746xx -DREENTRANT_SYSCALLS_PROVIDED -DARM_MATH_CM7 -DUSE_STDPERIPH_DRIVER
 CFLAGS += -mlittle-endian -mthumb -mthumb-interwork -mcpu=cortex-m7
 CFLAGS += -fsingle-precision-constant -Wdouble-promotion
-CFLAGS += -mfpu=fpv4-sp-d16 -mfloat-abi=hard
+CFLAGS += -mfpu=fpv5-sp-d16 -mfloat-abi=hard
 CFLAGS += -ffreestanding -nostdlib
 
 # Includes
@@ -34,7 +34,8 @@ all: $(LIBNAME)
 $(LIBNAME): $(OBJS)
 	$(CC) $(CFLAGS) -c -o cmsis_os.o Source/CMSIS_RTOS/cmsis_os.c
 	$(CC) $(CFLAGS) -c -o port.o Source/portable/GCC/ARM_CM7/r0p1/port.c
-	$(AR) -r ../../../$@ $(OBJS)
+	$(CC) $(CFLAGS) -c -o heap.o Source/portable/MemMang/heap_4.c
+	$(AR) -r ../../../$@ *.o
 
 clean:
 	rm -f *.o
