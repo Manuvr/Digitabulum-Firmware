@@ -101,7 +101,9 @@ CFLAGS += $(CPP_FLAGS)
 ###########################################################################
 # Source file definitions...
 ###########################################################################
-SRCS    = src/*.c
+SRCS    = src/main.c src/sdmmc src/spi.c src/syscalls.c src/tim.c src/usart.c src/usb_otg
+SRCS   += src/bsp_driver_sd.c src/fatfs.c src/freertos.c src/gpio.c src/i2c.c src/rng.c 
+SRCS   += src/stm32f7xx_hal_msp.c src/stm32f7xx_it.c
 SRCS   += lib/Drivers/CMSIS/Device/ST/STM32F7xx/Source/Templates/gcc/startup_stm32f746xx.s
 SRCS   += lib/Drivers/CMSIS/Device/ST/STM32F7xx/Source/Templates/system_stm32f7xx.c
 
@@ -120,7 +122,7 @@ vpath %.a lib
 ###########################################################################
 # Rules for building the firmware follow...
 ###########################################################################
-
+OBJS = $(SRCS:.c=.o)
 .PHONY: lib $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 
 
@@ -128,12 +130,17 @@ all: lib $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 	$(SZ_CROSS) $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 
 
+%.o : %.c
+	$(CPP_CROSS) $(CFLAGS) -c -o $@ $^
+
+
 lib:
 	$(MAKE) -C lib
 
-$(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: $(SRCS)
+
+$(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: $(OBJS)
 	$(shell mkdir $(OUTPUT_PATH))
-	$(CPP_CROSS) $(CFLAGS) $^ -o $@ $(LIBPATHS) $(LIBS)
+	$(CPP_CROSS) $(CFLAGS) $^ -o $@ $(OBJS) $(LIBPATHS) $(LIBS)
 	$(CP_CROSS) -O ihex $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 	$(CP_CROSS) -O binary $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin
 
@@ -141,6 +148,7 @@ $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: $(SRCS)
 program: $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 #	$(TOOLCHAIN)/arm-none-eabi-gdb $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf --eval-command="tar extended-remote :4242" --eval-command="load"
 	dfu-util -d 0483:df11 -a 0  -s 0x8000000 -D $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin --reset
+
 
 fullclean: clean
 	rm -rf doc/doxygen/*

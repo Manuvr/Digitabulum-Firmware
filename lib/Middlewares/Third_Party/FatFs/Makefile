@@ -32,7 +32,6 @@ all: $(LIBNAME)
 	$(CC) $(CFLAGS) -c -o $@ $^
 
 $(LIBNAME): $(OBJS)
-	$(CC) -o option.o src/option/*.c $(CFLAGS)
 	$(AR) -r ../../../$@ $(OBJS)
 
 clean:
