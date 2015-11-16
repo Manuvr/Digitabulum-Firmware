@@ -40,8 +40,7 @@ char SD_Path[4];  /* SD logical drive path */
 
 /* USER CODE END Variables */    
 
-void MX_FATFS_Init(void) 
-{
+void MX_FATFS_Init(void) {
   /*## FatFS: Link the SD driver ###########################*/
   retSD = FATFS_LinkDriver(&SD_Driver, SD_Path);
 
@@ -55,15 +54,8 @@ void MX_FATFS_Init(void)
   * @param  None
   * @retval Time in DWORD
   */
-DWORD get_fattime(void)
-{
+DWORD get_fattime(void) {
   /* USER CODE BEGIN get_fattime */
   return 0;
-  /* USER CODE END get_fattime */  
 }
 
-/* USER CODE BEGIN Application */
-     
-/* USER CODE END Application */
-
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

@@ -67,12 +67,9 @@ void MX_FREERTOS_Init(void);
 
 /* USER CODE END 0 */
 
-int main(void)
-{
-
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
+int main(void) {
+  SCB_EnableICache();       /* Enable I-Cache */
+  SCB_EnableDCache();       /* Enable D-Cache */
 
   /* MCU Configuration----------------------------------------------------------*/
 
@@ -83,15 +80,15 @@ int main(void)
   SystemClock_Config();
 
   /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_I2C1_Init();
+  //MX_GPIO_Init();
+  //MX_I2C1_Init();
   MX_RNG_Init();
   MX_SDMMC1_SD_Init();
-  MX_SPI1_Init();
-  MX_SPI2_Init();
-  MX_TIM1_Init();
-  MX_TIM2_Init();
-  MX_USART2_UART_Init();
+  //MX_SPI1_Init();
+  //MX_SPI2_Init();
+  //MX_TIM1_Init();
+  //MX_TIM2_Init();
+  //MX_USART2_UART_Init();
   MX_USB_OTG_FS_USB_Init();
 
   /* USER CODE BEGIN 2 */
@@ -105,19 +102,11 @@ int main(void)
   osKernelStart();
   
   /* We should never get here as control is now taken by the scheduler */
-
   /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-  /* USER CODE END WHILE */
-
-  /* USER CODE BEGIN 3 */
-
+  while (1) {
   }
-  /* USER CODE END 3 */
-
 }
+
 
 /** System Clock Configuration
 */
@@ -188,6 +177,8 @@ void assert_failed(uint8_t* file, uint32_t line)
     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
 
+  while (1) {
+  }
 }
 
 #endif

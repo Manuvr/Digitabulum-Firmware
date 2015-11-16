@@ -63,16 +63,16 @@ MCUFLAGS += -ffreestanding
 LIBPATHS  = -L. -Llib/
 
 # Libraries to link
-LIBS = -lm -lstdperiph -lfatfs -lfreertos -lc -lgcc -lstdc++ -lsupc++
+LIBS = -lm -lfatfs -lstdperiph -lfreertos -lc -lgcc -lstdc++
 
 # Flags for the linker...
 LDFLAGS = -static $(MCUFLAGS)
-LDFLAGS += -Wl,--start-group $(LIBS) -Wl,--end-group
-LDFLAGS += -Wl,--gc-sections -Wall -Tdigitabulum.ld
 LDFLAGS += $(LIBPATHS)
+LDFLAGS += -Wl,--start-group $(LIBS) -Wl,--end-group
+LDFLAGS += -Wl,--gc-sections -Wall -Tdigitabulum.ld --stats 
 
 # Wrap the include paths into the flags...
-CFLAGS = $(INCLUDES)
+CFLAGS =  $(INCLUDES)
 CFLAGS += $(OPTIMIZATION) -Wall
 
 CFLAGS += $(MCUFLAGS)
@@ -81,8 +81,10 @@ CFLAGS += $(MCUFLAGS)
 CFLAGS += -DREENTRANT_SYSCALLS_PROVIDED -DUSE_STDPERIPH_DRIVER
 CFLAGS += -DUSE_USB_OTG_FS
 
+# Debug options.
+CFLAGS += -g -ggdb
 
-CPP_FLAGS = -std=$(CPP_STANDARD) -lstdc++
+CPP_FLAGS = -std=$(CPP_STANDARD)
 #CPP_FLAGS += -fno-use-linker-plugin 
 #CPP_FLAGS += -fno-rtti -fno-exceptions
 #CPP_FLAGS += -fstack-usage
@@ -111,8 +113,8 @@ CFLAGS += $(CPP_FLAGS)
 SRCS    = src/main.c src/sdmmc.c src/spi.c src/syscalls.c src/tim.c src/usart.c src/usb_otg.c
 SRCS   += src/bsp_driver_sd.c src/fatfs.c src/freertos.c src/gpio.c src/i2c.c src/rng.c 
 SRCS   += src/stm32f7xx_hal_msp.c src/stm32f7xx_it.c
-#SRCS   += lib/Drivers/CMSIS/Device/ST/STM32F7xx/Source/Templates/gcc/startup_stm32f746xx.s
-#SRCS   += lib/Drivers/CMSIS/Device/ST/STM32F7xx/Source/Templates/system_stm32f7xx.c
+SRCS   += src/system_stm32f7xx.c src/startup.s
+
 
 #CPP_SRCS  = src/*.cpp
 
@@ -145,16 +147,17 @@ lib:
 	$(MAKE) -C lib
 
 
-$(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: $(OBJS)
+$(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: 
 	$(shell mkdir $(OUTPUT_PATH))
-	$(CPP_CROSS) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CPP_CROSS) -c $(CFLAGS) $(SRCS)
+	$(CPP_CROSS) $(CFLAGS) $^ -o $@ *.o $(LDFLAGS)
 	$(CP_CROSS) -O ihex $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 	$(CP_CROSS) -O binary $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin
 
 
 program: $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 #	$(TOOLCHAIN)/arm-none-eabi-gdb $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf --eval-command="tar extended-remote :4242" --eval-command="load"
-	dfu-util -d 0483:df11 -a 0  -s 0x8000000 -D $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin --reset
+	dfu-util -d 0483:df11 -a 0  -s 0x08000000 -D $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin --reset
 
 
 fullclean: clean

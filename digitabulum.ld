@@ -33,7 +33,7 @@
 ENTRY(Reset_Handler)
 
 /* Highest address of the user mode stack */
-_estack = 0x20020000;    /* end of 128K RAM on AHB bus*/
+_estack = 0x20010000;    /* end of CCM RAM */
 
 /* Generate a link error if heap and stack don't fit into RAM */
 _Min_Heap_Size = 0;      /* required amount of heap  */
@@ -42,11 +42,13 @@ _Min_Stack_Size = 0x400; /* required amount of stack */
 /* Specify the memory areas */
 MEMORY
 {
-  FLASH (rx)      : ORIGIN = 0x08000000, LENGTH = 1M
-  RAM (xrw)       : ORIGIN = 0x20000000, LENGTH = 128K
-  CCMRAM (rw)     : ORIGIN = 0x10000000, LENGTH = 64K
-  BACKUP (rw)     : ORIGIN = 0x40024000, LENGTH = 4K
-  MEMORY_B1 (rx)  : ORIGIN = 0x60000000, LENGTH = 0K
+  ITCM_RAM (xrx)  : ORIGIN = 0x00000000, LENGTH = 16K    /* Instruction RAM. */
+  FLASH (xrx)     : ORIGIN = 0x08000000, LENGTH = 1024K
+  CCMRAM (rw)     : ORIGIN = 0x20000000, LENGTH = 64K    /* Stack */
+  RAM (xrw)       : ORIGIN = 0x20010000, LENGTH = 240K   /* Heap  */
+  SRAM2 (xrw)     : ORIGIN = 0x200C4000, LENGTH = 16K    /* We will use this block for DMA. */
+  BACKUP (rw)     : ORIGIN = 0x40024000, LENGTH = 4K     /* Non-volatile backup. */
+  MEMORY_B1 (rx)  : ORIGIN = 0x60000000, LENGTH = 0K     /* Expansion port (TBD) */
 }
 
 /* Define output sections */
@@ -127,8 +129,13 @@ SECTIONS
   /* Uninitialized data section */
   . = ALIGN(4);
 
-  /* We want to use the CCM for stack. Thanks again, clive1. 
+  /* 
+  * We want to use the CCM for stack. Thanks again, clive1. 
   * https://my.st.com/public/STe2ecommunities/mcu/Lists/cortex_mx_stm32/Flat.aspx?RootFolder=https%3a%2f%2fmy%2est%2ecom%2fpublic%2fSTe2ecommunities%2fmcu%2fLists%2fcortex_mx_stm32%2fMake%20use%20of%20the%2064k%20CCM&FolderCTID=0x01200200770978C69A1141439FE559EB459D7580009C4E14902C3CDE46A77F0FFD06506F5B&currentviews=5234
+  *
+  * It is also worth mentioning that this RAM can be accessed atomicly in 64-bit. This might be a good
+  *   reason to ALIGN(8), to prevent the manual alignment required to keep floating-point numbers aligned
+  *   on those boundaries.
   */
   .ccm (NOLOAD) :
   {
@@ -139,6 +146,36 @@ SECTIONS
       . = ALIGN(4);
       _eccm = .;
   } >CCMRAM 
+
+  /*
+  * Instruction RAM. We have 16KB of low-latency memory to keep oft-traversed roads...
+  */
+  .itcm (NOLOAD) :
+  {
+      . = ALIGN(4);
+      _sitcm = .;
+      *(.itcm)
+      *(.itcm.*)
+      . = ALIGN(4);
+      _eitcm = .;
+  } >ITCM_RAM 
+  
+  
+  /*
+  * In an effort to more completely decouple i/o from computation, we use the top 16K SRAM bank
+  *   for DMA buffers.
+  *
+  * Align 4, and use the FIFOs on the DMA peripherals. Lowers needless strain on the memory bus.
+  */
+  .dma (NOLOAD) :
+  {
+      . = ALIGN(4);
+      _sdma = .;
+      *(.dma)
+      *(.dma.*)
+      . = ALIGN(4);
+      _edma = .;
+  } >SRAM2 
 
   .bss :
   {

@@ -111,8 +111,7 @@ void MX_FREERTOS_Init(void) {
 }
 
 /* StartTask01 function */
-void StartTask01(void const * argument)
-{
+void StartTask01(void const * argument) {
   /* init code for FATFS */
   MX_FATFS_Init();
 
@@ -122,35 +121,24 @@ void StartTask01(void const * argument)
   {
     osDelay(1);
   }
-  /* USER CODE END StartTask01 */
 }
 
 /* StartTask02 function */
-void StartTask02(void const * argument)
-{
+void StartTask02(void const * argument) {
   /* USER CODE BEGIN StartTask02 */
   /* Infinite loop */
   for(;;)
   {
     osDelay(1);
   }
-  /* USER CODE END StartTask02 */
 }
 
 /* StartTask03 function */
-void StartTask03(void const * argument)
-{
+void StartTask03(void const * argument) {
   /* USER CODE BEGIN StartTask03 */
   /* Infinite loop */
   for(;;)
   {
     osDelay(1);
   }
-  /* USER CODE END StartTask03 */
 }
-
-/* USER CODE BEGIN Application */
-     
-/* USER CODE END Application */
-
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
