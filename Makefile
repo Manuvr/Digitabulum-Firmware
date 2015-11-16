@@ -51,28 +51,35 @@ INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7
 INCLUDES   += -Ilib/Middlewares/Third_Party/FatFs/src
 INCLUDES   += -Ilib/Middlewares/Third_Party/FatFs/src/drivers
 
+# Describing the target arch....
+MCUFLAGS  = -DHSE_VALUE=$(EXT_CLK_RATE) -DRUN_WITH_HSI
+MCUFLAGS += -DSTM32F746xx -DARM_MATH_CM7 
+MCUFLAGS += -mlittle-endian -mthumb -mthumb-interwork -mcpu=cortex-m7
+MCUFLAGS += -fsingle-precision-constant -Wdouble-promotion
+MCUFLAGS += -mfpu=fpv5-sp-d16 -mfloat-abi=hard
+MCUFLAGS += -ffreestanding
+
 # Library paths
 LIBPATHS  = -L. -Llib/
 
 # Libraries to link
-LIBS = -lm -lstdperiph -lfatfs -lfreertos -lc
+LIBS = -lm -lstdperiph -lfatfs -lfreertos -lc -lgcc -lstdc++ -lsupc++
+
+# Flags for the linker...
+LDFLAGS = -static $(MCUFLAGS)
+LDFLAGS += -Wl,--start-group $(LIBS) -Wl,--end-group
+LDFLAGS += -Wl,--gc-sections -Wall -Tdigitabulum.ld
+LDFLAGS += $(LIBPATHS)
 
 # Wrap the include paths into the flags...
 CFLAGS = $(INCLUDES)
-#CFLAGS += -g -ggdb
-CFLAGS += $(OPTIMIZATION) -Wall -Tdigitabulum.ld
+CFLAGS += $(OPTIMIZATION) -Wall
 
-CFLAGS += -DHSE_VALUE=$(EXT_CLK_RATE)
+CFLAGS += $(MCUFLAGS)
 
 # This will cause us to ignore the external OSC!!
-CFLAGS += -DRUN_WITH_HSI
-
-CFLAGS += -DSTM32F746xx -DREENTRANT_SYSCALLS_PROVIDED -DARM_MATH_CM7 -DUSE_STDPERIPH_DRIVER
+CFLAGS += -DREENTRANT_SYSCALLS_PROVIDED -DUSE_STDPERIPH_DRIVER
 CFLAGS += -DUSE_USB_OTG_FS
-CFLAGS += -mlittle-endian -mthumb -mthumb-interwork -mcpu=cortex-m7
-CFLAGS += -fsingle-precision-constant -Wdouble-promotion
-CFLAGS += -mfpu=fpv5-sp-d16 -mfloat-abi=hard
-CFLAGS += -ffreestanding
 
 
 CPP_FLAGS = -std=$(CPP_STANDARD) -lstdc++
@@ -101,11 +108,11 @@ CFLAGS += $(CPP_FLAGS)
 ###########################################################################
 # Source file definitions...
 ###########################################################################
-SRCS    = src/main.c src/sdmmc src/spi.c src/syscalls.c src/tim.c src/usart.c src/usb_otg
+SRCS    = src/main.c src/sdmmc.c src/spi.c src/syscalls.c src/tim.c src/usart.c src/usb_otg.c
 SRCS   += src/bsp_driver_sd.c src/fatfs.c src/freertos.c src/gpio.c src/i2c.c src/rng.c 
 SRCS   += src/stm32f7xx_hal_msp.c src/stm32f7xx_it.c
-SRCS   += lib/Drivers/CMSIS/Device/ST/STM32F7xx/Source/Templates/gcc/startup_stm32f746xx.s
-SRCS   += lib/Drivers/CMSIS/Device/ST/STM32F7xx/Source/Templates/system_stm32f7xx.c
+#SRCS   += lib/Drivers/CMSIS/Device/ST/STM32F7xx/Source/Templates/gcc/startup_stm32f746xx.s
+#SRCS   += lib/Drivers/CMSIS/Device/ST/STM32F7xx/Source/Templates/system_stm32f7xx.c
 
 #CPP_SRCS  = src/*.cpp
 
@@ -140,7 +147,7 @@ lib:
 
 $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: $(OBJS)
 	$(shell mkdir $(OUTPUT_PATH))
-	$(CPP_CROSS) $(CFLAGS) $^ -o $@ $(OBJS) $(LIBPATHS) $(LIBS)
+	$(CPP_CROSS) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 	$(CP_CROSS) -O ihex $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 	$(CP_CROSS) -O binary $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin
 
