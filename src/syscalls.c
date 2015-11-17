@@ -66,6 +66,12 @@ int _kill(int pid, int sig) {
     return (-1);
 }
 
+void _exit (int status)
+{
+    _kill(status, -1);
+    while (1) {}
+}
+
 
 int _write(int file, char *ptr, int len) {
   //VCP_send_buffer((uint8_t*)ptr, len);
@@ -78,7 +84,6 @@ int _write(int file, char *ptr, int len) {
  sbrk
  Increase program data space.
  Malloc and related functions depend on this
- */
 caddr_t _sbrk(int incr) {
 
     extern char _ebss; // Defined by the linker
@@ -103,11 +108,40 @@ caddr_t _sbrk(int incr) {
     heap_end += incr;
     return (caddr_t) prev_heap_end;
 }
+ */
 
+#define MAX_STACK_SIZE 0x2000
+caddr_t _sbrk(int incr)
+{
+    extern char end asm("end");
+    static char *heap_end;
+    char *prev_heap_end,*min_stack_ptr;
 
+    if (heap_end == 0)
+        heap_end = &end;
 
-/* Register name faking - works in collusion with the linker.  */
-register char * stack_ptr asm ("sp");
+    prev_heap_end = heap_end;
+
+//#ifdef FreeRTOS
+    /* Use the NVIC offset register to locate the main stack pointer. */
+    min_stack_ptr = (char*)(*(unsigned int *)*(unsigned int *)0xE000ED08);
+    /* Locate the STACK bottom address */
+    min_stack_ptr -= MAX_STACK_SIZE;
+
+    if (heap_end + incr > min_stack_ptr)
+//#endif
+    {
+//      write(1, "Heap and stack collision\n", 25);
+//      abort();
+        errno = ENOMEM;
+        return (caddr_t) -1;
+    }
+
+    heap_end += incr;
+
+    return (caddr_t) prev_heap_end;
+}
+
 
 caddr_t _sbrk_r (struct _reent *r, int incr) {
   extern char   end asm ("end"); /* Defined by the linker.  */

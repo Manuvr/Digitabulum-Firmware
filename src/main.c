@@ -152,7 +152,7 @@ void SystemClock_Config(void) {
   PeriphClkInitStruct.Clk48ClockSelection = RCC_CLK48SOURCE_PLL;
   PeriphClkInitStruct.Sdmmc1ClockSelection = RCC_SDMMC1CLKSOURCE_CLK48;
   if(HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct)  != HAL_OK) {
-    Error_Handler();
+    while(1) { ; }
   }
 
   HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/8000);

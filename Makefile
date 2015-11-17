@@ -70,7 +70,7 @@ LDFLAGS = -static $(MCUFLAGS)
 LDFLAGS += $(LIBPATHS)
 LDFLAGS += -Wl,--start-group $(LIBS) -Wl,--end-group
 LDFLAGS += -Wl,--gc-sections -Wall -Tdigitabulum.ld --stats 
-LDFLAGS += -Xlinker -Map -Xlinker $(PROJECT).map
+LDFLAGS += -Xlinker -Map -Xlinker $(FIRMWARE_NAME).map
 
 # Wrap the include paths into the flags...
 CFLAGS =  $(INCLUDES)
@@ -84,6 +84,8 @@ CFLAGS += -DUSE_USB_OTG_FS
 
 # Debug options.
 CFLAGS += -g -ggdb
+CFLAGS += -Wl,-Map=$(FIRMWARE_NAME).map
+
 
 CPP_FLAGS = -std=$(CPP_STANDARD)
 #CPP_FLAGS += -fno-use-linker-plugin 
