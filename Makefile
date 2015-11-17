@@ -70,6 +70,7 @@ LDFLAGS = -static $(MCUFLAGS)
 LDFLAGS += $(LIBPATHS)
 LDFLAGS += -Wl,--start-group $(LIBS) -Wl,--end-group
 LDFLAGS += -Wl,--gc-sections -Wall -Tdigitabulum.ld --stats 
+LDFLAGS += -Xlinker -Map -Xlinker $(PROJECT).map
 
 # Wrap the include paths into the flags...
 CFLAGS =  $(INCLUDES)
@@ -165,7 +166,7 @@ fullclean: clean
 	$(MAKE) clean -C lib
 
 clean:
-	rm -f *.o *.su *~
+	rm -f *.o *.su *~ *.map
 	rm -rf $(OUTPUT_PATH)
 
 doc:

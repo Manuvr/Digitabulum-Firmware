@@ -66,6 +66,8 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
 /* Init FreeRTOS */
 
+
+
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
        
@@ -113,13 +115,12 @@ void MX_FREERTOS_Init(void) {
 /* StartTask01 function */
 void StartTask01(void const * argument) {
   /* init code for FATFS */
-  MX_FATFS_Init();
+  //MX_FATFS_Init();
 
   /* USER CODE BEGIN StartTask01 */
   /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
+  for(;;) {
+    osDelay(20);
   }
 }
 
