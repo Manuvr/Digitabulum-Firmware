@@ -119,9 +119,10 @@ SRCS   += src/stm32f7xx_hal_msp.c src/stm32f7xx_it.c
 SRCS   += src/system_stm32f7xx.c src/startup.s
 
 
-#CPP_SRCS  = src/*.cpp
+CPP_SRCS  = src/StringBuilder/*.cpp
+CPP_SRCS += src/StringBuilder/*.cpp
 
-#SRCS   += $(CPP_SRCS)
+SRCS   += $(CPP_SRCS)
 
 
 ###################################################
