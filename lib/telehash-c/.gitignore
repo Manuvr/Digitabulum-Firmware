@@ -1,0 +1,10 @@
+*.o
+*.a
+*.json
+*.dSYM
+*.dtps
+.DS_Store
+node_modules/
+telehash.c
+telehash.h
+/TAGS
