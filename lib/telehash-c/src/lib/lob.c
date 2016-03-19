@@ -4,11 +4,6 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdarg.h>
-#include "telehash.h" // util_sort(), util_sys_short()
-#include "telehash.h" // e3x_rand()
-#include "telehash.h"
-#include "telehash.h"
-#include "telehash.h"
 
 lob_t lob_new()
 {
@@ -272,7 +267,7 @@ lob_t lob_set_float(lob_t p, char *key, float value, uint8_t places)
   static char buf[16];
 
   if(!p || !key) return LOG("bad args");
-  
+
   buf[0] = 0; // reset
 
   float d = 0.5;
