@@ -41,8 +41,8 @@ SZ_CROSS       = $(TOOLCHAIN)/arm-none-eabi-size
 ###########################################################################
 # Source files, includes, and linker directives...
 ###########################################################################
-INCLUDES    = -iquote. -iquotesrc/ 
-INCLUDES   += -Icompiler/arm-none-eabi/include/ 
+INCLUDES    = -iquote. -iquotesrc/
+INCLUDES   += -Icompiler/arm-none-eabi/include/
 INCLUDES   += -Ilib/Drivers/STM32F7xx_HAL_Driver/Inc/ -Ilib/Inc -Ilib/Drivers/CMSIS/Device/ST/STM32F7xx/Include
 INCLUDES   += -Ilib/Drivers/CMSIS/Include
 INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS
@@ -53,7 +53,7 @@ INCLUDES   += -Ilib/Middlewares/Third_Party/FatFs/src/drivers
 
 # Describing the target arch....
 MCUFLAGS  = -DHSE_VALUE=$(EXT_CLK_RATE) -DRUN_WITH_HSI
-MCUFLAGS += -DSTM32F746xx -DARM_MATH_CM7 
+MCUFLAGS += -DSTM32F746xx -DARM_MATH_CM7
 MCUFLAGS += -mlittle-endian -mthumb -mthumb-interwork -mcpu=cortex-m7
 MCUFLAGS += -fsingle-precision-constant -Wdouble-promotion
 MCUFLAGS += -mfpu=fpv5-sp-d16 -mfloat-abi=hard
@@ -69,7 +69,7 @@ LIBS = -lm -lfatfs -lstdperiph -lfreertos -lc -lgcc -lstdc++
 LDFLAGS = -static $(MCUFLAGS)
 LDFLAGS += $(LIBPATHS)
 LDFLAGS += -Wl,--start-group $(LIBS) -Wl,--end-group
-LDFLAGS += -Wl,--gc-sections -Wall -Tdigitabulum.ld --stats 
+LDFLAGS += -Wl,--gc-sections -Wall -Tdigitabulum.ld --stats
 LDFLAGS += -Xlinker -Map -Xlinker $(FIRMWARE_NAME).map
 
 # Wrap the include paths into the flags...
@@ -88,7 +88,7 @@ CFLAGS += -Wl,-Map=$(FIRMWARE_NAME).map
 
 
 CPP_FLAGS = -std=$(CPP_STANDARD)
-#CPP_FLAGS += -fno-use-linker-plugin 
+#CPP_FLAGS += -fno-use-linker-plugin
 #CPP_FLAGS += -fno-rtti -fno-exceptions
 #CPP_FLAGS += -fstack-usage
 
@@ -114,13 +114,12 @@ CFLAGS += $(CPP_FLAGS)
 # Source file definitions...
 ###########################################################################
 SRCS    = src/main.c src/sdmmc.c src/spi.c src/syscalls.c src/tim.c src/usart.c src/usb_otg.c
-SRCS   += src/bsp_driver_sd.c src/fatfs.c src/freertos.c src/gpio.c src/i2c.c src/rng.c 
+SRCS   += src/bsp_driver_sd.c src/fatfs.c src/freertos.c src/gpio.c src/i2c.c src/rng.c
 SRCS   += src/stm32f7xx_hal_msp.c src/stm32f7xx_it.c
 SRCS   += src/system_stm32f7xx.c src/startup.s
 
 
-CPP_SRCS  = src/StringBuilder/*.cpp
-CPP_SRCS += src/StringBuilder/*.cpp
+CPP_SRCS += src/DataStructures/*.cpp
 
 SRCS   += $(CPP_SRCS)
 
@@ -151,7 +150,7 @@ lib:
 	$(MAKE) -C lib
 
 
-$(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: 
+$(OUTPUT_PATH)/$(FIRMWARE_NAME).elf:
 	$(shell mkdir $(OUTPUT_PATH))
 	$(CPP_CROSS) -c $(CFLAGS) $(SRCS)
 	$(CPP_CROSS) $(CFLAGS) $^ -o $@ *.o $(LDFLAGS)
