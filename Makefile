@@ -10,7 +10,7 @@
 FIRMWARE_NAME      = digitabulum
 
 MCU                = cortex-m7
-EXT_CLK_RATE       = 24000000
+EXT_CLK_RATE       = 25000000
 OPTIMIZATION       = -Os
 C_STANDARD         = gnu99
 CPP_STANDARD       = gnu++11
@@ -41,6 +41,7 @@ export SZ      = $(TOOLCHAIN)/arm-none-eabi-size
 ###########################################################################
 INCLUDES    = -iquote. -iquotesrc/
 INCLUDES   += -Icompiler/arm-none-eabi/include/
+INCLUDES   += -Ilib/ManuvrOS
 INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/STM32F7xx_HAL_Driver/Inc/
 INCLUDES   += -I$(WHERE_I_AM)/lib/Inc
 INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/CMSIS/Device/ST/STM32F7xx/Include
@@ -65,7 +66,7 @@ MCUFLAGS += -ffreestanding
 LIBPATHS  = -L. -Llib/ -L$(OUTPUT_PATH)
 
 # Libraries to link
-LIBS = -lm -lfatfs -lstdperiph -lfreertos -lc -lgcc -lstdc++
+LIBS = -lm -lmanuvr -lfatfs -lstdperiph -lfreertos -lc -lgcc -lstdc++
 
 # Flags for the linker...
 LDFLAGS = -static $(MCUFLAGS)
@@ -86,7 +87,7 @@ CFLAGS += $(MCUFLAGS)
 
 # This will cause us to ignore the external OSC!!
 CFLAGS += -DREENTRANT_SYSCALLS_PROVIDED -DUSE_STDPERIPH_DRIVER
-CFLAGS += -DUSE_USB_OTG_FS
+CFLAGS += -DENABLE_USB_VCP
 
 # Debug options.
 #CFLAGS += -g -ggdb
@@ -118,7 +119,7 @@ export CPP_FLAGS
 ###########################################################################
 # Source file definitions...
 ###########################################################################
-SRCS    = src/sdmmc.c src/spi.c src/syscalls.c src/tim.c src/usart.c src/usb_otg.c
+SRCS    = src/sdmmc.c src/spi.c src/syscalls.c src/tim.c src/usart.c
 SRCS   += src/bsp_driver_sd.c src/fatfs.c src/freertos.c src/gpio.c src/i2c.c
 SRCS   += src/stm32f7xx_hal_msp.c src/stm32f7xx_it.c
 SRCS   += src/system_stm32f7xx.c src/startup.s

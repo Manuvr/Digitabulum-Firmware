@@ -39,19 +39,19 @@
 #include "spi.h"
 #include "tim.h"
 #include "usart.h"
-#include "usb_otg.h"
 #include "gpio.h"
 
 /* USER CODE BEGIN Includes */
-
+#include "FirmwareDefs.h"
+#include <Kernel.h>
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
+Kernel* kernel      = NULL;
 
-/* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 
-/* USER CODE END PV */
+
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
@@ -103,9 +103,24 @@ int main(void) {
   /* Start scheduler */
   //osKernelStart();
 
-  /* We should never get here as control is now taken by the scheduler */
+  kernel = new Kernel();  // Instance a kernel.
+
+  kernel->bootstrap();
+
   /* Infinite loop */
   while (1) {
+    kernel->procIdleFlags();
+
+    // Move the kernel log to stdout.
+    if (Kernel::log_buffer.count()) {
+      if (!kernel->getVerbosity()) {
+        Kernel::log_buffer.clear();
+      }
+      else {
+        //printf("%s", Kernel::log_buffer.position(0));
+        Kernel::log_buffer.drop_position(0);
+      }
+    }
   }
 }
 
@@ -129,7 +144,6 @@ void SystemClock_Config(void) {
     /* Digitabulum's 24MHz OSC... */
     #if HSE_VALUE == 24000000
       RCC_OscInitStruct.PLL.PLLM = 24;
-      bool _test = false;
     #endif
 
     /* STM32F7-Discovery. 25MHz OSC... */
@@ -148,8 +162,6 @@ void SystemClock_Config(void) {
   RCC_OscInitStruct.PLL.PLLQ = 8;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
 
-
-  while (_test) {}
 
   if(HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
     while(1) { ; }
@@ -221,13 +233,3 @@ void assert_failed(uint8_t* file, uint32_t line)
 }
 
 #endif
-
-/**
-  * @}
-  */
-
-/**
-  * @}
-*/
-
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
