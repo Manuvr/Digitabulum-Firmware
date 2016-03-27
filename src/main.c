@@ -66,7 +66,7 @@ void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN 0 */
 /* USER CODE END 0 */
 
-int main(void) {
+void system_setup() {
   SCB_EnableICache();       /* Enable I-Cache */
   SCB_EnableDCache();       /* Enable D-Cache */
 
@@ -74,8 +74,13 @@ int main(void) {
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
-  /* Configure the system clock */
-  SystemClock_Config();
+  SystemClock_Config();    /* Configure the system clock */
+}
+
+
+int main(void) {
+  system_setup();   // Need to setup clocks and CPU...
+
 
   /* Initialize all configured peripherals */
   //MX_GPIO_Init();
@@ -98,7 +103,7 @@ int main(void) {
 
   /* Start scheduler */
   osKernelStart();
-  
+
   /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   while (1) {
@@ -121,11 +126,21 @@ void SystemClock_Config(void) {
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+
+  /* Digitabulum's 24MHz OSC...
   RCC_OscInitStruct.PLL.PLLM = 16;
   RCC_OscInitStruct.PLL.PLLN = 256;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 8;
-  
+  */
+
+  /* STM32F7-Discovery. 25MHz OSC...
+  */
+  RCC_OscInitStruct.PLL.PLLM = 25;
+  RCC_OscInitStruct.PLL.PLLN = 432;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 9;
+
   if(HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
     while(1) { ; }
   }
@@ -142,10 +157,10 @@ void SystemClock_Config(void) {
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV4;
   if(HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_6) != HAL_OK) {
     while(1) { ; }
-  }  
+  }
 
-  PeriphClkInitStruct.PeriphClockSelection = 
-                              RCC_PERIPHCLK_USART2 | RCC_PERIPHCLK_I2C1 | 
+  PeriphClkInitStruct.PeriphClockSelection =
+                              RCC_PERIPHCLK_USART2 | RCC_PERIPHCLK_I2C1 |
                               RCC_PERIPHCLK_SDMMC1 | RCC_PERIPHCLK_CLK48;
   PeriphClkInitStruct.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
   PeriphClkInitStruct.I2c1ClockSelection = RCC_I2C1CLKSOURCE_PCLK1;
@@ -191,10 +206,10 @@ void assert_failed(uint8_t* file, uint32_t line)
 
 /**
   * @}
-  */ 
+  */
 
 /**
   * @}
-*/ 
+*/
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

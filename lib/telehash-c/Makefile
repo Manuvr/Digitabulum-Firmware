@@ -1,15 +1,3 @@
-BINPATH=../../compiler/bin/
-
-CC=$(BINPATH)/arm-none-eabi-gcc
-AR=$(BINPATH)/arm-none-eabi-ar
-
-CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -DDEBUG
-CFLAGS += -mlittle-endian -mthumb -mthumb-interwork -mcpu=cortex-m7
-CFLAGS += -fsingle-precision-constant -Wdouble-promotion
-CFLAGS += -mfpu=fpv5-sp-d16 -mfloat-abi=hard
-CFLAGS += -ffreestanding -nostdlib
-
-
 #CFLAGS+=-Weverything -Wno-unused-macros -Wno-undef -Wno-gnu-zero-variadic-macro-arguments -Wno-padded -Wno-gnu-label-as-value -Wno-gnu-designator -Wno-missing-prototypes -Wno-format-nonliteral
 INCLUDE+=-Iinclude -Iinclude/lib -Iunix
 
@@ -19,7 +7,7 @@ MESH = src/mesh.c src/link.c src/chan.c src/pipe.c
 EXT = src/ext/stream.c src/ext/block.c src/ext/peer.c src/ext/path.c
 NET = src/net/loopback.c src/net/udp4.c src/net/tcp4.c src/net/serial.c
 UTIL = src/util/util.c src/util/uri.c src/util/chunks.c src/util/frames.c src/unix/util.c src/unix/util_sys.c
-TMESH = src/tmesh/tmesh.c 
+TMESH = src/tmesh/tmesh.c
 
 # CS1a by default
 CS = src/e3x/cs1a/aes.c src/e3x/cs1a/hmac.c src/e3x/cs1a/aes128.c src/e3x/cs1a/cs1a.c src/e3x/cs1a/uECC.c src/e3x/cs1a/sha256.c
@@ -54,16 +42,13 @@ CS_OBJFILES = $(patsubst %.c,%.o,$(CS))
 FULL_OBJFILES = $(LIB_OBJFILES) $(E3X_OBJFILES) $(MESH_OBJFILES) $(EXT_OBJFILES) $(NET_OBJFILES) $(UTIL_OBJFILES) $(CS_OBJFILES)
 
 IDGEN_OBJFILES = $(FULL_OBJFILES) util/idgen.o
-ROUTER_OBJFILES = $(FULL_OBJFILES) util/router.o 
-PING_OBJFILES = $(FULL_OBJFILES) util/ping.o 
+ROUTER_OBJFILES = $(FULL_OBJFILES) util/router.o
+PING_OBJFILES = $(FULL_OBJFILES) util/ping.o
 
 HEADERS=$(wildcard include/*.h)
 
 all: static
 	@echo "TODO\t`git grep TODO | wc -l | tr -d ' '`"
-
-deps:
-	npm install
 
 # todo, this header mangling process is a drag
 
@@ -90,8 +75,7 @@ static-tmesh:
 	@rm -f telehash.h.bak
 
 libtelehash: $(FULL_OBJFILES)
-	rm -f libtelehash.a
-	ar crs libtelehash.a $(FULL_OBJFILES)
+	$(AR) -crs $(OUTPUT_PATH)/$@ $(FULL_OBJFILES)
 
 .PHONY: static TAGS
 
@@ -99,7 +83,7 @@ TAGS:
 	find . | grep ".*\.\(h\|c\)" | xargs etags -f TAGS
 
 %.o : %.c $(HEADERS)
-	$(CC) $(INCLUDE) $(CFLAGS) -c $< -o $@
+	$(CC) $(INCLUDE) $(CFLAGS) -nostdlib -c $< -o $@
 
 #mesh:
 #	$(CC) $(CFLAGS) -o bin/mesh util/mesh.c src/*.c unix/util.c src/ext/*.c $(ARCH)

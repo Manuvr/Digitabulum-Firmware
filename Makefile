@@ -9,9 +9,6 @@
 ###########################################################################
 FIRMWARE_NAME      = digitabulum
 
-OUTPUT_PATH        = build/
-STLINK_LOADER_PATH = compiler/stlink
-
 MCU                = cortex-m7
 EXT_CLK_RATE       = 24000000
 OPTIMIZATION       = -Os
@@ -22,20 +19,21 @@ CPP_STANDARD       = gnu++11
 ###########################################################################
 # Environmental awareness...
 ###########################################################################
-SHELL          = /bin/sh
-WHO_I_AM       = $(shell whoami)
-WHERE_I_AM     = $(shell pwd)
-HOME_DIRECTORY = /home/$(WHO_I_AM)
-TOOLCHAIN      = compiler/bin
+WHERE_I_AM         = $(shell pwd)
+TOOLCHAIN          = $(WHERE_I_AM)/compiler/bin
+STLINK_LOADER_PATH = $(WHERE_I_AM)/compiler/stlink
 
-CC_CROSS       = $(TOOLCHAIN)/arm-none-eabi-gcc
-CPP_CROSS      = $(TOOLCHAIN)/arm-none-eabi-g++
-LD_CROSS       = $(TOOLCHAIN)/arm-none-eabi-ld
-AR_CROSS       = $(TOOLCHAIN)/arm-none-eabi-ar
-AS_CROSS       = $(TOOLCHAIN)/arm-none-eabi-as
-CP_CROSS       = $(TOOLCHAIN)/arm-none-eabi-objcopy
-OD_CROSS       = $(TOOLCHAIN)/arm-none-eabi-objdump
-SZ_CROSS       = $(TOOLCHAIN)/arm-none-eabi-size
+# This is where we will store compiled libs and the final output.
+export OUTPUT_PATH  = $(WHERE_I_AM)/build
+
+export CC      = $(TOOLCHAIN)/arm-none-eabi-gcc
+export CPP     = $(TOOLCHAIN)/arm-none-eabi-g++
+export LD      = $(TOOLCHAIN)/arm-none-eabi-ld
+export AR      = $(TOOLCHAIN)/arm-none-eabi-ar
+export AS      = $(TOOLCHAIN)/arm-none-eabi-as
+export CP      = $(TOOLCHAIN)/arm-none-eabi-objcopy
+export OD      = $(TOOLCHAIN)/arm-none-eabi-objdump
+export SZ      = $(TOOLCHAIN)/arm-none-eabi-size
 
 
 ###########################################################################
@@ -52,12 +50,14 @@ INCLUDES   += -Ilib/Middlewares/Third_Party/FatFs/src
 INCLUDES   += -Ilib/Middlewares/Third_Party/FatFs/src/drivers
 
 # Describing the target arch....
-MCUFLAGS  = -DHSE_VALUE=$(EXT_CLK_RATE) -DRUN_WITH_HSI
+MCUFLAGS  = -DHSE_VALUE=$(EXT_CLK_RATE)
+MCUFLAGS += -DRUN_WITH_HSE
+#MCUFLAGS += -DRUN_WITH_HSI
 MCUFLAGS += -DSTM32F746xx -DARM_MATH_CM7
-MCUFLAGS += -mlittle-endian -mthumb -mthumb-interwork -mcpu=cortex-m7
+MCUFLAGS += -mlittle-endian -mthumb -mthumb-interwork -mcpu=$(MCU)
 MCUFLAGS += -fsingle-precision-constant -Wdouble-promotion
 MCUFLAGS += -mfpu=fpv5-sp-d16 -mfloat-abi=hard
-MCUFLAGS += -ffreestanding
+MCUFLAGS += -ffreestanding -nostdlib
 
 # Library paths
 LIBPATHS  = -L. -Llib/
@@ -76,6 +76,10 @@ LDFLAGS += -Xlinker -Map -Xlinker $(FIRMWARE_NAME).map
 CFLAGS =  $(INCLUDES)
 CFLAGS += $(OPTIMIZATION) -Wall
 
+# We include this specifically so that we can get a grip on configuration headers
+#   downstream.
+CFLAGS += -I$(WHERE_I_AM)/confs
+
 CFLAGS += $(MCUFLAGS)
 
 # This will cause us to ignore the external OSC!!
@@ -83,15 +87,14 @@ CFLAGS += -DREENTRANT_SYSCALLS_PROVIDED -DUSE_STDPERIPH_DRIVER
 CFLAGS += -DUSE_USB_OTG_FS
 
 # Debug options.
-CFLAGS += -g -ggdb
+#CFLAGS += -g -ggdb
 CFLAGS += -Wl,-Map=$(FIRMWARE_NAME).map
 
 
-CPP_FLAGS = -std=$(CPP_STANDARD)
+CPP_FLAGS = -std=$(CPP_STANDARD) $(CFLAGS)
 #CPP_FLAGS += -fno-use-linker-plugin
 #CPP_FLAGS += -fno-rtti -fno-exceptions
 #CPP_FLAGS += -fstack-usage
-
 
 ###########################################################################
 # Are we on a 64-bit system? If so, we'll need to specify
@@ -106,9 +109,9 @@ else
   TARGET_WIDTH =
 endif
 
-
-CFLAGS += $(CPP_FLAGS)
-
+# Finally, export our flags for downstream Makefiles...
+export CFLAGS
+export CPP_FLAGS
 
 ###########################################################################
 # Source file definitions...
@@ -117,9 +120,6 @@ SRCS    = src/main.c src/sdmmc.c src/spi.c src/syscalls.c src/tim.c src/usart.c 
 SRCS   += src/bsp_driver_sd.c src/fatfs.c src/freertos.c src/gpio.c src/i2c.c src/rng.c
 SRCS   += src/stm32f7xx_hal_msp.c src/stm32f7xx_it.c
 SRCS   += src/system_stm32f7xx.c src/startup.s
-
-
-CPP_SRCS += src/DataStructures/*.cpp
 
 SRCS   += $(CPP_SRCS)
 
@@ -139,23 +139,24 @@ OBJS = $(SRCS:.c=.o)
 
 
 all: lib $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
-	$(SZ_CROSS) $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
+	$(SZ) $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 
 
 %.o : %.c
-	$(CPP_CROSS) $(CFLAGS) -c -o $@ $^
+	$(CPP) $(CPP_FLAGS) -c -o $@ $^
 
 
 lib:
+	mkdir -p $(OUTPUT_PATH)
 	$(MAKE) -C lib
 
 
 $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf:
 	$(shell mkdir $(OUTPUT_PATH))
-	$(CPP_CROSS) -c $(CFLAGS) $(SRCS)
-	$(CPP_CROSS) $(CFLAGS) $^ -o $@ *.o $(LDFLAGS)
-	$(CP_CROSS) -O ihex $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
-	$(CP_CROSS) -O binary $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin
+	$(CPP) -c $(CPP_FLAGS) $(SRCS)
+	$(CPP) $(CPP_FLAGS) $^ -o $@ *.o $(LDFLAGS)
+	$(CP) -O ihex $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
+	$(CP) -O binary $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin
 
 
 program: $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf

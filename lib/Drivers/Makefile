@@ -1,21 +1,8 @@
-BINPATH=../../compiler/bin/
-
-CC=$(BINPATH)/arm-none-eabi-gcc
-AR=$(BINPATH)/arm-none-eabi-ar
-
-###################################################
 
 vpath %.c Src
 
-CFLAGS  = -g -O2 -Wall
-CFLAGS += -DSTM32F746xx -DREENTRANT_SYSCALLS_PROVIDED -DARM_MATH_CM7 -DUSE_STDPERIPH_DRIVER
-CFLAGS += -mlittle-endian -mthumb -mthumb-interwork -mcpu=cortex-m7
-CFLAGS += -fsingle-precision-constant -Wdouble-promotion
-CFLAGS += -mfpu=fpv5-sp-d16 -mfloat-abi=hard
-CFLAGS += -ffreestanding -nostdlib
-
 # Includes
-CFLAGS += -ISTM32F7xx_HAL_Driver/Inc/ -I../Inc/ -ICMSIS/Device/ST/STM32F7xx/Include/ -ICMSIS/Include/
+INCLUDES = -ISTM32F7xx_HAL_Driver/Inc/ -I../Inc/ -ICMSIS/Device/ST/STM32F7xx/Include/ -ICMSIS/Include/
 
 # Sources
 SRCS = stm32f7xx_hal_adc.c stm32f7xx_hal_adc_ex.c stm32f7xx_hal.c stm32f7xx_hal_can.c stm32f7xx_hal_cec.c stm32f7xx_hal_cortex.c stm32f7xx_hal_crc.c \
@@ -36,10 +23,10 @@ LIBNAME = libstdperiph.a
 all: $(LIBNAME)
 
 %.o : STM32F7xx_HAL_Driver/Src/%.c
-	$(CC) $(CFLAGS) -c -o $@ $^
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $^
 
 $(LIBNAME): $(OBJS)
-	$(AR) -r ../$@ $(OBJS)
+	$(AR) -r $(OUTPUT_PATH)/$@ $(OBJS)
 
 clean:
 	rm -f $(OBJS) $(LIBNAME)
