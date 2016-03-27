@@ -35,7 +35,6 @@
 #include "cmsis_os.h"
 #include "fatfs.h"
 #include "i2c.h"
-#include "rng.h"
 #include "sdmmc.h"
 #include "spi.h"
 #include "tim.h"
@@ -70,11 +69,11 @@ void system_setup() {
   SCB_EnableICache();       /* Enable I-Cache */
   SCB_EnableDCache();       /* Enable D-Cache */
 
+  SystemClock_Config();    /* Configure the system clock */
+
   /* MCU Configuration----------------------------------------------------------*/
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-
-  SystemClock_Config();    /* Configure the system clock */
 }
 
 
@@ -85,24 +84,24 @@ int main(void) {
   /* Initialize all configured peripherals */
   //MX_GPIO_Init();
   //MX_I2C1_Init();
-  MX_RNG_Init();
-  MX_SDMMC1_SD_Init();
+  //TODO: Strike. MX_RNG_Init();
+  //MX_SDMMC1_SD_Init();
   //MX_SPI1_Init();
   //MX_SPI2_Init();
   //MX_TIM1_Init();
   //MX_TIM2_Init();
   //MX_USART2_UART_Init();
-  MX_USB_OTG_FS_USB_Init();
+  //MX_USB_OTG_FS_USB_Init();
 
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
 
   /* Call init function for freertos objects (in freertos.c) */
-  MX_FREERTOS_Init();
+  //MX_FREERTOS_Init();
 
   /* Start scheduler */
-  osKernelStart();
+  //osKernelStart();
 
   /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
@@ -118,28 +117,39 @@ void SystemClock_Config(void) {
   RCC_ClkInitTypeDef RCC_ClkInitStruct;
   RCC_PeriphCLKInitTypeDef PeriphClkInitStruct;
 
-  __PWR_CLK_ENABLE();
-
+  __HAL_RCC_PWR_CLK_ENABLE();  // Or this?  __PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
 
-  /* Digitabulum's 24MHz OSC...
-  RCC_OscInitStruct.PLL.PLLM = 16;
-  RCC_OscInitStruct.PLL.PLLN = 256;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-  RCC_OscInitStruct.PLL.PLLQ = 8;
-  */
+  #if defined(RUN_WITH_HSE)
+    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+    RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+    RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
 
-  /* STM32F7-Discovery. 25MHz OSC...
-  */
-  RCC_OscInitStruct.PLL.PLLM = 25;
+    /* Digitabulum's 24MHz OSC... */
+    #if HSE_VALUE == 24000000
+      RCC_OscInitStruct.PLL.PLLM = 24;
+      bool _test = false;
+    #endif
+
+    /* STM32F7-Discovery. 25MHz OSC... */
+    #if HSE_VALUE == 25000000
+      RCC_OscInitStruct.PLL.PLLM = 25;
+    #endif
+  #elif defined(RUN_WITH_HSI)
+    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+    RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+    RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+
+    RCC_OscInitStruct.PLL.PLLM = 16;
+  #endif
   RCC_OscInitStruct.PLL.PLLN = 432;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-  RCC_OscInitStruct.PLL.PLLQ = 9;
+  RCC_OscInitStruct.PLL.PLLQ = 8;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+
+
+  while (_test) {}
 
   if(HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
     while(1) { ; }
@@ -163,9 +173,17 @@ void SystemClock_Config(void) {
                               RCC_PERIPHCLK_USART2 | RCC_PERIPHCLK_I2C1 |
                               RCC_PERIPHCLK_SDMMC1 | RCC_PERIPHCLK_CLK48;
   PeriphClkInitStruct.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
-  PeriphClkInitStruct.I2c1ClockSelection = RCC_I2C1CLKSOURCE_PCLK1;
-  PeriphClkInitStruct.Clk48ClockSelection = RCC_CLK48SOURCE_PLL;
+  PeriphClkInitStruct.I2c1ClockSelection   = RCC_I2C1CLKSOURCE_PCLK1;
+  PeriphClkInitStruct.Clk48ClockSelection  = RCC_CLK48SOURCE_PLLSAIP;
   PeriphClkInitStruct.Sdmmc1ClockSelection = RCC_SDMMC1CLKSOURCE_CLK48;
+
+  /* We are going to setup the 48MHz source to be consistent regardless of CPU clock. */
+  PeriphClkInitStruct.PLLSAI.PLLSAIN = 192;
+  PeriphClkInitStruct.PLLSAI.PLLSAIQ = 4;
+  PeriphClkInitStruct.PLLSAI.PLLSAIR = 2;
+  PeriphClkInitStruct.PLLSAI.PLLSAIP = RCC_PLLSAIP_DIV4;
+
+
   if(HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct)  != HAL_OK) {
     while(1) { ; }
   }

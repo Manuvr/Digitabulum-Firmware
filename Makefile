@@ -41,8 +41,10 @@ export SZ      = $(TOOLCHAIN)/arm-none-eabi-size
 ###########################################################################
 INCLUDES    = -iquote. -iquotesrc/
 INCLUDES   += -Icompiler/arm-none-eabi/include/
-INCLUDES   += -Ilib/Drivers/STM32F7xx_HAL_Driver/Inc/ -Ilib/Inc -Ilib/Drivers/CMSIS/Device/ST/STM32F7xx/Include
-INCLUDES   += -Ilib/Drivers/CMSIS/Include
+INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/STM32F7xx_HAL_Driver/Inc/
+INCLUDES   += -I$(WHERE_I_AM)/lib/Inc
+INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/CMSIS/Device/ST/STM32F7xx/Include
+INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/CMSIS/Include
 INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS
 INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/include
 INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1
@@ -57,10 +59,10 @@ MCUFLAGS += -DSTM32F746xx -DARM_MATH_CM7
 MCUFLAGS += -mlittle-endian -mthumb -mthumb-interwork -mcpu=$(MCU)
 MCUFLAGS += -fsingle-precision-constant -Wdouble-promotion
 MCUFLAGS += -mfpu=fpv5-sp-d16 -mfloat-abi=hard
-MCUFLAGS += -ffreestanding -nostdlib
+MCUFLAGS += -ffreestanding
 
 # Library paths
-LIBPATHS  = -L. -Llib/
+LIBPATHS  = -L. -Llib/ -L$(OUTPUT_PATH)
 
 # Libraries to link
 LIBS = -lm -lfatfs -lstdperiph -lfreertos -lc -lgcc -lstdc++
@@ -116,10 +118,12 @@ export CPP_FLAGS
 ###########################################################################
 # Source file definitions...
 ###########################################################################
-SRCS    = src/main.c src/sdmmc.c src/spi.c src/syscalls.c src/tim.c src/usart.c src/usb_otg.c
-SRCS   += src/bsp_driver_sd.c src/fatfs.c src/freertos.c src/gpio.c src/i2c.c src/rng.c
+SRCS    = src/sdmmc.c src/spi.c src/syscalls.c src/tim.c src/usart.c src/usb_otg.c
+SRCS   += src/bsp_driver_sd.c src/fatfs.c src/freertos.c src/gpio.c src/i2c.c
 SRCS   += src/stm32f7xx_hal_msp.c src/stm32f7xx_it.c
 SRCS   += src/system_stm32f7xx.c src/startup.s
+
+CPP_SRCS  = src/main.cpp
 
 SRCS   += $(CPP_SRCS)
 
