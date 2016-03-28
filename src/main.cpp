@@ -30,6 +30,15 @@
   *
   ******************************************************************************
   */
+
+
+#include <Kernel.h>
+#include "FirmwareDefs.h"
+
+#ifdef __cplusplus
+ extern "C" {
+#endif
+
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f7xx_hal.h"
 #include "cmsis_os.h"
@@ -41,16 +50,11 @@
 #include "usart.h"
 #include "gpio.h"
 
-/* USER CODE BEGIN Includes */
-#include "FirmwareDefs.h"
-#include <Kernel.h>
-/* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
 Kernel* kernel      = NULL;
 
 /* Private variables ---------------------------------------------------------*/
-
 
 
 /* Private function prototypes -----------------------------------------------*/
@@ -61,9 +65,6 @@ void MX_FREERTOS_Init(void);
 /* Private function prototypes -----------------------------------------------*/
 
 /* USER CODE END PFP */
-
-/* USER CODE BEGIN 0 */
-/* USER CODE END 0 */
 
 void system_setup() {
   SCB_EnableICache();       /* Enable I-Cache */
@@ -232,4 +233,8 @@ void assert_failed(uint8_t* file, uint32_t line)
   }
 }
 
+#endif
+
+#ifdef __cplusplus
+ }
 #endif

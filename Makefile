@@ -65,20 +65,21 @@ MCUFLAGS += -mfpu=fpv5-sp-d16 -mfloat-abi=hard
 MCUFLAGS += -ffreestanding
 
 # Library paths
-LIBPATHS  = -L. -Llib/ -L$(OUTPUT_PATH)
+LIBPATHS  = -L. -Llib/
 
 # Libraries to link
 LIBS = -lm -lmanuvr -lfatfs -lstdperiph -lfreertos -lc -lgcc -lstdc++
 
 # Flags for the linker...
-LDFLAGS = -static $(MCUFLAGS)
+LDFLAGS  = -static $(MCUFLAGS)
 LDFLAGS += $(LIBPATHS)
 LDFLAGS += -Wl,--start-group $(LIBS) -Wl,--end-group
 LDFLAGS += -Wl,--gc-sections -Wall -Tdigitabulum.ld --stats
-LDFLAGS += -Xlinker -Map -Xlinker $(FIRMWARE_NAME).map
+LDFLAGS += -Wl,-Map=$(FIRMWARE_NAME).map
 
 # Wrap the include paths into the flags...
 CFLAGS =  $(INCLUDES)
+CFLAGS += -L$(OUTPUT_PATH)
 CFLAGS += $(OPTIMIZATION) -Wall
 
 # We include this specifically so that we can get a grip on configuration headers
@@ -90,10 +91,10 @@ CFLAGS += $(MCUFLAGS)
 # This will cause us to ignore the external OSC!!
 CFLAGS += -DREENTRANT_SYSCALLS_PROVIDED -DUSE_STDPERIPH_DRIVER
 CFLAGS += -DENABLE_USB_VCP
+#CFLAGS += -DHAL_CORTEX_MODULE_ENABLED
 
 # Debug options.
 #CFLAGS += -g -ggdb
-CFLAGS += -Wl,-Map=$(FIRMWARE_NAME).map
 
 
 CPP_FLAGS = -std=$(CPP_STANDARD) $(CFLAGS)
@@ -118,17 +119,17 @@ endif
 export CFLAGS
 export CPP_FLAGS
 
+export STM32F746xx
+
 ###########################################################################
 # Source file definitions...
 ###########################################################################
 SRCS    = src/sdmmc.c src/spi.c src/syscalls.c src/tim.c src/usart.c
 SRCS   += src/bsp_driver_sd.c src/fatfs.c src/freertos.c src/gpio.c src/i2c.c
 SRCS   += src/stm32f7xx_hal_msp.c src/stm32f7xx_it.c
-SRCS   += src/system_stm32f7xx.c src/startup.s
+SRCS   += src/system_stm32f7xx.c
 
 CPP_SRCS  = src/main.cpp
-
-SRCS   += $(CPP_SRCS)
 
 
 ###################################################
@@ -142,6 +143,7 @@ vpath %.a lib
 # Rules for building the firmware follow...
 ###########################################################################
 OBJS = $(SRCS:.c=.o)
+
 .PHONY: lib $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 
 
@@ -150,7 +152,7 @@ all: lib $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 
 
 %.o : %.c
-	$(CPP) $(CPP_FLAGS) -c -o $@ $^
+	$(CC) $(CFLAGS) -c -o $@ $^
 
 
 lib:
@@ -158,10 +160,9 @@ lib:
 	$(MAKE) -C lib
 
 
-$(OUTPUT_PATH)/$(FIRMWARE_NAME).elf:
+$(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: $(OBJS)
 	$(shell mkdir $(OUTPUT_PATH))
-	$(CPP) -c $(CPP_FLAGS) $(SRCS)
-	$(CPP) $(CPP_FLAGS) $^ -o $@ *.o $(LDFLAGS)
+	$(CPP) $(CPP_FLAGS) $(LDFLAGS) src/startup.s src/main.cpp $(OBJS) -o $@
 	$(CP) -O ihex $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 	$(CP) -O binary $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin
 
