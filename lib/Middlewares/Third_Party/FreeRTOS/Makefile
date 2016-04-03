@@ -24,4 +24,4 @@ $(LIBNAME): $(OBJS)
 	$(AR) -r $(OUTPUT_PATH)/$@ $(OBJS)
 
 clean:
-	rm -f $(OBJS)
+	rm -f $(OBJS) *.o
