@@ -27,13 +27,16 @@ STLINK_LOADER_PATH = $(WHERE_I_AM)/compiler/stlink
 export OUTPUT_PATH  = $(WHERE_I_AM)/build
 
 export CC      = $(TOOLCHAIN)/arm-none-eabi-gcc
-export CPP     = $(TOOLCHAIN)/arm-none-eabi-g++
+export CXX     = $(TOOLCHAIN)/arm-none-eabi-g++
 export LD      = $(TOOLCHAIN)/arm-none-eabi-ld
 export AR      = $(TOOLCHAIN)/arm-none-eabi-ar
 export AS      = $(TOOLCHAIN)/arm-none-eabi-as
 export CP      = $(TOOLCHAIN)/arm-none-eabi-objcopy
 export OD      = $(TOOLCHAIN)/arm-none-eabi-objdump
 export SZ      = $(TOOLCHAIN)/arm-none-eabi-size
+
+# Yuck... Should use CXX everywhere...
+export CPP     = $(CXX)
 
 
 ###########################################################################
@@ -68,7 +71,7 @@ MCUFLAGS += -ffreestanding
 LIBPATHS  = -L. -Llib/
 
 # Libraries to link
-LIBS = -lm -lmanuvr -lfatfs -lstdperiph -lfreertos -lc -lgcc -lstdc++
+LIBS = -lm -lstdperiph -lmanuvr -lfatfs -lfreertos -lc -lgcc -lstdc++
 
 # Flags for the linker...
 LDFLAGS  = -static $(MCUFLAGS)
@@ -131,6 +134,8 @@ SRCS   += src/system_stm32f7xx.c
 
 CPP_SRCS  = src/main.cpp
 
+# TODO: Need to understand why -l won't blend....
+LIB_HARDCODES = $(OUTPUT_PATH)/*.a
 
 ###################################################
 
@@ -147,7 +152,7 @@ OBJS = $(SRCS:.c=.o)
 .PHONY: lib $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 
 
-all: lib $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
+all: $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 	$(SZ) $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 
 
@@ -155,14 +160,14 @@ all: lib $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 	$(CC) $(CFLAGS) -c -o $@ $^
 
 
-lib:
+lib: $(OBJS)
 	mkdir -p $(OUTPUT_PATH)
 	$(MAKE) -C lib
 
 
-$(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: $(OBJS)
+$(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: lib
 	$(shell mkdir $(OUTPUT_PATH))
-	$(CPP) $(CPP_FLAGS) $(LDFLAGS) src/startup.s src/main.cpp $(OBJS) -o $@
+	$(CXX) $(CPP_FLAGS) $(LDFLAGS) src/startup.s src/main.cpp $(OBJS) $(LIB_HARDCODES) -o $@
 	$(CP) -O ihex $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 	$(CP) -O binary $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin
 
@@ -177,7 +182,7 @@ fullclean: clean
 	$(MAKE) clean -C lib
 
 clean:
-	rm -f *.o *.su *~ *.map
+	rm -f *.o *.su *~ *.map $(OBJS)
 	rm -rf $(OUTPUT_PATH)
 
 doc:

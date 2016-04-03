@@ -2,6 +2,7 @@
 
 all:
 	$(MAKE) -C Drivers
+#	$(MAKE) -C mbed
 	$(MAKE) -C Middlewares
 	$(MAKE) -C telehash-c
 	$(MAKE) -C ManuvrOS
@@ -9,6 +10,7 @@ all:
 clean:
 	rm -f *.a
 	$(MAKE) clean -C Drivers
+#	$(MAKE) clean -C mbed
 	$(MAKE) clean -C Middlewares
 	$(MAKE) clean -C telehash-c
 	$(MAKE) clean -C ManuvrOS
