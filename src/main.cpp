@@ -95,11 +95,18 @@ static void CDC_Device(void) {
 }
 
 
+bool _tx_in_progress = false;
+bool _rx_ready = false;
 
-/* USER CODE BEGIN PFP */
-/* Private function prototypes -----------------------------------------------*/
+void VCP_Rx_Notify(uint8_t*, int) {
+  _rx_ready = true;
+}
 
-/* USER CODE END PFP */
+void VCP_Tx_Complete() {
+  _tx_in_progress = false;
+}
+
+
 
 void system_setup() {
   SCB_EnableICache();       /* Enable I-Cache */
@@ -143,18 +150,20 @@ int main(void) {
   /* Infinite loop */
   while (1) {
     kernel->procIdleFlags();
-    CDC_Device();
+    if (_rx_ready) CDC_Device();
 
-    // Move the kernel log to stdout.
-    if (Kernel::log_buffer.count()) {
-      if (!kernel->getVerbosity()) {
-        Kernel::log_buffer.clear();
-      }
-      else {
-        if (TM_USBD_IsDeviceReady(TM_USB_FS) == TM_USBD_Result_Ok) {
-          TM_USBD_CDC_Puts(TM_USB_FS, Kernel::log_buffer.position(0));
-      		TM_USBD_CDC_Process(TM_USB_FS);
-          Kernel::log_buffer.drop_position(0);
+    if (!_tx_in_progress) {
+      if (Kernel::log_buffer.count()) {
+        if (!kernel->getVerbosity()) {
+          Kernel::log_buffer.clear();
+        }
+        else {
+          if (TM_USBD_IsDeviceReady(TM_USB_FS) == TM_USBD_Result_Ok) {
+            TM_USBD_CDC_Puts(TM_USB_FS, Kernel::log_buffer.position(0));
+            _tx_in_progress = true;
+      		  TM_USBD_CDC_Process(TM_USB_FS);
+            Kernel::log_buffer.drop_position(0);
+          }
         }
       }
     }

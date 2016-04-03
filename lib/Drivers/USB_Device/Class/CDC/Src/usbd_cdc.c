@@ -655,6 +655,9 @@ static uint8_t  USBD_CDC_Setup (USBD_HandleTypeDef *pdev,
   return USBD_OK;
 }
 
+extern void VCP_Rx_Notify(uint8_t*, int);
+extern void VCP_Tx_Complete();
+
 /**
   * @brief  USBD_CDC_DataIn
   *         Data sent on non-control IN endpoint
@@ -670,7 +673,7 @@ static uint8_t  USBD_CDC_DataIn (USBD_HandleTypeDef *pdev, uint8_t epnum)
   {
 
     hcdc->TxState = 0;
-
+    VCP_Tx_Complete();
     return USBD_OK;
   }
   else
@@ -698,7 +701,7 @@ static uint8_t  USBD_CDC_DataOut (USBD_HandleTypeDef *pdev, uint8_t epnum)
   if(pdev->pClassData != NULL)
   {
     ((USBD_CDC_ItfTypeDef *)pdev->pUserData)->Receive(hcdc->RxBuffer, &hcdc->RxLength);
-
+    VCP_Rx_Notify(hcdc->RxBuffer, &hcdc->RxLength);
     return USBD_OK;
   }
   else
