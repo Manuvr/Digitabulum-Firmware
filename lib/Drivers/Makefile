@@ -99,4 +99,4 @@ $(LIBNAME): $(OBJS)
 	$(AR) -rvs $(OUTPUT_PATH)/$@ $(OBJS)
 
 clean:
-	rm -f $(OBJS) $(LIBNAME)
+	rm -f STM32F7xx_HAL_Driver/Src/*.o $(OBJS) $(LIBNAME)

@@ -51,6 +51,9 @@
 #include "gpio.h"
 
 
+#include "tm_stm32_usb_device.h"
+#include "tm_stm32_usb_device_cdc.h"
+
 /* Private variables ---------------------------------------------------------*/
 Kernel* kernel      = NULL;
 
@@ -60,6 +63,38 @@ Kernel* kernel      = NULL;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
+
+#define CMD_BUFF_SIZE 128
+static char _cmd_buf[CMD_BUFF_SIZE];
+static int _cmd_buf_ptr = 0;
+
+/* CDC device example */
+static void CDC_Device(void) {
+	char ch;
+
+		/* Check if we are ready to use, if drivers are OK installed on computer */
+		if (TM_USBD_IsDeviceReady(TM_USB_FS) == TM_USBD_Result_Ok) {
+			/* We are ready */
+
+			/* Check if anything received */
+			while (TM_USBD_CDC_Getc(TM_USB_FS, &ch)) {
+				//TM_USBD_CDC_Putc(TM_USB_FS, ch);
+        if ((ch == '\r') || (ch == '\n') || (ch == '\0')) {
+          TM_USBD_CDC_Putc(TM_USB_FS, '\n');
+          kernel->accumulateConsoleInput((uint8_t*)_cmd_buf, strlen(_cmd_buf), true);
+          _cmd_buf_ptr = 0;
+          for (int i = 0; i < CMD_BUFF_SIZE; i++) *(_cmd_buf + i) = '\0';
+        }
+        else {
+          _cmd_buf[_cmd_buf_ptr++] = ch;
+        }
+			}
+		} else {
+			/* We are not ready */
+		}
+}
+
+
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
@@ -75,6 +110,8 @@ void system_setup() {
   /* MCU Configuration----------------------------------------------------------*/
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
+
+  for (int i = 0; i < CMD_BUFF_SIZE; i++) *(_cmd_buf + i) = '\0';
 }
 
 
@@ -92,11 +129,6 @@ int main(void) {
   //MX_TIM1_Init();
   //MX_TIM2_Init();
   //MX_USART2_UART_Init();
-  //MX_USB_OTG_FS_USB_Init();
-
-  /* USER CODE BEGIN 2 */
-
-  /* USER CODE END 2 */
 
   /* Call init function for freertos objects (in freertos.c) */
   //MX_FREERTOS_Init();
@@ -111,6 +143,7 @@ int main(void) {
   /* Infinite loop */
   while (1) {
     kernel->procIdleFlags();
+    CDC_Device();
 
     // Move the kernel log to stdout.
     if (Kernel::log_buffer.count()) {
@@ -118,8 +151,11 @@ int main(void) {
         Kernel::log_buffer.clear();
       }
       else {
-        //printf("%s", Kernel::log_buffer.position(0));
-        Kernel::log_buffer.drop_position(0);
+        if (TM_USBD_IsDeviceReady(TM_USB_FS) == TM_USBD_Result_Ok) {
+          TM_USBD_CDC_Puts(TM_USB_FS, Kernel::log_buffer.position(0));
+      		TM_USBD_CDC_Process(TM_USB_FS);
+          Kernel::log_buffer.drop_position(0);
+        }
       }
     }
   }

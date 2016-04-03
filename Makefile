@@ -11,7 +11,7 @@ FIRMWARE_NAME      = digitabulum
 
 MCU                = cortex-m7
 EXT_CLK_RATE       = 25000000
-OPTIMIZATION       = -Os
+OPTIMIZATION       = -O0 -g
 C_STANDARD         = gnu99
 CPP_STANDARD       = gnu++11
 
@@ -77,7 +77,7 @@ LIBS = -lm -lstdperiph -lmanuvr -lfatfs -lfreertos -lc -lgcc -lstdc++
 LDFLAGS  = -static $(MCUFLAGS)
 LDFLAGS += $(LIBPATHS)
 LDFLAGS += -Wl,--start-group $(LIBS) -Wl,--end-group
-LDFLAGS += -Wl,--gc-sections -Wall -Tdigitabulum.ld --stats
+LDFLAGS += -Wl,--gc-sections -Wall -Tdigitabulum.ld
 LDFLAGS += -Wl,-Map=$(FIRMWARE_NAME).map
 
 # Wrap the include paths into the flags...
@@ -98,7 +98,6 @@ CFLAGS += -DENABLE_USB_VCP
 
 # Debug options.
 #CFLAGS += -g -ggdb
-
 
 CPP_FLAGS = -std=$(CPP_STANDARD) $(CFLAGS)
 #CPP_FLAGS += -fno-use-linker-plugin
