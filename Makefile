@@ -34,9 +34,7 @@ export AS      = $(TOOLCHAIN)/arm-none-eabi-as
 export CP      = $(TOOLCHAIN)/arm-none-eabi-objcopy
 export OD      = $(TOOLCHAIN)/arm-none-eabi-objdump
 export SZ      = $(TOOLCHAIN)/arm-none-eabi-size
-
-# Yuck... Should use CXX everywhere...
-export CPP     = $(CXX)
+export MAKE    = make
 
 
 ###########################################################################
@@ -44,7 +42,7 @@ export CPP     = $(CXX)
 ###########################################################################
 INCLUDES    = -iquote. -iquotesrc/
 INCLUDES   += -Icompiler/arm-none-eabi/include/
-INCLUDES   += -Ilib/ManuvrOS
+INCLUDES   += -I$(WHERE_I_AM)/lib/ManuvrOS
 INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/STM32F7xx_HAL_Driver/Inc/
 INCLUDES   += -I$(WHERE_I_AM)/lib/Inc
 INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/CMSIS/Device/ST/STM32F7xx/Include
@@ -134,7 +132,7 @@ SRCS   += src/system_stm32f7xx.c
 CPP_SRCS  = src/main.cpp
 
 # TODO: Need to understand why -l won't blend....
-LIB_HARDCODES = $(OUTPUT_PATH)/*.a
+LIB_HARDCODES = $(OUTPUT_PATH)/*.a $(OUTPUT_PATH)/SensorPackage.o
 
 ###################################################
 
@@ -166,6 +164,7 @@ lib: $(OBJS)
 
 $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: lib
 	$(shell mkdir $(OUTPUT_PATH))
+	$(MAKE) -C src/Digitabulum/
 	$(CXX) $(CPP_FLAGS) $(LDFLAGS) src/startup.s src/main.cpp $(OBJS) $(LIB_HARDCODES) -o $@
 	$(CP) -O ihex $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 	$(CP) -O binary $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin
