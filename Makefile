@@ -126,8 +126,8 @@ export STM32F746xx
 ###########################################################################
 # Source file definitions...
 ###########################################################################
-SRCS    = src/syscalls.c src/tim.c src/usart.c
-SRCS   += src/bsp_driver_sd.c src/fatfs.c src/freertos.c src/gpio.c src/i2c.c
+SRCS    = src/syscalls.c src/tim.c src/gpio.c src/i2c.c
+SRCS   += src/bsp_driver_sd.c src/fatfs.c src/freertos.c
 SRCS   += src/stm32f7xx_hal_msp.c src/stm32f7xx_it.c
 SRCS   += src/system_stm32f7xx.c
 

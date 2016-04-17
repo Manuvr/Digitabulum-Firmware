@@ -13,6 +13,9 @@ SRCS  += LSM9DS1/LSM9DS1_M.cpp
 SRCS  += ManuLegend/LegendManager.cpp
 SRCS  += ManuLegend/ManuLegend.cpp
 SRCS  += SDCard/SDCard.cpp
+SRCS  += RovingNetworks/RNBase.cpp
+SRCS  += RovingNetworks/BTQueuedOperation.cpp
+SRCS  += RovingNetworks/RN4677/RN4677.cpp
 
 
 all:
