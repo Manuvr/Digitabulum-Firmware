@@ -1057,19 +1057,19 @@ int8_t CPLDDriver::iiu_group_irq() {
         IIU* current_iiu = lm->fetchIIU(idx);
         if (CPLD_IMU_IRQ_MASK_XM0 & serviced_mask) {
           if (getVerbosity() > 3) Kernel::log("CPLDDriver::iiu_group_irq",0, "(%d):  xm2  %d\n", nu_irqs, idx);
-          current_iiu->irq_xm0();
+          current_iiu->irq_ag0();
           return_value++;
         }
         if (CPLD_IMU_IRQ_MASK_XM1 & serviced_mask) {
           if (getVerbosity() > 3) Kernel::log("CPLDDriver::iiu_group_irq",0, "(%d):  xm1  %d\n", nu_irqs, idx);
-          current_iiu->irq_xm1();
+          current_iiu->irq_ag1();
           return_value++;
         }
-    //    if (CPLD_IMU_IRQ_MASK_G & serviced_mask) {
-    //      if (getVerbosity() > 3) Kernel::log("CPLDDriver::iiu_group_irq",0, "(%d):  g   %d\n", nu_irqs, idx);
-    //      current_iiu->irq_g();
-    //      return_value++;
-    //    }
+        if (CPLD_IMU_IRQ_MASK_G & serviced_mask) {
+          if (getVerbosity() > 3) Kernel::log("CPLDDriver::iiu_group_irq",0, "(%d):  g   %d\n", nu_irqs, idx);
+          current_iiu->irq_m();
+          return_value++;
+        }
       }
     }
 
