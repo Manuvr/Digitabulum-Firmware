@@ -163,6 +163,9 @@ const MessageTypeDef cpld_message_defs[] = {
   {  DIGITABULUM_MSG_IMU_DOUBLE_TAP       , MSG_FLAG_EXPORTABLE,  "IMU_DOUBLE_TAP"       , MSG_ARGS_U8_FLOAT }, // IMU id and optional threshold.
 };
 
+SPI_HandleTypeDef hspi1;
+SPI_HandleTypeDef hspi2;
+
 
 /****************************************************************************************************
 *   ___ _              ___      _ _              _      _
@@ -221,6 +224,10 @@ CPLDDriver::CPLDDriver() : SPIDeviceWithRegisters(0, 9) {
 * Destructor. Should probably never be called.
 */
 CPLDDriver::~CPLDDriver() {
+  __SPI1_CLK_DISABLE();
+  __SPI2_CLK_DISABLE();
+  HAL_GPIO_DeInit(GPIOA, GPIO_PIN_4|GPIO_PIN_6|GPIO_PIN_5|GPIO_PIN_7);
+  HAL_GPIO_DeInit(GPIOB, GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15);
 }
 
 
@@ -331,7 +338,6 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 
-  SPI_HandleTypeDef hspi1;
   hspi1.Instance = SPI1;
   hspi1.Init.Mode = SPI_MODE_MASTER;
   hspi1.Init.Direction = SPI_DIRECTION_2LINES;
@@ -348,7 +354,6 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLED;
   HAL_SPI_Init(&hspi1);
 
-  SPI_HandleTypeDef hspi2;
   hspi2.Instance = SPI2;
   hspi2.Init.Mode = SPI_MODE_SLAVE;
   hspi2.Init.Direction = SPI_DIRECTION_2LINES;
