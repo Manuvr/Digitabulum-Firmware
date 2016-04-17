@@ -1,3 +1,25 @@
+/*
+File:   ManuLegend.cpp
+Author: J. Ian Lindsay
+Date:   2014.07.01
+
+Copyright 2016 Manuvr, Inc
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+
+*/
+
 #include "ManuLegend.h"
 
 
@@ -14,7 +36,7 @@
 /**
 * Constructor
 */
-ManuManuLegend::ManuLegend() {
+ManuLegend::ManuLegend() {
   // Make the Legend NULL at first. Nothing requested.
   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) per_iiu_data[idx] = 0;
 }
@@ -22,7 +44,7 @@ ManuManuLegend::ManuLegend() {
 /**
 * Destructor
 */
-ManuManuLegend::~ManuLegend() {
+ManuLegend::~ManuLegend() {
   if (dataset_local) {
     free(dataset_local);
     dataset_local = NULL;

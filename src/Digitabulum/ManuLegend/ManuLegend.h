@@ -170,7 +170,6 @@ class ManuLegend {
     uint8_t*       dataset_global = NULL;   // This is the dataset common to all ManuLegends.
     uint8_t*       dataset_local  = NULL;   // This is the dataset the EventReceiver asked for.
     EventReceiver* owner          = NULL;   // This is the owner of this ManuLegend.
-    uint32_t       pid_updater    = 0;
 
     ManuLegend();
     ~ManuLegend();
@@ -261,8 +260,8 @@ class LegendManager : public EventReceiver {
     /* Overrides from EventReceiver */
     const char* getReceiverName();
     void printDebug(StringBuilder*);
-    int8_t notify(ManuvrEvent*);
-    int8_t callback_proc(ManuvrEvent *);
+    int8_t notify(ManuvrRunnable*);
+    int8_t callback_proc(ManuvrRunnable *);
     int8_t writeFrameToBuffer(StringBuilder*);
     void procDirectDebugInstruction(StringBuilder *);
 
@@ -302,13 +301,10 @@ class LegendManager : public EventReceiver {
     uint32_t*       _ptr_sequence = NULL;
     float*          _ptr_delta_t  = NULL;
 
-    ManuvrEvent event_legend_frame_ready;
-    ManuvrEvent event_iiu_read;
+    ManuvrRunnable event_legend_frame_ready;
+    ManuvrRunnable event_iiu_read;
 
     LinkedList<ManuLegend*> active_legends;  // We need to keep track of the legends we've released.
-
-    /* Schedules that we depend upon. */
-    uint32_t pid_periodic_read   = 0;  // The timer for full frame refresh requests.
 
     // TODO: This will not scale. Think harder, Homer.
     uint8_t  last_imu_read        = 0;  // This is the IMU that is currently being operated on.
@@ -350,7 +346,7 @@ class LegendManager : public EventReceiver {
 
     static uint32_t minimum_prealloc_level;
 
-    static PriorityQueue<Measurement*>  preallocd_measurements;
+    static PriorityQueue<InertialMeasurement*>  preallocd_measurements;
 };
 
 #endif

@@ -52,19 +52,19 @@
 */
 class SPIBusOp {
   public:
+    SPIOpCallback* callback = NULL;                  // Which class gets pinged when we've finished?
+    uint8_t* buf            = NULL;                  // Pointer to the data buffer for the transaction.
+
     uint16_t bus_addr    = 0x0000;                   // The address that this operation is directed toward.
+    int16_t  reg_idx     = -1;                       // Optional register index. Makes callbacks faster.
+
     uint8_t  opcode      = SPI_OPCODE_UNDEFINED;     // What is the particular operation being done?
     uint8_t  xfer_state  = SPI_XFER_STATE_IDLE;      // What state is this transfer in?
 
     //uint32_t time_began    = 0;   // This is the time when bus access begins.
     //uint32_t time_ended    = 0;   // This is the time when bus access stops (or is aborted).
 
-    uint8_t* buf         = NULL;                     // Pointer to the data buffer for the transaction.
     uint8_t  buf_len     = 0;                        // How large is the above buffer?
-
-
-    SPIOpCallback* callback = NULL;      // Which class gets pinged when we've finished?
-    int16_t        reg_idx  = -1;        // Optional register index. Makes callbacks faster.
     bool           profile  = false;     // Set to true to profile this transaction.
 
     SPIBusOp();

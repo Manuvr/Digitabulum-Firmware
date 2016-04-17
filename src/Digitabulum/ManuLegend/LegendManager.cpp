@@ -1,3 +1,25 @@
+/*
+File:   LegendManager.cpp
+Author: J. Ian Lindsay
+Date:   2014.07.01
+
+Copyright 2016 Manuvr, Inc
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+
+*/
+
 #include "ManuLegend.h"
 
 extern "C" {
@@ -136,19 +158,6 @@ LegendManager::LegendManager() {
 
   *(_ptr_sequence) = 0;
 
-  // Build some pre-formed Events.
-  event_legend_frame_ready.repurpose(DIGITABULUM_MSG_IMU_MAP_STATE);
-  event_legend_frame_ready.isManaged(true);
-  event_legend_frame_ready.specific_target = NULL; //(EventReceiver*) this;
-  event_legend_frame_ready.callback        = (EventReceiver*) this;
-  event_legend_frame_ready.priority        = EVENT_PRIORITY_LOWEST;
-
-  event_iiu_read.repurpose(DIGITABULUM_MSG_IMU_READ);
-  event_iiu_read.isManaged(true);
-  event_iiu_read.specific_target = (EventReceiver*) this;
-  event_iiu_read.callback        = (EventReceiver*) this;
-  event_iiu_read.priority        = EVENT_PRIORITY_LOWEST;
-
   _legend_is_stable(true);  // Ick....
   operating_legend = new ManuLegend();
   operating_legend->sensorEnabled(true);
@@ -165,7 +174,7 @@ LegendManager::LegendManager() {
   setLegend(operating_legend);
 
   // Lastly, subscribe to Events.
-  StaticHub::getInstance()->fetchKernel()->subscribe(this);
+  Kernel::getInstance()->subscribe(this);
 }
 
 
@@ -185,7 +194,7 @@ LegendManager::~LegendManager() {
 IIU* LegendManager::fetchIIU(uint8_t idx) {
   if (idx > 16) {
     local_log.concatf("LegendManager::fetchIIU(%d):  We should crash, but will return mod-17 instead.\n", idx);
-    StaticHub::log(&local_log);
+    Kernel::log(&local_log);
   }
   return &iius[idx % LEGEND_DATASET_IIU_COUNT];
 }
@@ -211,21 +220,21 @@ int8_t LegendManager::refreshIMU() {
 
   if (last_imu_read) {
     // We are alrady doing something to the IMUs, Need to wait.
-    if (verbosity > 2) {
+    if (getVerbosity() > 2) {
       local_log.concat("LegendManager tried to do two large IMU operations at once. Doing nothing. Be patient.\n");
-      StaticHub::log(&local_log);
+      Kernel::log(&local_log);
     }
     return -1;
   }
 
-  if (scheduler->scheduleEnabled(pid_periodic_read)) {
+  if (event_iiu_read.enableSchedule(true)) {
     // We are alrady doing something to the IMUs, Need to wait.
     local_log.concat("Tried to refresh all IMUs while the schedule to do the same thing is enabled. Doing nothing..\n");
-    StaticHub::log(&local_log);
+    Kernel::log(&local_log);
     return -1;
   }
 
-  scheduler->fireSchedule(pid_periodic_read);  // Fire once.
+  event_iiu_read.fireNow();
   return 0;
 }
 
@@ -258,7 +267,7 @@ int8_t LegendManager::reconfigure_data_map() {
   uint16_t accumulated_offset = LEGEND_DATASET_GLOBAL_SIZE;
   for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
     // Configure the IIU...
-    iius[i].setPositionAndAddress(i, CPLDDriver::imu_map[i].gyro_addr, CPLDDriver::imu_map[i].accel_addr);
+    iius[i].setPositionAndAddress(i, CPLDDriver::imu_map[i].imu_addr, CPLDDriver::imu_map[i].mag_addr);
 
     /* Assign the ManuLegend specification to the IIU class, thereby giving the IIU class its pointers. */
 
@@ -300,11 +309,9 @@ int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
     }
 
     bool should_enable_pid = false;
-    if (nu_legend->pid_updater) {
-      if (scheduler->scheduleEnabled(nu_legend->pid_updater)) {
-        scheduler->disableSchedule(nu_legend->pid_updater);
-        should_enable_pid = true;
-      }
+    if (event_legend_frame_ready.isScheduled()) {
+      event_legend_frame_ready.enableSchedule(false);
+      should_enable_pid = true;
     }
 
 
@@ -320,13 +327,13 @@ int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
     StringBuilder* legend_string = new StringBuilder();
     nu_legend->formLegendString(legend_string);
     ManuvrRunnable* legend_broadcast     = Kernel::returnEvent(DIGITABULUM_MSG_IMU_LEGEND);
-    legend_broadcast->callback        = (EventReceiver*) this;
+    legend_broadcast->originator      = (EventReceiver*) this;
     legend_broadcast->specific_target = nu_legend->owner;
     legend_broadcast->priority        = EVENT_PRIORITY_LOWEST + 1;
     legend_broadcast->markArgForReap(legend_broadcast->addArg(legend_string), true);
 
     if (should_enable_pid) {
-      scheduler->enableSchedule(nu_legend->pid_updater);
+      event_legend_frame_ready.enableSchedule(true);
     }
     return 0;
   }
@@ -347,12 +354,12 @@ const char* LegendManager::getReceiverName() {  return "LegendManager";  }
 void LegendManager::printDebug(StringBuilder *output) {
   if (output == NULL) return;
   EventReceiver::printDebug(output);
-  if (verbosity > 0) {
+  if (getVerbosity() > 0) {
     // Print just the aggregate sample count and return.
   }
 
 
-  if (verbosity > 3) {
+  if (getVerbosity() > 3) {
     output->concatf("--- __dataset location  0x%08x\n", (uint32_t) __dataset);
     output->concatf("--- __prealloc location 0x%08x\n", (uint32_t) __prealloc);
     output->concatf("--- __IIU location      0x%08x\n", (uint32_t) iius);
@@ -372,14 +379,12 @@ void LegendManager::printDebug(StringBuilder *output) {
   output->concatf("--- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
   output->concatf("--- Delta-t             %2.5f\n---\n", (double) *(_ptr_delta_t));
 
-  if (verbosity > 3) {
+  if (getVerbosity() > 3) {
     output->concatf("--- MAX_DATASET_SIZE    %u\n",    (unsigned long) LEGEND_MGR_MAX_DATASET_SIZE);
   }
-  if (verbosity > 4) {
-    output->concatf("--- pid_periodic_read   0x%08x\n", pid_periodic_read);
-    //scheduler->printSchedule(pid_periodic_read, output);
-    output->concatf("--- pid_frame_broadcast 0x%08x\n---\n", operating_legend->pid_updater);
-    //scheduler->printSchedule(pid_frame_broadcast, output);
+  if (getVerbosity() > 5) {
+    event_legend_frame_ready.printDebug(output);
+    event_iiu_read.printDebug(output);
   }
 
   output->concatf("--- prealloc starves    %u\n--- minimum_prealloc    %u\n", (unsigned long) prealloc_starves, (unsigned long) minimum_prealloc_level);
@@ -442,12 +447,26 @@ int8_t LegendManager::bootComplete() {
   *    Bassnectar - 01. F.U.N..mp3
   *    ---J. Ian Lindsay   Thu Apr 09 04:04:41 MST 2015
   */
+  event_iiu_read.repurpose(DIGITABULUM_MSG_IMU_READ);
+  event_iiu_read.isManaged(true);
+  event_iiu_read.specific_target = (EventReceiver*) this;
+  event_iiu_read.originator      = (EventReceiver*) this;
+  event_iiu_read.priority        = EVENT_PRIORITY_LOWEST;
+  event_iiu_read.alterSchedulePeriod(20);
+  event_iiu_read.alterScheduleRecurrence(-1);
+  event_iiu_read.autoClear(false);
+  event_iiu_read.enableSchedule(false);
 
-  pid_periodic_read = scheduler->createSchedule(20,  -1, false, this, &event_iiu_read);
-  scheduler->disableSchedule(pid_periodic_read);
-
-  operating_legend->pid_updater = scheduler->createSchedule(25,  -1, false, this, &event_legend_frame_ready);
-  scheduler->disableSchedule(operating_legend->pid_updater);
+  // Build some pre-formed Events.
+  event_legend_frame_ready.repurpose(DIGITABULUM_MSG_IMU_MAP_STATE);
+  event_legend_frame_ready.isManaged(true);
+  event_legend_frame_ready.specific_target = NULL; //(EventReceiver*) this;
+  event_legend_frame_ready.originator      = (EventReceiver*) this;
+  event_legend_frame_ready.priority        = EVENT_PRIORITY_LOWEST;
+  event_legend_frame_ready.alterSchedulePeriod(25);
+  event_legend_frame_ready.alterScheduleRecurrence(-1);
+  event_legend_frame_ready.autoClear(false);
+  event_legend_frame_ready.enableSchedule(false);
 
   return 1;
 }
@@ -473,7 +492,7 @@ int8_t LegendManager::bootComplete() {
 int8_t LegendManager::callback_proc(ManuvrRunnable *event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
-  int8_t return_value = event->KernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
+  int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
 
   /* Some class-specific set of conditionals below this line. */
   switch (event->event_code) {
@@ -503,7 +522,7 @@ int8_t LegendManager::callback_proc(ManuvrRunnable *event) {
           break;
 
         default:
-          if (verbosity > 2) local_log.concat("LegendManager::callback_proc(IMU_READ): Bad arg\n");
+          if (getVerbosity() > 2) local_log.concat("LegendManager::callback_proc(IMU_READ): Bad arg\n");
           last_imu_read = 0;
           break;
       }
@@ -529,16 +548,16 @@ int8_t LegendManager::callback_proc(ManuvrRunnable *event) {
         case 14:
         case 15:
           last_imu_read++;
-          if (verbosity > 6) local_log.concat("LegendManager::callback_proc(IMU_INIT): RECYCLING\n");
+          if (getVerbosity() > 6) local_log.concat("LegendManager::callback_proc(IMU_INIT): RECYCLING\n");
           // We still have IMUs left to deal with. Recycle the event...
           return EVENT_CALLBACK_RETURN_RECYCLE;
         case 16:
           last_imu_read = 0;
-          if (verbosity > 6) local_log.concat("LegendManager::callback_proc(IMU_INIT): DROPPING\n");
+          if (getVerbosity() > 6) local_log.concat("LegendManager::callback_proc(IMU_INIT): DROPPING\n");
           break;
 
         default:
-          if (verbosity > 2) local_log.concat("LegendManager::callback_proc(IMU_READ): Bad arg\n");
+          if (getVerbosity() > 2) local_log.concat("LegendManager::callback_proc(IMU_READ): Bad arg\n");
           last_imu_read = 0;
           break;
       }
@@ -573,15 +592,15 @@ int8_t LegendManager::callback_proc(ManuvrRunnable *event) {
       break;
 
     default:
-      if (verbosity > 5) {
+      if (getVerbosity() > 5) {
         local_log.concat("LegendManager::callback_proc(): Default case.\n");
         event->printDebug(&local_log);
-        StaticHub::log(&local_log);
+        Kernel::log(&local_log);
       }
       break;
   }
 
-  if (local_log.length() > 0) {    StaticHub::log(&local_log);  }
+  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
   return return_value;
 }
 
@@ -601,26 +620,26 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
 
 
     case MANUVR_MSG_SESS_ESTABLISHED:
-      scheduler->delaySchedule(operating_legend->pid_updater, 1100);     // Enable the periodic frame broadcast.
+      event_legend_frame_ready.delaySchedule(1100);     // Enable the periodic frame broadcast.
       {
         ManuvrRunnable *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
         event->addArg((uint8_t) 4);  // Set the desired init stage.
         event->priority = 0;
         raiseEvent(event);
       }
-      scheduler->delaySchedule(pid_periodic_read, 1000);  // Enable the periodic read after letting the dust settle.
+      event_iiu_read.delaySchedule(1000);  // Enable the periodic read after letting the dust settle.
       return_value++;
       break;
 
     case MANUVR_MSG_SESS_HANGUP:
-      scheduler->disableSchedule(operating_legend->pid_updater);  // Disable the periodic frame broadcast.
+      event_legend_frame_ready.enableSchedule(false);
       for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
         ManuvrRunnable *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
         event->addArg((uint8_t) 4);  // Set the desired init stage.
         event->priority = 0;
         raiseEvent(event);
       }
-      scheduler->disableSchedule(pid_periodic_read);    // Disable the periodic read.
+      event_iiu_read.enableSchedule(false);    // Disable the periodic read.
       return_value++;
       break;
 
@@ -632,7 +651,7 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
        */
       if (0 == active_event->argCount()) {
         if (last_imu_read > 16) {
-          if (verbosity > 1) local_log.concat("MSG_IMU_INIT: last_imu_read > 16.\n");
+          if (getVerbosity() > 1) local_log.concat("MSG_IMU_INIT: last_imu_read > 16.\n");
         }
         else {
           iius[last_imu_read].init();
@@ -642,7 +661,7 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
       else if (0 == active_event->getArgAs(&temp_uint_8)) {
         // If the arg was present, we interpret this as a specified INIT stage...
         if (temp_uint_8 > 16) {
-          if (verbosity > 1) local_log.concat("MSG_IMU_INIT had an IMU idx > 16.\n");
+          if (getVerbosity() > 1) local_log.concat("MSG_IMU_INIT had an IMU idx > 16.\n");
         }
         else {
           iius[last_imu_read].state_pass_through(temp_uint_8);
@@ -662,7 +681,7 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
 
     case DIGITABULUM_MSG_CPLD_RESET_COMPLETE:
       {
-        if (verbosity > 3) local_log.concatf("Initializing IMUs...\n");
+        if (getVerbosity() > 3) local_log.concatf("Initializing IMUs...\n");
 
         // Range-bind everything....
         for (uint8_t i = 0; i < 17; i++) {
@@ -688,7 +707,7 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
     case DIGITABULUM_MSG_IMU_QUAT_CRUNCH:
       if (0 == active_event->getArgAs(&temp_uint_8)) {
         if (temp_uint_8 > 16) {
-          if (verbosity > 1) local_log.concat("QUAT_CRUNCH had an IMU idx > 16.\n");
+          if (getVerbosity() > 1) local_log.concat("QUAT_CRUNCH had an IMU idx > 16.\n");
         }
         else {
           iius[temp_uint_8].MadgwickQuaternionUpdate();
@@ -696,7 +715,7 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
         return_value++;
       }
       else {
-        if (verbosity > 2) local_log.concatf("QUAT_CRUNCH handler (IIU %u) got a bad return from an Arg..\n", temp_uint_8);
+        if (getVerbosity() > 2) local_log.concatf("QUAT_CRUNCH handler (IIU %u) got a bad return from an Arg..\n", temp_uint_8);
       }
       break;
 
@@ -705,7 +724,7 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
       break;
   }
 
-  if (local_log.length() > 0) {    StaticHub::log(&local_log);  }
+  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
   return return_value;
 }
 
@@ -761,10 +780,10 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
         }
       }
       else {
-        int8_t old_verbosity = verbosity;
-        if (temp_byte && (temp_byte < 7)) verbosity = temp_byte;
+        int8_t old_verbosity = getVerbosity();
+        if (temp_byte && (temp_byte < 7)) setVerbosity(temp_byte);
         printDebug(&local_log);
-        if (temp_byte && (temp_byte < 7)) verbosity = old_verbosity;
+        if (temp_byte && (temp_byte < 7)) setVerbosity(old_verbosity);
       }
       break;
 
@@ -854,7 +873,7 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
     case 't':
       if (temp_byte < 17) {
         ManuvrRunnable *event = Kernel::returnEvent((*(str) == 'T') ? DIGITABULUM_MSG_IMU_DOUBLE_TAP : DIGITABULUM_MSG_IMU_TAP);
-        event->callback        = (EventReceiver*) this;
+        event->originator      = (EventReceiver*) this;
         event->addArg((uint8_t) temp_byte);
         Kernel::staticRaiseEvent(event);
         local_log.concatf("Sent %stap event for IMU %d.\n", ((*(str) == 'T') ? "double ":""), temp_byte);
@@ -865,7 +884,7 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
       if (temp_byte < 17) {
         ManuvrRunnable *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_QUAT_CRUNCH);
         event->specific_target = (EventReceiver*) this;
-        event->callback        = NULL;
+        event->originator      = NULL;
         event->addArg((uint8_t) temp_byte);
         Kernel::staticRaiseEvent(event);
         local_log.concatf("Running quat on IIU %d.\n", temp_byte);
@@ -1086,11 +1105,11 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'd':
       if (255 == temp_byte) {
-        scheduler->fireSchedule(operating_legend->pid_updater);
+        event_legend_frame_ready.fireNow();  // Fire a single frame transmission.
         local_log.concat("We are manually firing the IMU frame broadcasts schedule.\n");
       }
       else if (254 == temp_byte) {
-        scheduler->enableSchedule(operating_legend->pid_updater);  // Enable the periodic read.
+        event_legend_frame_ready.enableSchedule(true);  // Enable the periodic read.
         local_log.concat("Enabled frame broadcasts.\n");
       }
       else if (253 == temp_byte) {
@@ -1101,30 +1120,30 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
         local_log.concat("We are manually firing the IMU frame broadcasts schedule.\n");
       }
       else if (temp_byte) {
-        scheduler->alterSchedulePeriod(operating_legend->pid_updater, temp_byte*10);
+        event_legend_frame_ready.alterSchedulePeriod(temp_byte*10);
         local_log.concatf("Set periodic frame broadcast to once every %dms.\n", temp_byte*10);
       }
       else {
-        scheduler->disableSchedule(operating_legend->pid_updater);  // Disable the periodic read.
+        event_legend_frame_ready.enableSchedule(false);  // Disable the periodic read.
         local_log.concat("Disabled frame broadcasts.\n");
       }
       break;
 
     case 'f':
       if (255 == temp_byte) {
-        scheduler->fireSchedule(pid_periodic_read);
+        event_iiu_read.fireNow();
         local_log.concat("We are manually firing the IMU read schedule.\n");
       }
       else if (254 == temp_byte) {
-        scheduler->enableSchedule(pid_periodic_read);  // Enable the periodic read.
+        event_iiu_read.enableSchedule(true);
         local_log.concat("Enabled periodic readback.\n");
       }
       else if (temp_byte) {
-        scheduler->alterSchedulePeriod(pid_periodic_read, temp_byte*10);
+        event_iiu_read.alterSchedulePeriod(temp_byte*10);
         local_log.concatf("Set periodic read schedule to once every %dms.\n", temp_byte*10);
       }
       else {
-        scheduler->disableSchedule(pid_periodic_read);  // Disable the periodic read.
+        event_iiu_read.enableSchedule(false);  // Disable the periodic read.
         local_log.concat("Disabled periodic readback.\n");
       }
       break;
@@ -1158,5 +1177,5 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
       break;
   }
 
-  if (local_log.length() > 0) {    StaticHub::log(&local_log);  }
+  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
 }

@@ -46,13 +46,13 @@ uint16_t SPIBusOp::spi_wait_timeout = 20; // In microseconds. Per-byte.
 
 /* Until we get hardware control of CS working, we call this. */
 void SPIBusOp::assertCS(bool asserted) {
-  bool cs_pin_state = (GPIOA->ODR & GPIO_Pin_4);
+  bool cs_pin_state = false; //(GPIOA->ODR & GPIO_Pin_4);
   if (asserted != cs_pin_state) {
     debug_log.concat("We are changing the CS state to something that \"already is\".\n");
   }
 
   if (asserted) {
-    GPIOA->BSRRH = GPIO_Pin_4;
+    //GPIOA->BSRRH = GPIO_Pin_4;
   }
   else {
     while( (SPI1->SR & SPI_I2S_FLAG_BSY) ); // wait until transmit complete, JIC.
@@ -64,7 +64,7 @@ void SPIBusOp::assertCS(bool asserted) {
     //  while (mark > micros());
     //}
 
-    GPIOA->BSRRL = GPIO_Pin_4;
+    //GPIOA->BSRRL = GPIO_Pin_4;
   }
 }
 
@@ -84,33 +84,33 @@ void SPIBusOp::buildDMAMembers() {
   DMA_ITConfig(DMA2_Stream0, DMA_IT_TC | DMA_IT_TE | DMA_IT_HT | DMA_IT_FE | DMA_IT_DME, DISABLE);
   DMA_ITConfig(DMA2_Stream0, DMA_IT_TC, ENABLE);
 
-  DMA_InitStructure_Read.DMA_DIR                 = DMA_DIR_PeripheralToMemory;   // Receive
-  DMA_InitStructure_Read.DMA_Channel             = DMA_Channel_3;
-  DMA_InitStructure_Read.DMA_PeripheralDataSize  = DMA_PeripheralDataSize_Byte;
-  DMA_InitStructure_Read.DMA_MemoryDataSize      = DMA_MemoryDataSize_Byte;
-  DMA_InitStructure_Read.DMA_Priority            = DMA_Priority_High;
-  DMA_InitStructure_Read.DMA_FIFOMode            = DMA_FIFOMode_Disable;  // Required for differnt access-widths.
-  DMA_InitStructure_Read.DMA_FIFOThreshold       = DMA_FIFOThreshold_Full;
-  DMA_InitStructure_Read.DMA_MemoryBurst         = DMA_MemoryBurst_Single;
-  DMA_InitStructure_Read.DMA_PeripheralInc       = DMA_PeripheralInc_Disable;
-  DMA_InitStructure_Read.DMA_PeripheralBurst     = DMA_PeripheralBurst_Single;
-  DMA_InitStructure_Read.DMA_Mode                = DMA_Mode_Normal;
-  DMA_InitStructure_Read.DMA_MemoryInc           = DMA_MemoryInc_Enable;
-  DMA_InitStructure_Read.DMA_PeripheralBaseAddr  = (uint32_t) &SPI1->DR;
+  DMA_InitStructure_Read.Direction            = DMA_PERIPH_TO_MEMORY;   // Receive
+  DMA_InitStructure_Read.Channel              = DMA_CHANNEL_3;
+  DMA_InitStructure_Read.PeriphDataAlignment  = DMA_PDATAALIGN_BYTE;
+  DMA_InitStructure_Read.MemDataAlignment     = DMA_MDATAALIGN_BYTE;
+  DMA_InitStructure_Read.Priority             = DMA_PRIORITY_HIGH;
+  DMA_InitStructure_Read.FIFOMode             = DMA_FIFOMODE_DISABLE;  // Required for differnt access-widths.
+  DMA_InitStructure_Read.FIFOThreshold        = DMA_FIFO_THRESHOLD_FULL;
+  DMA_InitStructure_Read.MemBurst             = DMA_MBURST_SINGLE;
+  DMA_InitStructure_Read.PeriphInc            = DMA_PINC_DISABLE;
+  DMA_InitStructure_Read.PeriphBurst          = DMA_PBURST_SINGLE;
+  DMA_InitStructure_Read.Mode                 = DMA_NORMAL;
+  DMA_InitStructure_Read.MemInc               = DMA_MINC_ENABLE;
+  //DMA_InitStructure_Read.DMA_PeripheralBaseAddr  = (uint32_t) &SPI1->DR;
 
-  DMA_InitStructure_Write.DMA_DIR                = DMA_DIR_MemoryToPeripheral;   // Transmit
-  DMA_InitStructure_Write.DMA_Channel            = DMA_Channel_3;
-  DMA_InitStructure_Write.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Byte;
-  DMA_InitStructure_Write.DMA_MemoryDataSize     = DMA_MemoryDataSize_Byte;
-  DMA_InitStructure_Write.DMA_Priority           = DMA_Priority_High;
-  DMA_InitStructure_Write.DMA_FIFOMode           = DMA_FIFOMode_Disable;  // Required for differnt access-widths.
-  DMA_InitStructure_Write.DMA_FIFOThreshold      = DMA_FIFOThreshold_Full;
-  DMA_InitStructure_Write.DMA_MemoryBurst        = DMA_MemoryBurst_Single;
-  DMA_InitStructure_Write.DMA_PeripheralInc      = DMA_PeripheralInc_Disable;
-  DMA_InitStructure_Write.DMA_PeripheralBurst    = DMA_PeripheralBurst_Single;
-  DMA_InitStructure_Write.DMA_Mode               = DMA_Mode_Normal;
-  DMA_InitStructure_Write.DMA_MemoryInc          = DMA_MemoryInc_Enable;
-  DMA_InitStructure_Write.DMA_PeripheralBaseAddr = (uint32_t) &SPI1->DR;
+  DMA_InitStructure_Write.Direction           = DMA_MEMORY_TO_PERIPH;   // Transmit
+  DMA_InitStructure_Write.Channel             = DMA_CHANNEL_3;
+  DMA_InitStructure_Write.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+  DMA_InitStructure_Write.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
+  DMA_InitStructure_Write.Priority            = DMA_PRIORITY_HIGH;
+  DMA_InitStructure_Write.FIFOMode            = DMA_FIFOMODE_DISABLE;  // Required for differnt access-widths.
+  DMA_InitStructure_Write.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
+  DMA_InitStructure_Write.MemBurst            = DMA_MBURST_SINGLE;
+  DMA_InitStructure_Write.PeriphInc           = DMA_PINC_DISABLE;
+  DMA_InitStructure_Write.PeriphBurst         = DMA_PBURST_SINGLE;
+  DMA_InitStructure_Write.Mode                = DMA_NORMAL;
+  DMA_InitStructure_Write.MemInc              = DMA_MINC_ENABLE;
+  //DMA_InitStructure_Write.DMA_PeripheralBaseAddr = (uint32_t) &SPI1->DR;
 }
 
 
@@ -213,24 +213,24 @@ int8_t SPIBusOp::init_dma() {
   if (DMA_GetCmdStatus(DMA2_Stream3) != DISABLE) DMA_Cmd(DMA2_Stream3, DISABLE);
 
   if (opcode == SPI_OPCODE_READ) {
-    DMA_InitStructure_Read.DMA_MemoryInc          = DMA_MemoryInc_Enable;
+    DMA_InitStructure_Read.MemInc          = DMA_MINC_DISABLE;
     DMA_InitStructure_Read.DMA_BufferSize         = (uint16_t) buf_len;
     DMA_InitStructure_Read.DMA_Memory0BaseAddr    = (uint32_t) buf;
 
     // If we are using DMA, we will always need a transmit channel. Otherwise, an Rx operation
     // would have no means of driving the bus clock, and would thus never complete.
-    DMA_InitStructure_Write.DMA_MemoryInc         = DMA_MemoryInc_Disable;
+    DMA_InitStructure_Write.MemInc         = DMA_MINC_DISABLE;
     DMA_InitStructure_Write.DMA_BufferSize        = (uint16_t) buf_len;
     DMA_InitStructure_Write.DMA_Memory0BaseAddr   = (uint32_t) STATIC_ZERO;
   }
   else if (opcode == SPI_OPCODE_WRITE) {
-    DMA_InitStructure_Write.DMA_MemoryInc         = DMA_MemoryInc_Enable;
+    DMA_InitStructure_Write.MemInc         = DMA_MINC_ENABLE;
     DMA_InitStructure_Write.DMA_BufferSize        = (uint16_t) buf_len;
     DMA_InitStructure_Write.DMA_Memory0BaseAddr   = (uint32_t) buf;
 
     // For now, we are reliant on the Rx DMA IRQ. Tx IRQ is never used. So when
     // transmitting, we need to sink the read bytes until we do something smarter.
-    DMA_InitStructure_Read.DMA_MemoryInc          = DMA_MemoryInc_Disable;
+    DMA_InitStructure_Read.MemInc          = DMA_MINC_DISABLE;
     DMA_InitStructure_Read.DMA_BufferSize         = (uint16_t) buf_len;
     DMA_InitStructure_Read.DMA_Memory0BaseAddr    = (uint32_t) STATIC_ZERO;
   }
