@@ -17,6 +17,17 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
+
+2016.04.30   Migration log
+The RN42HID driver from which this class descended is possibly the least-portable
+thing I ever wrote. This is the end of an extension of classes with a hierarchy like this...
+  EventReceiver
+    ManuvrXport
+      RNBase
+        This class
+I will attempt to collect fail in this driver until it is properly abstracted and brought
+up to par.
+
 */
 
 #include "RN4677.h"
@@ -213,9 +224,6 @@ void RN4677::set_bitrate(int _bitrate) {
   USART2->CR1 |= USART_CR1_RXNEIE | USART_CR1_IDLEIE;
 
   HAL_UART_Init(&huart2);    // finally this enables the complete USART2 peripheral
-
-  // finally this enables the complete USART2 peripheral
-  USART_Cmd(USART2, ENABLE);
 }
 
 
@@ -240,3 +248,14 @@ void RN4677::force_9600_mode(bool force_low_speed) {
 
   reset();
 }
+
+void RN4677::factoryReset() {
+  // TODO: This should probably be done...
+}
+
+/**
+* Debug support function.
+*
+* @return a pointer to a string constant.
+*/
+const char* RN4677::getReceiverName() {  return "RN4677";  }

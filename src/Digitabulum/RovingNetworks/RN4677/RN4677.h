@@ -34,8 +34,18 @@ class RN4677 : public RNBase {
     RN4677();
     ~RN4677();
 
+    /* Overrides from the Transport class. */
+
+
+    /* Overrides from EventReceiver */
+    //void procDirectDebugInstruction(StringBuilder *);
+    const char* getReceiverName();
+    //void printDebug(StringBuilder *);
+    //int8_t notify(ManuvrRunnable*);
+    //int8_t callback_proc(ManuvrRunnable *);
 
   protected:
+    void factoryReset(void);   // Perform the sequence that will factory-reset the RN.
     void gpioSetup(void);
     void force_9600_mode(bool);   // Call with 'true' to force the module into 9600bps.
     void set_bitrate(int);    //
