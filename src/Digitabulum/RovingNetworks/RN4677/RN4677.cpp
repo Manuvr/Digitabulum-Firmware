@@ -35,7 +35,7 @@ up to par.
 #include <stm32f7xx_hal_gpio.h>
 
 
-UART_HandleTypeDef huart2 = USART2;
+UART_HandleTypeDef huart2;
 
 
 RN4677::RN4677() : RNBase() {

@@ -118,9 +118,14 @@ void RNBase::reclaimPreallocation(BTQueuedOperation* obj) {
 void RNBase::expire_lockout() {
   if (INSTANCE == NULL) return;
 
-  if (INSTANCE->getVerbosity() > 4) Kernel::log("oneshot_rn42_reenable()\n");
+  if (((EventReceiver*) INSTANCE)->getVerbosity() > 4) Kernel::log("oneshot_rn42_reenable()\n");
   INSTANCE->lockout_active = false;
   ((RNBase*) INSTANCE)->idleService();
+}
+
+/* Scheduler one-shot. Re-allows modules communication. */
+void oneshot_rn42_reenable() {
+  RNBase::expire_lockout();
 }
 
 /* Instance */
@@ -133,17 +138,11 @@ void RNBase::start_lockout(uint32_t milliseconds) {
 }
 
 
-/* Scheduler one-shot. Re-allows modules communication. */
-void oneshot_rn42_reenable() {
-  RNBase::expire_lockout();
-}
-
-
 /* Static. Reset callback. */
 void RNBase::unreset() {
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
   ((RNBase*) INSTANCE)->start_lockout(550);   // Spec says to wait 500ms after reset.
-  initialized(true);
+  ((RNBase*) INSTANCE)->initialized(true);
 }
 
 /* Scheduler one-shot. Disasserts the reset pin and starts the lockout timer rolling. */
@@ -418,7 +417,7 @@ int8_t RNBase::idleService(void) {
           if (NULL != session) {
             //if (current_work_item->opcode) {
               if (getVerbosity() > 4) Kernel::log(__PRETTY_FUNCTION__, 2, "About to mark message complete.\n");
-              session->markMessageComplete(current_work_item->xenomsg_id);
+              //session->markMessageComplete(current_work_item->xenomsg_id);
             //}
           }
         }
@@ -572,13 +571,13 @@ void RNBase::hostRxFlush(void) {
   if (NULL == INSTANCE) return;
 
   // TODO: Disable. Yuck... I hate the way this works....
-  read_abort_event.enableSchedule(false);
+  ((RNBase*)INSTANCE)->read_abort_event.enableSchedule(false);
 
   read_millis_0 = 0;
 
   if (uart2_rec_cnt > 0) {
     ((RNBase*)INSTANCE)->feed_rx_buffer((unsigned char*) uart2_received_string, uart2_rec_cnt);
-    if (INSTANCE->getVerbosity() > 4) Kernel::log("Flushed bytes\n");
+    if (((EventReceiver*) INSTANCE)->getVerbosity() > 4) Kernel::log("Flushed bytes\n");
     uart2_rec_cnt = 0;
   }
   else {
@@ -707,7 +706,7 @@ int8_t RNBase::sendBuffer(StringBuilder* _to_send) {
 */
 volatile void RNBase::irqServiceBT_data_activity(void) {
   if (NULL == INSTANCE) return;
-  if (INSTANCE->getVerbosity() > 6) Kernel::log(__PRETTY_FUNCTION__, 6, "We aren't doing anything here yet.");
+  if (((EventReceiver*) INSTANCE)->getVerbosity() > 6) Kernel::log(__PRETTY_FUNCTION__, 6, "We aren't doing anything here yet.");
 }
 
 /*
@@ -758,7 +757,7 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
       // Should watch GPIO2 for this.
     }
   }
-  if (INSTANCE->getVerbosity() > 6) Kernel::log(__PRETTY_FUNCTION__, 0, "BT GPIO 5: %lu.\n", ms);
+  if (((EventReceiver*) INSTANCE)->getVerbosity() > 6) Kernel::log(__PRETTY_FUNCTION__, 0, "BT GPIO 5: %lu.\n", ms);
   last_gpio_5_event = ms;
 }
 
