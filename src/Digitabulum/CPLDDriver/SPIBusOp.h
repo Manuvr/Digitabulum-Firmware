@@ -12,8 +12,6 @@
   #include "DataStructures/StringBuilder.h"
   #include "Drivers/DeviceWithRegisters/DeviceRegister.h"
 
-  class SPIOpCallback;
-
   // Bit[2] is the bit that indicates bus control.
   #define SPI_XFER_STATE_IDLE      0b00000000   // Bus op is waiting somewhere outside of the queue.
   #define SPI_XFER_STATE_INITIATE  0b00000001   // Waiting for initiation
@@ -42,10 +40,12 @@
   #define SPI_XFER_FLAG_DEVICE_REG_INC  0x40   // If set, indicates this operation advances addresses in the target device.
 
 
-  #define SPI_CALLBACK_ERROR     -1
+  #define SPI_CALLBACK_ERROR    -1
   #define SPI_CALLBACK_NOMINAL   0
   #define SPI_CALLBACK_RECYCLE   1
 
+
+class SPIOpCallback;
 
 /*
 * This class represents a single transaction on the bus.

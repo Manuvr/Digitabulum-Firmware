@@ -37,6 +37,8 @@ class RN4677 : public RNBase {
 
   protected:
     void gpioSetup(void);
+    void force_9600_mode(bool);   // Call with 'true' to force the module into 9600bps.
+    void set_bitrate(int);    //
 
 
   private:

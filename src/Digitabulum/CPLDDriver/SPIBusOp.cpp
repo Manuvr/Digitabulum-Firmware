@@ -1,11 +1,11 @@
 #include "SPIBusOp.h"
 #include "CPLDDriver.h"
-extern volatile CPLDDriver* cpld;
 #include <stm32f7xx_hal_dma.h>
 #include <stm32f7xx_hal_gpio.h>
 #include <stm32f7xx_hal_spi.h>
 #include <stm32f7xx_hal.h>
 
+extern volatile CPLDDriver* cpld;
 
 
 

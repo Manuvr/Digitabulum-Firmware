@@ -31,9 +31,17 @@
   ******************************************************************************
   */
 
+#include "FirmwareDefs.h"
 
 #include <Kernel.h>
-#include "FirmwareDefs.h"
+#include <Drivers/i2c-adapter/i2c-adapter.h>
+#include <Drivers/INA219/INA219.h>
+#include <Drivers/ADP8866/ADP8866.h>
+
+#include "Digitabulum/CPLDDriver/CPLDDriver.h"
+#include "Digitabulum/RovingNetworks/RN4677/RN4677.h"
+#include "Digitabulum/ManuLegend/ManuLegend.h"
+#include "Digitabulum/SDCard/SDCard.h"
 
 #ifdef __cplusplus
  extern "C" {
@@ -43,11 +51,7 @@
 #include "stm32f7xx_hal.h"
 #include "cmsis_os.h"
 #include "fatfs.h"
-#include "i2c.h"
-#include "sdmmc.h"
-#include "spi.h"
 #include "tim.h"
-#include "usart.h"
 #include "gpio.h"
 
 
@@ -57,7 +61,6 @@
 /* Private variables ---------------------------------------------------------*/
 Kernel* kernel      = NULL;
 
-/* Private variables ---------------------------------------------------------*/
 
 
 /* Private function prototypes -----------------------------------------------*/
@@ -128,14 +131,7 @@ int main(void) {
 
   /* Initialize all configured peripherals */
   //MX_GPIO_Init();
-  //MX_I2C1_Init();
-  //TODO: Strike. MX_RNG_Init();
-  //MX_SDMMC1_SD_Init();
-  //MX_SPI1_Init();
-  //MX_SPI2_Init();
-  //MX_TIM1_Init();
   //MX_TIM2_Init();
-  //MX_USART2_UART_Init();
 
   /* Call init function for freertos objects (in freertos.c) */
   //MX_FREERTOS_Init();
@@ -144,6 +140,13 @@ int main(void) {
   //osKernelStart();
 
   kernel = new Kernel();  // Instance a kernel.
+  #if defined(__MANUVR_DEBUG)
+    kernel->profiler(true);
+  #endif
+
+  I2CAdapter i2c(1);
+  kernel->subscribe(&i2c);
+
 
   kernel->bootstrap();
 

@@ -24,7 +24,7 @@ limitations under the License.
 #include <stm32f7xx_hal_gpio.h>
 
 
-UART_HandleTypeDef huart2;
+UART_HandleTypeDef huart2 = USART2;
 
 
 RN4677::RN4677() : RNBase() {
@@ -33,7 +33,11 @@ RN4677::RN4677() : RNBase() {
 
 RN4677::~RN4677() {
   __USART2_CLK_DISABLE();
-  HAL_GPIO_DeInit(GPIOA, GPIO_PIN_1|GPIO_PIN_0|GPIO_PIN_2|GPIO_PIN_3);
+  HAL_GPIO_DeInit(GPIOA, GPIO_PIN_1 | GPIO_PIN_0 | GPIO_PIN_2 | GPIO_PIN_3);
+  HAL_GPIO_DeInit(GPIOB, GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_5 | GPIO_PIN_8);
+  HAL_GPIO_DeInit(GPIOC, GPIO_PIN_3 | GPIO_PIN_4);
+  HAL_GPIO_DeInit(GPIOD, GPIO_PIN_3 | GPIO_PIN_6);
+  HAL_GPIO_DeInit(GPIOE, GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6);
 }
 
 
@@ -153,32 +157,86 @@ void RN4677::gpioSetup(void) {
   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5 | GPIO_PIN_6, GPIO_PIN_SET);
 
 
+  // Setting up USART2 to deal with the module...
   __USART2_CLK_ENABLE();
+	__HAL_RCC_USART2_CLK_ENABLE();
+	__HAL_RCC_USART2_FORCE_RESET();
 
-  GPIO_InitStruct.Pin = GPIO_PIN_1|GPIO_PIN_0;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
+  GPIO_InitStruct.Pin       = GPIO_PIN_1 | GPIO_PIN_0;
+  GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull      = GPIO_NOPULL;
+  GPIO_InitStruct.Speed     = GPIO_SPEED_HIGH;
   GPIO_InitStruct.Alternate = GPIO_AF7_USART2;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_3;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
+  GPIO_InitStruct.Pin       = GPIO_PIN_2 | GPIO_PIN_3;
+  GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull      = GPIO_NOPULL;
+  GPIO_InitStruct.Speed     = GPIO_SPEED_HIGH;
   GPIO_InitStruct.Alternate = GPIO_AF7_USART2;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+}
 
 
-  huart2.Instance = USART2;
-  huart2.Init.BaudRate = 115200;
-  huart2.Init.WordLength = UART_WORDLENGTH_7B;
-  huart2.Init.StopBits = UART_STOPBITS_1;
-  huart2.Init.Parity = UART_PARITY_NONE;
-  huart2.Init.Mode = UART_MODE_TX_RX;
-  huart2.Init.HwFlowCtl = UART_HWCONTROL_RTS_CTS;
-  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
-  huart2.Init.OneBitSampling = UART_ONEBIT_SAMPLING_DISABLED;
+
+/*
+*/
+void RN4677::set_bitrate(int _bitrate) {
+//  enterCommandMode();
+//  StringBuilder *temp = new StringBuilder("U,921K,N");
+//  insert_into_work_queue(RNBASE_OP_CODE_CMD_TX_WAIT_RX, temp);
+//  exitCommandMode();
+
+  HAL_NVIC_DisableIRQ(USART2_IRQn);
+  HAL_UART_DeInit(&huart2);
+
+  configured_bitrate = _bitrate;
+
+  /* Now the USART_InitStruct is used to define the
+   * properties of USART2
+   */
+  huart2.Instance                    = USART2;
+  huart2.Init.BaudRate               = configured_bitrate;
+  huart2.Init.WordLength             = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits               = UART_STOPBITS_1;
+  huart2.Init.Parity                 = UART_PARITY_NONE;
+  huart2.Init.Mode                   = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl              = UART_HWCONTROL_RTS_CTS;
+  huart2.Init.OverSampling           = UART_OVERSAMPLING_16;
+  huart2.Init.OneBitSampling         = UART_ONEBIT_SAMPLING_DISABLED;
   huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+
+  HAL_NVIC_SetPriority(USART2_IRQn, 1, 1);
+  HAL_NVIC_EnableIRQ(USART2_IRQn);
+  HAL_NVIC_ClearPendingIRQ(USART2_IRQn);
   HAL_UART_Init(&huart2);
+  USART2->CR1 |= USART_CR1_RXNEIE | USART_CR1_IDLEIE;
+
+  HAL_UART_Init(&huart2);    // finally this enables the complete USART2 peripheral
+
+  // finally this enables the complete USART2 peripheral
+  USART_Cmd(USART2, ENABLE);
+}
+
+
+
+/*
+* Since the RN42 retains settings across power cycles, we might need the
+*   ability to put the thing into a known state before trying to talk to it.
+* This fxn should retrace the init procedures only to the point of config. Once
+*   this class works reasonably well, we should never be running in this mode,
+*   except for recovery from serious amnesia.
+*/
+void RN4677::force_9600_mode(bool force_low_speed) {
+  // TODO: This convention and nomenclature are inverted.
+  if (force_low_speed) {
+    set_bitrate(9600);
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
+  }
+  else {
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
+    set_bitrate(921600);
+  }
+
+  reset();
 }

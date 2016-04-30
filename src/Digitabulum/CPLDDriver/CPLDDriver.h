@@ -38,7 +38,8 @@ The CPLD is responsible for these tasks:
   3) Storing its own revision number in a register accessible via SPI.
 
 At the time of writing, the CPLD can be driven either by its own internal oscillator, or
-  by the CPU itself using a timer channel.
+  by the CPU itself using a timer channel. It is not responsible for having any concept
+  of chirality. That is presently a software task.
 
 This class is the first class to become aware of IRQs outside of the main PCB. They are...
   * IRQs related to digit function.
@@ -71,7 +72,152 @@ CPLD_EXT_CLK | PA8          | External clock for the CPLD.
 CPLD_RESET   | PB9          | Resets the CPLD. Active low.
 CPLD_GPIO_0  | PE11         | Reserved. CPLD input.
 CPLD_GPIO_1  | PE14         | Reserved. CPLD input.
-IRQ_WAKEUP   | PC13         |
+IRQ_WAKEUP   | PC13         | CPLD output.
+
+
+
+CPLD register map
+The CPLD registers were constructed in the same fasion as those of the IMUs. The
+  most-significant bit is the R/~W bit.
+
+Vanilla IMU Access
+-----------------------------------------------------------------------
+Register | Digit | Position | Description
+=========|=======|==========|==========================================
+0x00     |   0   | Proximal | Inertial
+0x01     |   0   | Distal   | Inertial
+0x02     |   1   | Proximal | Inertial
+0x03     |   1   | Intrmedt | Inertial
+0x04     |   1   | Distal   | Inertial
+0x05     |   2   | Proximal | Inertial
+0x06     |   2   | Intrmedt | Inertial
+0x07     |   2   | Distal   | Inertial
+0x08     |   3   | Proximal | Inertial
+0x09     |   3   | Intrmedt | Inertial
+0x0A     |   3   | Distal   | Inertial
+0x0B     |   4   | Proximal | Inertial
+0x0C     |   4   | Intrmedt | Inertial
+0x0D     |   4   | Distal   | Inertial
+0x0E     |   5   | Proximal | Inertial
+0x0F     |   5   | Intrmedt | Inertial
+0x10     |   5   | Distal   | Inertial
+0x11     |   0   | Proximal | Magnetic
+0x12     |   0   | Distal   | Magnetic
+0x13     |   1   | Proximal | Magnetic
+0x14     |   1   | Intrmedt | Magnetic
+0x15     |   1   | Distal   | Magnetic
+0x16     |   2   | Proximal | Magnetic
+0x17     |   2   | Intrmedt | Magnetic
+0x18     |   2   | Distal   | Magnetic
+0x19     |   3   | Proximal | Magnetic
+0x1A     |   3   | Intrmedt | Magnetic
+0x1B     |   3   | Distal   | Magnetic
+0x1C     |   4   | Proximal | Magnetic
+0x1D     |   4   | Intrmedt | Magnetic
+0x1E     |   4   | Distal   | Magnetic
+0x1F     |   5   | Proximal | Magnetic
+0x20     |   5   | Intrmedt | Magnetic
+0x21     |   5   | Distal   | Magnetic
+
+Ranked IMU Access
+-----------------------------------------------------------------------
+Register | Digit | Position | Description
+=========|=======|==========|==========================================
+0x22     |   *   | Proximal | Magnetic  (6 sensors)
+0x23     |   *   | Intrmedt | Magnetic  (Note: Only 5 sensors here!)
+0x24     |   *   | Distal   | Magnetic  (6 sensors)
+0x25     |   *   | Proximal | Inertial  (6 sensors)
+0x26     |   *   | Intrmedt | Inertial  (Note: Only 5 sensors here!)
+0x27     |   *   | Distal   | Inertial  (6 sensors)
+
+Ranked access carries some complications...
+The data on the wire must be sent this way:
+byte 0: Rank access register
+byte 1: transfer length per-sensor
+byte 2: the sensor count requested
+
+byte 3 and onward would be the normal content of the dialog with the sensor,
+  starting with the target address within the sensor. Byte 3 will be captured
+  in an internal register and replicated to
+
+
+Internal registers
+-----------------------------------------------------------------------
+Register | R/~W  | Internal | Width | Description
+=========|=======|==========|=======|==================================
+0x28     | R     | (CS_0)   |  8    | VERSION
+0x29     | R/W   | (CS_1)   |  8    | CONFIG
+0x2A     | R/W   | (CS_2)   |  8    | STATUS
+0x2B     | R/W   | (CS_3)   |  8    | DIGIT_INCLUSION
+0x2C     | R/W   | (CS_4)   |  8    | Reserved
+0x2D     | R/W   | (CS_5)   |  8    | Reserved
+0x2E     | R     | (CS_6)   |  8    | Reserved
+0x2F     | R     | (CS_7)   |  8    | Reserved
+
+
+VERSION register is read-only, and stores an 8-bit integer reflecting the
+  revision of the currently-burned CPLD.
+
+
+
+CONFIG register
+Bit | Function
+----|------------
+0   | IRQ_RATE_0  // These two bits set the IRQ scan prescaler.
+1   | IRQ_RATE_1     0: Scan off   1: 1x      2: 2x      3: 4x
+2   | Reserved
+3   | Reserved
+4   | Reserved
+5   | Reserved
+6   | OSC_SEL     // 0: Internal oscillator (default)   1: Externally-applied clock
+7   | IRQ_XFER    // Set when an IRQ transfer is in-progress. Set to initiate.
+
+
+DIGIT_IRQ register
+          Bit | Function
+          ----|------------
+          0   | Metacarpals
+          1   | Digit 1
+          2   | Digit 2
+          3   | Digit 3
+          4   | Digit 4
+          5   | Digit 5
+          6   | 0
+          7   | 0
+
+DIGIT_INCLUSION register
+Allows us to include or exclude digit data in automated
+  bus operations. This is a concern independent of power-control and presence.
+  Generally, you would want this register to match the value of the DIGIT_PRESENT
+          Bit | Function
+          ----|------------
+          0   | Metacarpals
+          1   | Digit 1
+          2   | Digit 2
+          3   | Digit 3
+          4   | Digit 4
+          5   | Digit 5
+          6   | 0
+          7   | 0
+
+DIGIT_PRESENT register (read-only)
+          Bit | Function
+          ----|------------
+          0   | Metacarpals
+          1   | Digit 1
+          2   | Digit 2
+          3   | Digit 3
+          4   | Digit 4
+          5   | Digit 5
+          6   | 0
+          7   | 0
+
+The TRANSFER_LEN register dictates how many bytes we transfer per IMU-access,
+  without regard to the register selection byte.
+  IE, to read 6-bytes of vector data, this register would contain the value 6.
+
+
+
 */
 
 
