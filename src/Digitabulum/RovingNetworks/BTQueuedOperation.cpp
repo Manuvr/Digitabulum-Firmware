@@ -26,7 +26,7 @@ TODO: It would be really nice to unify this basic "work-queue" pattern and
 
 #include "RNBase.h"
 #include <stm32f7xx_hal_dma.h>
-
+#include <Kernel.h>
 
 /**
 * Used to disable the DMA IRQs at the NVIC.
@@ -213,19 +213,19 @@ DMA_InitTypeDef DMA_InitStructure;
 void BTQueuedOperation::buildDMAMembers() {
   DMA_DeInit(DMA1_Stream6);
 
-  DMA_InitStructure.DMA_Channel            = DMA_Channel_4;
-  DMA_InitStructure.DMA_DIR                = DMA_DIR_MemoryToPeripheral;   // Transmit
-  DMA_InitStructure.DMA_PeripheralInc      = DMA_PeripheralInc_Disable;
-  DMA_InitStructure.DMA_MemoryInc          = DMA_MemoryInc_Enable;
-  DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Byte;
-  DMA_InitStructure.DMA_MemoryDataSize     = DMA_MemoryDataSize_Word;
-  DMA_InitStructure.DMA_Mode               = DMA_Mode_Normal;
-  DMA_InitStructure.DMA_Priority           = DMA_Priority_Low;
-  DMA_InitStructure.DMA_FIFOMode           = DMA_FIFOMode_Enable;  // Required for differnt access-widths.
-  DMA_InitStructure.DMA_FIFOThreshold      = DMA_FIFOThreshold_Full;
-  DMA_InitStructure.DMA_MemoryBurst        = DMA_MemoryBurst_Single;
-  DMA_InitStructure.DMA_PeripheralBurst    = DMA_PeripheralBurst_Single;
-  DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t) &USART2->DR;
+  DMA_InitStructure.Channel             = DMA_CHANNEL_4;
+  DMA_InitStructure.Direction           = DMA_MEMORY_TO_PERIPH;   // Transmit
+  DMA_InitStructure.PeripheralInc       = DMA_PINC_DISABLE;
+  DMA_InitStructure.MemInc              = DMA_MINC_ENABLE;
+  DMA_InitStructure.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+  DMA_InitStructure.MemDataAlignment    = DMA_MDATAALIGN_WORD;
+  DMA_InitStructure.Mode                = DMA_NORMAL;
+  DMA_InitStructure.Priority            = DMA_PRIORITY_LOW;
+  DMA_InitStructure.FIFOMode            = DMA_FIFOMODE_ENABLE;  // Required for differnt access-widths.
+  DMA_InitStructure.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
+  DMA_InitStructure.MemBurst            = DMA_MBURST_SINGLE;
+  DMA_InitStructure.PeriphBurst         = DMA_PBURST_SINGLE;
+  //DMA_InitStructure.PeripheralBaseAddr  = (uint32_t) &USART2->DR;
 
   /* Enable DMA Stream Transfer Complete interrupt */
   enable_DMA_IRQ(false);
