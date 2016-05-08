@@ -69,7 +69,7 @@ MCUFLAGS += -ffreestanding
 LIBPATHS  = -L. -Llib/
 
 # Libraries to link
-LIBS = -lm -lstdperiph -lmanuvr -lfatfs -lfreertos -lc -lgcc -lstdc++
+LIBS = -lm -lstdperiph -lfatfs -lfreertos -lc -lgcc -lstdc++
 
 # Flags for the linker...
 LDFLAGS  = -static $(MCUFLAGS)

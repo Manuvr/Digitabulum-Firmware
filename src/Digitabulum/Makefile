@@ -5,7 +5,7 @@ LOCAL_FLAGS  =  -std=$(CXX_STANDARD) -nostdlib
 
 # Sources
 SRCS   = CPLDDriver/CPLDDriver.cpp
-#SRCS  += CPLDDriver/SPIBusOp.cpp
+SRCS  += CPLDDriver/SPIBusOp.cpp
 SRCS  += LSM9DS1/IIU.cpp
 SRCS  += LSM9DS1/LSM9DS1.cpp
 SRCS  += LSM9DS1/LSM9DS1_AG.cpp
