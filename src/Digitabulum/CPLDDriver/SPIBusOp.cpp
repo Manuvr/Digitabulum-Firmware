@@ -1,3 +1,26 @@
+/*
+File:   SPIBusOp.cpp
+Author: J. Ian Lindsay
+Date:   2014.07.01
+
+Copyright 2016 Manuvr, Inc
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+
+*/
+
+
 #include "SPIBusOp.h"
 #include "CPLDDriver.h"
 #include <stm32f7xx_hal_dma.h>
@@ -6,7 +29,7 @@
 #include <stm32f7xx_hal.h>
 
 extern volatile CPLDDriver* cpld;
-
+extern SPI_HandleTypeDef hspi1;
 
 
 /****************************************************************************************************
@@ -15,8 +38,8 @@ extern volatile CPLDDriver* cpld;
 StringBuilder debug_log;   // TODO: Relocate this to a static member.
 
 /* These are the basic DMA init parameters that will be needed by the SPI classes. */
-DMA_InitTypeDef DMA_InitStructure_Read;
-DMA_InitTypeDef DMA_InitStructure_Write;
+DMA_HandleTypeDef _dma_r_handle;
+DMA_HandleTypeDef _dma_w_handle;
 
 /*
 * Notated like a const, but should NOT be a const, because we use this as a DMA read sink as well
@@ -43,34 +66,6 @@ uint16_t SPIBusOp::spi_wait_timeout = 20; // In microseconds. Per-byte.
 //uint32_t SPIBusOp::spi_cs_delay     = 0;  // How many microseconds to delay before CS disassertion?
 
 
-
-/* Until we get hardware control of CS working, we call this. */
-void SPIBusOp::assertCS(bool asserted) {
-  bool cs_pin_state = false; //(GPIOA->ODR & GPIO_Pin_4);
-  if (asserted != cs_pin_state) {
-    debug_log.concat("We are changing the CS state to something that \"already is\".\n");
-  }
-
-  if (asserted) {
-    //GPIOA->BSRRH = GPIO_Pin_4;
-  }
-  else {
-    while( (SPI1->SR & SPI_I2S_FLAG_BSY) ); // wait until transmit complete, JIC.
-
-    //if (spi_cs_delay) {
-    //  uint32_t mark = micros() + spi_cs_delay;
-    //  // Control for clock-wrap. We're about to delay, so no hurry. Be careful...
-    //  while (mark < spi_cs_delay) mark = micros() + spi_cs_delay;
-    //  while (mark > micros());
-    //}
-
-    //GPIOA->BSRRL = GPIO_Pin_4;
-  }
-}
-
-
-
-
 /**
 * This is called upon CPLD instantiation to build the DMA init structures for the bus operation.
 * This data is retained following a wipe(), so we eat the minor memory penalty so that the
@@ -81,35 +76,37 @@ void SPIBusOp::buildDMAMembers() {
   // We setup the interrupt-driven stuff so we aren't surprised on the first use of the bus.
   enableSPI_DMA(false);
   enableSPI_IRQ(false);
-  DMA_ITConfig(DMA2_Stream0, DMA_IT_TC | DMA_IT_TE | DMA_IT_HT | DMA_IT_FE | DMA_IT_DME, DISABLE);
-  DMA_ITConfig(DMA2_Stream0, DMA_IT_TC, ENABLE);
+  DMA_ITConfig(DMA2_Stream3, DMA_IT_TC | DMA_IT_TE | DMA_IT_HT | DMA_IT_FE | DMA_IT_DME, DISABLE);
+  DMA_ITConfig(DMA2_Stream2, DMA_IT_TC, ENABLE);
 
-  DMA_InitStructure_Read.Direction            = DMA_PERIPH_TO_MEMORY;   // Receive
-  DMA_InitStructure_Read.Channel              = DMA_CHANNEL_3;
-  DMA_InitStructure_Read.PeriphDataAlignment  = DMA_PDATAALIGN_BYTE;
-  DMA_InitStructure_Read.MemDataAlignment     = DMA_MDATAALIGN_BYTE;
-  DMA_InitStructure_Read.Priority             = DMA_PRIORITY_HIGH;
-  DMA_InitStructure_Read.FIFOMode             = DMA_FIFOMODE_DISABLE;  // Required for differnt access-widths.
-  DMA_InitStructure_Read.FIFOThreshold        = DMA_FIFO_THRESHOLD_FULL;
-  DMA_InitStructure_Read.MemBurst             = DMA_MBURST_SINGLE;
-  DMA_InitStructure_Read.PeriphInc            = DMA_PINC_DISABLE;
-  DMA_InitStructure_Read.PeriphBurst          = DMA_PBURST_SINGLE;
-  DMA_InitStructure_Read.Mode                 = DMA_NORMAL;
-  DMA_InitStructure_Read.MemInc               = DMA_MINC_ENABLE;
+  _dma_r_handle.Instance                  = DMA2_Stream2;
+  _dma_r_handle.Init.Direction            = DMA_PERIPH_TO_MEMORY;   // Receive
+  _dma_r_handle.Init.Channel              = DMA_CHANNEL_3;
+  _dma_r_handle.Init.PeriphDataAlignment  = DMA_PDATAALIGN_BYTE;
+  _dma_r_handle.Init.MemDataAlignment     = DMA_MDATAALIGN_BYTE;
+  _dma_r_handle.Init.Priority             = DMA_PRIORITY_HIGH;
+  _dma_r_handle.Init.FIFOMode             = DMA_FIFOMODE_DISABLE;  // Required for differnt access-widths.
+  _dma_r_handle.Init.FIFOThreshold        = DMA_FIFO_THRESHOLD_FULL;
+  _dma_r_handle.Init.MemBurst             = DMA_MBURST_SINGLE;
+  _dma_r_handle.Init.PeriphInc            = DMA_PINC_DISABLE;
+  _dma_r_handle.Init.PeriphBurst          = DMA_PBURST_SINGLE;
+  _dma_r_handle.Init.Mode                 = DMA_NORMAL;
+  _dma_r_handle.Init.MemInc               = DMA_MINC_ENABLE;
   //DMA_InitStructure_Read.DMA_PeripheralBaseAddr  = (uint32_t) &SPI1->DR;
 
-  DMA_InitStructure_Write.Direction           = DMA_MEMORY_TO_PERIPH;   // Transmit
-  DMA_InitStructure_Write.Channel             = DMA_CHANNEL_3;
-  DMA_InitStructure_Write.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-  DMA_InitStructure_Write.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
-  DMA_InitStructure_Write.Priority            = DMA_PRIORITY_HIGH;
-  DMA_InitStructure_Write.FIFOMode            = DMA_FIFOMODE_DISABLE;  // Required for differnt access-widths.
-  DMA_InitStructure_Write.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
-  DMA_InitStructure_Write.MemBurst            = DMA_MBURST_SINGLE;
-  DMA_InitStructure_Write.PeriphInc           = DMA_PINC_DISABLE;
-  DMA_InitStructure_Write.PeriphBurst         = DMA_PBURST_SINGLE;
-  DMA_InitStructure_Write.Mode                = DMA_NORMAL;
-  DMA_InitStructure_Write.MemInc              = DMA_MINC_ENABLE;
+  _dma_w_handle.Instance                 = DMA2_Stream3;
+  _dma_w_handle.Init.Direction           = DMA_MEMORY_TO_PERIPH;   // Transmit
+  _dma_w_handle.Init.Channel             = DMA_CHANNEL_3;
+  _dma_w_handle.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+  _dma_w_handle.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
+  _dma_w_handle.Init.Priority            = DMA_PRIORITY_HIGH;
+  _dma_w_handle.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;  // Required for differnt access-widths.
+  _dma_w_handle.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
+  _dma_w_handle.Init.MemBurst            = DMA_MBURST_SINGLE;
+  _dma_w_handle.Init.PeriphInc           = DMA_PINC_DISABLE;
+  _dma_w_handle.Init.PeriphBurst         = DMA_PBURST_SINGLE;
+  _dma_w_handle.Init.Mode                = DMA_NORMAL;
+  _dma_w_handle.Init.MemInc              = DMA_MINC_ENABLE;
   //DMA_InitStructure_Write.DMA_PeripheralBaseAddr = (uint32_t) &SPI1->DR;
 }
 
@@ -371,7 +368,7 @@ int8_t SPIBusOp::begin() {
     return -1;
   }
 
-  assertCS(true);
+  //assertCS(true);
 
   /* In this case, we need to clear any pending interrupts for the SPI, and to do that, we must
      read this register, even though we don't care about the result.  */
@@ -432,7 +429,7 @@ int8_t SPIBusOp::markComplete() {
       DMA_ClearFlag(DMA2_Stream3, DMA_FLAG_FEIF3|DMA_FLAG_DMEIF3|DMA_FLAG_TEIF3|DMA_FLAG_HTIF3|DMA_FLAG_TCIF3);
     }
 
-    assertCS(false);
+    //assertCS(false);
   }
 
   //time_ended = micros();
@@ -563,7 +560,7 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
         //if (profile) transition_time_DMA_WAIT = micros();
         if (0 == DMA_GetCurrDataCounter(DMA2_Stream0)) {
           xfer_state = SPI_XFER_STATE_STOP;
-          if (DMA_GetCmdStatus(DMA2_Stream0) == DISABLE) {
+          if (HAL_DMA_GetState(DMA2_Stream0) == HAL_DMA_STATE_RESET) {
             markComplete();
           }
           else {

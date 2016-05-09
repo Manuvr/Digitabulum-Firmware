@@ -163,9 +163,11 @@ const MessageTypeDef cpld_message_defs[] = {
   {  DIGITABULUM_MSG_IMU_DOUBLE_TAP       , MSG_FLAG_EXPORTABLE,  "IMU_DOUBLE_TAP"       , MSG_ARGS_U8_FLOAT }, // IMU id and optional threshold.
 };
 
+TIM_HandleTypeDef htim1;
 SPI_HandleTypeDef hspi1;
 SPI_HandleTypeDef hspi2;
-TIM_HandleTypeDef htim1;
+DMA_HandleTypeDef _dma_handle_spi2;
+
 
 /****************************************************************************************************
 *   ___ _              ___      _ _              _      _
@@ -207,7 +209,6 @@ CPLDDriver::CPLDDriver() : SPIDeviceWithRegisters(0, 9) {
   event_spi_queue_ready.specific_target    = (EventReceiver*) this;
   event_spi_queue_ready.originator         = (EventReceiver*) this;
   event_spi_queue_ready.priority           = 5;
-
 
   // Mark all of our preallocated SPI jobs as "No Reap" and pass them into the prealloc queue.
   for (uint8_t i = 0; i < PREALLOCATED_SPI_JOBS; i++) {
@@ -303,11 +304,11 @@ void CPLDDriver::gpioSetup(void) {
   TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig;
   TIM_OC_InitTypeDef sConfigOC;
 
-  htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 0;
-  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 0;
-  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Instance               = TIM1;
+  htim1.Init.Prescaler         = 0;
+  htim1.Init.CounterMode       = TIM_COUNTERMODE_UP;
+  htim1.Init.Period            = 0;
+  htim1.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   HAL_TIM_Base_Init(&htim1);
 
@@ -393,7 +394,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   hspi1.Instance = SPI1;
   hspi1.Init.Mode = SPI_MODE_MASTER;
   hspi1.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi1.Init.DataSize = SPI_DATASIZE_4BIT;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
   hspi1.Init.CLKPolarity = cpol_mode;
   hspi1.Init.CLKPhase = cpha_mode;
   hspi1.Init.NSS = SPI_NSS_HARD_OUTPUT;
@@ -405,24 +406,49 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
   hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLED;
   HAL_SPI_Init(&hspi1);
-
-  hspi2.Instance = SPI2;
-  hspi2.Init.Mode = SPI_MODE_SLAVE;
-  hspi2.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi2.Init.DataSize = SPI_DATASIZE_4BIT;
-  hspi2.Init.CLKPolarity = cpol_mode;
-  hspi2.Init.CLKPhase = cpha_mode;
-  hspi2.Init.NSS = SPI_NSS_HARD_INPUT;
-  hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi2.Init.TIMode = SPI_TIMODE_DISABLED;
-  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
-  hspi2.Init.CRCPolynomial = 7;
-  hspi2.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-  hspi2.Init.NSSPMode = SPI_NSS_PULSE_DISABLED;
-  HAL_SPI_Init(&hspi2);
-
   //SPI_I2S_ITConfig(SPI1, SPI_I2S_IT_ERR | I2S_IT_UDR| SPI_IT_CRCERR | SPI_IT_MODF | SPI_I2S_IT_RXNE | SPI_I2S_IT_TXE, DISABLE);
   //SPI_I2S_ITConfig(SPI1, SPI_I2S_IT_RXNE , ENABLE);  // Interrupt when byte is done moving.
+
+  hspi2.Instance            = SPI2;
+  hspi2.Init.Mode           = SPI_MODE_SLAVE;
+  hspi2.Init.Direction      = SPI_DIRECTION_2LINES_RXONLY;
+  hspi2.Init.DataSize       = SPI_DATASIZE_8BIT;
+  hspi2.Init.CLKPolarity    = cpol_mode;
+  hspi2.Init.CLKPhase       = cpha_mode;
+  hspi2.Init.NSS            = SPI_NSS_HARD_INPUT;
+  hspi2.Init.FirstBit       = SPI_FIRSTBIT_MSB;
+  hspi2.Init.TIMode         = SPI_TIMODE_DISABLED;
+  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
+  hspi2.Init.CRCPolynomial  = 7;
+  hspi2.Init.CRCLength      = SPI_CRC_LENGTH_DATASIZE;
+  hspi2.Init.NSSPMode       = SPI_NSS_PULSE_DISABLED;
+  HAL_SPI_Init(&hspi2);
+
+  // We handle SPI2 in this class. Setup the DMA members.
+  HAL_DMA_DeInit(&_dma_handle_spi2);
+
+  _dma_handle_spi2.Instance                 = DMA1_Stream3;
+  _dma_handle_spi2.Init.Channel             = DMA_CHANNEL_0;
+  _dma_handle_spi2.Init.Direction           = DMA_PERIPH_TO_MEMORY;   // Receive
+  _dma_handle_spi2.Init.PeriphInc           = DMA_PINC_DISABLE;
+  _dma_handle_spi2.Init.MemInc              = DMA_MINC_ENABLE;
+  _dma_handle_spi2.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+  _dma_handle_spi2.Init.MemDataAlignment    = DMA_MDATAALIGN_WORD;
+  _dma_handle_spi2.Init.Mode                = DMA_NORMAL;
+  _dma_handle_spi2.Init.Priority            = DMA_PRIORITY_LOW;
+  _dma_handle_spi2.Init.FIFOMode            = DMA_FIFOMODE_ENABLE;  // Required for differnt access-widths.
+  _dma_handle_spi2.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
+  _dma_handle_spi2.Init.MemBurst            = DMA_MBURST_SINGLE;
+  _dma_handle_spi2.Init.PeriphBurst         = DMA_PBURST_SINGLE;
+
+  __HAL_DMA_CLEAR_FLAG(&_dma_handle_spi2, DMA_FLAG_TCIF0_4 | DMA_FLAG_HTIF0_4 | DMA_FLAG_TEIF0_4 | DMA_FLAG_DMEIF0_4 | DMA_FLAG_FEIF0_4);
+  HAL_DMA_Init(&_dma_handle_spi2);
+
+  /* Enable DMA Stream Transfer Complete interrupt */
+  __HAL_DMA_ENABLE_IT(&_dma_handle_spi2, DMA_IT_TC);
+  HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
+
+  HAL_DMA_Start_IT(&_dma_handle_spi2, (uint32_t) hspi2.pTxBuffPtr, (uint32_t) _irq_data_0, 11);
 }
 
 
