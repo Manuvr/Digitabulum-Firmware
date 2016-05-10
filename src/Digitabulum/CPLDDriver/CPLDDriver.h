@@ -147,10 +147,10 @@ Register | R/~W  | Internal | Width | Description
 =========|=======|==========|=======|==================================
 0x28     | R     | (CS_0)   |  8    | VERSION
 0x29     | R/W   | (CS_1)   |  8    | CONFIG
-0x2A     | R/W   | (CS_2)   |  8    | STATUS
-0x2B     | R/W   | (CS_3)   |  8    | DIGIT_INCLUSION
-0x2C     | R/W   | (CS_4)   |  8    | Reserved
-0x2D     | R/W   | (CS_5)   |  8    | Reserved
+0x2A     | R     | (CS_2)   |  8    | STATUS
+0x2B     | R     | (CS_3)   |  8    | DIGIT_PRESENT
+0x2C     | R     | (CS_4)   |  8    | Reserved
+0x2D     | R     | (CS_5)   |  8    | Reserved
 0x2E     | R     | (CS_6)   |  8    | Reserved
 0x2F     | R     | (CS_7)   |  8    | Reserved
 
@@ -159,61 +159,34 @@ VERSION register is read-only, and stores an 8-bit integer reflecting the
   revision of the currently-burned CPLD.
 
 
-
 CONFIG register
-Bit | Function
-----|------------
-0   | IRQ_RATE_0  // These two bits set the IRQ scan prescaler.
-1   | IRQ_RATE_1     0: Scan off   1: 1x      2: 2x      3: 4x
-2   | Reserved
-3   | Reserved
-4   | Reserved
-5   | Reserved
-6   | OSC_SEL     // 0: Internal oscillator (default)   1: Externally-applied clock
-7   | IRQ_XFER    // Set when an IRQ transfer is in-progress. Set to initiate.
+  Bit | Function
+  ----|------------
+  0   | IRQ_RATE_0  // These two bits set the IRQ scan prescaler.
+  1   | IRQ_RATE_1     0: Scan off   1: 1x      2: 2x      3: 4x
+  2   | Reserved
+  3   | Reserved
+  4   | Reserved
+  5   | Reserved
+  6   | OSC_SEL     // 0: Internal oscillator (default)   1: Externally-applied clock
+  7   | IRQ_XFER    // Set when an IRQ transfer is in-progress. Set to initiate.
 
-
-DIGIT_IRQ register
-          Bit | Function
-          ----|------------
-          0   | Metacarpals
-          1   | Digit 1
-          2   | Digit 2
-          3   | Digit 3
-          4   | Digit 4
-          5   | Digit 5
-          6   | 0
-          7   | 0
-
-DIGIT_INCLUSION register
-Allows us to include or exclude digit data in automated
-  bus operations. This is a concern independent of power-control and presence.
-  Generally, you would want this register to match the value of the DIGIT_PRESENT
-          Bit | Function
-          ----|------------
-          0   | Metacarpals
-          1   | Digit 1
-          2   | Digit 2
-          3   | Digit 3
-          4   | Digit 4
-          5   | Digit 5
-          6   | 0
-          7   | 0
 
 DIGIT_PRESENT register (read-only)
-          Bit | Function
-          ----|------------
-          0   | Metacarpals
-          1   | Digit 1
-          2   | Digit 2
-          3   | Digit 3
-          4   | Digit 4
-          5   | Digit 5
-          6   | 0
-          7   | 0
+  Bit | Function
+  ----|------------
+  0   | Metacarpals
+  1   | Digit 1
+  2   | Digit 2
+  3   | Digit 3
+  4   | Digit 4
+  5   | Digit 5
+  6   | 0
+  7   | 0
+
 
 The TRANSFER_LEN register dictates how many bytes we transfer per IMU-access,
-  without regard to the register selection byte.
+  without including the register selection byte.
   IE, to read 6-bytes of vector data, this register would contain the value 6.
 
 
@@ -374,6 +347,11 @@ class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
 
 
   private:
+    uint8_t   _irq_data_0[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};  // IRQ data is double-buffered
+    uint8_t   _irq_data_1[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};  //   in these arrays.
+    uint8_t*  _irq_data       = _irq_data_0;                           // Used for paging the above buffers.
+
+    ManuvrRunnable _irq_data_arrival;
     ManuvrRunnable event_spi_queue_ready;
     ManuvrRunnable event_spi_callback_ready;
     ManuvrRunnable event_spi_timeout;

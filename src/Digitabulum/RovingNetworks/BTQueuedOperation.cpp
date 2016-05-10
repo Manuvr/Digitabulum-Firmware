@@ -25,7 +25,13 @@ TODO: It would be really nice to unify this basic "work-queue" pattern and
 
 
 #include "RNBase.h"
+#include "stm32f7xx.h"
 #include <stm32f7xx_hal_dma.h>
+#include <Kernel.h>
+
+DMA_HandleTypeDef _dma_handle;
+
+extern UART_HandleTypeDef huart2;
 
 
 /**
@@ -35,16 +41,25 @@ TODO: It would be really nice to unify this basic "work-queue" pattern and
 */
 void BTQueuedOperation::enable_DMA_IRQ(bool enable) {
   if (!enable) {
-    NVIC_DisableIRQ(DMA1_Stream6_IRQn);
+    HAL_NVIC_DisableIRQ(DMA1_Stream6_IRQn);
   }
   else {
-    DMA_ClearFlag(DMA1_Stream6, DMA_FLAG_FEIF6|DMA_FLAG_DMEIF6|DMA_FLAG_TEIF6|DMA_FLAG_HTIF6|DMA_FLAG_TCIF6);
-    DMA_ClearITPendingBit(DMA1_Stream6, DMA_IT_TCIF6 | DMA_IT_TEIF6 | DMA_IT_HTIF6 | DMA_IT_DMEIF6 | DMA_IT_FEIF6);
-    NVIC_EnableIRQ(DMA1_Stream6_IRQn);
+    // Clear all DMA flags.
+    __HAL_DMA_CLEAR_FLAG(&_dma_handle, DMA_FLAG_TCIF2_6 | DMA_FLAG_HTIF2_6 | DMA_FLAG_TEIF2_6 | DMA_FLAG_DMEIF2_6 | DMA_FLAG_FEIF2_6);
+    // Clear all possible pending interrupts.
+    //DMA_ClearITPendingBit(DMA1_Stream6, ());
+
+    // Allow the DMA module IRQ in the interrupt controller.
+    HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
   }
 }
 
-
+//{
+//  HAL_OK       = 0x00,
+//  HAL_ERROR    = 0x01,
+//  HAL_BUSY     = 0x02,
+//  HAL_TIMEOUT  = 0x03
+//} HAL_StatusTypeDef;
 
 
 
@@ -164,12 +179,13 @@ int8_t BTQueuedOperation::mark_complete(void) {
   tx_buf = NULL;
   tx_len = 0;
   enable_DMA_IRQ(false);
+  HAL_DMA_Abort(&_dma_handle);
 
   switch (opcode) {
     case RNBASE_OP_CODE_CMD_TX_WAIT_RX:
       {
       // We need to be able to time out...
-      EventManager::raiseEvent(MANUVR_MSG_BT_RX_BUF_NOT_EMPTY, NULL);
+      //Kernel::raiseEvent(MANUVR_MSG_BT_RX_BUF_NOT_EMPTY, NULL);
       }
       break;
     case RNBASE_OP_CODE_CMD_TX:
@@ -207,29 +223,26 @@ void BTQueuedOperation::printDebug(StringBuilder *output) {
 
 
 
-DMA_InitTypeDef DMA_InitStructure;
-
-
 void BTQueuedOperation::buildDMAMembers() {
-  DMA_DeInit(DMA1_Stream6);
+  HAL_DMA_DeInit(&_dma_handle);
 
-  DMA_InitStructure.DMA_Channel            = DMA_Channel_4;
-  DMA_InitStructure.DMA_DIR                = DMA_DIR_MemoryToPeripheral;   // Transmit
-  DMA_InitStructure.DMA_PeripheralInc      = DMA_PeripheralInc_Disable;
-  DMA_InitStructure.DMA_MemoryInc          = DMA_MemoryInc_Enable;
-  DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Byte;
-  DMA_InitStructure.DMA_MemoryDataSize     = DMA_MemoryDataSize_Word;
-  DMA_InitStructure.DMA_Mode               = DMA_Mode_Normal;
-  DMA_InitStructure.DMA_Priority           = DMA_Priority_Low;
-  DMA_InitStructure.DMA_FIFOMode           = DMA_FIFOMode_Enable;  // Required for differnt access-widths.
-  DMA_InitStructure.DMA_FIFOThreshold      = DMA_FIFOThreshold_Full;
-  DMA_InitStructure.DMA_MemoryBurst        = DMA_MemoryBurst_Single;
-  DMA_InitStructure.DMA_PeripheralBurst    = DMA_PeripheralBurst_Single;
-  DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t) &USART2->DR;
+  _dma_handle.Instance                 = DMA1_Stream6;
+  _dma_handle.Init.Channel             = DMA_CHANNEL_4;
+  _dma_handle.Init.Direction           = DMA_MEMORY_TO_PERIPH;   // Transmit
+  _dma_handle.Init.PeriphInc           = DMA_PINC_DISABLE;
+  _dma_handle.Init.MemInc              = DMA_MINC_ENABLE;
+  _dma_handle.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+  _dma_handle.Init.MemDataAlignment    = DMA_MDATAALIGN_WORD;
+  _dma_handle.Init.Mode                = DMA_NORMAL;
+  _dma_handle.Init.Priority            = DMA_PRIORITY_LOW;
+  _dma_handle.Init.FIFOMode            = DMA_FIFOMODE_ENABLE;  // Required for differnt access-widths.
+  _dma_handle.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
+  _dma_handle.Init.MemBurst            = DMA_MBURST_SINGLE;
+  _dma_handle.Init.PeriphBurst         = DMA_PBURST_SINGLE;
 
   /* Enable DMA Stream Transfer Complete interrupt */
   enable_DMA_IRQ(false);
-  DMA_ITConfig(DMA1_Stream6, DMA_IT_TC | DMA_IT_TE | DMA_IT_DME, ENABLE);
+  __HAL_DMA_ENABLE_IT(&_dma_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
 }
 
 
@@ -246,19 +259,15 @@ void BTQueuedOperation::buildDMAMembers() {
 */
 int8_t BTQueuedOperation::init_dma() {
   // Disable the DMA Tx Stream.
-  if (DMA_GetCmdStatus(DMA1_Stream6) != DISABLE) DMA_Cmd(DMA1_Stream6, DISABLE);
+  if (HAL_DMA_GetState(&_dma_handle) != HAL_DMA_STATE_RESET) __HAL_DMA_DISABLE(&_dma_handle);
 
-  DMA_InitStructure.DMA_Memory0BaseAddr    = (uint32_t) tx_buf;
-  DMA_InitStructure.DMA_BufferSize         = (uint16_t) tx_len;
-
-  while (DMA_GetCmdStatus(DMA1_Stream6) != DISABLE);
-  DMA_Init(DMA1_Stream6, &DMA_InitStructure);
-  DMA_Cmd(DMA1_Stream6, ENABLE);    // Enable the DMA Tx Stream
+  HAL_DMA_Init(&_dma_handle);
+  HAL_DMA_Start_IT(&_dma_handle, (uint32_t) tx_buf, (uint32_t) huart2.pTxBuffPtr, (uint32_t) tx_len);
 
   enable_DMA_IRQ(true);
 
   /* Enable the USART Tx DMA request */
-  USART_DMACmd(USART2, USART_DMAReq_Tx, ENABLE);
+  //USART_DMACmd(USART2, USART_DMAReq_Tx, ENABLE);
   return 0;
 }
 
