@@ -112,6 +112,20 @@ void VCP_Tx_Complete() {
 
 
 void system_setup() {
+  GPIO_InitTypeDef GPIO_InitStruct;
+
+  /* These Port B pins are push-pull outputs:
+  *
+  * #  Default   Purpose
+  * -----------------------------------------------
+  * 0     0      ~External OSC Enable
+  */
+  GPIO_InitStruct.Pin        = GPIO_PIN_0;
+  GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull       = GPIO_NOPULL;
+  GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
   SCB_EnableICache();       /* Enable I-Cache */
   SCB_EnableDCache();       /* Enable D-Cache */
 
@@ -186,6 +200,8 @@ void SystemClock_Config(void) {
 
 
   #if defined(RUN_WITH_HSE)
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
+
     RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
     RCC_OscInitStruct.HSEState = RCC_HSE_ON;
     RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
@@ -200,6 +216,8 @@ void SystemClock_Config(void) {
       RCC_OscInitStruct.PLL.PLLM = 25;
     #endif
   #elif defined(RUN_WITH_HSI)
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
+
     RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
     RCC_OscInitStruct.HSIState = RCC_HSI_ON;
     RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;

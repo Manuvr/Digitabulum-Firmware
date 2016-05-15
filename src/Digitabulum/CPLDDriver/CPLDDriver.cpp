@@ -266,7 +266,6 @@ void CPLDDriver::gpioSetup(void) {
   GPIO_InitStruct.Pull       = GPIO_NOPULL;
   GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
 
   /* These Port E pins are push-pull outputs:
   *
@@ -276,11 +275,10 @@ void CPLDDriver::gpioSetup(void) {
   * 14    0      CPLD_GPIO_1
   */
   GPIO_InitStruct.Pin        = GPIO_PIN_11 | GPIO_PIN_14;
-  GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Mode       = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull       = GPIO_NOPULL;
   GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_11 | GPIO_PIN_14, GPIO_PIN_RESET);
 
 
   __TIM1_CLK_ENABLE();

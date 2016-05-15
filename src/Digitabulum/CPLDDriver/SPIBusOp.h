@@ -181,13 +181,11 @@ class SPIBusOp {
     uint8_t total_len() {     return buf_len + ((bus_addr > 255) ? 2 : 1);    }
 
     bool wait_with_timeout();
-    bool wait_txe_with_timeout();
 
     /* This only works because of careful defines. Tread lightly. */
     inline bool has_bus_control() {     return (xfer_state & 0x04);   }
 
 
-    static void enableSPI_IRQ(bool enable);
     static void enableSPI_DMA(bool enable);
 };
 
