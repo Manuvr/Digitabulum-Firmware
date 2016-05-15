@@ -161,6 +161,9 @@ int main(void) {
   I2CAdapter i2c(1);
   kernel->subscribe(&i2c);
 
+  ADP8866 adp8866(7, 8, 0x27);
+  kernel->subscribe((EventReceiver*) &adp8866);
+  i2c.addSlaveDevice(&adp8866);
 
   kernel->bootstrap();
 

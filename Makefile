@@ -49,6 +49,7 @@ INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/CMSIS/Device/ST/STM32F7xx/Include
 INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/CMSIS/Include
 INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/USB_Device/Class/CDC/Inc
 INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/USB_Device/Core/Inc
+INCLUDES   += -I$(WHERE_I_AM)/src/Digitabulum
 INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS
 INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/include
 INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1
@@ -131,10 +132,25 @@ SRCS   += src/bsp_driver_sd.c src/fatfs.c src/freertos.c
 SRCS   += src/stm32f7xx_hal_msp.c src/stm32f7xx_it.c
 SRCS   += src/system_stm32f7xx.c
 
-CPP_SRCS  = src/main.cpp
+CPP_SRCS   = src/main.cpp
+CPP_SRCS  += src/Digitabulum/CPLDDriver/CPLDDriver.cpp
+CPP_SRCS  += src/Digitabulum/CPLDDriver/SPIDeviceWithRegisters.cpp
+CPP_SRCS  += src/Digitabulum/CPLDDriver/SPIBusOp.cpp
+CPP_SRCS  += src/Digitabulum/LSM9DS1/IIU.cpp
+CPP_SRCS  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp
+CPP_SRCS  += src/Digitabulum/LSM9DS1/LSM9DS1_AG.cpp
+CPP_SRCS  += src/Digitabulum/LSM9DS1/LSM9DS1_M.cpp
+CPP_SRCS  += src/Digitabulum/ManuLegend/LegendManager.cpp
+CPP_SRCS  += src/Digitabulum/ManuLegend/ManuLegend.cpp
+CPP_SRCS  += src/Digitabulum/SDCard/SDCard.cpp
+CPP_SRCS  += src/Digitabulum/RovingNetworks/RNBase.cpp
+CPP_SRCS  += src/Digitabulum/RovingNetworks/BTQueuedOperation.cpp
+CPP_SRCS  += src/Digitabulum/RovingNetworks/RN4677/RN4677.cpp
+CPP_SRCS  += src/Digitabulum/IREmitter/IREmitter.cpp
+
 
 # TODO: Need to understand why -l won't blend....
-LIB_HARDCODES = $(OUTPUT_PATH)/*.a $(OUTPUT_PATH)/SensorPackage.o
+LIB_HARDCODES = $(OUTPUT_PATH)/*.a
 
 ###################################################
 
@@ -166,8 +182,7 @@ lib: $(OBJS)
 
 $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: lib
 	$(shell mkdir $(OUTPUT_PATH))
-	$(MAKE) -C src/Digitabulum/
-	$(CXX) $(CPP_FLAGS) $(LDFLAGS) src/startup.s src/main.cpp $(OBJS) $(LIB_HARDCODES) -o $@
+	$(CXX) $(CPP_FLAGS) $(LDFLAGS) src/startup.s $(CPP_SRCS) $(OBJS) $(LIB_HARDCODES) -o $@
 	$(CP) -O ihex $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 	$(CP) -O binary $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin
 

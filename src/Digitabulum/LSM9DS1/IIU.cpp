@@ -541,8 +541,9 @@ void IIU::printDebug(StringBuilder* output) {
   printBrief(output);  // OK
   output->concatf("--- measurements\n--- quat_queue:\t %d measurements\n", quat_queue.size());
   output->concatf("--- temperature: %.2fC\n--- delta_t:\t %.4fms\n--- Quat:\t ", ((double) delta_t * 1000), (double)*(_ptr_temperature));
-
-  _ptr_quat->printDebug(output);  // OK
+  #if defined(__MANUVR_DEBUG)
+    _ptr_quat->printDebug(output);  // OK
+  #endif
   output->concat("\n");
   if (verbosity > 2) {
     if (verbosity > 3) output->concatf("--- GyroMeasDrift:    %.4f\n",  (double) GyroMeasDrift);
