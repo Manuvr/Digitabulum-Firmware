@@ -165,6 +165,9 @@ int main(void) {
   kernel->subscribe((EventReceiver*) &adp8866);
   i2c.addSlaveDevice(&adp8866);
 
+  RN4677 bt;
+  kernel->subscribe((EventReceiver*) &bt);
+
   kernel->bootstrap();
 
   /* Infinite loop */

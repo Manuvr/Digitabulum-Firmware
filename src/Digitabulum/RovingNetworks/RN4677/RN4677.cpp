@@ -39,6 +39,8 @@ UART_HandleTypeDef huart2;
 
 
 RN4677::RN4677() : RNBase() {
+  gpioSetup();
+  force_9600_mode(false);   // Init the UART.
 }
 
 

@@ -944,7 +944,6 @@ int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
 
     /* Things that only this class is likely to care about. */
     case DIGITABULUM_MSG_IMU_IRQ_RAISED:
-      read_imu_irq_pins();
       return_value = 1;
       break;
     case MANUVR_MSG_SPI_QUEUE_READY:

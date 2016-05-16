@@ -184,10 +184,10 @@ class RNBase : public ManuvrXport {
     virtual ~RNBase();
 
     /* Overrides from the Transport class. */
-    int8_t connect();
-    int8_t disconnect();
-    int8_t listen();
-    int8_t reset();
+    virtual int8_t connect();
+    //virtual int8_t disconnect();
+    virtual int8_t listen();
+    virtual int8_t reset();
     bool   write_port(unsigned char* out, int out_len);
     int8_t read_port();
 

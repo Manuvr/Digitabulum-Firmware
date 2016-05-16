@@ -195,7 +195,6 @@ RNBase::RNBase() {
 
   current_work_item = NULL;
 
-  gpioSetup();
   connected(GPIOB->IDR & GPIO_PIN_10);
 
   // Build some pre-formed Events.
@@ -208,8 +207,6 @@ RNBase::RNBase() {
   read_abort_event.autoClear(false);
   read_abort_event.enableSchedule(false);
   __kernel->addSchedule(&read_abort_event);
-
-  force_9600_mode(false);   // Init the UART.
 }
 
 
@@ -219,6 +216,17 @@ RNBase::~RNBase() {
   // Will never be torn down, I'd think.... Maybe in low power modes?
   // Serialize the essentials and pack up?
   reset();           // we effectively park the module in reset state.
+}
+
+
+
+int8_t RNBase::connect() {
+  return 0;
+}
+
+
+int8_t RNBase::listen() {
+  return 0;
 }
 
 
@@ -250,6 +258,17 @@ int8_t RNBase::reset() {
   __kernel->addSchedule(new ManuvrRunnable(510,  0, true, oneshot_rn42_reset_disassert));
   return 0;
 }
+
+
+bool RNBase::write_port(unsigned char* out, int out_len) {
+  return true;
+}
+
+
+int8_t RNBase::read_port() {
+  return 0;
+}
+
 
 
 
