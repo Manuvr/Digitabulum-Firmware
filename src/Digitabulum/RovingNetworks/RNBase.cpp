@@ -178,35 +178,35 @@ void host_read_abort() {
 ****************************************************************************************************/
 
 RNBase::RNBase() {
-  __class_initializer();
-  BTQueuedOperation::buildDMAMembers();
-  INSTANCE = this;
+  //__class_initializer();
+  //BTQueuedOperation::buildDMAMembers();
+  //INSTANCE = this;
 
-  /* Populate all the static preallocation slots for messages. */
-  for (uint16_t i = 0; i < PREALLOCATED_BT_Q_OPS; i++) {
-    __prealloc_pool[i].wipe();
-    preallocated.insert(&__prealloc_pool[i]);
-  }
+  ///* Populate all the static preallocation slots for messages. */
+  //for (uint16_t i = 0; i < PREALLOCATED_BT_Q_OPS; i++) {
+  //  __prealloc_pool[i].wipe();
+  //  preallocated.insert(&__prealloc_pool[i]);
+  //}
 
-  command_mode_pend = false;
-  command_mode      = false;
-  lockout_active    = false;
-  autoconnect_mode  = false;
+  //command_mode_pend = false;
+  //command_mode      = false;
+  //lockout_active    = false;
+  //autoconnect_mode  = false;
 
-  current_work_item = NULL;
+  //current_work_item = NULL;
 
-  connected(GPIOB->IDR & GPIO_PIN_10);
+  //connected(GPIOB->IDR & GPIO_PIN_10);
 
-  // Build some pre-formed Events.
-  read_abort_event.repurpose(MANUVR_MSG_XPORT_QUEUE_RDY);
-  read_abort_event.isManaged(true);
-  read_abort_event.specific_target = (EventReceiver*) this;
-  read_abort_event.originator      = (EventReceiver*) this;
-  read_abort_event.alterScheduleRecurrence(-1);
-  read_abort_event.alterSchedulePeriod(CHARACTER_CHRONOLOGICAL_BREAK);
-  read_abort_event.autoClear(false);
-  read_abort_event.enableSchedule(false);
-  __kernel->addSchedule(&read_abort_event);
+  //// Build some pre-formed Events.
+  //read_abort_event.repurpose(MANUVR_MSG_XPORT_QUEUE_RDY);
+  //read_abort_event.isManaged(true);
+  //read_abort_event.specific_target = (EventReceiver*) this;
+  //read_abort_event.originator      = (EventReceiver*) this;
+  //read_abort_event.alterScheduleRecurrence(-1);
+  //read_abort_event.alterSchedulePeriod(CHARACTER_CHRONOLOGICAL_BREAK);
+  //read_abort_event.autoClear(false);
+  //read_abort_event.enableSchedule(false);
+  //__kernel->addSchedule(&read_abort_event);
 }
 
 
@@ -812,7 +812,9 @@ int8_t RNBase::bootComplete() {
   event_bt_queue_ready.specific_target = (EventReceiver*) this;
   event_bt_queue_ready.originator      = (EventReceiver*) this;
 
-  reset();
+  gpioSetup();
+  //force_9600_mode(false);   // Init the UART.
+
   return 1;
 }
 

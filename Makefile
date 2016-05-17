@@ -12,6 +12,7 @@ FIRMWARE_NAME      = digitabulum
 MCU                = cortex-m7
 EXT_CLK_RATE       = 24000000
 OPTIMIZATION       = -O0 -g
+#OPTIMIZATION       = -O2
 C_STANDARD         = gnu99
 CPP_STANDARD       = gnu++11
 
@@ -58,8 +59,8 @@ INCLUDES   += -Ilib/Middlewares/Third_Party/FatFs/src/drivers
 
 # Describing the target arch....
 MCUFLAGS  = -DHSE_VALUE=$(EXT_CLK_RATE)
-MCUFLAGS += -DRUN_WITH_HSE
-#MCUFLAGS += -DRUN_WITH_HSI
+#MCUFLAGS += -DRUN_WITH_HSE
+MCUFLAGS += -DRUN_WITH_HSI
 MCUFLAGS += -DSTM32F746xx -DARM_MATH_CM7
 MCUFLAGS += -mlittle-endian -mthumb -mthumb-interwork -mcpu=$(MCU)
 MCUFLAGS += -fsingle-precision-constant -Wdouble-promotion

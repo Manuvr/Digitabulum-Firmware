@@ -45,7 +45,7 @@ This is an example file for building firmware on linux. Anticipated target is a 
 */
 // This is the string that identifies this Manuvrable to other Manuvrables. In MHB's case, this
 //   will select the mEngine.
-#define IDENTITY_STRING           "Disco-F7"    // This will select Manuvr's debug engine in MHB.
+#define IDENTITY_STRING           "Digitabulum"    // This will select Manuvr's debug engine in MHB.
 
 // This would be the version of the Manuvrable's firmware (this program).
 #define VERSION_STRING               "0.0.1"
@@ -60,7 +60,7 @@ This is an example file for building firmware on linux. Anticipated target is a 
 /*
 * Kernel options.
 */
-#define EVENT_MANAGER_PREALLOC_COUNT      16    // How large a preallocation buffer should we keep?
+#define EVENT_MANAGER_PREALLOC_COUNT       8    // How large a preallocation buffer should we keep?
 #define MANUVR_PLATFORM_TIMER_PERIOD_MS   10    // What is the granularity of our scheduler?
 
 
@@ -68,7 +68,7 @@ This is an example file for building firmware on linux. Anticipated target is a 
 * Optional fields...                                                                                *
 ****************************************************************************************************/
 
-#define EXTENDED_DETAIL_STRING    "Disco-F7-Test-Build"  // Optional. User-defined.
+#define EXTENDED_DETAIL_STRING    "{}"  // Optional. User-defined.
 
 // We have console support on linux. On a bare-metal build, this would mean that we've designated
 //   a serial port (or some other transport) as a target for plaintext interaction. This is
@@ -80,6 +80,6 @@ This is an example file for building firmware on linux. Anticipated target is a 
 // If another Manuverable asks, we will send them semantic definitions for our messages.
 // Comment the line below if your platform is too-small to support these, or you don't intend
 //   your Manuvrable to be used by a human directly.
-#define __ENABLE_MSG_SEMANTICS
+//#define __ENABLE_MSG_SEMANTICS
 
 #endif

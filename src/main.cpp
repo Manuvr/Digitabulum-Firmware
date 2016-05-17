@@ -54,7 +54,6 @@
 #include "tim.h"
 #include "gpio.h"
 
-
 #include "tm_stm32_usb_device.h"
 #include "tm_stm32_usb_device_cdc.h"
 
@@ -71,30 +70,29 @@ void MX_FREERTOS_Init(void);
 static char _cmd_buf[CMD_BUFF_SIZE];
 static int _cmd_buf_ptr = 0;
 
-/* CDC device example */
+
 static void CDC_Device(void) {
 	char ch;
-
-		/* Check if we are ready to use, if drivers are OK installed on computer */
-		if (TM_USBD_IsDeviceReady(TM_USB_FS) == TM_USBD_Result_Ok) {
-			/* We are ready */
-
-			/* Check if anything received */
-			while (TM_USBD_CDC_Getc(TM_USB_FS, &ch)) {
-				//TM_USBD_CDC_Putc(TM_USB_FS, ch);
-        if ((ch == '\r') || (ch == '\n') || (ch == '\0')) {
-          TM_USBD_CDC_Putc(TM_USB_FS, '\n');
-          kernel->accumulateConsoleInput((uint8_t*)_cmd_buf, strlen(_cmd_buf), true);
-          _cmd_buf_ptr = 0;
-          for (int i = 0; i < CMD_BUFF_SIZE; i++) *(_cmd_buf + i) = '\0';
-        }
-        else {
-          _cmd_buf[_cmd_buf_ptr++] = ch;
-        }
-			}
-		} else {
-			/* We are not ready */
+	/* Check if we are ready to use, if drivers are OK installed on computer */
+	if (TM_USBD_IsDeviceReady(TM_USB_FS) == TM_USBD_Result_Ok) {
+		/* We are ready */
+		/* Check if anything received */
+		while (TM_USBD_CDC_Getc(TM_USB_FS, &ch)) {
+			//TM_USBD_CDC_Putc(TM_USB_FS, ch);
+      if ((ch == '\r') || (ch == '\n') || (ch == '\0')) {
+        TM_USBD_CDC_Putc(TM_USB_FS, '\n');
+        kernel->accumulateConsoleInput((uint8_t*)_cmd_buf, strlen(_cmd_buf), true);
+        _cmd_buf_ptr = 0;
+        for (int i = 0; i < CMD_BUFF_SIZE; i++) *(_cmd_buf + i) = '\0';
+      }
+      else {
+        _cmd_buf[_cmd_buf_ptr++] = ch;
+      }
 		}
+	}
+  else {
+		/* We are not ready */
+	}
 }
 
 
@@ -142,7 +140,6 @@ void system_setup() {
 int main(void) {
   system_setup();   // Need to setup clocks and CPU...
 
-
   /* Initialize all configured peripherals */
   //MX_GPIO_Init();
   //MX_TIM2_Init();
@@ -157,6 +154,9 @@ int main(void) {
   #if defined(__MANUVR_DEBUG)
     kernel->profiler(true);
   #endif
+
+  CPLDDriver _cpld;
+  kernel->subscribe(&_cpld);
 
   I2CAdapter i2c(1);
   kernel->subscribe(&i2c);

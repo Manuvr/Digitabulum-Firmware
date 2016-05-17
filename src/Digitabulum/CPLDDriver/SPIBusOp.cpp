@@ -105,8 +105,8 @@ void SPIBusOp::buildDMAMembers() {
   _dma_w_handle.Init.MemInc              = DMA_MINC_ENABLE;
   //DMA_InitStructure_Write.DMA_PeripheralBaseAddr = (uint32_t) &SPI1->DR;
 
-  __HAL_DMA_ENABLE_IT(&_dma_r_handle, DMA_IT_TC);
-  __HAL_DMA_ENABLE_IT(&_dma_w_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+  //__HAL_DMA_ENABLE_IT(&_dma_r_handle, DMA_IT_TC);
+  //__HAL_DMA_ENABLE_IT(&_dma_w_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
 }
 
 

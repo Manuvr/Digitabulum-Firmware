@@ -189,10 +189,6 @@ CPLDDriver::CPLDDriver() : SPIDeviceWithRegisters(0, 9) {
     ManuvrMsg::registerMessages(cpld_message_defs, sizeof(cpld_message_defs) / sizeof(MessageTypeDef));
   }
 
-  gpioSetup();
-
-  SPIBusOp::buildDMAMembers();
-
   // Definitions of CPLD registers.
   reg_defs[MANUS_CPLD_REG_CONFIG   ]   = DeviceRegister((bus_addr + 0xA3), (uint8_t)  0b00000000, &cpld_conf_value,    false, false, true );
   reg_defs[MANUS_CPLD_REG_VERSION  ]   = DeviceRegister((bus_addr + 0xA6), (uint8_t)  0b00000000, &cpld_version,       false, false, false);
@@ -858,7 +854,10 @@ void CPLDDriver::purge_stalled_job() {
 int8_t CPLDDriver::bootComplete() {
   EventReceiver::bootComplete();
 
-  init_spi(1, 0);  // COL=1, CPHA=0, HW-driven
+  //gpioSetup();
+  SPIBusOp::buildDMAMembers();
+
+  //init_spi(1, 0);  // COL=1, CPHA=0, HW-driven
 
   /* Configure the IRQ_WAKEUP pin. */
   //EXTI_InitTypeDef   EXTI_InitStructure;
@@ -872,7 +871,7 @@ int8_t CPLDDriver::bootComplete() {
   event_spi_timeout.alterSchedule(bus_timeout_millis, -1, false, callback_spi_timeout);
   event_spi_timeout.isManaged(true);
 
-  reset();
+  //reset();
   return 1;
 }
 

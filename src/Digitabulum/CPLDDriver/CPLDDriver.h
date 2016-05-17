@@ -293,7 +293,7 @@ typedef struct {
 
 
 #define CPLD_SPI_MAX_QUEUE_PRINT 3     // How many SPI queue items should we print for debug?
-#define PREALLOCATED_SPI_JOBS    80    // How many SPI queue items should we have on-tap?
+#define PREALLOCATED_SPI_JOBS    10    // How many SPI queue items should we have on-tap?
 
 /*
 * The actual CPLD driver class. Might could implement this as a singleton.
