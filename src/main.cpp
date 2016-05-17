@@ -41,6 +41,7 @@
 #include "Digitabulum/CPLDDriver/CPLDDriver.h"
 #include "Digitabulum/RovingNetworks/RN4677/RN4677.h"
 #include "Digitabulum/ManuLegend/ManuLegend.h"
+#include "Digitabulum/IREmitter/IREmitter.h"
 #include "Digitabulum/SDCard/SDCard.h"
 
 #ifdef __cplusplus
@@ -140,8 +141,7 @@ void system_setup() {
 int main(void) {
   system_setup();   // Need to setup clocks and CPU...
 
-  /* Initialize all configured peripherals */
-  //MX_GPIO_Init();
+  unused_gpio();    // We don't use all the GPIO on this platform.
   //MX_TIM2_Init();
 
   /* Call init function for freertos objects (in freertos.c) */
@@ -167,6 +167,12 @@ int main(void) {
 
   RN4677 bt;
   kernel->subscribe((EventReceiver*) &bt);
+
+  SDCard sd;
+  kernel->subscribe((EventReceiver*) &sd);
+
+  IREmitter ir;
+  kernel->subscribe((EventReceiver*) &ir);
 
   kernel->bootstrap();
 

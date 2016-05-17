@@ -56,7 +56,7 @@ class SDCard : public EventReceiver {
     uint8_t buf_in[512];
     uint8_t buf_out[512];
 
-    void gpioSetup(void);
+    void gpioSetup();
 };
 
 

@@ -23,6 +23,8 @@ limitations under the License.
 #include "IREmitter.h"
 #include <DataStructures/StringBuilder.h>
 
+#include "stm32f7xx_hal.h"
+
 
 
 // If your driver represents a statically-allocated unit, you can do something
@@ -39,6 +41,17 @@ IREmitter::~IREmitter() {
 }
 
 
+void IREmitter::gpioSetup() {
+  GPIO_InitTypeDef GPIO_InitStruct;
+
+  // We bind timer2-channel1 to the LED pin.
+  GPIO_InitStruct.Pin       = GPIO_PIN_15;
+  GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull      = GPIO_NOPULL;
+  GPIO_InitStruct.Speed     = GPIO_SPEED_LOW;
+  GPIO_InitStruct.Alternate = GPIO_AF1_TIM2;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+}
 
 
 /****************************************************************************************************

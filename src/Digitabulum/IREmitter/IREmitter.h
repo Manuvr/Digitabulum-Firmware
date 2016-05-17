@@ -46,6 +46,7 @@ class IREmitter : public EventReceiver {
 
 
   private:
+    void gpioSetup();
 };
 
 
