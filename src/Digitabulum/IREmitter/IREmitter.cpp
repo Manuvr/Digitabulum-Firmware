@@ -97,6 +97,7 @@ void IREmitter::printDebug(StringBuilder* output) {
 */
 int8_t IREmitter::bootComplete() {
   EventReceiver::bootComplete();   // Call up to get scheduler ref and class init.
+  gpioSetup();
   return 0;
 }
 

@@ -31,7 +31,7 @@ Digitabulum's power-management subsystem consists of...
 #ifndef __DIGITABULUM_PMU_DRIVER_H__
 #define __DIGITABULUM_PMU_DRIVER_H__
 
-#include "Kernel.h"
+#include <Kernel.h>
 
 #include <Drivers/INA219/INA219.h>
 #include <Drivers/MCP73833/MCP73833.h>
@@ -49,8 +49,6 @@ class PMU : public EventReceiver {
     const char* getReceiverName();
     void printDebug(StringBuilder*);
 
-    volatile static HapticStrap* INSTANCE;
-
 
   protected:
     int8_t bootComplete();
@@ -58,6 +56,7 @@ class PMU : public EventReceiver {
 
   private:
     void gpioSetup();
+    int8_t cpu_scale(uint8_t _freq);
 };
 
 #endif //__DIGITABULUM_PMU_DRIVER_H__

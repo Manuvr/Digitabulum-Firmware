@@ -46,7 +46,7 @@
 #include "Digitabulum/DigitabulumPMU/DigitabulumPMU.h"
 
 #ifdef __cplusplus
- extern "C" {
+  extern "C" {
 #endif
 
 /* Includes ------------------------------------------------------------------*/
@@ -67,6 +67,7 @@ TIM_HandleTypeDef htim2;  // This is the timer for the CPLD clock.
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
+void unused_gpio(void);
 
 #define CMD_BUFF_SIZE 128
 static char _cmd_buf[CMD_BUFF_SIZE];
@@ -248,6 +249,12 @@ int main(void) {
   IREmitter ir;
   kernel->subscribe((EventReceiver*) &ir);
 
+  HapticStrap strap;
+  kernel->subscribe((EventReceiver*) &strap);
+
+  PMU pmu;
+  kernel->subscribe((EventReceiver*) &pmu);
+
   kernel->bootstrap();
 
   /* Infinite loop */
@@ -388,5 +395,5 @@ void assert_failed(uint8_t* file, uint32_t line)
 #endif
 
 #ifdef __cplusplus
- }
+  }
 #endif

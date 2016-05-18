@@ -263,7 +263,7 @@ void CPLDDriver::gpioSetup(void) {
   GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /* These Port E pins are push-pull outputs:
+  /* These Port E pins are inputs:
   *
   * #  Default   Purpose
   * -----------------------------------------------
@@ -275,6 +275,19 @@ void CPLDDriver::gpioSetup(void) {
   GPIO_InitStruct.Pull       = GPIO_NOPULL;
   GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+  /* These Port C pins are push-pull outputs:
+  *
+  * #  Default   Purpose
+  * -----------------------------------------------
+  * 2     1      DEN_AG_CARPALS
+  */
+  GPIO_InitStruct.Pin   = GPIO_PIN_2;
+  GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull  = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
 
 
   __TIM1_CLK_ENABLE();
@@ -854,7 +867,7 @@ void CPLDDriver::purge_stalled_job() {
 int8_t CPLDDriver::bootComplete() {
   EventReceiver::bootComplete();
 
-  //gpioSetup();
+  gpioSetup();
   SPIBusOp::buildDMAMembers();
 
   //init_spi(1, 0);  // COL=1, CPHA=0, HW-driven
