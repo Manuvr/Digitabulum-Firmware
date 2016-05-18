@@ -130,7 +130,7 @@ export STM32F746xx
 ###########################################################################
 # Source file definitions...
 ###########################################################################
-SRCS    = src/syscalls.c src/tim.c src/gpio.c
+SRCS    = src/syscalls.c src/gpio.c
 SRCS   += src/bsp_driver_sd.c src/fatfs.c src/freertos.c
 SRCS   += src/stm32f7xx_hal_msp.c src/stm32f7xx_it.c
 SRCS   += src/system_stm32f7xx.c
@@ -150,6 +150,7 @@ CPP_SRCS  += src/Digitabulum/RovingNetworks/RNBase.cpp
 CPP_SRCS  += src/Digitabulum/RovingNetworks/BTQueuedOperation.cpp
 CPP_SRCS  += src/Digitabulum/RovingNetworks/RN4677/RN4677.cpp
 CPP_SRCS  += src/Digitabulum/IREmitter/IREmitter.cpp
+CPP_SRCS  += src/Digitabulum/HapticStrap/HapticStrap.cpp
 
 
 # TODO: Need to understand why -l won't blend....
