@@ -151,6 +151,19 @@ int8_t HapticStrap::notify(ManuvrRunnable *active_event) {
 
 void HapticStrap::procDirectDebugInstruction(StringBuilder *input) {
 #ifdef __MANUVR_CONSOLE_SUPPORT
+  char* str = input->position(0);
+
+  switch (*(str)) {
+    case 'f':
+    case 'F':
+      cpu_scale(*(str) == 'f' ? 0 : 1);
+      break;
+    default:
+      #ifdef __MANUVR_DEBUG
+      EventReceiver::procDirectDebugInstruction(input);
+      #endif
+      break;
+  }
 #endif
   if (local_log.length() > 0) {    Kernel::log(&local_log);  }
 }
