@@ -211,8 +211,6 @@ void SDCard::procDirectDebugInstruction(StringBuilder *input) {
 
   switch (*(str)) {
     case 'f':
-    case 'F':
-      cpu_scale(*(str) == 'f' ? 0 : 1);
       break;
     default:
       #ifdef __MANUVR_DEBUG

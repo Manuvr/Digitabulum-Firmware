@@ -45,7 +45,6 @@ Data from magnetometers and GPS devices is used to establish error-rates
 #include "IIU.h"
 #include <stdarg.h>
 
-#include "LSM9DS1.h"
 #include "ManuLegend/ManuLegend.h"
 
 

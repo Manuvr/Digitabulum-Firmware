@@ -45,11 +45,12 @@ Data from magnetometers and GPS devices is used to establish error-rates
 #ifndef __IIU_CLASS_H__
 #define __IIU_CLASS_H__
 
-#include "LSM9DS1.h"
+#include "LSM9DS1_M.h"
+#include "LSM9DS1_AG.h"
 #include <stdarg.h>
 #include <Kernel.h>
-#include "DataStructures/InertialMeasurement.h"
-#include "DataStructures/Quaternion.h"
+#include <DataStructures/InertialMeasurement.h>
+#include <DataStructures/Quaternion.h>
 
 class LSM9DSx_Common;   // Forward declaration of the LSM9DSx_Common class.
 
