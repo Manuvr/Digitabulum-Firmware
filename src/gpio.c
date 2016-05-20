@@ -16,15 +16,15 @@ void unused_gpio() {
   GPIO_InitTypeDef GPIO_InitStruct;
 
   /* GPIO Ports Clock Enable */
-  __GPIOE_CLK_ENABLE();
-  __GPIOB_CLK_ENABLE();
-  __GPIOG_CLK_ENABLE();
-  __GPIOD_CLK_ENABLE();
-  __GPIOC_CLK_ENABLE();
   __GPIOA_CLK_ENABLE();
-  __GPIOI_CLK_ENABLE();
-  __GPIOH_CLK_ENABLE();
+  __GPIOB_CLK_ENABLE();
+  __GPIOC_CLK_ENABLE();
+  __GPIOD_CLK_ENABLE();
+  __GPIOE_CLK_ENABLE();
   __GPIOF_CLK_ENABLE();
+  __GPIOG_CLK_ENABLE();
+  __GPIOH_CLK_ENABLE();
+  __GPIOI_CLK_ENABLE();
 
   // LED Driver Reset pin
   GPIO_InitStruct.Pin   = GPIO_PIN_10;
@@ -108,4 +108,8 @@ void unused_gpio() {
                           |GPIO_PIN_7|GPIO_PIN_10|GPIO_PIN_12
                           |GPIO_PIN_15;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+  // Digitabulum doesn't use these ports...
+  __GPIOF_CLK_DISABLE();
+  __GPIOG_CLK_DISABLE();
 }
