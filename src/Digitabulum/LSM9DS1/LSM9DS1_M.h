@@ -41,7 +41,7 @@ limitations under the License.
 #define LSM9DS1_M_DATA_Z           0x0C  // 16-bit data registers
 #define LSM9DS1_M_INT_CFG          0x0D
 #define LSM9DS1_M_INT_SRC          0x0E
-#define LSM9DS1_M_INT_TSH          0x0F
+#define LSM9DS1_M_INT_TSH          0x0F  // 16-bit threshold register
 
 
 
@@ -90,6 +90,8 @@ class LSM9DS1_M : public LSM9DSx_Common {
 
 
   private:
+    bool    power_to_mag         = false;  // Sensor powered on?
+
     uint8_t scale_mag            = 0;     // What scale is the sensor operating at? This is an index.
     uint8_t update_rate_mag      = 0;     // Index to the update-rate array.
 

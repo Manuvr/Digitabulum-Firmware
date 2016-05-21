@@ -87,16 +87,16 @@ class IIU;              // Forward declaration of the IIU class.
 * These are possible error states for the IMU state-machine.
 */
 #define IMU_ERROR_NO_ERROR                  0
-#define IMU_ERROR_WRONG_IDENTITY           -1
-#define IMU_ERROR_INVALID_PARAM_ID         -2
-#define IMU_ERROR_NOT_CALIBRATED           -3
-#define IMU_ERROR_NOT_WRITABLE             -4
-#define IMU_ERROR_DATA_EXHAUSTED           -5
-#define IMU_ERROR_NOT_INITIALIZED          -6
-#define IMU_ERROR_BUS_INSERTION_FAILED     -7
-#define IMU_ERROR_BUS_OPERATION_FAILED_R   -8
-#define IMU_ERROR_BUS_OPERATION_FAILED_W   -9
-#define IMU_ERROR_REGISTER_UNDEFINED      -10
+#define IMU_ERROR_WRONG_IDENTITY            1
+#define IMU_ERROR_INVALID_PARAM_ID          2
+#define IMU_ERROR_NOT_CALIBRATED            3
+#define IMU_ERROR_NOT_WRITABLE              4
+#define IMU_ERROR_DATA_EXHAUSTED            5
+#define IMU_ERROR_NOT_INITIALIZED           6
+#define IMU_ERROR_BUS_INSERTION_FAILED      7
+#define IMU_ERROR_BUS_OPERATION_FAILED_R    8
+#define IMU_ERROR_BUS_OPERATION_FAILED_W    9
+#define IMU_ERROR_REGISTER_UNDEFINED       10
 
 
 
@@ -104,13 +104,14 @@ class IIU;              // Forward declaration of the IIU class.
 * These are the sensor states.
 */
 enum class State {
-  FAULT,     // Fault.
   STAGE_0,   // Undiscovered. Maybe absent.
   STAGE_1,   // Discovered, but not init'd.
   STAGE_2,   // Discovered and initiallized, but unknown register values.
   STAGE_3,   // Fully initialized and sync'd. Un-calibrated.
   STAGE_4,   // Calibrated and idle.
-  STAGE_5    // Calibrated and reading.
+  STAGE_5,   // Calibrated and reading.
+  FAULT,     // Fault.
+  UNDEF      // Not a state-machine value. A return code to simplifiy error-checks.
 };
 
 
@@ -131,8 +132,8 @@ class LSM9DSx_Common : public SPIDeviceWithRegisters {
 
 
     /* State-check functions. Inlined where practical. */
-    inline enum State getState() {          return (0x0F & imu_state);                    }
-    inline enum State desiredState() {      return (0x0F & desired_state);                }
+    inline State getState() {               return imu_state;                             }
+    inline State desiredState() {           return desired_state;                         }
 
     inline bool present() {                 return (State::STAGE_0 != getState());        }
     inline bool initPending() {             return ((State::STAGE_1 == getState()) || (State::STAGE_2 == getState()));  }
@@ -144,7 +145,7 @@ class LSM9DSx_Common : public SPIDeviceWithRegisters {
     inline bool desired_state_attained() {  return (getState() == desiredState());        }
     inline void setVerbosity(int8_t _v) {   verbosity = _v;  };
 
-    int8_t setDesiredState(enum State); // Used to set the state the OS wants the IMU class to acheive.
+    int8_t setDesiredState(State);   // Used to set the state the OS wants the IMU class to acheive.
     void write_test_bytes();
     bool step_state();      // Used internally to move between states. TODO: Should be private.
 
@@ -165,14 +166,15 @@ class LSM9DSx_Common : public SPIDeviceWithRegisters {
     virtual int8_t readSensor(void) =0;      // Call to poll the sensor's registers and take any appropriate action.
     //virtual int8_t enable(bool);             // Pass a boolean to turn the sensor on or off.
 
-    virtual int8_t set_base_filter_param(uint8_t nu_bw_idx) =0;
+    //virtual int8_t set_base_filter_param(uint8_t nu_bw_idx) =0;
 
 
     inline const char* getStateString() {    return getStateString(imu_state);        }
     inline const char* getErrorString() {    return getErrorString(error_condition);  }
 
-    static const char* getStateString(uint8_t state);
-    static const char* getErrorString(uint8_t state);
+    static State getStateByIndex(uint8_t state_idx);
+    static const char* getStateString(State state);
+    static const char* getErrorString(uint8_t fault_code);
 
 
 
@@ -181,8 +183,9 @@ class LSM9DSx_Common : public SPIDeviceWithRegisters {
     IIU*      integrator       = NULL;  //
     uint32_t  sample_count     = 0;     // How many samples have we read since init?
     uint8_t   pending_samples  = 0;     // How many samples are we expecting to arrive?
-    uint8_t   imu_state        = State::STAGE_0;
-    uint8_t   desired_state    = State::STAGE_0;
+
+    State     imu_state        = State::STAGE_0;
+    State     desired_state    = State::STAGE_0;
 
     uint8_t   idx_identity     = 0;
     uint8_t   idx_reset_locus  = 0;
@@ -205,6 +208,7 @@ class LSM9DSx_Common : public SPIDeviceWithRegisters {
     uint8_t  error_condition   = 0;
 
     int8_t  verbosity          = 1;
+    StringBuilder local_log;
 
     /* These members are for profiling various aspects of this IMU. */
     uint32_t profiler_read_begin = 0;
@@ -230,7 +234,7 @@ class LSM9DSx_Common : public SPIDeviceWithRegisters {
     /**
     * Sets the current IMU state without blowing away the high bits in the state member.
     */
-    inline void set_state(uint8_t nu) {     imu_state = (imu_state & 0xF0) | (nu & 0x0F);   }
+    inline void set_state(State nu) {     imu_state = nu;   }
 
     int8_t identity_check();
     bool fire_preformed_bus_op(SPIBusOp* op);

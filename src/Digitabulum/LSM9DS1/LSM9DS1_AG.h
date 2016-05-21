@@ -42,8 +42,8 @@ limitations under the License.
 #define LSM9DS1_G_CTRL_REG3           0x12
 #define LSM9DS1_G_ORIENT_CFG          0x13
 #define LSM9DS1_G_INT_GEN_SRC         0x14
-#define LSM9DS1_AG_OUT_TEMP           0x15
-#define LSM9DS1_G_STATUS_REG          0x16
+#define LSM9DS1_AG_OUT_TEMP           0x15  // 16-bit temperature register (11-bit)
+#define LSM9DS1_AG_STATUS_REG         0x16
 #define LSM9DS1_G_OUT_X               0x17  // 16-bit gyro data registers
 #define LSM9DS1_G_OUT_Y               0x18  // 16-bit gyro data registers
 #define LSM9DS1_G_OUT_Z               0x19  // 16-bit gyro data registers
@@ -55,7 +55,7 @@ limitations under the License.
 #define LSM9DS1_AG_CTRL_REG9          0x1F
 #define LSM9DS1_AG_CTRL_REG10         0x20
 #define LSM9DS1_A_INT_GEN_SRC         0x21
-#define LSM9DS1_A_STATUS_REG          0x22
+#define LSM9DS1_AG_STATUS_REG_ALT     0x22
 #define LSM9DS1_A_OUT_X               0x23  // 16-bit accelerometer data registers
 #define LSM9DS1_A_OUT_Y               0x24  // 16-bit accelerometer data registers
 #define LSM9DS1_A_OUT_Z               0x25  // 16-bit accelerometer data registers
@@ -130,6 +130,9 @@ class LSM9DS1_AG : public LSM9DSx_Common {
 
 
   private:
+    bool    power_to_acc         = false;  // Sensor powered on?
+    bool    power_to_gyr         = false;  // Sensor powered on?
+
     uint8_t scale_acc            = 0;  // What scale is the sensor operating at? This is an index.
     uint8_t scale_gyr            = 0;  // What scale is the sensor operating at? This is an index.
 
