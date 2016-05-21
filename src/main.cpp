@@ -57,14 +57,32 @@
 #include "tm_stm32_usb_device.h"
 #include "tm_stm32_usb_device_cdc.h"
 
-/* Private variables ---------------------------------------------------------*/
-Kernel* kernel      = NULL;
 
+Kernel* kernel      = NULL;
 TIM_HandleTypeDef htim2;  // This is the timer for the CPLD clock.
 
 
+// Milliseconds to vibrate, Pulse count.
+const unsigned char MSG_ARGS_VIBRATE[] = {  UINT16_FM, UINT8_FM, 0  };
 
-/* Private function prototypes -----------------------------------------------*/
+// Messages that are specific to Digitabulum.
+const MessageTypeDef digitabulum_message_defs[] = {
+  /*
+    For messages that have arguments, we have the option of defining inline lables for each parameter.
+    This is advantageous for debugging and writing front-ends. We case-off here to make this choice at
+    compile time.
+  */
+  #if defined (__ENABLE_MSG_SEMANTICS)
+  {  DIGITABULUM_MSG_GPIO_VIBRATE_0  , MSG_FLAG_EXPORTABLE,  "VIBRATE_0"            , MSG_ARGS_VIBRATE }, // Some class wants to trigger vibrator 0.
+  {  DIGITABULUM_MSG_GPIO_VIBRATE_1  , MSG_FLAG_EXPORTABLE,  "VIBRATE_1"            , MSG_ARGS_VIBRATE }, // Some class wants to trigger vibrator 1.
+  #else
+  {  DIGITABULUM_MSG_GPIO_VIBRATE_0  , MSG_FLAG_EXPORTABLE,  "VIBRATE_0"            , MSG_ARGS_VIBRATE, NULL }, // Some class wants to trigger vibrator 0.
+  {  DIGITABULUM_MSG_GPIO_VIBRATE_1  , MSG_FLAG_EXPORTABLE,  "VIBRATE_1"            , MSG_ARGS_VIBRATE, NULL }, // Some class wants to trigger vibrator 1.
+  #endif
+};
+
+
+/* Function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
 void unused_gpio(void);
@@ -72,7 +90,6 @@ void unused_gpio(void);
 #define CMD_BUFF_SIZE 128
 static char _cmd_buf[CMD_BUFF_SIZE];
 static int _cmd_buf_ptr = 0;
-
 
 
 void MX_TIM2_Init(void) {
@@ -213,6 +230,11 @@ void system_setup() {
 }
 
 
+/****************************************************************************************************
+* Main function                                                                                     *
+* TODO: We should sort-out what can be in CCM and what cannot be, and after we've allocated all the *
+*         I/O buffers, switch over to CCM for our execution stacks.                                 *                                                                                 *
+****************************************************************************************************/
 int main(void) {
   system_setup();   // Need to setup clocks and CPU...
 
@@ -281,8 +303,9 @@ int main(void) {
 }
 
 
-/** System Clock Configuration
-*/
+/****************************************************************************************************
+* Clock-tree config...                                                                              *
+****************************************************************************************************/
 void SystemClock_Config(void) {
   RCC_OscInitTypeDef RCC_OscInitStruct;
   RCC_ClkInitTypeDef RCC_ClkInitStruct;
@@ -368,30 +391,22 @@ void SystemClock_Config(void) {
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 }
 
-/* USER CODE BEGIN 4 */
 
-/* USER CODE END 4 */
 
 #ifdef USE_FULL_ASSERT
-
 /**
-   * @brief Reports the name of the source file and the source line number
-   * where the assert_param error has occurred.
-   * @param file: pointer to the source file name
-   * @param line: assert_param error line source number
-   * @retval None
-   */
-void assert_failed(uint8_t* file, uint32_t line)
-{
-  /* USER CODE BEGIN 6 */
+* @brief Reports the name of the source file and the source line number
+* where the assert_param error has occurred.
+* @param file: pointer to the source file name
+* @param line: assert_param error line source number
+* @retval None
+*/
+void assert_failed(uint8_t* file, uint32_t line) {
   /* User can add his own implementation to report the file name and line number,
     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-  /* USER CODE END 6 */
-
   while (1) {
   }
 }
-
 #endif
 
 #ifdef __cplusplus

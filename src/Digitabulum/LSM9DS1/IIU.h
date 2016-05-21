@@ -166,6 +166,7 @@ class IIU {
     /* These are meant to be called from the IMUs. */
     int8_t pushMeasurement(uint8_t, float x, float y, float z, float delta_t);
     int8_t state_change_notice(LSM9DSx_Common* imu_ptr, uint8_t p_state, uint8_t c_state);
+    void deposit_log(StringBuilder*);
 
     /* These are meant to be called from a Legend. */
     void setPositionAndAddress(uint8_t nu_pos, uint8_t imu_addr, uint8_t mag_addr);

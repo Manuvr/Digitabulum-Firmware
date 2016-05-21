@@ -73,40 +73,31 @@ SPIBusOp CPLDDriver::preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];
 * This is a table of IMUs that we can support. See header file for clarification.
 */
 IMUBusMap CPLDDriver::imu_map[17] = {
-  {0xA0, 0xA1, 0x00010101 },
-  {0x9F, 0x9E, 0x00010101 },
-  {0x93, 0x92, 0x00202020 },
-  {0x95, 0x94, 0x00202020 },
-  {0x97, 0x96, 0x00202020 },
-  {0x8D, 0x8C, 0x00101010 },
-  {0x8F, 0x8E, 0x00101010 },
-  {0x91, 0x90, 0x00101010 },
-  {0x81, 0x80, 0x00040404 },
-  {0x83, 0x82, 0x00040404 },
-  {0x85, 0x84, 0x00040404 },
-  {0x87, 0x86, 0x00080808 },
-  {0x89, 0x88, 0x00080808 },
-  {0x8B, 0x8A, 0x00080808 },
-  {0x99, 0x98, 0x00020202 },
-  {0x9B, 0x9A, 0x00020202 },
-  {0x9D, 0x9C, 0x00020202 }
-};
-
-const unsigned char MSG_ARGS_VIBRATE[] = {
-  UINT16_FM, UINT8_FM, 0,  // Milliseconds to vibrate, Pulse count.
-  UINT16_FM, 0,            // Milliseconds to vibrate.
-  0                        // No args. Single pulse at default duration.
+  {0x00, 0x12, 0x00010101 },
+  {0x01, 0x13, 0x00010101 },
+  {0x02, 0x14, 0x00202020 },
+  {0x03, 0x15, 0x00202020 },
+  {0x04, 0x16, 0x00202020 },
+  {0x05, 0x17, 0x00101010 },
+  {0x06, 0x18, 0x00101010 },
+  {0x07, 0x19, 0x00101010 },
+  {0x08, 0x1A, 0x00040404 },
+  {0x09, 0x1B, 0x00040404 },
+  {0x0A, 0x1C, 0x00040404 },
+  {0x0B, 0x1D, 0x00080808 },
+  {0x0C, 0x1E, 0x00080808 },
+  {0x0D, 0x1F, 0x00080808 },
+  {0x0E, 0x20, 0x00020202 },
+  {0x0F, 0x21, 0x00020202 },
+  {0x11, 0x22, 0x00020202 }
 };
 
 const unsigned char MSG_ARGS_U8_FLOAT[] = {
-  UINT8_FM, FLOAT_FM, 0,
-  0
+  UINT8_FM, FLOAT_FM, 0
 };
 
 const unsigned char MSG_ARGS_IMU_READ[] = {
-  UINT8_FM, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM, 0,  // IMU id and a collection of readings.
-  UINT8_FM, 0,                // IMU id. Interpreted as a request for a rading.
-  0                           // No args. Read all the things.
+  UINT8_FM, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM, 0  // IMU id and a collection of readings.
 };
 
 
@@ -115,8 +106,8 @@ const unsigned char MSG_ARGS_IMU_LEGEND[] = {
   UINT16_FM, UINT16_FM, UINT16_FM, UINT16_FM,
   UINT16_FM, UINT16_FM, UINT16_FM, UINT16_FM,
   UINT16_FM, UINT16_FM, UINT16_FM, UINT16_FM,
-  UINT16_FM, UINT16_FM, UINT16_FM, UINT16_FM, 0, // 37 bytes: An IMU Legend broadcast.
-  0
+  UINT16_FM, UINT16_FM, UINT16_FM, UINT16_FM,
+  0     // 37 bytes: An IMU Legend broadcast.
 };
 
 /* There are only two grammatical forms represented here. A zero-length, and a giant block of Vectors. */
@@ -138,17 +129,13 @@ const unsigned char MSG_ARGS_IMU_MAP_STATE[] = {
     VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
     VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
     VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    0,     // (17 IMUs * 3 vectors + 1 float per IMU) * (4 bytes per float) = 680) bytes: Statement of debug map.
-  0        // 0 bytes: Request for present map.
-};
+  0   // (17 IMUs * 3 vectors + 1 float per IMU) * (4 bytes per float) = 680) bytes: Statement of debug map.
+};    // 0 bytes: Request for present map.
 
 
 
 const MessageTypeDef cpld_message_defs[] = {
   /* These are messages specific to Digitabulum. */
-  {  DIGITABULUM_MSG_GPIO_VIBRATE_0       , MSG_FLAG_EXPORTABLE,  "GPIO_VIBRATE_0"       , MSG_ARGS_VIBRATE }, // Some class wants to trigger vibrator 0.
-  {  DIGITABULUM_MSG_GPIO_VIBRATE_1       , MSG_FLAG_EXPORTABLE,  "GPIO_VIBRATE_1"       , MSG_ARGS_VIBRATE }, // Some class wants to trigger vibrator 1.
-
   {  DIGITABULUM_MSG_IMU_IRQ_RAISED       , 0x0000,               "IMU_IRQ_RAISED"       , ManuvrMsg::MSG_ARGS_NONE }, // IRQ asserted by CPLD.
   {  DIGITABULUM_MSG_IMU_READ             , 0x0000,               "IMU_READ"             , MSG_ARGS_IMU_READ },  // IMU read request. Argument is the ID.
   {  DIGITABULUM_MSG_IMU_MAP_STATE        , MSG_FLAG_EXPORTABLE,  "IMU_MAP_STATE"        , MSG_ARGS_IMU_MAP_STATE }, //

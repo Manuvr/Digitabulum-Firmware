@@ -451,6 +451,10 @@ bool IIU::nullifyGravity(bool en) {
 
 
 
+void IIU::deposit_log(StringBuilder* _log) {
+  local_log.concatHandoff(_log);
+  Kernel::log(&local_log);
+};
 
 
 
@@ -515,8 +519,8 @@ void IIU::enableAutoscale(uint8_t s_type, bool enabled) {
 
 
 void IIU::setVerbosity(int8_t nu) {
-  imu_m->verbosity = nu;
-  imu_ag->verbosity = nu;
+  imu_m->setVerbosity(nu);
+  imu_ag->setVerbosity(nu);
   verbosity = nu;
 }
 
