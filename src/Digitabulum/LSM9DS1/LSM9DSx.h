@@ -130,7 +130,6 @@ class LSM9DSx_Common : public SPIDeviceWithRegisters {
     bool    profile       = false;
     bool    cancel_error  = false;
 
-
     /* State-check functions. Inlined where practical. */
     inline State getState() {               return imu_state;                             }
     inline State desiredState() {           return desired_state;                         }
@@ -146,10 +145,10 @@ class LSM9DSx_Common : public SPIDeviceWithRegisters {
     inline void setVerbosity(int8_t _v) {   verbosity = _v;  };
 
     int8_t setDesiredState(State);   // Used to set the state the OS wants the IMU class to acheive.
-    void write_test_bytes();
-    bool step_state();      // Used internally to move between states. TODO: Should be private.
+    void   write_test_bytes();
+    bool   step_state();      // Used internally to move between states. TODO: Should be private.
 
-    int8_t init(void);
+    int8_t  init(void);
     virtual void reset(void);           // Reset our state without causing a re-init.
 
     virtual int8_t bulk_refresh();    // Read all the non-identity/non-FIFO registers in the device.
@@ -197,7 +196,6 @@ class LSM9DSx_Common : public SPIDeviceWithRegisters {
 
     int8_t    base_filter_param = 0;
 
-    Vector3<int16_t> sample_backlog[32];
     uint8_t   sb_next_read     = 0;
     uint8_t   sb_next_write    = 0;
 

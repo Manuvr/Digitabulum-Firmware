@@ -161,7 +161,6 @@ SPIBusOp::SPIBusOp(uint8_t nu_op, uint16_t addr, uint8_t *buf, uint8_t len, SPIO
   this->buf_len         = len;
   this->bus_addr        = addr;
   callback = requester;
-  profile = false;
 }
 
 
@@ -173,7 +172,7 @@ SPIBusOp::SPIBusOp(uint8_t nu_op, uint16_t addr, uint8_t *buf, uint8_t len, SPIO
 * Moreover, sometimes instances of this class will be preallocated, and never torn down.
 */
 SPIBusOp::~SPIBusOp() {
-  if (profile) {
+  if (profile()) {
     debug_log.concat("Destroying an SPI job that was marked for profiling:\n");
     printDebug(&debug_log);
   }
@@ -251,7 +250,7 @@ void SPIBusOp::wipe() {
   buf         = NULL;
   reg_idx     = -1;
   callback    = NULL;
-  profile     = false;
+  profile(false);
 }
 
 
@@ -434,7 +433,7 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
   /* These are our transfer-size-invariant cases. */
   switch (xfer_state) {
     case SPI_XFER_STATE_COMPLETE:
-      //if (profile) transition_time_COMPLETE     = micros();
+      //if (profile()) transition_time_COMPLETE     = micros();
       abort(SPI_XFER_ERROR_HANGING_IRQ);
       return 0;
 
@@ -449,14 +448,14 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
     /*
     * This is the IRQ-only block.
     */
-    if (profile) debug_log.concatf("IRQ  %s\t status: 0x%08x\n", getStateString(), (unsigned long) status_reg);
+    if (profile()) debug_log.concatf("IRQ  %s\t status: 0x%08x\n", getStateString(), (unsigned long) status_reg);
     switch (xfer_state) {
       case SPI_XFER_STATE_ADDR:
         break;
 
       case SPI_XFER_STATE_STOP:
         markComplete();
-        //if (profile) transition_time_STOP = micros();
+        //if (profile()) transition_time_STOP = micros();
         break;
 
       /* Below are the states that we shouldn't be in at this point... */
@@ -471,7 +470,7 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
     /*
     * This is the DMA block.
     */
-    if (profile) {
+    if (profile()) {
       uint16_t count_0 = __HAL_DMA_GET_COUNTER(&_dma_r_handle);
       debug_log.concatf("DMA  %s\t DMA0: %d \t buf_len: %d \t status: 0x%08x\n", getStateString(), (uint16_t) count_0, buf_len, (unsigned long) hspi1.State);
     }
@@ -494,26 +493,26 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
         break;
 
       case SPI_XFER_STATE_DMA_WAIT:
-        //if (profile) transition_time_DMA_WAIT = micros();
+        //if (profile()) transition_time_DMA_WAIT = micros();
         if (0 == __HAL_DMA_GET_COUNTER(&_dma_r_handle)) {
           xfer_state = SPI_XFER_STATE_STOP;
           if (HAL_DMA_GetState(&_dma_r_handle) == HAL_DMA_STATE_RESET) {
             markComplete();
           }
           else {
-            //if (profile) debug_log.concat("\t DMA looks sick...\n");
+            //if (profile()) debug_log.concat("\t DMA looks sick...\n");
             abort(SPI_XFER_ERROR_DMA_TIMEOUT);
           }
         }
         else {
-          //if (profile) debug_log.concatf("\tJob 0x%04x looks incomplete, but DMA is IRQ. Advancing state to STOP for next IRQ and hope.\n", txn_id);
+          //if (profile()) debug_log.concatf("\tJob 0x%04x looks incomplete, but DMA is IRQ. Advancing state to STOP for next IRQ and hope.\n", txn_id);
           debug_log.concat("\tJob looks incomplete, but DMA is IRQ. Advancing state to STOP for next IRQ and hope.\n");
           abort(SPI_XFER_ERROR_DMA_TIMEOUT); // TODO: WRONG
         }
         break;
 
       case SPI_XFER_STATE_STOP:
-        //if (profile) transition_time_STOP = micros();
+        //if (profile()) transition_time_STOP = micros();
         markComplete();
         break;
 

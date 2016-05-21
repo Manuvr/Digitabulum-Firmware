@@ -548,7 +548,7 @@ int8_t CPLDDriver::queue_spi_job(SPIBusOp* op) {
     }
 
     if ((getVerbosity() > 6) && (op->callback == (SPIOpCallback*) this)) {
-      op->profile = true;
+      op->profile(true);
     }
 
     if (op->xfer_state != SPI_XFER_STATE_IDLE) {

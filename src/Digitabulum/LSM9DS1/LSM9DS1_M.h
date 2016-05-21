@@ -90,7 +90,8 @@ class LSM9DS1_M : public LSM9DSx_Common {
 
 
   private:
-    bool    power_to_mag         = false;  // Sensor powered on?
+    Vector3<int16_t> sample_backlog_mag[32];
+    bool    power_to_mag         = false; // Sensor powered on?
 
     uint8_t scale_mag            = 0;     // What scale is the sensor operating at? This is an index.
     uint8_t update_rate_mag      = 0;     // Index to the update-rate array.
