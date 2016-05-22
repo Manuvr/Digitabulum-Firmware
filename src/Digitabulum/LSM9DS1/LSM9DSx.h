@@ -187,8 +187,6 @@ class LSM9DSx_Common : public SPIDeviceWithRegisters {
     State     desired_state    = State::STAGE_0;
 
     uint8_t   idx_identity     = 0;
-    uint8_t   idx_reset_locus  = 0;
-    uint8_t   idx_fifo_src     = 0;
     uint8_t   idx_io_test_0    = 0;
     uint8_t   idx_io_test_1    = 0;
     uint8_t   io_test_val_0    = 0;     //
