@@ -26,14 +26,31 @@ limitations under the License.
 #include "stm32f7xx_hal.h"
 
 
+/****************************************************************************************************
+*      _______.___________.    ___   .___________. __    ______     _______.
+*     /       |           |   /   \  |           ||  |  /      |   /       |
+*    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
+*     \   \       |  |      /  /_\  \    |  |     |  | |  |        \   \
+* .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
+* |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
+*
+* Static members and initializers should be located here. Initializers first, functions second.
+****************************************************************************************************/
 
-// If your driver represents a statically-allocated unit, you can do something
-//   like this...
-//volatile HapticStrap* HapticStrap::INSTANCE = NULL;
+volatile HapticStrap* HapticStrap::INSTANCE = NULL;
 
+
+/****************************************************************************************************
+*   ___ _              ___      _ _              _      _
+*  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
+* | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
+*  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
+*                                          |_|
+* Constructors/destructors, class initialization functions and so-forth...
+****************************************************************************************************/
 
 HapticStrap::HapticStrap() {
-  //INSTANCE = this;
+  INSTANCE = this;
 }
 
 

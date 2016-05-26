@@ -36,6 +36,13 @@ Digitabulum's power-management subsystem consists of...
 #include <Drivers/INA219/INA219.h>
 #include <Drivers/MCP73833/MCP73833.h>
 
+// Valid CPU frequencies.
+enum class CPUFreqSetting {
+  CPU_54,
+  CPU_216,
+  CPU_CLK_UNDEF
+};
+
 
 class PMU : public EventReceiver {
   public:
@@ -49,12 +56,17 @@ class PMU : public EventReceiver {
     const char* getReceiverName();
     void printDebug(StringBuilder*);
 
+    static volatile PMU *INSTANCE;
+    static int pmu_cpu_clock_rate(CPUFreqSetting);
+
 
   protected:
     int8_t bootComplete();
 
 
   private:
+    CPUFreqSetting _cpu_clock;
+
     void gpioSetup();
     int8_t cpu_scale(uint8_t _freq);
 };

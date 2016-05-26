@@ -258,9 +258,14 @@ int main(void) {
   I2CAdapter i2c(1);
   kernel->subscribe(&i2c);
 
-  ADP8866 adp8866(7, 8, 0x27);
+  // Pins 58 and 63 are the reset and IRQ pin, respectively.
+  // This is translated to pins 10 and 13 on PortD.
+  ADP8866 adp8866(58, 63, 0x27);
   kernel->subscribe((EventReceiver*) &adp8866);
   i2c.addSlaveDevice(&adp8866);
+
+  LegendManager _legend_manager;
+  kernel->subscribe(&_legend_manager);
 
   RN4677 bt;
   kernel->subscribe((EventReceiver*) &bt);

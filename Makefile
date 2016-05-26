@@ -151,6 +151,7 @@ CPP_SRCS  += src/Digitabulum/RovingNetworks/BTQueuedOperation.cpp
 CPP_SRCS  += src/Digitabulum/RovingNetworks/RN4677/RN4677.cpp
 CPP_SRCS  += src/Digitabulum/IREmitter/IREmitter.cpp
 CPP_SRCS  += src/Digitabulum/HapticStrap/HapticStrap.cpp
+CPP_SRCS  += src/Digitabulum/ExpansionPort/ExpansionPort.cpp
 CPP_SRCS  += src/Digitabulum/DigitabulumPMU/DigitabulumPMU.cpp
 
 

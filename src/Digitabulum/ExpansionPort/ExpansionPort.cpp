@@ -1,7 +1,7 @@
 /*
-File:   DigitabulumPMU.cpp
+File:   ExpansionPort.cpp
 Author: J. Ian Lindsay
-Date:   2016.03.31
+Date:   2016.05.26
 
 Copyright 2016 Manuvr, Inc
 
@@ -20,95 +20,38 @@ limitations under the License.
 */
 
 
-#include "DigitabulumPMU.h"
+#include "ExpansionPort.h"
 #include <DataStructures/StringBuilder.h>
 
 #include "stm32f7xx_hal.h"
 
 
-/****************************************************************************************************
-*      _______.___________.    ___   .___________. __    ______     _______.
-*     /       |           |   /   \  |           ||  |  /      |   /       |
-*    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
-*     \   \       |  |      /  /_\  \    |  |     |  | |  |        \   \
-* .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
-* |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
-*
-* Static members and initializers should be located here. Initializers first, functions second.
-****************************************************************************************************/
 
-volatile PMU* PMU::INSTANCE = NULL;
+// If your driver represents a statically-allocated unit, you can do something
+//   like this...
+//volatile ExpansionPort* ExpansionPort::INSTANCE = NULL;
 
-int PMU::pmu_cpu_clock_rate(CPUFreqSetting _setting) {
-  switch (_setting) {
-    case CPUFreqSetting::CPU_54:         return 54;
-    case CPUFreqSetting::CPU_216:        return 216;
-    case CPUFreqSetting::CPU_CLK_UNDEF:  return 0;
-  }
-  return 0;
+
+ExpansionPort::ExpansionPort() {
+  INSTANCE = this;
 }
 
 
-/****************************************************************************************************
-*   ___ _              ___      _ _              _      _
-*  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
-* | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
-*  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
-*                                          |_|
-* Constructors/destructors, class initialization functions and so-forth...
-****************************************************************************************************/
-
-PMU::PMU() {
-  INSTANCE   = this;
-  _cpu_clock = CPUFreqSetting::CPU_CLK_UNDEF;
+ExpansionPort::~ExpansionPort() {
 }
 
 
-PMU::~PMU() {
-}
-
-
-// Pass 1 for low freq, 0 for max
-int8_t PMU::cpu_scale(uint8_t _freq) {
-  RCC_ClkInitTypeDef RCC_ClkInitStruct;
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-
-  switch (_freq) {
-    case 0:
-      _cpu_clock = CPUFreqSetting::CPU_216;
-      RCC_ClkInitStruct.AHBCLKDivider  = RCC_SYSCLK_DIV1;
-      RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV16;
-      RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV4;
-      break;
-    case 1:
-      _cpu_clock = CPUFreqSetting::CPU_54;
-      RCC_ClkInitStruct.AHBCLKDivider  = RCC_SYSCLK_DIV4;
-      RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
-      RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
-      break;
-    default:
-      Kernel::log("Invalid CPU freq.\n");
-      return -1;
-  }
-
-  if(HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_6) != HAL_OK) {
-    while(1) { ; }
-  }
-
-  local_log.concatf("CPU now at %dMHz\n", pmu_cpu_clock_rate(_cpu_clock));
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
-  return 0;
-}
-
-
-void PMU::gpioSetup() {
+void ExpansionPort::gpioSetup() {
   GPIO_InitTypeDef GPIO_InitStruct;
 
-  // We bind timer2-channel1 to the LED pin.
-  GPIO_InitStruct.Pin   = GPIO_PIN_1|GPIO_PIN_0;
-  GPIO_InitStruct.Mode  = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull  = GPIO_PULLUP;
-  GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
+  // GPIO for haptic vibrators...
+  // PB10     ------> TIM2_CH3
+  // PB11     ------> TIM2_CH4
+  GPIO_InitStruct.Pin       = GPIO_PIN_10|GPIO_PIN_11;
+  GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull      = GPIO_NOPULL;
+  GPIO_InitStruct.Speed     = GPIO_SPEED_LOW;
+  GPIO_InitStruct.Alternate = GPIO_AF1_TIM2;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 }
 
@@ -134,7 +77,7 @@ void PMU::gpioSetup() {
 *
 * @return a pointer to a string constant.
 */
-const char* PMU::getReceiverName() {  return "PMU";  }
+const char* ExpansionPort::getReceiverName() {  return "ExpansionPort";  }
 
 
 /**
@@ -142,9 +85,8 @@ const char* PMU::getReceiverName() {  return "PMU";  }
 *
 * @param A pointer to a StringBuffer object to receive the output.
 */
-void PMU::printDebug(StringBuilder* output) {
+void ExpansionPort::printDebug(StringBuilder* output) {
   EventReceiver::printDebug(output);
-  output->concatf("-- CPU freq                  %d MHz\n",      pmu_cpu_clock_rate(_cpu_clock));
 }
 
 
@@ -155,10 +97,8 @@ void PMU::printDebug(StringBuilder* output) {
 *
 * @return 0 on no action, 1 on action, -1 on failure.
 */
-int8_t PMU::bootComplete() {
+int8_t ExpansionPort::bootComplete() {
   EventReceiver::bootComplete();   // Call up to get scheduler ref and class init.
-  gpioSetup();
-  cpu_scale(1);
   return 0;
 }
 
@@ -178,7 +118,7 @@ int8_t PMU::bootComplete() {
 * @param  event  The event for which service has been completed.
 * @return A callback return code.
 */
-int8_t PMU::callback_proc(ManuvrRunnable *event) {
+int8_t ExpansionPort::callback_proc(ManuvrRunnable *event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
   int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
@@ -194,7 +134,7 @@ int8_t PMU::callback_proc(ManuvrRunnable *event) {
 
 
 
-int8_t PMU::notify(ManuvrRunnable *active_event) {
+int8_t ExpansionPort::notify(ManuvrRunnable *active_event) {
   int8_t return_value = 0;
 
   switch (active_event->event_code) {
@@ -208,15 +148,12 @@ int8_t PMU::notify(ManuvrRunnable *active_event) {
 }
 
 
-void PMU::procDirectDebugInstruction(StringBuilder *input) {
+
+void ExpansionPort::procDirectDebugInstruction(StringBuilder *input) {
 #ifdef __MANUVR_CONSOLE_SUPPORT
   char* str = input->position(0);
 
   switch (*(str)) {
-    case 'f':
-    case 'F':
-      cpu_scale(*(str) == 'f' ? 0 : 1);
-      break;
     default:
       #ifdef __MANUVR_DEBUG
       EventReceiver::procDirectDebugInstruction(input);
