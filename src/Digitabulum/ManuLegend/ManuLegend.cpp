@@ -220,9 +220,9 @@ void ManuLegend::formLegendString(StringBuilder *output) {
 
 void ManuLegend::printDebug(StringBuilder *output) {
   output->concatf("--------------------------------\n---Legend\n--------------------------------\n");
-  output->concatf("--- dataset_global      0x%08x\n",    (unsigned long) dataset_global);
-  output->concatf("--- dataset_local       0x%08x\n",    (unsigned long) dataset_local);
-  output->concatf("--- dataset_size        %u\n",        (unsigned long) ds_size);
+  output->concatf("-- dataset_global         0x%08x\n",    (unsigned long) dataset_global);
+  output->concatf("-- dataset_local          0x%08x\n",    (unsigned long) dataset_local);
+  output->concatf("-- dataset_size           %u\n",        (unsigned long) ds_size);
 
   output->concat("--- Enabled data:\n");
   if (sequence()) output->concatf("--- Sequence number     %u\n",        (unsigned long) *((uint32_t*) dataset_local));

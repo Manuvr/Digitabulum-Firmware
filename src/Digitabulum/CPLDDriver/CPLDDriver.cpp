@@ -71,25 +71,27 @@ SPIBusOp CPLDDriver::preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];
 
 /*
 * This is a table of IMUs that we can support. See header file for clarification.
+* Each IMU has a IRQ mask value that allows us to easilly isolate the relevant
+*   bits in the IRQ transfer.
 */
 IMUBusMap CPLDDriver::imu_map[17] = {
-  {0x00, 0x12, 0x00010101 },
-  {0x01, 0x13, 0x00010101 },
-  {0x02, 0x14, 0x00202020 },
-  {0x03, 0x15, 0x00202020 },
-  {0x04, 0x16, 0x00202020 },
-  {0x05, 0x17, 0x00101010 },
-  {0x06, 0x18, 0x00101010 },
-  {0x07, 0x19, 0x00101010 },
-  {0x08, 0x1A, 0x00040404 },
-  {0x09, 0x1B, 0x00040404 },
-  {0x0A, 0x1C, 0x00040404 },
-  {0x0B, 0x1D, 0x00080808 },
-  {0x0C, 0x1E, 0x00080808 },
-  {0x0D, 0x1F, 0x00080808 },
-  {0x0E, 0x20, 0x00020202 },
-  {0x0F, 0x21, 0x00020202 },
-  {0x11, 0x22, 0x00020202 }
+  {CPLD_REG_IMU_DM_P_I, CPLD_REG_IMU_DM_P_M, 0x00 },
+  {CPLD_REG_IMU_DM_D_I, CPLD_REG_IMU_DM_D_M, 0x04 },
+  {CPLD_REG_IMU_D1_P_I, CPLD_REG_IMU_D1_P_M, 0x08 },
+  {CPLD_REG_IMU_D1_I_I, CPLD_REG_IMU_D1_I_M, 0x0C },
+  {CPLD_REG_IMU_D1_D_I, CPLD_REG_IMU_D1_D_M, 0x10 },
+  {CPLD_REG_IMU_D2_P_I, CPLD_REG_IMU_D2_P_M, 0x14 },
+  {CPLD_REG_IMU_D2_I_I, CPLD_REG_IMU_D2_I_M, 0x18 },
+  {CPLD_REG_IMU_D2_D_I, CPLD_REG_IMU_D2_D_M, 0x1C },
+  {CPLD_REG_IMU_D3_P_I, CPLD_REG_IMU_D3_P_M, 0x20 },
+  {CPLD_REG_IMU_D3_I_I, CPLD_REG_IMU_D3_I_M, 0x24 },
+  {CPLD_REG_IMU_D3_D_I, CPLD_REG_IMU_D3_D_M, 0x28 },
+  {CPLD_REG_IMU_D4_P_I, CPLD_REG_IMU_D4_P_M, 0x2C },
+  {CPLD_REG_IMU_D4_I_I, CPLD_REG_IMU_D4_I_M, 0x30 },
+  {CPLD_REG_IMU_D4_D_I, CPLD_REG_IMU_D4_D_M, 0x34 },
+  {CPLD_REG_IMU_D5_P_I, CPLD_REG_IMU_D5_P_M, 0x38 },
+  {CPLD_REG_IMU_D5_I_I, CPLD_REG_IMU_D5_I_M, 0x3C },
+  {CPLD_REG_IMU_D5_D_I, CPLD_REG_IMU_D5_D_M, 0x40 }
 };
 
 const unsigned char MSG_ARGS_U8_FLOAT[] = {

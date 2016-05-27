@@ -172,9 +172,6 @@ LegendManager::LegendManager() {
   }
   reconfigure_data_map();
   setLegend(operating_legend);
-
-  // Lastly, subscribe to Events.
-  Kernel::getInstance()->subscribe(this);
 }
 
 

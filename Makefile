@@ -11,8 +11,8 @@ FIRMWARE_NAME      = digitabulum
 
 MCU                = cortex-m7
 EXT_CLK_RATE       = 24000000
-OPTIMIZATION       = -O0 -g
-#OPTIMIZATION       = -O2
+#OPTIMIZATION       = -O0 -g
+OPTIMIZATION       = -O2
 C_STANDARD         = gnu99
 CPP_STANDARD       = gnu++11
 
