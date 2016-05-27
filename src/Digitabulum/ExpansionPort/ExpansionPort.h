@@ -1,7 +1,7 @@
 /*
-File:   SDCard.h
+File:   ExpansionPort.h
 Author: J. Ian Lindsay
-Date:   2016.04.17
+Date:   2016.05.26
 
 Copyright 2016 Manuvr, Inc
 
@@ -19,27 +19,17 @@ limitations under the License.
 
 */
 
-#ifndef __DIGITABULUM_SDCARD_H__
-#define __DIGITABULUM_SDCARD_H__
 
-#include <inttypes.h>
-#include <stm32f7xx_hal_dma.h>
-#include <stm32f7xx_hal_sd.h>
+#ifndef __DIGITABULUM_EXP_PORT_H__
+#define __DIGITABULUM_EXP_PORT_H__
 
 #include <Kernel.h>
 
-/*
-* This class represents an open comm session with a foreign device. That comm session might
-*   be happening over USB, BlueTooth, WiFi, IRDa, etc. All we care about is the byte stream.
-* Transport class instantiates us, and maintains a pointer to us.
-*/
-class SDCard : public EventReceiver {
+
+class ExpansionPort : public EventReceiver {
   public:
-    SDCard();
-    ~SDCard();
-
-
-    int8_t init(void);
+    ExpansionPort();
+    ~ExpansionPort();
 
     /* Overrides from EventReceiver */
     int8_t notify(ManuvrRunnable*);
@@ -48,17 +38,16 @@ class SDCard : public EventReceiver {
     const char* getReceiverName();
     void printDebug(StringBuilder*);
 
+    volatile static ExpansionPort* INSTANCE;
+
 
   protected:
     int8_t bootComplete();
 
 
   private:
-    uint8_t buf_in[512];
-    uint8_t buf_out[512];
-
     void gpioSetup();
 };
 
 
-#endif
+#endif  // __DIGITABULUM_EXP_PORT_H__

@@ -23,6 +23,8 @@ limitations under the License.
 #include "IREmitter.h"
 #include <DataStructures/StringBuilder.h>
 
+#include "stm32f7xx_hal.h"
+
 
 
 // If your driver represents a statically-allocated unit, you can do something
@@ -39,6 +41,17 @@ IREmitter::~IREmitter() {
 }
 
 
+void IREmitter::gpioSetup() {
+  GPIO_InitTypeDef GPIO_InitStruct;
+
+  // We bind timer2-channel1 to the LED pin.
+  GPIO_InitStruct.Pin       = GPIO_PIN_15;
+  GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull      = GPIO_NOPULL;
+  GPIO_InitStruct.Speed     = GPIO_SPEED_LOW;
+  GPIO_InitStruct.Alternate = GPIO_AF1_TIM2;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+}
 
 
 /****************************************************************************************************
@@ -84,6 +97,7 @@ void IREmitter::printDebug(StringBuilder* output) {
 */
 int8_t IREmitter::bootComplete() {
   EventReceiver::bootComplete();   // Call up to get scheduler ref and class init.
+  gpioSetup();
   return 0;
 }
 
@@ -136,6 +150,17 @@ int8_t IREmitter::notify(ManuvrRunnable *active_event) {
 
 void IREmitter::procDirectDebugInstruction(StringBuilder *input) {
 #ifdef __MANUVR_CONSOLE_SUPPORT
+  char* str = input->position(0);
+
+  switch (*(str)) {
+    case 'f':
+      break;
+    default:
+      #ifdef __MANUVR_DEBUG
+      EventReceiver::procDirectDebugInstruction(input);
+      #endif
+      break;
+  }
 #endif
   if (local_log.length() > 0) {    Kernel::log(&local_log);  }
 }

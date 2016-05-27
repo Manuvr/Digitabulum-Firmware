@@ -45,11 +45,12 @@ Data from magnetometers and GPS devices is used to establish error-rates
 #ifndef __IIU_CLASS_H__
 #define __IIU_CLASS_H__
 
-#include "LSM9DS1.h"
+#include "LSM9DS1_M.h"
+#include "LSM9DS1_AG.h"
 #include <stdarg.h>
 #include <Kernel.h>
-#include "DataStructures/InertialMeasurement.h"
-#include "DataStructures/Quaternion.h"
+#include <DataStructures/InertialMeasurement.h>
+#include <DataStructures/Quaternion.h>
 
 class LSM9DSx_Common;   // Forward declaration of the LSM9DSx_Common class.
 
@@ -64,6 +65,17 @@ class LSM9DSx_Common;   // Forward declaration of the LSM9DSx_Common class.
 #define IMU_FLAG_MAG_DATA          0b00000010  // Matches capabilities flag for magnetometer data.
 #define IMU_FLAG_GRAVITY_DATA      0b00000100  // Matches capabilities flag for gravity data.
 #define IMU_FLAG_BEARING_DATA      0b00001000  // Matches capabilities flag for bearing at calibration.
+
+// TODO: Transition to this....
+//enum class SampleType {
+//  UNSPECIFIED,
+//  ACCEL,        // Accelerometer vector.
+//  GYRO,         // Gyro vector.
+//  MAG,          // Magnetometer vector.
+//  GRAVITY,      // Gravity vector.
+//  BEARING,      // Bearing at calibration.
+//  ALTITUDE,     // Altitude.
+//};
 
 
 
@@ -129,11 +141,11 @@ class IIU {
 
 
     IIU();
-    ~IIU(void);
+    ~IIU();
 
 
-    int8_t init(void);
-    int8_t readSensor(void);
+    int8_t init();
+    int8_t readSensor();
 
     int8_t setParameter(uint16_t reg, int len, uint8_t*);  // Used to set operational parameters for the sensor.
     int8_t getParameter(uint16_t reg, int len, uint8_t*);  // Used to read operational parameters from the sensor.
@@ -164,7 +176,8 @@ class IIU {
 
     /* These are meant to be called from the IMUs. */
     int8_t pushMeasurement(uint8_t, float x, float y, float z, float delta_t);
-    int8_t state_change_notice(LSM9DSx_Common* imu_ptr, uint8_t p_state, uint8_t c_state);
+    int8_t state_change_notice(LSM9DSx_Common* imu_ptr, State p_state, State c_state);
+    void deposit_log(StringBuilder*);
 
     /* These are meant to be called from a Legend. */
     void setPositionAndAddress(uint8_t nu_pos, uint8_t imu_addr, uint8_t mag_addr);
@@ -290,8 +303,8 @@ class IIU {
     }
 
 
-    inline void setAccelBaseFiler(uint8_t nu) {  if (imu_ag) imu_ag->set_base_filter_param(nu);  };
-    inline void setGyroBaseFiler(uint8_t nu) {   if (imu_m) imu_m->set_base_filter_param(nu);    };
+    inline void setAccelBaseFiler(uint8_t nu) {  if (imu_ag) imu_ag->set_base_filter_param_acc(nu);  };
+    inline void setGyroBaseFiler(uint8_t nu) {   if (imu_ag) imu_ag->set_base_filter_param_gyr(nu);  };
 
 
     /*

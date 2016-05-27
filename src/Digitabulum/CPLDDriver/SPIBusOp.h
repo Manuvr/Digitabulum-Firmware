@@ -61,6 +61,7 @@ limitations under the License.
   #define SPI_XFER_FLAG_NO_FREE         0x01   // If set in a transaction's flags field, it will not be free()'d.
   #define SPI_XFER_FLAG_PREALLOCATE_Q   0x02   // If set, indicates this object should be returned to the prealloc queue.
   #define SPI_XFER_FLAG_DEVICE_REG_INC  0x40   // If set, indicates this operation advances addresses in the target device.
+  #define SPI_XFER_FLAG_PROFILE         0x80   // If set, this bus operation shall be profiled.
 
 
   #define SPI_CALLBACK_ERROR    -1
@@ -75,20 +76,18 @@ class SPIOpCallback;
 */
 class SPIBusOp {
   public:
-    SPIOpCallback* callback = NULL;                  // Which class gets pinged when we've finished?
-    uint8_t* buf            = NULL;                  // Pointer to the data buffer for the transaction.
+    SPIOpCallback* callback = NULL;               // Which class gets pinged when we've finished?
+    uint8_t* buf            = NULL;               // Pointer to the data buffer for the transaction.
+    uint8_t  buf_len        = 0;                  // How large is the above buffer?
 
-    uint16_t bus_addr    = 0x0000;                   // The address that this operation is directed toward.
-    int16_t  reg_idx     = -1;                       // Optional register index. Makes callbacks faster.
+    uint16_t bus_addr    = 0x0000;                // The address that this operation is directed toward.
+    int16_t  reg_idx     = -1;                    // Optional register index. Makes callbacks faster.
 
-    uint8_t  opcode      = SPI_OPCODE_UNDEFINED;     // What is the particular operation being done?
-    uint8_t  xfer_state  = SPI_XFER_STATE_IDLE;      // What state is this transfer in?
+    uint8_t  opcode      = SPI_OPCODE_UNDEFINED;  // What is the particular operation being done?
+    uint8_t  xfer_state  = SPI_XFER_STATE_IDLE;   // What state is this transfer in?
 
     //uint32_t time_began    = 0;   // This is the time when bus access begins.
     //uint32_t time_ended    = 0;   // This is the time when bus access stops (or is aborted).
-
-    uint8_t  buf_len     = 0;                        // How large is the above buffer?
-    bool           profile  = false;     // Set to true to profile this transaction.
 
     SPIBusOp();
     SPIBusOp(uint8_t nu_op, uint16_t addr, uint8_t *buf, uint8_t len, SPIOpCallback* requester);
@@ -130,6 +129,17 @@ class SPIBusOp {
     * @return true if the bus manager class should return this object to its preallocation queue.
     */
     inline bool returnToPrealloc() {  return (flags & SPI_XFER_FLAG_PREALLOCATE_Q);  }
+
+    /**
+    * The bus manager calls this fxn to decide if it ought to return this object to the preallocation
+    *   queue following completion.
+    *
+    * @return true if this bus operation is being profiled.
+    */
+    inline bool profile() {         return (flags & SPI_XFER_FLAG_PROFILE);  }
+    inline void profile(bool en) {
+      flags = (en) ? (flags | SPI_XFER_FLAG_PROFILE) : (flags & ~(SPI_XFER_FLAG_PROFILE));
+    };
 
     /**
     * The bus manager calls this fxn to decide if it ought to return this object to the preallocation
@@ -181,13 +191,11 @@ class SPIBusOp {
     uint8_t total_len() {     return buf_len + ((bus_addr > 255) ? 2 : 1);    }
 
     bool wait_with_timeout();
-    bool wait_txe_with_timeout();
 
     /* This only works because of careful defines. Tread lightly. */
     inline bool has_bus_control() {     return (xfer_state & 0x04);   }
 
 
-    static void enableSPI_IRQ(bool enable);
     static void enableSPI_DMA(bool enable);
 };
 

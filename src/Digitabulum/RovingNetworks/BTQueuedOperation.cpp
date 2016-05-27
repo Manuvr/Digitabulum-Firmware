@@ -123,7 +123,7 @@ void BTQueuedOperation::wipe() {
   this->opcode     = RNBASE_OP_CODE_UNDEFINED;
   this->tx_buf     = NULL;
   this->tx_len     = 0;
-  this->txn_id     = randomInt();
+  this->txn_id     = 0; //randomInt();
   data.clear();
 }
 
@@ -242,7 +242,7 @@ void BTQueuedOperation::buildDMAMembers() {
 
   /* Enable DMA Stream Transfer Complete interrupt */
   enable_DMA_IRQ(false);
-  __HAL_DMA_ENABLE_IT(&_dma_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+  //__HAL_DMA_ENABLE_IT(&_dma_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
 }
 
 

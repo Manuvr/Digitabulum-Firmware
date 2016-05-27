@@ -45,7 +45,7 @@ DMA_HandleTypeDef _dma_w_handle;
 * Notated like a const, but should NOT be a const, because we use this as a DMA read sink as well
 *   as a sort of /dev/zero. This never contains any meaningful data.
 */
-uint8_t *STATIC_ZERO = NULL;
+uint32_t STATIC_ZERO = 0;
 
 
 /****************************************************************************************************
@@ -72,12 +72,8 @@ uint16_t SPIBusOp::spi_wait_timeout = 20; // In microseconds. Per-byte.
 *   same init doesn't need to be done a million times for repeat operations.
 */
 void SPIBusOp::buildDMAMembers() {
-  STATIC_ZERO = (uint8_t*) malloc(4);
   // We setup the interrupt-driven stuff so we aren't surprised on the first use of the bus.
   enableSPI_DMA(false);
-  enableSPI_IRQ(false);
-  DMA_ITConfig(DMA2_Stream3, DMA_IT_TC | DMA_IT_TE | DMA_IT_HT | DMA_IT_FE | DMA_IT_DME, DISABLE);
-  DMA_ITConfig(DMA2_Stream2, DMA_IT_TC, ENABLE);
 
   _dma_r_handle.Instance                  = DMA2_Stream2;
   _dma_r_handle.Init.Direction            = DMA_PERIPH_TO_MEMORY;   // Receive
@@ -108,22 +104,9 @@ void SPIBusOp::buildDMAMembers() {
   _dma_w_handle.Init.Mode                = DMA_NORMAL;
   _dma_w_handle.Init.MemInc              = DMA_MINC_ENABLE;
   //DMA_InitStructure_Write.DMA_PeripheralBaseAddr = (uint32_t) &SPI1->DR;
-}
 
-
-/**
-* Used to disable the SPI IRQs at the NVIC.
-*
-* @param bool enable the interrupts?
-*/
-void SPIBusOp::enableSPI_IRQ(bool enable) {
-  if (!enable) {
-    NVIC_DisableIRQ(SPI1_IRQn);
-  }
-  else {
-    SPI_I2S_ClearITPendingBit(SPI1, SPI_I2S_IT_RXNE);
-    NVIC_EnableIRQ(SPI1_IRQn);
-  }
+  //__HAL_DMA_ENABLE_IT(&_dma_r_handle, DMA_IT_TC);
+  //__HAL_DMA_ENABLE_IT(&_dma_w_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
 }
 
 
@@ -178,7 +161,6 @@ SPIBusOp::SPIBusOp(uint8_t nu_op, uint16_t addr, uint8_t *buf, uint8_t len, SPIO
   this->buf_len         = len;
   this->bus_addr        = addr;
   callback = requester;
-  profile = false;
 }
 
 
@@ -190,7 +172,7 @@ SPIBusOp::SPIBusOp(uint8_t nu_op, uint16_t addr, uint8_t *buf, uint8_t len, SPIO
 * Moreover, sometimes instances of this class will be preallocated, and never torn down.
 */
 SPIBusOp::~SPIBusOp() {
-  if (profile) {
+  if (profile()) {
     debug_log.concat("Destroying an SPI job that was marked for profiling:\n");
     printDebug(&debug_log);
   }
@@ -205,44 +187,48 @@ SPIBusOp::~SPIBusOp() {
 * @return 0 on success, or non-zero on failure.
 */
 int8_t SPIBusOp::init_dma() {
-  *(STATIC_ZERO) = 0;
-  if (DMA_GetCmdStatus(DMA2_Stream0) != DISABLE) DMA_Cmd(DMA2_Stream0, DISABLE);
-  if (DMA_GetCmdStatus(DMA2_Stream3) != DISABLE) DMA_Cmd(DMA2_Stream3, DISABLE);
+  if (HAL_DMA_GetState(&_dma_w_handle) != HAL_DMA_STATE_RESET) __HAL_DMA_DISABLE(&_dma_w_handle);
+  if (HAL_DMA_GetState(&_dma_r_handle) != HAL_DMA_STATE_RESET) __HAL_DMA_DISABLE(&_dma_r_handle);
+
+  uint32_t _origin_buf = 0;
+  uint32_t _target_buf = 0;
 
   if (opcode == SPI_OPCODE_READ) {
-    DMA_InitStructure_Read.MemInc          = DMA_MINC_DISABLE;
-    DMA_InitStructure_Read.DMA_BufferSize         = (uint16_t) buf_len;
-    DMA_InitStructure_Read.DMA_Memory0BaseAddr    = (uint32_t) buf;
+    _dma_r_handle.Init.MemInc = DMA_MINC_DISABLE;
+    _dma_w_handle.Init.MemInc = DMA_MINC_DISABLE;
 
-    // If we are using DMA, we will always need a transmit channel. Otherwise, an Rx operation
-    // would have no means of driving the bus clock, and would thus never complete.
-    DMA_InitStructure_Write.MemInc         = DMA_MINC_DISABLE;
-    DMA_InitStructure_Write.DMA_BufferSize        = (uint16_t) buf_len;
-    DMA_InitStructure_Write.DMA_Memory0BaseAddr   = (uint32_t) STATIC_ZERO;
+    //DMA_InitStructure_Read.DMA_Memory0BaseAddr    = (uint32_t) buf;
+
+    // We still need a transmit DMA operation to send the transfer parameters.
+    //DMA_InitStructure_Write.DMA_Memory0BaseAddr   = (uint32_t) &STATIC_ZERO;
   }
   else if (opcode == SPI_OPCODE_WRITE) {
-    DMA_InitStructure_Write.MemInc         = DMA_MINC_ENABLE;
-    DMA_InitStructure_Write.DMA_BufferSize        = (uint16_t) buf_len;
-    DMA_InitStructure_Write.DMA_Memory0BaseAddr   = (uint32_t) buf;
+    _dma_r_handle.Init.MemInc = DMA_MINC_DISABLE;
+    _dma_w_handle.Init.MemInc = DMA_MINC_ENABLE;
+
+    //DMA_InitStructure_Write.DMA_Memory0BaseAddr   = (uint32_t) buf;
 
     // For now, we are reliant on the Rx DMA IRQ. Tx IRQ is never used. So when
     // transmitting, we need to sink the read bytes until we do something smarter.
-    DMA_InitStructure_Read.MemInc          = DMA_MINC_DISABLE;
-    DMA_InitStructure_Read.DMA_BufferSize         = (uint16_t) buf_len;
-    DMA_InitStructure_Read.DMA_Memory0BaseAddr    = (uint32_t) STATIC_ZERO;
+    //DMA_InitStructure_Read.DMA_Memory0BaseAddr    = (uint32_t) &STATIC_ZERO;
   }
   else {
     return -1;
   }
 
-  while (DMA_GetCmdStatus(DMA2_Stream0) != DISABLE);  // TODO: Might-could cut this.
-  DMA_Init(DMA2_Stream0, &DMA_InitStructure_Read);
+  while (HAL_DMA_GetState(&_dma_w_handle) != HAL_DMA_STATE_RESET) {}  // TODO: Might-could cut this.
+  HAL_DMA_Init(&_dma_w_handle);
 
-  while (DMA_GetCmdStatus(DMA2_Stream3) != DISABLE);  // TODO: Might-could cut this.
-  DMA_Init(DMA2_Stream3, &DMA_InitStructure_Write);
+  while (HAL_DMA_GetState(&_dma_r_handle) != HAL_DMA_STATE_RESET) {}  // TODO: Might-could cut this.
+  HAL_DMA_Init(&_dma_r_handle);
 
-  DMA_Cmd(DMA2_Stream0, ENABLE);
-  DMA_Cmd(DMA2_Stream3, ENABLE);
+  if (opcode == SPI_OPCODE_READ) {
+    HAL_DMA_Start_IT(&_dma_r_handle, (uint32_t) hspi1.pRxBuffPtr, (uint32_t) buf, (uint32_t) buf_len);
+    HAL_DMA_Start_IT(&_dma_w_handle, (uint32_t) buf, (uint32_t) hspi1.pTxBuffPtr, (uint32_t) buf_len);
+  }
+  else if (opcode == SPI_OPCODE_WRITE) {
+    HAL_DMA_Start_IT(&_dma_w_handle, (uint32_t) buf, (uint32_t) hspi1.pTxBuffPtr, (uint32_t) buf_len);
+  }
 
   return 0;
 }
@@ -264,7 +250,7 @@ void SPIBusOp::wipe() {
   buf         = NULL;
   reg_idx     = -1;
   callback    = NULL;
-  profile     = false;
+  profile(false);
 }
 
 
@@ -272,10 +258,10 @@ bool SPIBusOp::wait_with_timeout() {
   uint32_t to_mark = micros();
   uint32_t timeout_val = (2 * spi_wait_timeout) + (buf_len * spi_wait_timeout);
   uint32_t m_mark = micros();
-  while( (SPI1->SR & SPI_I2S_FLAG_BSY) && ((max(to_mark, m_mark) - min(to_mark, m_mark)) <= timeout_val) ) {
+  while(__HAL_SPI_GET_FLAG(&hspi1, HAL_SPI_STATE_BUSY) && ((max(to_mark, m_mark) - min(to_mark, m_mark)) <= timeout_val) ) {
     m_mark = micros();
   } // wait until bus is not busy, JIC.
-  if (SPI1->SR & SPI_I2S_FLAG_BSY) {
+  if (__HAL_SPI_GET_FLAG(&hspi1, HAL_SPI_STATE_BUSY)) {
     debug_log.concatf("SPI Bus timeout after %uuS.\n", timeout_val);
     return false;
   }
@@ -283,23 +269,6 @@ bool SPIBusOp::wait_with_timeout() {
     return true;
   }
 }
-
-bool SPIBusOp::wait_txe_with_timeout() {
-  uint32_t to_mark = micros();
-  uint32_t timeout_val = (2 * spi_wait_timeout) + (buf_len * spi_wait_timeout);
-  uint32_t m_mark = micros();
-  while( !(SPI1->SR & SPI_I2S_FLAG_TXE) && ((max(to_mark, m_mark) - min(to_mark, m_mark)) <= timeout_val) ) {
-    m_mark = micros();
-  } // wait until bus is not busy, JIC.
-  if (!(SPI1->SR & SPI_I2S_FLAG_TXE)) {
-    debug_log.concatf("SPI Bus txe_timeout after %uuS.\n", timeout_val);
-    return false;
-  }
-  else {
-    return true;
-  }
-}
-
 
 
 /****************************************************************************************************
@@ -373,29 +342,23 @@ int8_t SPIBusOp::begin() {
   /* In this case, we need to clear any pending interrupts for the SPI, and to do that, we must
      read this register, even though we don't care about the result.  */
   volatile uint8_t throw_away;
-  if (SPI1->SR & SPI_I2S_FLAG_RXNE) throw_away = SPI1->DR;   // Clear the Rx flag (if set).
+  if (__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_RXNE)) {} // throw_away = hspi1->DR;   // Clear the Rx flag (if set).
 
   /* The peripheral should be totally clear at this point. Since the TX FIFO is two slots deep,
      we're going to shovel in both bytes if we have a 16-bit address. Since the ISR only calls
      us back when the bus goes idle, we don't need to worry about tracking the extra IRQ. */
   xfer_state = SPI_XFER_STATE_ADDR;
   if (bus_addr > 255) {
-    SPI1->DR = (uint8_t) (bus_addr >> 8);
+    //hspi1->DR = (uint8_t) (bus_addr >> 8);
   }
 
-  // TODO: This is probably unjustified paranoia, since we checked for idle 20 lines ago.
-  if (!wait_txe_with_timeout()) {
+  if (!wait_with_timeout()) {
     debug_log.concatf("SPI op aborted halfway into ADDR phase?!\n");
     abort();
     return -1;
   }
   /* Shovel in the last (or only) address byte... */
-  SPI1->DR = (uint8_t) bus_addr;
-
-  /* TODO? We should probably replace the SPI IRQs entirely with DMA for the addressing phase.
-     it would be more costly on the setup, but we cut our IRQ count from 4 to 2 per job, in the
-     best-savings case. */
-  enableSPI_IRQ(true);
+  //hspi1->DR = (uint8_t) bus_addr;
 
   return 0;
 }
@@ -417,16 +380,14 @@ int8_t SPIBusOp::begin() {
 int8_t SPIBusOp::markComplete() {
   if (has_bus_control() || (((CPLDDriver*) cpld)->current_queue_item == this) ) {
     // If this job has bus control, we need to release the bus and tidy up IRQs.
-    enableSPI_IRQ(false);
-
     if (buf_len > 1) {
       // We have DMA cruft to clean.
       enableSPI_DMA(false);
-      DMA_Cmd(DMA2_Stream0, DISABLE);
-      DMA_ClearFlag(DMA2_Stream0, DMA_FLAG_FEIF0|DMA_FLAG_DMEIF0|DMA_FLAG_TEIF0|DMA_FLAG_HTIF0|DMA_FLAG_TCIF0);
+      __HAL_DMA_DISABLE(&_dma_r_handle);
+      __HAL_DMA_CLEAR_FLAG(&_dma_r_handle, DMA_FLAG_TCIF2_6 | DMA_FLAG_HTIF2_6 | DMA_FLAG_TEIF2_6 | DMA_FLAG_DMEIF2_6 | DMA_FLAG_FEIF2_6);
 
-      DMA_Cmd(DMA2_Stream3, DISABLE);
-      DMA_ClearFlag(DMA2_Stream3, DMA_FLAG_FEIF3|DMA_FLAG_DMEIF3|DMA_FLAG_TEIF3|DMA_FLAG_HTIF3|DMA_FLAG_TCIF3);
+      __HAL_DMA_DISABLE(&_dma_w_handle);
+      __HAL_DMA_CLEAR_FLAG(&_dma_w_handle, DMA_FLAG_TCIF3_7 | DMA_FLAG_HTIF3_7 | DMA_FLAG_TEIF3_7 | DMA_FLAG_DMEIF3_7 | DMA_FLAG_FEIF3_7);
     }
 
     //assertCS(false);
@@ -472,7 +433,7 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
   /* These are our transfer-size-invariant cases. */
   switch (xfer_state) {
     case SPI_XFER_STATE_COMPLETE:
-      //if (profile) transition_time_COMPLETE     = micros();
+      //if (profile()) transition_time_COMPLETE     = micros();
       abort(SPI_XFER_ERROR_HANGING_IRQ);
       return 0;
 
@@ -487,38 +448,14 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
     /*
     * This is the IRQ-only block.
     */
-    if (profile) debug_log.concatf("IRQ  %s\t status: 0x%08x\n", getStateString(), (unsigned long) status_reg);
+    if (profile()) debug_log.concatf("IRQ  %s\t status: 0x%08x\n", getStateString(), (unsigned long) status_reg);
     switch (xfer_state) {
       case SPI_XFER_STATE_ADDR:
-        if (SPI_OPCODE_READ == opcode) {
-          // If we are only going to read a byte, drive the clock for one more byte.
-          SPI1->DR = 0;
-          xfer_state = SPI_XFER_STATE_STOP;
-        }
-        else {
-          // If writing, just do so.
-          if (status_reg & 0x00000002) {  // TXE?
-            //if (profile) debug_log.concatf("0x%04x   DATA: 0x%02x\n", (unsigned short)txn_id, (uint8_t) *(buf));
-            SPI1->DR = (uint8_t) *(buf);
-            xfer_state = SPI_XFER_STATE_STOP;
-          }
-          else {
-            debug_log.concat("\tADDR Unable to write a byte. Defer...\n");
-          }
-        }
-        //if (profile) transition_time_ADDR = micros();
         break;
 
       case SPI_XFER_STATE_STOP:
-        if (SPI_OPCODE_READ == opcode) {
-          // If we are only reading one byte, do so now.
-          *(buf) = data_reg;
-        }
-        else if (SPI1->SR & SPI_I2S_FLAG_RXNE) {  // RXNE?
-          // If writing, just clear the flag,
-        }
         markComplete();
-        //if (profile) transition_time_STOP = micros();
+        //if (profile()) transition_time_STOP = micros();
         break;
 
       /* Below are the states that we shouldn't be in at this point... */
@@ -533,50 +470,49 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
     /*
     * This is the DMA block.
     */
-    if (profile) {
-      uint16_t count_0 = DMA_GetCurrDataCounter(DMA2_Stream0);
-      debug_log.concatf("DMA  %s\t DMA0: %d \t buf_len: %d \t status: 0x%08x\n", getStateString(), (uint16_t) count_0, buf_len, (unsigned long) SPI1->SR);
+    if (profile()) {
+      uint16_t count_0 = __HAL_DMA_GET_COUNTER(&_dma_r_handle);
+      debug_log.concatf("DMA  %s\t DMA0: %d \t buf_len: %d \t status: 0x%08x\n", getStateString(), (uint16_t) count_0, buf_len, (unsigned long) hspi1.State);
     }
 
     switch (xfer_state) {
       case SPI_XFER_STATE_ADDR:
         xfer_state = SPI_XFER_STATE_DMA_WAIT;   // We will only ever end up here ONCE per job.
-        enableSPI_IRQ(false);
 
         wait_with_timeout();    // Just in case the bus is still running (it ought not be).
 
-        if (SPI1->SR & SPI_I2S_FLAG_RXNE) {
-          data_reg = SPI1->DR;   // Clear the Rx flag (if set).
-          //debug_log.concatf("\t DMA had to wait on a byte before address setup: 0x%02x. SR is now 0x%04x \n", data_reg, SPI1->SR);
+        if (__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_RXNE)) {
+          //data_reg = hspi1->DR;   // Clear the Rx flag (if set).
+          //debug_log.concatf("\t DMA had to wait on a byte before address setup: 0x%02x. SR is now 0x%04x \n", data_reg, hspi1->SR);
         }
 
         init_dma();
-        SPI_I2S_DMACmd(SPI1, SPI_I2S_DMAReq_Rx, ENABLE);
-        SPI_I2S_DMACmd(SPI1, SPI_I2S_DMAReq_Tx, ENABLE);
+        //SPI_I2S_DMACmd(hspi1, SPI_I2S_DMAReq_Rx, ENABLE);
+        //SPI_I2S_DMACmd(hspi1, SPI_I2S_DMAReq_Tx, ENABLE);
         enableSPI_DMA(true);
         break;
 
       case SPI_XFER_STATE_DMA_WAIT:
-        //if (profile) transition_time_DMA_WAIT = micros();
-        if (0 == DMA_GetCurrDataCounter(DMA2_Stream0)) {
+        //if (profile()) transition_time_DMA_WAIT = micros();
+        if (0 == __HAL_DMA_GET_COUNTER(&_dma_r_handle)) {
           xfer_state = SPI_XFER_STATE_STOP;
-          if (HAL_DMA_GetState(DMA2_Stream0) == HAL_DMA_STATE_RESET) {
+          if (HAL_DMA_GetState(&_dma_r_handle) == HAL_DMA_STATE_RESET) {
             markComplete();
           }
           else {
-            //if (profile) debug_log.concat("\t DMA looks sick...\n");
+            //if (profile()) debug_log.concat("\t DMA looks sick...\n");
             abort(SPI_XFER_ERROR_DMA_TIMEOUT);
           }
         }
         else {
-          //if (profile) debug_log.concatf("\tJob 0x%04x looks incomplete, but DMA is IRQ. Advancing state to STOP for next IRQ and hope.\n", txn_id);
+          //if (profile()) debug_log.concatf("\tJob 0x%04x looks incomplete, but DMA is IRQ. Advancing state to STOP for next IRQ and hope.\n", txn_id);
           debug_log.concat("\tJob looks incomplete, but DMA is IRQ. Advancing state to STOP for next IRQ and hope.\n");
           abort(SPI_XFER_ERROR_DMA_TIMEOUT); // TODO: WRONG
         }
         break;
 
       case SPI_XFER_STATE_STOP:
-        //if (profile) transition_time_STOP = micros();
+        //if (profile()) transition_time_STOP = micros();
         markComplete();
         break;
 

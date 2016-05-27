@@ -61,7 +61,239 @@ void SysTick_Handler(void) {
 /* please refer to the startup file (startup_stm32f7xx.s).                    */
 /******************************************************************************/
 
-/* USER CODE BEGIN 1 */
+/*
+*
+*/
+void WWDG_IRQHandler(void) {
+}
 
-/* USER CODE END 1 */
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+
+/*
+*
+*/
+void RTC_WKUP_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void RTC_Alarm_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void EXTI0_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void EXTI1_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void EXTI2_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void EXTI3_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void EXTI4_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void EXTI9_5_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void EXTI15_10_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void DMA1_Stream0_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void DMA1_Stream1_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void DMA1_Stream2_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void DMA1_Stream3_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void DMA1_Stream4_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void DMA1_Stream5_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void DMA1_Stream6_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void DMA1_Stream7_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void DMA2_Stream0_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void DMA2_Stream1_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void DMA2_Stream2_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void DMA2_Stream3_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void DMA2_Stream4_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void DMA2_Stream5_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void DMA2_Stream6_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void DMA2_Stream7_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void I2C1_EV_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void I2C1_ER_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void SPI1_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void SPI2_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void USART2_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void SDMMC1_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void RNG_IRQHandler(void) {
+}
+
+
+/*
+*
+*/
+void fxn(void) {
+}

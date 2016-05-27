@@ -71,42 +71,35 @@ SPIBusOp CPLDDriver::preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];
 
 /*
 * This is a table of IMUs that we can support. See header file for clarification.
+* Each IMU has a IRQ mask value that allows us to easilly isolate the relevant
+*   bits in the IRQ transfer.
 */
 IMUBusMap CPLDDriver::imu_map[17] = {
-  {0xA0, 0xA1, 0x00010101 },
-  {0x9F, 0x9E, 0x00010101 },
-  {0x93, 0x92, 0x00202020 },
-  {0x95, 0x94, 0x00202020 },
-  {0x97, 0x96, 0x00202020 },
-  {0x8D, 0x8C, 0x00101010 },
-  {0x8F, 0x8E, 0x00101010 },
-  {0x91, 0x90, 0x00101010 },
-  {0x81, 0x80, 0x00040404 },
-  {0x83, 0x82, 0x00040404 },
-  {0x85, 0x84, 0x00040404 },
-  {0x87, 0x86, 0x00080808 },
-  {0x89, 0x88, 0x00080808 },
-  {0x8B, 0x8A, 0x00080808 },
-  {0x99, 0x98, 0x00020202 },
-  {0x9B, 0x9A, 0x00020202 },
-  {0x9D, 0x9C, 0x00020202 }
-};
-
-const unsigned char MSG_ARGS_VIBRATE[] = {
-  UINT16_FM, UINT8_FM, 0,  // Milliseconds to vibrate, Pulse count.
-  UINT16_FM, 0,            // Milliseconds to vibrate.
-  0                        // No args. Single pulse at default duration.
+  {CPLD_REG_IMU_DM_P_I, CPLD_REG_IMU_DM_P_M, 0x00 },
+  {CPLD_REG_IMU_DM_D_I, CPLD_REG_IMU_DM_D_M, 0x04 },
+  {CPLD_REG_IMU_D1_P_I, CPLD_REG_IMU_D1_P_M, 0x08 },
+  {CPLD_REG_IMU_D1_I_I, CPLD_REG_IMU_D1_I_M, 0x0C },
+  {CPLD_REG_IMU_D1_D_I, CPLD_REG_IMU_D1_D_M, 0x10 },
+  {CPLD_REG_IMU_D2_P_I, CPLD_REG_IMU_D2_P_M, 0x14 },
+  {CPLD_REG_IMU_D2_I_I, CPLD_REG_IMU_D2_I_M, 0x18 },
+  {CPLD_REG_IMU_D2_D_I, CPLD_REG_IMU_D2_D_M, 0x1C },
+  {CPLD_REG_IMU_D3_P_I, CPLD_REG_IMU_D3_P_M, 0x20 },
+  {CPLD_REG_IMU_D3_I_I, CPLD_REG_IMU_D3_I_M, 0x24 },
+  {CPLD_REG_IMU_D3_D_I, CPLD_REG_IMU_D3_D_M, 0x28 },
+  {CPLD_REG_IMU_D4_P_I, CPLD_REG_IMU_D4_P_M, 0x2C },
+  {CPLD_REG_IMU_D4_I_I, CPLD_REG_IMU_D4_I_M, 0x30 },
+  {CPLD_REG_IMU_D4_D_I, CPLD_REG_IMU_D4_D_M, 0x34 },
+  {CPLD_REG_IMU_D5_P_I, CPLD_REG_IMU_D5_P_M, 0x38 },
+  {CPLD_REG_IMU_D5_I_I, CPLD_REG_IMU_D5_I_M, 0x3C },
+  {CPLD_REG_IMU_D5_D_I, CPLD_REG_IMU_D5_D_M, 0x40 }
 };
 
 const unsigned char MSG_ARGS_U8_FLOAT[] = {
-  UINT8_FM, FLOAT_FM, 0,
-  0
+  UINT8_FM, FLOAT_FM, 0
 };
 
 const unsigned char MSG_ARGS_IMU_READ[] = {
-  UINT8_FM, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM, 0,  // IMU id and a collection of readings.
-  UINT8_FM, 0,                // IMU id. Interpreted as a request for a rading.
-  0                           // No args. Read all the things.
+  UINT8_FM, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM, 0  // IMU id and a collection of readings.
 };
 
 
@@ -115,8 +108,8 @@ const unsigned char MSG_ARGS_IMU_LEGEND[] = {
   UINT16_FM, UINT16_FM, UINT16_FM, UINT16_FM,
   UINT16_FM, UINT16_FM, UINT16_FM, UINT16_FM,
   UINT16_FM, UINT16_FM, UINT16_FM, UINT16_FM,
-  UINT16_FM, UINT16_FM, UINT16_FM, UINT16_FM, 0, // 37 bytes: An IMU Legend broadcast.
-  0
+  UINT16_FM, UINT16_FM, UINT16_FM, UINT16_FM,
+  0     // 37 bytes: An IMU Legend broadcast.
 };
 
 /* There are only two grammatical forms represented here. A zero-length, and a giant block of Vectors. */
@@ -138,17 +131,13 @@ const unsigned char MSG_ARGS_IMU_MAP_STATE[] = {
     VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
     VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
     VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    0,     // (17 IMUs * 3 vectors + 1 float per IMU) * (4 bytes per float) = 680) bytes: Statement of debug map.
-  0        // 0 bytes: Request for present map.
-};
+  0   // (17 IMUs * 3 vectors + 1 float per IMU) * (4 bytes per float) = 680) bytes: Statement of debug map.
+};    // 0 bytes: Request for present map.
 
 
 
 const MessageTypeDef cpld_message_defs[] = {
   /* These are messages specific to Digitabulum. */
-  {  DIGITABULUM_MSG_GPIO_VIBRATE_0       , MSG_FLAG_EXPORTABLE,  "GPIO_VIBRATE_0"       , MSG_ARGS_VIBRATE }, // Some class wants to trigger vibrator 0.
-  {  DIGITABULUM_MSG_GPIO_VIBRATE_1       , MSG_FLAG_EXPORTABLE,  "GPIO_VIBRATE_1"       , MSG_ARGS_VIBRATE }, // Some class wants to trigger vibrator 1.
-
   {  DIGITABULUM_MSG_IMU_IRQ_RAISED       , 0x0000,               "IMU_IRQ_RAISED"       , ManuvrMsg::MSG_ARGS_NONE }, // IRQ asserted by CPLD.
   {  DIGITABULUM_MSG_IMU_READ             , 0x0000,               "IMU_READ"             , MSG_ARGS_IMU_READ },  // IMU read request. Argument is the ID.
   {  DIGITABULUM_MSG_IMU_MAP_STATE        , MSG_FLAG_EXPORTABLE,  "IMU_MAP_STATE"        , MSG_ARGS_IMU_MAP_STATE }, //
@@ -188,10 +177,6 @@ CPLDDriver::CPLDDriver() : SPIDeviceWithRegisters(0, 9) {
     cpld = this;
     ManuvrMsg::registerMessages(cpld_message_defs, sizeof(cpld_message_defs) / sizeof(MessageTypeDef));
   }
-
-  gpioSetup();
-
-  SPIBusOp::buildDMAMembers();
 
   // Definitions of CPLD registers.
   reg_defs[MANUS_CPLD_REG_CONFIG   ]   = DeviceRegister((bus_addr + 0xA3), (uint8_t)  0b00000000, &cpld_conf_value,    false, false, true );
@@ -266,9 +251,8 @@ void CPLDDriver::gpioSetup(void) {
   GPIO_InitStruct.Pull       = GPIO_NOPULL;
   GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
 
-  /* These Port E pins are push-pull outputs:
+  /* These Port E pins are inputs:
   *
   * #  Default   Purpose
   * -----------------------------------------------
@@ -276,11 +260,23 @@ void CPLDDriver::gpioSetup(void) {
   * 14    0      CPLD_GPIO_1
   */
   GPIO_InitStruct.Pin        = GPIO_PIN_11 | GPIO_PIN_14;
-  GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Mode       = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull       = GPIO_NOPULL;
   GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_11 | GPIO_PIN_14, GPIO_PIN_RESET);
+
+  /* These Port C pins are push-pull outputs:
+  *
+  * #  Default   Purpose
+  * -----------------------------------------------
+  * 2     1      DEN_AG_CARPALS
+  */
+  GPIO_InitStruct.Pin   = GPIO_PIN_2;
+  GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull  = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
 
 
   __TIM1_CLK_ENABLE();
@@ -554,7 +550,7 @@ int8_t CPLDDriver::queue_spi_job(SPIBusOp* op) {
     }
 
     if ((getVerbosity() > 6) && (op->callback == (SPIOpCallback*) this)) {
-      op->profile = true;
+      op->profile(true);
     }
 
     if (op->xfer_state != SPI_XFER_STATE_IDLE) {
@@ -860,7 +856,10 @@ void CPLDDriver::purge_stalled_job() {
 int8_t CPLDDriver::bootComplete() {
   EventReceiver::bootComplete();
 
-  init_spi(1, 0);  // COL=1, CPHA=0, HW-driven
+  gpioSetup();
+  SPIBusOp::buildDMAMembers();
+
+  //init_spi(1, 0);  // COL=1, CPHA=0, HW-driven
 
   /* Configure the IRQ_WAKEUP pin. */
   //EXTI_InitTypeDef   EXTI_InitStructure;
@@ -874,7 +873,7 @@ int8_t CPLDDriver::bootComplete() {
   event_spi_timeout.alterSchedule(bus_timeout_millis, -1, false, callback_spi_timeout);
   event_spi_timeout.isManaged(true);
 
-  reset();
+  //reset();
   return 1;
 }
 
@@ -946,7 +945,6 @@ int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
 
     /* Things that only this class is likely to care about. */
     case DIGITABULUM_MSG_IMU_IRQ_RAISED:
-      read_imu_irq_pins();
       return_value = 1;
       break;
     case MANUVR_MSG_SPI_QUEUE_READY:

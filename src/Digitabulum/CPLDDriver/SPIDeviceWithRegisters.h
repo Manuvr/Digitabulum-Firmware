@@ -24,6 +24,7 @@ limitations under the License.
   #define __OFFBOARD_REGISTER_SPI_DEV_H__ 1
 
   #include "Drivers/DeviceWithRegisters/DeviceWithRegisters.h"
+  #include "Drivers/DeviceWithRegisters/DeviceRegister.h"
   #include "SPIOpCallback.h"
 
   /*

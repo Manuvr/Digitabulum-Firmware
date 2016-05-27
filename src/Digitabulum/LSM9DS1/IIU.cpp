@@ -45,7 +45,6 @@ Data from magnetometers and GPS devices is used to establish error-rates
 #include "IIU.h"
 #include <stdarg.h>
 
-#include "LSM9DS1.h"
 #include "ManuLegend/ManuLegend.h"
 
 
@@ -83,8 +82,6 @@ IIU::~IIU() {
 void IIU::setPositionAndAddress(uint8_t nu_pos, uint8_t imu_addr, uint8_t mag_addr) {
   pos_id = nu_pos;
 
-  //imu_g  = new LSM9DS1_M(g_addr, this);     // An IMU.
-  //imu_xm = new LSM9DS1_AG(xm_addr, this);   // An IMU.
   imu_m  = new LSM9DS1_M(mag_addr, this);     // An IMU.
   imu_ag = new LSM9DS1_AG(imu_addr, this);    // An IMU.
 
@@ -123,11 +120,11 @@ int8_t IIU::init() {
   }
 
   if (! imu_m->present()) {
-    imu_m->setDesiredState(IMU_INIT_STAGE_1);
+    imu_m->setDesiredState(State::STAGE_1);
   }
 
   if (! imu_ag->present()) {
-    imu_ag->setDesiredState(IMU_INIT_STAGE_1);
+    imu_ag->setDesiredState(State::STAGE_1);
   }
   return return_value;
 }
@@ -172,8 +169,8 @@ void IIU::sync() {
 
 
 void IIU::setOperatingState(uint8_t nu) {
-  imu_m->setDesiredState(nu);
-  imu_ag->setDesiredState(nu);
+  imu_m->setDesiredState(LSM9DSx_Common::getStateByIndex(nu));
+  imu_ag->setDesiredState(LSM9DSx_Common::getStateByIndex(nu));
 }
 
 
@@ -285,11 +282,17 @@ int8_t IIU::pushMeasurement(uint8_t data_type, float x, float y, float z, float 
 }
 
 
-int8_t IIU::state_change_notice(LSM9DSx_Common* imu_ptr, uint8_t p_state, uint8_t c_state) {
+int8_t IIU::state_change_notice(LSM9DSx_Common* imu_ptr, State p_state, State c_state) {
   switch (c_state) {
-    case IMU_INIT_STAGE_3:
+    case State::STAGE_3:
       if (_ptr_vel)  _ptr_vel->set(0.0f, 0.0f, 0.0f);
       if (_ptr_quat) _ptr_quat->set(0.0f, 0.0f, 0.0f, 1.0f);
+      break;
+    case State::UNDEF:
+      // Mistake.
+      break;
+    default:
+      // No action.
       break;
   }
   return 0;
@@ -348,32 +351,32 @@ void IIU::setSampleRateProfile(uint8_t profile_idx) {
     case 0:
       delta_t = 0.0f;
       imu_ag->set_sample_rate_acc(0);
-      imu_ag->set_sample_rate_mag(0);
-      imu_m->set_sample_rate_gyr(0);
+      imu_ag->set_sample_rate_gyr(0);
+      imu_m->set_sample_rate_mag(0);
       break;
     case 1:
       delta_t = 0.0f;
       imu_ag->set_sample_rate_acc(1);
-      imu_ag->set_sample_rate_mag(1);
-      imu_m->set_sample_rate_gyr(1);
+      imu_ag->set_sample_rate_gyr(1);
+      imu_m->set_sample_rate_mag(1);
       break;
     case 2:
       delta_t = 0.0f;
       imu_ag->set_sample_rate_acc(6);
-      imu_ag->set_sample_rate_mag(5);
-      imu_m->set_sample_rate_gyr(2);
+      imu_ag->set_sample_rate_gyr(2);
+      imu_m->set_sample_rate_mag(5);
       break;
     case 3:
       delta_t = 0.0f;
       imu_ag->set_sample_rate_acc(8);
-      imu_ag->set_sample_rate_mag(5);
-      imu_m->set_sample_rate_gyr(3);
+      imu_ag->set_sample_rate_gyr(3);
+      imu_m->set_sample_rate_mag(5);
       break;
     case 4:
       delta_t = 0.0f;
       imu_ag->set_sample_rate_acc(10);
-      imu_ag->set_sample_rate_mag(6);
-      imu_m->set_sample_rate_gyr(4);
+      imu_ag->set_sample_rate_gyr(4);
+      imu_m->set_sample_rate_mag(6);
       break;
     default:
       break;
@@ -396,9 +399,9 @@ int8_t IIU::getParameter(uint16_t reg, int len, uint8_t*) {
 
 
 
-bool IIU::state_pass_through(uint8_t nu_state) {
-  imu_m->setDesiredState(nu_state);
-  imu_ag->setDesiredState(nu_state);
+bool IIU::state_pass_through(uint8_t nu) {
+  imu_m->setDesiredState(LSM9DSx_Common::getStateByIndex(nu));
+  imu_ag->setDesiredState(LSM9DSx_Common::getStateByIndex(nu));
 
   return (imu_m->desired_state_attained() & imu_ag->desired_state_attained());
 }
@@ -406,13 +409,13 @@ bool IIU::state_pass_through(uint8_t nu_state) {
 
 
 int8_t IIU::readSensor(void) {
-  if (IMU_INIT_STAGE_3 <= imu_m->getState()) {
-    imu_m->setDesiredState(IMU_INIT_STAGE_5);
+  if (State::STAGE_3 <= imu_m->getState()) {
+    imu_m->setDesiredState(State::STAGE_5);
     imu_m->readSensor();
   }
 
-  if (IMU_INIT_STAGE_3 <= imu_ag->getState()) {
-    imu_ag->setDesiredState(IMU_INIT_STAGE_5);
+  if (State::STAGE_3 <= imu_ag->getState()) {
+    imu_ag->setDesiredState(State::STAGE_5);
     imu_ag->readSensor();
   }
   return 0;
@@ -452,6 +455,10 @@ bool IIU::nullifyGravity(bool en) {
 
 
 
+void IIU::deposit_log(StringBuilder* _log) {
+  local_log.concatHandoff(_log);
+  Kernel::log(&local_log);
+};
 
 
 
@@ -503,10 +510,10 @@ void IIU::setTemperature(float nu) {
 
 void IIU::enableAutoscale(uint8_t s_type, bool enabled) {
   if (s_type & IMU_FLAG_GYRO_DATA) {
-    imu_m->autoscale_gyr = enabled;
+    imu_ag->autoscale_gyr = enabled;
   }
   if (s_type & IMU_FLAG_MAG_DATA) {
-    imu_ag->autoscale_mag = enabled;
+    imu_m->autoscale_mag = enabled;
   }
   if (s_type & IMU_FLAG_ACCEL_DATA) {
     imu_ag->autoscale_acc = enabled;
@@ -516,8 +523,8 @@ void IIU::enableAutoscale(uint8_t s_type, bool enabled) {
 
 
 void IIU::setVerbosity(int8_t nu) {
-  imu_m->verbosity = nu;
-  imu_ag->verbosity = nu;
+  imu_m->setVerbosity(nu);
+  imu_ag->setVerbosity(nu);
   verbosity = nu;
 }
 
@@ -541,8 +548,9 @@ void IIU::printDebug(StringBuilder* output) {
   printBrief(output);  // OK
   output->concatf("--- measurements\n--- quat_queue:\t %d measurements\n", quat_queue.size());
   output->concatf("--- temperature: %.2fC\n--- delta_t:\t %.4fms\n--- Quat:\t ", ((double) delta_t * 1000), (double)*(_ptr_temperature));
-
-  _ptr_quat->printDebug(output);  // OK
+  #if defined(__MANUVR_DEBUG)
+    _ptr_quat->printDebug(output);  // OK
+  #endif
   output->concat("\n");
   if (verbosity > 2) {
     if (verbosity > 3) output->concatf("--- GyroMeasDrift:    %.4f\n",  (double) GyroMeasDrift);

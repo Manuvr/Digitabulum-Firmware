@@ -125,18 +125,18 @@ void RN4677::gpioSetup(void) {
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
 
-  /* These Port C pins are push-pull outputs:
+  /* These Port C pins are open-drain outputs:
   *
   * #  Default   Purpose
   * -----------------------------------------------
-  * 4     0      WAKE_SW
+  * 4     1      WAKE_SW
   */
   GPIO_InitStruct.Pin        = GPIO_PIN_4;
-  GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_OD;
   GPIO_InitStruct.Pull       = GPIO_NOPULL;
   GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
 
   /* These Port D pins are push-pull outputs:
   *

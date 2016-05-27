@@ -233,49 +233,65 @@ class IIU;
 
 
 /* CPLD register map ***************************************/
-#define MANUS_CPLD_REG_IMU_00_X  0x80  // |
-#define MANUS_CPLD_REG_IMU_00_G  0x81  // | These are pseudo registers. If the first byte in an SPI transaction is equal
-#define MANUS_CPLD_REG_IMU_01_X  0x82  // |   to one of these values, the corresponding IMU will be selected, and its bus
-#define MANUS_CPLD_REG_IMU_01_G  0x83  // |   connected to the CPU's SPI. Every bus operation that targets an IMU must be
-#define MANUS_CPLD_REG_IMU_02_X  0x84  // |   immediately preceeded by one of these bytes.
-#define MANUS_CPLD_REG_IMU_02_G  0x85  // |
-#define MANUS_CPLD_REG_IMU_03_X  0x86  // | The resulting bus connection will be retained until the CPU-facing ~CS line
-#define MANUS_CPLD_REG_IMU_03_G  0x87  // |   goes high.
-#define MANUS_CPLD_REG_IMU_04_X  0x88  // |
-#define MANUS_CPLD_REG_IMU_04_G  0x89  // |
-#define MANUS_CPLD_REG_IMU_05_X  0x8A  // |
-#define MANUS_CPLD_REG_IMU_05_G  0x8B  // |
-#define MANUS_CPLD_REG_IMU_06_X  0x8C  // |
-#define MANUS_CPLD_REG_IMU_06_G  0x8D  // |
-#define MANUS_CPLD_REG_IMU_07_X  0x8E  // |
-#define MANUS_CPLD_REG_IMU_07_G  0x8F  // |
-#define MANUS_CPLD_REG_IMU_08_X  0x90  // |
-#define MANUS_CPLD_REG_IMU_08_G  0x91  // |
-#define MANUS_CPLD_REG_IMU_09_X  0x92  // |
-#define MANUS_CPLD_REG_IMU_09_G  0x93  // |
-#define MANUS_CPLD_REG_IMU_0A_X  0x94  // |
-#define MANUS_CPLD_REG_IMU_0A_G  0x95  // |
-#define MANUS_CPLD_REG_IMU_0B_X  0x96  // |
-#define MANUS_CPLD_REG_IMU_0B_G  0x97  // |
-#define MANUS_CPLD_REG_IMU_0C_X  0x98  // |
-#define MANUS_CPLD_REG_IMU_0C_G  0x99  // |
-#define MANUS_CPLD_REG_IMU_0D_X  0x9A  // |
-#define MANUS_CPLD_REG_IMU_0D_G  0x9B  // |
-#define MANUS_CPLD_REG_IMU_0E_X  0x9C  // |
-#define MANUS_CPLD_REG_IMU_0E_G  0x9D  // |
-#define MANUS_CPLD_REG_IMU_0F_X  0x9E  // |
-#define MANUS_CPLD_REG_IMU_0F_G  0x9F  // |
-#define MANUS_CPLD_REG_IMU_10_X  0xA0  // |
-#define MANUS_CPLD_REG_IMU_10_G  0xA1  // |
+#define CPLD_REG_IMU_DM_P_I    0x00  // |
+#define CPLD_REG_IMU_DM_D_I    0x01  // | These are pseudo registers. If the first byte in an SPI transaction is equal
+#define CPLD_REG_IMU_D1_P_I    0x02  // |   to one of these values, the corresponding IMU will be selected, and its bus
+#define CPLD_REG_IMU_D1_I_I    0x03  // |   connected to the CPU's SPI. Every bus operation that targets an individual
+#define CPLD_REG_IMU_D1_D_I    0x04  // |   IMU must be immediately preceeded by one of these bytes.
+#define CPLD_REG_IMU_D2_P_I    0x05  // |
+#define CPLD_REG_IMU_D2_I_I    0x06  // | The resulting bus connection will be retained until the CPU-facing ~CS line
+#define CPLD_REG_IMU_D2_D_I    0x07  // |   goes high.
+#define CPLD_REG_IMU_D3_P_I    0x08  // |
+#define CPLD_REG_IMU_D3_I_I    0x09  // |
+#define CPLD_REG_IMU_D3_D_I    0x0A  // |
+#define CPLD_REG_IMU_D4_P_I    0x0B  // |
+#define CPLD_REG_IMU_D4_I_I    0x0C  // |
+#define CPLD_REG_IMU_D4_D_I    0x0D  // |
+#define CPLD_REG_IMU_D5_P_I    0x0E  // |
+#define CPLD_REG_IMU_D5_I_I    0x0F  // |
+#define CPLD_REG_IMU_D5_D_I    0x10  // |
+#define CPLD_REG_IMU_DM_P_M    0x11  // |
+#define CPLD_REG_IMU_DM_D_M    0x12  // |
+#define CPLD_REG_IMU_D1_P_M    0x13  // |
+#define CPLD_REG_IMU_D1_I_M    0x14  // |
+#define CPLD_REG_IMU_D1_D_M    0x15  // |
+#define CPLD_REG_IMU_D2_P_M    0x16  // |
+#define CPLD_REG_IMU_D2_I_M    0x17  // |
+#define CPLD_REG_IMU_D2_D_M    0x18  // |
+#define CPLD_REG_IMU_D3_P_M    0x19  // |
+#define CPLD_REG_IMU_D3_I_M    0x1A  // |
+#define CPLD_REG_IMU_D3_D_M    0x1B  // |
+#define CPLD_REG_IMU_D4_P_M    0x1C  // |
+#define CPLD_REG_IMU_D4_I_M    0x1D  // |
+#define CPLD_REG_IMU_D4_D_M    0x1E  // |
+#define CPLD_REG_IMU_D5_P_M    0x1F  // |
+#define CPLD_REG_IMU_D5_I_M    0x20  // |
+#define CPLD_REG_IMU_D5_D_M    0x21  // |
 
+#define CPLD_REG_RANK_P_I      0x22  // | These registers are for ranked access.
+#define CPLD_REG_RANK_I_I      0x23  // | This is only useful for write operations.
+#define CPLD_REG_RANK_D_I      0x24  // | Buffers for these transfers must be distinct
+#define CPLD_REG_RANK_P_M      0x25  // |   from those for individual access.
+#define CPLD_REG_RANK_I_M      0x26  // |
+#define CPLD_REG_RANK_D_M      0x27  // |
 
-#define MANUS_CPLD_REG_CONFIG    0x00  // CPLD operating parameters
-#define MANUS_CPLD_REG_VERSION   0x03  // Holds CPLD revision number.
+#define MANUS_CPLD_REG_VERSION 0x28  // | Holds CPLD revision number.
+#define MANUS_CPLD_REG_CONFIG  0x29  // | CPLD operating parameters
+#define MANUS_CPLD_REG_STATUS  0x2A  // | Status
+#define CPLD_REG_CS_3          0x2B  // | RESERVED
+#define CPLD_REG_CS_4          0x2C  // | RESERVED
+#define CPLD_REG_CS_5          0x2D  // | RESERVED
+#define CPLD_REG_CS_6          0x2E  // | RESERVED
+#define CPLD_REG_CS_7          0x2F  // | RESERVED
 
 
 /* Configuration register bits *****************************/
 
 /***********************************************************/
+
+#define CPLD_SPI_MAX_QUEUE_PRINT 3     // How many SPI queue items should we print for debug?
+#define PREALLOCATED_SPI_JOBS    10    // How many SPI queue items should we have on-tap?
+
 
 
 /*
@@ -287,13 +303,10 @@ class IIU;
 typedef struct {
   uint8_t  imu_addr;    // The address of the inertial half of the LSM9DS1.
   uint8_t  mag_addr;    // The address of the magnetic half of the LSM9DS1.
-  uint32_t irq_mask;    // This value represents where in the CPLD IRQ register this IIUs bits lie.
+  uint8_t  irq_mask;    // This value represents where in the IRQ buffer this IIUs bits lie.
   //uint8_t  location;    // This is an integer that represents our location code. This might need refinement.
 } IMUBusMap;
 
-
-#define CPLD_SPI_MAX_QUEUE_PRINT 3     // How many SPI queue items should we print for debug?
-#define PREALLOCATED_SPI_JOBS    80    // How many SPI queue items should we have on-tap?
 
 /*
 * The actual CPLD driver class. Might could implement this as a singleton.
@@ -336,8 +349,8 @@ class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
     int8_t callback_proc(ManuvrRunnable *);
     void procDirectDebugInstruction(StringBuilder*);
 
-
     uint8_t getCPLDVersion(void);      // Read the version code in the CPLD.
+
 
     static IMUBusMap imu_map[17];     // This is how the CPLD keeps track of IIUs and their addresses.
 
@@ -377,7 +390,6 @@ class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
     PriorityQueue<SPIBusOp*> work_queue;
     PriorityQueue<SPIBusOp*> callback_queue;
     PriorityQueue<SPIBusOp*> preallocated;
-    static SPIBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
 
     uint32_t preallocation_misses = 0;        // How many times have we starved the preallocation queue?
     uint32_t specificity_burden   = 0;        // How many queue items have new deleted?
@@ -411,9 +423,9 @@ class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
     /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
     /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
 
-    uint32_t  queued_interrupts;      // These are interrupts we haven't serviced yet.
-
     uint16_t readInternalStates(void);
+
+    static SPIBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
 };
 
 #endif

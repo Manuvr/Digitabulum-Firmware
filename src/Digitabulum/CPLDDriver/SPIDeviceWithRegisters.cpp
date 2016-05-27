@@ -93,7 +93,7 @@ int8_t SPIDeviceWithRegisters::writeRegister(uint8_t idx, unsigned int nu_val, b
       reg->dirty = true;
       break;
     default:
-      StaticHub::log("SPIDeviecWithRegisters::writeRegisters(): Invalid register size.\n");
+      Kernel::log("SPIDeviecWithRegisters::writeRegisters(): Invalid register size.\n");
       return -1;
   }
 

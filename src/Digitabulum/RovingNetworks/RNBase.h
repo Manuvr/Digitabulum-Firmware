@@ -95,7 +95,7 @@ TODO: This class is in SORE need of the following things:
 #define RNBASE_DEFAULT_PRIORITY  2    // New CP messages have a low priority, and will stack in their natural order.
 
 
-#define PREALLOCATED_BT_Q_OPS    8    // How many data-carriers should we preallocate?
+#define PREALLOCATED_BT_Q_OPS    4    // How many data-carriers should we preallocate?
 #define RNBASE_MAX_BT_Q_DEPTH    5    //
 
 #define CHARACTER_CHRONOLOGICAL_BREAK 50   // How many ms must pass before we consider the read buffer flushable?
@@ -184,10 +184,10 @@ class RNBase : public ManuvrXport {
     virtual ~RNBase();
 
     /* Overrides from the Transport class. */
-    int8_t connect();
-    int8_t disconnect();
-    int8_t listen();
-    int8_t reset();
+    virtual int8_t connect();
+    //virtual int8_t disconnect();
+    virtual int8_t listen();
+    virtual int8_t reset();
     bool   write_port(unsigned char* out, int out_len);
     int8_t read_port();
 
