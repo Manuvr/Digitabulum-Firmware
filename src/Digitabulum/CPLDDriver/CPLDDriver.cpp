@@ -486,7 +486,7 @@ int8_t CPLDDriver::spi_op_callback(SPIBusOp* op) {
   }
 
   unsigned int value = regValue(op->reg_idx);
-  if (SPI_OPCODE_READ == op->opcode) {
+  if (BusOpcode::RX == op->opcode) {
     switch (op->reg_idx) {
       case CPLD_REG_VERSION:
         reg_defs[0].unread = false;
@@ -498,7 +498,7 @@ int8_t CPLDDriver::spi_op_callback(SPIBusOp* op) {
         break;
     }
   }
-  else if (SPI_OPCODE_WRITE == op->opcode) {
+  else if (BusOpcode::TX == op->opcode) {
     reg_defs[op->reg_idx].dirty = false;
   }
 

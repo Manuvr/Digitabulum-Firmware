@@ -155,7 +155,7 @@ SPIBusOp::SPIBusOp() {
 * @param  len        The length of the transaction.
 * @param  requester  The object to be notified when the bus operation completes with success.
 */
-SPIBusOp::SPIBusOp(uint8_t nu_op, uint16_t addr, uint8_t *buf, uint8_t len, SPIOpCallback* requester) {
+SPIBusOp::SPIBusOp(BusOpcode nu_op, uint16_t addr, uint8_t *buf, uint8_t len, SPIOpCallback* requester) {
   this->opcode          = nu_op;
   this->buf             = buf;
   this->buf_len         = len;
@@ -193,7 +193,7 @@ int8_t SPIBusOp::init_dma() {
   uint32_t _origin_buf = 0;
   uint32_t _target_buf = 0;
 
-  if (opcode == SPI_OPCODE_READ) {
+  if (opcode == BusOpcode::RX) {
     _dma_r_handle.Init.MemInc = DMA_MINC_DISABLE;
     _dma_w_handle.Init.MemInc = DMA_MINC_DISABLE;
 
@@ -202,7 +202,7 @@ int8_t SPIBusOp::init_dma() {
     // We still need a transmit DMA operation to send the transfer parameters.
     //DMA_InitStructure_Write.DMA_Memory0BaseAddr   = (uint32_t) &STATIC_ZERO;
   }
-  else if (opcode == SPI_OPCODE_WRITE) {
+  else if (opcode == BusOpcode::TX) {
     _dma_r_handle.Init.MemInc = DMA_MINC_DISABLE;
     _dma_w_handle.Init.MemInc = DMA_MINC_ENABLE;
 
@@ -222,11 +222,11 @@ int8_t SPIBusOp::init_dma() {
   while (HAL_DMA_GetState(&_dma_r_handle) != HAL_DMA_STATE_RESET) {}  // TODO: Might-could cut this.
   HAL_DMA_Init(&_dma_r_handle);
 
-  if (opcode == SPI_OPCODE_READ) {
+  if (opcode == BusOpcode::RX) {
     HAL_DMA_Start_IT(&_dma_r_handle, (uint32_t) hspi1.pRxBuffPtr, (uint32_t) buf, (uint32_t) buf_len);
     HAL_DMA_Start_IT(&_dma_w_handle, (uint32_t) buf, (uint32_t) hspi1.pTxBuffPtr, (uint32_t) buf_len);
   }
-  else if (opcode == SPI_OPCODE_WRITE) {
+  else if (opcode == BusOpcode::TX) {
     HAL_DMA_Start_IT(&_dma_w_handle, (uint32_t) buf, (uint32_t) hspi1.pTxBuffPtr, (uint32_t) buf_len);
   }
 
@@ -244,7 +244,7 @@ void SPIBusOp::wipe() {
   // We need to preserve flags that deal with memory management.
   flags       = flags & (SPI_XFER_FLAG_NO_FREE | SPI_XFER_FLAG_PREALLOCATE_Q);
   err_code    = SPI_XFER_ERROR_NONE;
-  opcode      = SPI_OPCODE_UNDEFINED;
+  opcode      = BusOpcode::UNDEF;
   bus_addr    = 0x0000;
   buf_len     = 0;
   buf         = NULL;
@@ -635,19 +635,6 @@ const char* SPIBusOp::getStateString() {
   }
 }
 
-/**
-* Logging support.
-*
-* @return a const char* containing a human-readable representation of the data.
-*/
-const char* SPIBusOp::getOpcodeString() {
-  switch (opcode) {
-    case SPI_OPCODE_UNDEFINED:  return "UNINITIALIZED";
-    case SPI_OPCODE_READ:       return "READ";
-    case SPI_OPCODE_WRITE:      return "WRITE";
-    default:                    return "<UNDEFINED OPCODE>";
-  }
-}
 
 /**
 * Logging support.
