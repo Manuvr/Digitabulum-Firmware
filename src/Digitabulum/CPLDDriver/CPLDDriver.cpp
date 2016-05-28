@@ -179,8 +179,9 @@ CPLDDriver::CPLDDriver() : SPIDeviceWithRegisters(0, 9) {
   }
 
   // Definitions of CPLD registers.
-  reg_defs[MANUS_CPLD_REG_CONFIG   ]   = DeviceRegister((bus_addr + 0xA3), (uint8_t)  0b00000000, &cpld_conf_value,    false, false, true );
-  reg_defs[MANUS_CPLD_REG_VERSION  ]   = DeviceRegister((bus_addr + 0xA6), (uint8_t)  0b00000000, &cpld_version,       false, false, false);
+  reg_defs[0]   = DeviceRegister((bus_addr + CPLD_REG_VERSION), (uint8_t)  0b00000000, &cpld_conf_value,    false, false, false);
+  reg_defs[1]   = DeviceRegister((bus_addr + CPLD_REG_CONFIG),  (uint8_t)  0b00000000, &cpld_version,       false, false, true );
+  reg_defs[2]   = DeviceRegister((bus_addr + CPLD_REG_STATUS),  (uint8_t)  0b00000000, &cpld_version,       false, false, false);
 
   // Build some pre-formed Events.
   event_spi_callback_ready.repurpose(MANUVR_MSG_SPI_CB_QUEUE_READY);
