@@ -18,22 +18,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
+This is the class that is used to keep bus operations on the SPI atomic.
 */
 
 
 #ifndef __SPI_BUS_OP_H__
 #define __SPI_BUS_OP_H__
-  /*
-  * This is the struct that is used to keep bus operations on the SPI atomic. We provide
-  *   the callback in the LSM9DS0_Common class because it is the greatest common denominator
-  *   where the logical sensors and their registers are still differentiable.
-  * This is in preparation for the conversion to interrupt mode, and then from there to DMA.
-  */
 
-  #include <inttypes.h>
+  #include <Drivers/BusQueue/BusQueue.h>
+  #include <DataStructures/StringBuilder.h>
+  #include <Drivers/DeviceWithRegisters/DeviceRegister.h>
   #include <stm32f7xx_hal_dma.h>
-  #include "DataStructures/StringBuilder.h"
-  #include "Drivers/DeviceWithRegisters/DeviceRegister.h"
 
   // Bit[2] is the bit that indicates bus control.
   #define SPI_XFER_STATE_IDLE      0b00000000   // Bus op is waiting somewhere outside of the queue.
@@ -199,4 +194,4 @@ class SPIBusOp {
     static void enableSPI_DMA(bool enable);
 };
 
-#endif
+#endif  // __SPI_BUS_OP_H__

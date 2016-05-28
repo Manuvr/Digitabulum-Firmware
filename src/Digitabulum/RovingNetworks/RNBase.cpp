@@ -22,6 +22,7 @@ limitations under the License.
 #include <stm32f7xx_hal_dma.h>
 #include "RNBase.h"
 #include "XenoSession/XenoSession.h"
+#include <Drivers/BusQueue/BusQueue.h>
 
 
 #define MAX_UART_STR_LEN 255
@@ -281,7 +282,7 @@ int8_t RNBase::read_port() {
 */
 void RNBase::sendGeneralCommand(StringBuilder *cmd) {
   enterCommandMode();
-  insert_into_work_queue(RNBASE_OP_CODE_CMD_TX_WAIT_RX, cmd);
+  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, cmd);
   exitCommandMode();
   if (getVerbosity() > 5) Kernel::log(__PRETTY_FUNCTION__, 2, "Sent command %s.\n", cmd->string());
 }
@@ -295,7 +296,7 @@ void RNBase::sendGeneralCommand(StringBuilder *cmd) {
 void RNBase::sendGeneralCommand(const char *cmd) {
   enterCommandMode();
   StringBuilder *temp = new StringBuilder(cmd);
-  insert_into_work_queue(RNBASE_OP_CODE_CMD_TX_WAIT_RX, temp);
+  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
   exitCommandMode();
   if (getVerbosity() > 5) Kernel::log(__PRETTY_FUNCTION__, 2, "Sent command %s.\n", cmd);
 }
@@ -307,7 +308,7 @@ void RNBase::sendGeneralCommand(const char *cmd) {
 void RNBase::setHIDMode(void) {
   enterCommandMode();
   StringBuilder *temp = new StringBuilder(RNBASE_MODE_HID);
-  insert_into_work_queue(RNBASE_OP_CODE_CMD_TX_WAIT_RX, temp);
+  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
   exitCommandMode();
   if (getVerbosity() > 5) Kernel::log(__PRETTY_FUNCTION__, 2, "Tried to enter HID mode.");
 }
@@ -319,7 +320,7 @@ void RNBase::setHIDMode(void) {
 void RNBase::setSPPMode(void) {
   enterCommandMode();
   StringBuilder *temp = new StringBuilder(RNBASE_PROTO_SPP);
-  insert_into_work_queue(RNBASE_OP_CODE_CMD_TX_WAIT_RX, temp);
+  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
   exitCommandMode();
   if (getVerbosity() > 5) Kernel::log(__PRETTY_FUNCTION__, 2, "Tried to enter SPP mode.");
 }
@@ -339,7 +340,7 @@ void RNBase::setDevName(char *nu_name) {
   }
   temp->concat(nu_name);
   temp->concat("\r\n");
-  insert_into_work_queue(RNBASE_OP_CODE_CMD_TX_WAIT_RX, temp);
+  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
   start_lockout(1100);
   exitCommandMode();
   //sendRebootCommand();
@@ -352,7 +353,7 @@ void RNBase::setDevName(char *nu_name) {
 void RNBase::sendRebootCommand(void) {
   enterCommandMode();
   StringBuilder *temp = new StringBuilder(RNBASE_CMD_REBOOT);
-  insert_into_work_queue(RNBASE_OP_CODE_CMD_TX_WAIT_RX, temp);
+  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
   start_lockout(3000);
 }
 
@@ -365,7 +366,7 @@ void RNBase::sendRebootCommand(void) {
 */
 int8_t RNBase::sendBreak() {
     StringBuilder *temp = new StringBuilder("\r\n");
-    insert_into_work_queue(RNBASE_OP_CODE_CMD_TX, temp);
+    insert_into_work_queue(BusOpcode::TX_CMD, temp);
     return 0;
 }
 
@@ -376,7 +377,7 @@ int8_t RNBase::sendBreak() {
 */
 int8_t RNBase::enterCommandMode() {
     StringBuilder *temp = new StringBuilder(RNBASE_MODE_COMMAND);
-    insert_into_work_queue(RNBASE_OP_CODE_CMD_TX_WAIT_RX, temp);
+    insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
     //start_lockout(1100);
     return 0;
 }
@@ -389,7 +390,7 @@ int8_t RNBase::enterCommandMode() {
 */
 int8_t RNBase::exitCommandMode() {
     StringBuilder *temp = new StringBuilder(RNBASE_MODE_EXITCOMMAND);
-    insert_into_work_queue(RNBASE_OP_CODE_CMD_TX_WAIT_RX, temp);
+    insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
     start_lockout(1500);
     return 0;
 }
@@ -401,7 +402,7 @@ void RNBase::setAutoconnect(bool autocon) {
     enterCommandMode();
     _er_set_flag(RNBASE_FLAG_CMD_PEND, autocon);
     StringBuilder *temp = new StringBuilder(autocon ? RNBASE_MODE_AUTOCONNECT : RNBASE_MODE_MANUCONNECT);
-    insert_into_work_queue(RNBASE_OP_CODE_CMD_TX_WAIT_RX, temp);
+    insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
     if (getVerbosity() > 4) Kernel::log(__PRETTY_FUNCTION__, 2, "Autoconnect is now %sabled.", (autocon ? "en" : "dis"));
     exitCommandMode();
     sendRebootCommand();
@@ -448,12 +449,12 @@ int8_t RNBase::idleService(void) {
       else if (!_er_flag(RNBASE_FLAG_LOCK_OUT)) {
         // If it isn't completed or initiated, and we aren't locked out, let's kick it off...
         switch (current_work_item->opcode) {
-          case RNBASE_OP_CODE_CMD_TX_WAIT_RX:
-          case RNBASE_OP_CODE_CMD_TX:
+          case BusOpcode::TX_CMD_WAIT_RX:
+          case BusOpcode::TX_CMD:
             _er_set_flag(RNBASE_FLAG_CMD_PEND, !_er_flag(RNBASE_FLAG_CMD_MODE));
             current_work_item->begin();
             break;
-          case RNBASE_OP_CODE_TX:
+          case BusOpcode::TX:
             if (connected()) {
               current_work_item->begin();
             }
@@ -504,7 +505,7 @@ void RNBase::master_mode(bool force_master_mode) {
 // Return 0 indicates caller should burn or wait.
 // Return 1 indicates we recycled.
 int8_t RNBase::burn_or_recycle_current() {
-  if ((NULL != current_work_item) && (current_work_item->opcode == RNBASE_OP_CODE_TX)) {
+  if ((NULL != current_work_item) && (current_work_item->opcode == BusOpcode::TX)) {
     // If there is something in-process and it is meant for a counterparty....
     if (! current_work_item->initiated) {
       // If there is an un-initiated counterparty transaction waiting, displace it.
@@ -522,7 +523,7 @@ int8_t RNBase::burn_or_recycle_current() {
 
 
 
-uint32_t RNBase::insert_into_work_queue(uint8_t opcode, StringBuilder* data) {
+uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
   BTQueuedOperation *nu = fetchPreallocation();
   nu->set_data(opcode, data);
 
@@ -535,13 +536,13 @@ uint32_t RNBase::insert_into_work_queue(uint8_t opcode, StringBuilder* data) {
   */
   int priority = RNBASE_DEFAULT_PRIORITY;
   switch (opcode) {
-    case RNBASE_OP_CODE_CMD_TX_WAIT_RX:
-    case RNBASE_OP_CODE_CMD_TX:
+    case BusOpcode::TX_CMD_WAIT_RX:
+    case BusOpcode::TX_CMD:
       if (!burn_or_recycle_current()) {
         // Burn
       }
 
-      if ((NULL != current_work_item) && (current_work_item->opcode == RNBASE_OP_CODE_CMD_TX)) {
+      if ((NULL != current_work_item) && (current_work_item->opcode == BusOpcode::TX_CMD)) {
         if (! current_work_item->initiated) {
           // If there is an un-initiated counterparty transaction waiting, displace it.
           // Re-queue with retry priority.
@@ -552,7 +553,7 @@ uint32_t RNBase::insert_into_work_queue(uint8_t opcode, StringBuilder* data) {
       priority = RNBASE_CMD_PRIORITY;
       work_queue.insert(nu, priority);
       break;
-    default:
+    case BusOpcode::TX:
       if (NULL == current_work_item) {
         current_work_item = nu;
         current_work_item->begin();
@@ -568,6 +569,10 @@ uint32_t RNBase::insert_into_work_queue(uint8_t opcode, StringBuilder* data) {
         queue_floods++;
         reclaimPreallocation(nu);
       }
+      break;
+
+    default:
+      Kernel::log("RNBase: Unknown opcode.\n");
       break;
   }
   raiseEvent(&event_bt_queue_ready);
@@ -602,7 +607,7 @@ void RNBase::hostRxFlush(void) {
   }
 
   if (INSTANCE->current_work_item != NULL) {
-    if (RNBASE_OP_CODE_CMD_TX_WAIT_RX == INSTANCE->current_work_item->opcode) {
+    if (BusOpcode::TX_CMD_WAIT_RX == INSTANCE->current_work_item->opcode) {
       INSTANCE->current_work_item->completed = true;
     }
     Kernel::isrRaiseEvent(&(((RNBase*)INSTANCE)->event_bt_queue_ready));
@@ -662,23 +667,25 @@ void RNBase::feed_rx_buffer(unsigned char *nu, uint8_t len) {
     BTQueuedOperation *local_work_item = (NULL != current_work_item) ? current_work_item : work_queue.get();
     if (NULL != local_work_item) {
         switch (local_work_item->opcode) {
-          case RNBASE_OP_CODE_CMD_TX_WAIT_RX:
+          case BusOpcode::TX_CMD_WAIT_RX:
             // We make sure that we tell the class if we are expecting a change in this state.
             _er_set_flag(RNBASE_FLAG_CMD_PEND, !_er_flag(RNBASE_FLAG_CMD_MODE));
             local_work_item->data.concat(nu, len);
             //output.concatf("Rx Local work item length: %d\n", local_work_item->data.length());
             break;
 
-          case RNBASE_OP_CODE_CMD_TX:
-          case RNBASE_OP_CODE_TX:
-          default:
+          case BusOpcode::TX_CMD:
+          case BusOpcode::TX:
             if (getVerbosity() > 2) {
-              local_log.concatf("Don't know what to do with data. In command_mode (or pending), but have wrong opcode for work_queue item.\n\t");
+              local_log.concat("Don't know what to do with data. In command_mode (or pending), but have wrong opcode for work_queue item.\n\t");
               for (int i = 0; i < len; i++) {
                 local_log.concatf("0x%02x ", *(nu + i));
               }
               local_log.concat("\n\n");
             }
+            break;
+          default:
+            local_log.concat("RNBase: Unknown opcode.\n");
             break;
         }
     }
@@ -913,7 +920,7 @@ int8_t RNBase::notify(ManuvrRunnable *active_event) {
       // Purge the queue.
       for (int i = 0; i < work_queue.size(); i++) {
         BTQueuedOperation* current = work_queue.dequeue();
-        if (RNBASE_OP_CODE_TX == current->opcode) {
+        if (BusOpcode::TX == current->opcode) {
           reclaimPreallocation(current);
         }
         else {
