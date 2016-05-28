@@ -69,31 +69,6 @@ void callback_spi_timeout() {
 SPIBusOp CPLDDriver::preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];
 
 
-/*
-* This is a table of IMUs that we can support. See header file for clarification.
-* Each IMU has a IRQ mask value that allows us to easilly isolate the relevant
-*   bits in the IRQ transfer.
-*/
-IMUBusMap CPLDDriver::imu_map[17] = {
-  {CPLD_REG_IMU_DM_P_I, CPLD_REG_IMU_DM_P_M, 0x00 },
-  {CPLD_REG_IMU_DM_D_I, CPLD_REG_IMU_DM_D_M, 0x04 },
-  {CPLD_REG_IMU_D1_P_I, CPLD_REG_IMU_D1_P_M, 0x08 },
-  {CPLD_REG_IMU_D1_I_I, CPLD_REG_IMU_D1_I_M, 0x0C },
-  {CPLD_REG_IMU_D1_D_I, CPLD_REG_IMU_D1_D_M, 0x10 },
-  {CPLD_REG_IMU_D2_P_I, CPLD_REG_IMU_D2_P_M, 0x14 },
-  {CPLD_REG_IMU_D2_I_I, CPLD_REG_IMU_D2_I_M, 0x18 },
-  {CPLD_REG_IMU_D2_D_I, CPLD_REG_IMU_D2_D_M, 0x1C },
-  {CPLD_REG_IMU_D3_P_I, CPLD_REG_IMU_D3_P_M, 0x20 },
-  {CPLD_REG_IMU_D3_I_I, CPLD_REG_IMU_D3_I_M, 0x24 },
-  {CPLD_REG_IMU_D3_D_I, CPLD_REG_IMU_D3_D_M, 0x28 },
-  {CPLD_REG_IMU_D4_P_I, CPLD_REG_IMU_D4_P_M, 0x2C },
-  {CPLD_REG_IMU_D4_I_I, CPLD_REG_IMU_D4_I_M, 0x30 },
-  {CPLD_REG_IMU_D4_D_I, CPLD_REG_IMU_D4_D_M, 0x34 },
-  {CPLD_REG_IMU_D5_P_I, CPLD_REG_IMU_D5_P_M, 0x38 },
-  {CPLD_REG_IMU_D5_I_I, CPLD_REG_IMU_D5_I_M, 0x3C },
-  {CPLD_REG_IMU_D5_D_I, CPLD_REG_IMU_D5_D_M, 0x40 }
-};
-
 const unsigned char MSG_ARGS_U8_FLOAT[] = {
   UINT8_FM, FLOAT_FM, 0
 };
@@ -519,8 +494,8 @@ int8_t CPLDDriver::spi_op_callback(SPIBusOp* op) {
   unsigned int value = regValue(op->reg_idx);
   if (SPI_OPCODE_READ == op->opcode) {
     switch (op->reg_idx) {
-      case MANUS_CPLD_REG_VERSION:
-        reg_defs[MANUS_CPLD_REG_VERSION].unread = false;
+      case CPLD_REG_VERSION:
+        reg_defs[CPLD_REG_VERSION].unread = false;
 
         if (getVerbosity() > 3) local_log.concatf("CPLD r%d.\n", value);
         if (17 == value) {
@@ -915,20 +890,34 @@ int8_t CPLDDriver::callback_proc(ManuvrRunnable *event) {
 
 
 IIU* CPLDDriver::fetch_iiu_by_bus_addr(uint8_t test_addr) {
-  for (uint8_t i = 0; i < 17; i++) {
-    // This is a hack. Should have this in the LegendManager.
-    // ---J. Ian Lindsay   Thu Apr 16 04:59:11 MST 2015
-    if ((test_addr == CPLDDriver::imu_map[i].imu_addr) || (test_addr == CPLDDriver::imu_map[i].mag_addr)) return LegendManager::getInstance()->fetchIIU(i);
+  if (CPLD_REG_IMU_D5_D_M < test_addr) {
+    // Too big. Not an IMU address.
+    return NULL;
   }
-  return NULL;
+  else if (CPLD_REG_IMU_D5_D_I < test_addr) {
+    // Magnetic aspect.
+    return LegendManager::getInstance()->fetchIIU(test_addr - CPLD_REG_IMU_D5_D_I);
+  }
+  else {
+    // Inertial aspect. Bus address and index are equal.
+    return LegendManager::getInstance()->fetchIIU(test_addr);
+  }
 }
 
 
 int8_t CPLDDriver::fetch_iiu_index_by_bus_addr(uint8_t test_addr) {
-  for (uint8_t i = 0; i < 17; i++) {
-    if ((test_addr == CPLDDriver::imu_map[i].imu_addr) || (test_addr == CPLDDriver::imu_map[i].mag_addr)) return i;
+  if (CPLD_REG_IMU_D5_D_M < test_addr) {
+    // Too big. Not an IMU address.
+    return -1;
   }
-  return -1;
+  else if (CPLD_REG_IMU_D5_D_I < test_addr) {
+    // Magnetic aspect.
+    return (test_addr - CPLD_REG_IMU_D5_D_I);
+  }
+  else {
+    // Inertial aspect. Bus address and index are equal.
+    return test_addr;
+  }
 }
 
 
@@ -1041,8 +1030,8 @@ void CPLDDriver::setCPLDConfig(uint8_t mask, bool state) {
   else {
     cpld_conf_value &= ~mask;
   }
-  reg_defs[MANUS_CPLD_REG_CONFIG].set(cpld_conf_value);
-  writeRegister(&reg_defs[MANUS_CPLD_REG_CONFIG]);
+  reg_defs[CPLD_REG_CONFIG].set(cpld_conf_value);
+  writeRegister(&reg_defs[CPLD_REG_CONFIG]);
 }
 
 
@@ -1051,7 +1040,7 @@ void CPLDDriver::setCPLDConfig(uint8_t mask, bool state) {
 *   compatability with older CPLD versions.
 */
 uint8_t CPLDDriver::getCPLDVersion(void) {
-  readRegister(MANUS_CPLD_REG_VERSION);
+  readRegister(CPLD_REG_VERSION);
   return cpld_version;
 }
 
@@ -1078,24 +1067,25 @@ int8_t CPLDDriver::iiu_group_irq() {
   // serviced_mask has a bit for each copper line that has gone active.
   if (serviced_mask) {
     for (uint8_t idx = 0; idx < 17; idx++) {
-      if (serviced_mask & CPLDDriver::imu_map[idx].irq_mask) {
-        IIU* current_iiu = lm->fetchIIU(idx);
-        if (CPLD_IMU_IRQ_MASK_XM0 & serviced_mask) {
-          if (getVerbosity() > 3) Kernel::log("CPLDDriver::iiu_group_irq",0, "(%d):  xm2  %d\n", nu_irqs, idx);
-          current_iiu->irq_ag0();
-          return_value++;
-        }
-        if (CPLD_IMU_IRQ_MASK_XM1 & serviced_mask) {
-          if (getVerbosity() > 3) Kernel::log("CPLDDriver::iiu_group_irq",0, "(%d):  xm1  %d\n", nu_irqs, idx);
-          current_iiu->irq_ag1();
-          return_value++;
-        }
-        if (CPLD_IMU_IRQ_MASK_G & serviced_mask) {
-          if (getVerbosity() > 3) Kernel::log("CPLDDriver::iiu_group_irq",0, "(%d):  g   %d\n", nu_irqs, idx);
-          current_iiu->irq_m();
-          return_value++;
-        }
-      }
+      // TODO: Needs to be updated to reflect better CPLD capabilities.
+      //if (serviced_mask & CPLDDriver::imu_map[idx].irq_mask) {
+      //  IIU* current_iiu = lm->fetchIIU(idx);
+      //  if (CPLD_IMU_IRQ_MASK_XM0 & serviced_mask) {
+      //    if (getVerbosity() > 3) Kernel::log("CPLDDriver::iiu_group_irq",0, "(%d):  xm2  %d\n", nu_irqs, idx);
+      //    current_iiu->irq_ag0();
+      //    return_value++;
+      //  }
+      //  if (CPLD_IMU_IRQ_MASK_XM1 & serviced_mask) {
+      //    if (getVerbosity() > 3) Kernel::log("CPLDDriver::iiu_group_irq",0, "(%d):  xm1  %d\n", nu_irqs, idx);
+      //    current_iiu->irq_ag1();
+      //    return_value++;
+      //  }
+      //  if (CPLD_IMU_IRQ_MASK_G & serviced_mask) {
+      //    if (getVerbosity() > 3) Kernel::log("CPLDDriver::iiu_group_irq",0, "(%d):  g   %d\n", nu_irqs, idx);
+      //    current_iiu->irq_m();
+      //    return_value++;
+      //  }
+      //}
     }
 
     //pending_interrupts |= serviced_mask;
@@ -1288,10 +1278,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
         case 2:
           cpld_service_irqs = !cpld_service_irqs;
           local_log.concatf("CPLD servicing IRQs?  %s\n", cpld_service_irqs?"yes":"no");
-          break;
-        case 3:
-          cpld_chain_cs_to_queue = !cpld_chain_cs_to_queue;
-          local_log.concatf("CPLD chain_cs_to_queue?  %s\n", cpld_chain_cs_to_queue?"yes":"no");
           break;
         case 16:
           spi_prescaler = SPI_BAUDRATEPRESCALER_16;

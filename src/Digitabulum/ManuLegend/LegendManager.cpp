@@ -264,7 +264,7 @@ int8_t LegendManager::reconfigure_data_map() {
   uint16_t accumulated_offset = LEGEND_DATASET_GLOBAL_SIZE;
   for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
     // Configure the IIU...
-    iius[i].setPositionAndAddress(i, CPLDDriver::imu_map[i].imu_addr, CPLDDriver::imu_map[i].mag_addr);
+    iius[i].setPositionAndAddress(i, i, i+0x11);
 
     /* Assign the ManuLegend specification to the IIU class, thereby giving the IIU class its pointers. */
 

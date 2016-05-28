@@ -71,8 +71,8 @@ IRQs are aggregated and checked for validity by internal CPLD logic. If a
   differences. But if everything is operating correctly, each received IRQ
   message will be different from its predecesor by at least one bit.
 
-To facilitate power-management, any given subset of IRQ signals can be mapped to
-  the CPU's special WAKEUP interrupt.
+To facilitate power-management, any given IRQ signal can be mapped to the CPU's
+  special WAKEUP interrupt pin.
 
 
 Changing between clock sources:
@@ -301,7 +301,8 @@ CPLD Version notes:
 
 Revision 1:
 --------------------------------------------------------------------------------
-Initial version.
+Initial version. Internal registers do not follow spec to aid debug.
+IRQ agg and addressing system is complete. At least: it passes simulation.
 
 */
 
@@ -390,7 +391,7 @@ class IIU;
 #define CPLD_REG_VERSION       0x28  // | Holds CPLD revision number.
 #define CPLD_REG_CONFIG        0x29  // | CPLD operating parameters
 #define CPLD_REG_STATUS        0x2A  // | Status
-#define CPLD_REG_CS_3          0x2B  // | RESERVED
+#define CPLD_REG_WAKEUP_IRQ    0x2B  // | WAKEUP mapping
 #define CPLD_REG_CS_4          0x2C  // | RESERVED
 #define CPLD_REG_CS_5          0x2D  // | RESERVED
 #define CPLD_REG_CS_6          0x2E  // | RESERVED
@@ -407,30 +408,23 @@ class IIU;
 
 
 /*
-* This type maps the bus addresses of a given IMU chip to its location on the hand.
-*   These are constants, but this data may vary with CPLD version.
-* This struct will probably become obsolete once the K-map class is smart enough to guess
-*   what IMU is at which location.
-*/
-typedef struct {
-  uint8_t  imu_addr;    // The address of the inertial half of the LSM9DS1.
-  uint8_t  mag_addr;    // The address of the magnetic half of the LSM9DS1.
-  uint8_t  irq_mask;    // This value represents where in the IRQ buffer this IIUs bits lie.
-  //uint8_t  location;    // This is an integer that represents our location code. This might need refinement.
-} IMUBusMap;
-
-
-/*
-* The actual CPLD driver class. Might could implement this as a singleton.
+* The CPLD driver class.
 */
 class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
   public:
     CPLDDriver();
-    ~CPLDDriver(void);       // Should never be called. Here for the sake of completeness.
+    ~CPLDDriver();       // Should never be called. Here for the sake of completeness.
 
     /* Overrides from the SPICallback interface */
     virtual int8_t spi_op_callback(SPIBusOp*);
     int8_t queue_spi_job(SPIBusOp*);
+
+    /* Overrides from EventReceiver */
+    const char* getReceiverName();
+    void printDebug(StringBuilder*);
+    int8_t notify(ManuvrRunnable*);
+    int8_t callback_proc(ManuvrRunnable *);
+    void procDirectDebugInstruction(StringBuilder*);
 
 
 /* RESCOPE THESE??? */
@@ -453,18 +447,7 @@ class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
     volatile static void irqService_vect_0(void);
     uint32_t read_imu_irq_pins(void);  // TODO: Can this be optimized down at all?
 
-
-    /* Overrides from EventReceiver */
-    const char* getReceiverName();
-    void printDebug(StringBuilder*);
-    int8_t notify(ManuvrRunnable*);
-    int8_t callback_proc(ManuvrRunnable *);
-    void procDirectDebugInstruction(StringBuilder*);
-
     uint8_t getCPLDVersion(void);      // Read the version code in the CPLD.
-
-
-    static IMUBusMap imu_map[17];     // This is how the CPLD keeps track of IIUs and their addresses.
 
 
   protected:
@@ -472,9 +455,9 @@ class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
 
 
   private:
-    uint8_t   _irq_data_0[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};  // IRQ data is double-buffered
-    uint8_t   _irq_data_1[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};  //   in these arrays.
-    uint8_t*  _irq_data       = _irq_data_0;                           // Used for paging the above buffers.
+    uint8_t   _irq_data_0[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};  // IRQ data is double-buffered
+    uint8_t   _irq_data_1[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};  //   in these arrays.
+    uint8_t*  _irq_data       = _irq_data_0;                     // Used for paging the above buffers.
 
     ManuvrRunnable _irq_data_arrival;
     ManuvrRunnable event_spi_queue_ready;
@@ -492,11 +475,18 @@ class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
 
     uint8_t   spi_cb_per_event   = 3; // Used to limit the number of callbacks processed per event.
 
+    /* Inlines for deriving address and IRQ bit offsets from index. */
+    // Address of the inertial half of the LSM9DS1.
+    inline uint8_t _intertial_addr(int idx) {   return ((idx % 17) + 0x00);   };
+    // Address of the magnetic half of the LSM9DS1.
+    inline uint8_t _magnetic_addr(int idx) {    return ((idx % 17) + 0x11);   };
+    // These values represent where in the IRQ buffer this IIU's bits lie.
+    inline uint8_t _irq_offset_byte(int idx) {  return (idx >> 1);            };
+    inline uint8_t _irq_offset_bit(int idx) {   return (idx << 2);            };
 
     /* SPI and work queue related members */
     int  cpld_max_bus_queue_depth     = 300;     // Debug
     int  spi_prescaler                = SPI_BAUDRATEPRESCALER_16;
-    bool cpld_chain_cs_to_queue       = false;   // Debug
     bool cpld_prevent_bus_queue_flood = true;    // Debug
     bool spi_queue_idle               = true;    // TODO: Convert to bus profiler. Need to know bus use percentage/volume.
     bool cpld_service_irqs            = false;
