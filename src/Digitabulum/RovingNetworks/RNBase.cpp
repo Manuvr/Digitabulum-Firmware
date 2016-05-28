@@ -119,7 +119,7 @@ void RNBase::expire_lockout() {
   if (INSTANCE == NULL) return;
 
   if (((EventReceiver*) INSTANCE)->getVerbosity() > 4) Kernel::log("oneshot_rn42_reenable()\n");
-  INSTANCE->lockout_active = false;
+  ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_LOCK_OUT);
   ((RNBase*) INSTANCE)->idleService();
 }
 
@@ -134,7 +134,7 @@ void RNBase::start_lockout(uint32_t milliseconds) {
 
   // TODO: Need a cleaner way to accomplish this...
   __kernel->addSchedule(new ManuvrRunnable(milliseconds,  0, true, oneshot_rn42_reenable));
-  lockout_active = true;
+  _er_set_flag(RNBASE_FLAG_LOCK_OUT);
 }
 
 
@@ -188,10 +188,9 @@ RNBase::RNBase() {
   //  preallocated.insert(&__prealloc_pool[i]);
   //}
 
-  //command_mode_pend = false;
-  //command_mode      = false;
-  //lockout_active    = false;
-  //autoconnect_mode  = false;
+  // Clear all the flags.
+  _er_clear_flag(RNBASE_FLAG_LOCK_OUT | RNBASE_FLAG_CMD_MODE);
+  _er_clear_flag(RNBASE_FLAG_CMD_PEND | RNBASE_FLAG_AUTOCONN);
 
   //current_work_item = NULL;
 
@@ -245,12 +244,11 @@ int8_t RNBase::reset() {
     current_work_item = NULL;
   }
 
-  lockout_active    = true;
-  command_mode_pend = false;
+  _er_set_flag(RNBASE_FLAG_LOCK_OUT);
+  _er_clear_flag(RNBASE_FLAG_CMD_PEND | RNBASE_FLAG_AUTOCONN);
 
   connected(0 != HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_10));
   queue_floods      = 0;
-  autoconnect_mode  = false;
 
   tx_buf.clear();
 
@@ -399,9 +397,9 @@ int8_t RNBase::exitCommandMode() {
 
 
 void RNBase::setAutoconnect(bool autocon) {
-  if (autoconnect_mode ^ autocon) {
+  if (_er_flag(RNBASE_FLAG_AUTOCONN) ^ autocon) {
     enterCommandMode();
-    autoconnect_mode = autocon;
+    _er_set_flag(RNBASE_FLAG_CMD_PEND, autocon);
     StringBuilder *temp = new StringBuilder(autocon ? RNBASE_MODE_AUTOCONNECT : RNBASE_MODE_MANUCONNECT);
     insert_into_work_queue(RNBASE_OP_CODE_CMD_TX_WAIT_RX, temp);
     if (getVerbosity() > 4) Kernel::log(__PRETTY_FUNCTION__, 2, "Autoconnect is now %sabled.", (autocon ? "en" : "dis"));
@@ -447,12 +445,12 @@ int8_t RNBase::idleService(void) {
         // We'd probably be interfering with somehting if we do anything. So do nothing.
         return -2;
       }
-      else if (!lockout_active) {
+      else if (!_er_flag(RNBASE_FLAG_LOCK_OUT)) {
         // If it isn't completed or initiated, and we aren't locked out, let's kick it off...
         switch (current_work_item->opcode) {
           case RNBASE_OP_CODE_CMD_TX_WAIT_RX:
           case RNBASE_OP_CODE_CMD_TX:
-            command_mode_pend = (!command_mode);
+            _er_set_flag(RNBASE_FLAG_CMD_PEND, !_er_flag(RNBASE_FLAG_CMD_MODE));
             current_work_item->begin();
             break;
           case RNBASE_OP_CODE_TX:
@@ -660,13 +658,13 @@ volatile void RNBase::usart2_character_rx(unsigned char c) {
 * TODO: This all needs to be DMA driven. Until then, try and remember... you are in an ISR.
 */
 void RNBase::feed_rx_buffer(unsigned char *nu, uint8_t len) {
-  if (command_mode || command_mode_pend) {
+  if (_er_flag(RNBASE_FLAG_CMD_MODE | RNBASE_FLAG_CMD_PEND)) {
     BTQueuedOperation *local_work_item = (NULL != current_work_item) ? current_work_item : work_queue.get();
     if (NULL != local_work_item) {
         switch (local_work_item->opcode) {
           case RNBASE_OP_CODE_CMD_TX_WAIT_RX:
             // We make sure that we tell the class if we are expecting a change in this state.
-            command_mode_pend = (!command_mode);
+            _er_set_flag(RNBASE_FLAG_CMD_PEND, !_er_flag(RNBASE_FLAG_CMD_MODE));
             local_work_item->data.concat(nu, len);
             //output.concatf("Rx Local work item length: %d\n", local_work_item->data.length());
             break;
@@ -751,9 +749,9 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
     if (delta < 500) {
       // Probably the 10Hz signal. Means we are in command mode.
       if (INSTANCE != NULL) {
-        if (!INSTANCE->command_mode) {
-          INSTANCE->command_mode = true;
-          INSTANCE->command_mode_pend = false;
+        if (!((RNBase*) INSTANCE)->_er_flag(RNBASE_FLAG_CMD_MODE)) {
+          ((RNBase*) INSTANCE)->_er_set_flag(RNBASE_FLAG_CMD_MODE);
+          ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_CMD_PEND);
           ManuvrRunnable *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_ENTERED_CMD_MODE);
           Kernel::isrRaiseEvent(nu_event);
         }
@@ -762,10 +760,8 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
     else if (delta < 3500) {
       // Probably the 1Hz signal. Means we are discoverable and waiting for connection.
       if (INSTANCE != NULL) {
-        if (INSTANCE->command_mode) {
-          INSTANCE->command_mode      = false;
-          INSTANCE->command_mode_pend = false;
-          INSTANCE->lockout_active    = false;
+        if (((RNBase*) INSTANCE)->_er_flag(RNBASE_FLAG_CMD_MODE)) {
+          ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_CMD_MODE | RNBASE_FLAG_CMD_PEND | RNBASE_FLAG_LOCK_OUT);
           ManuvrRunnable *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_EXITED_CMD_MODE);
           Kernel::isrRaiseEvent(nu_event);
         }
@@ -867,10 +863,10 @@ void RNBase::printDebug(StringBuilder *temp) {
   temp->concatf("--- _heap_frees:            %u\n---\n", (unsigned long) _heap_frees);
 
   temp->concatf("--- bitrate to module       %d\n", configured_bitrate);
-  temp->concatf("--- lockout_active          %s\n", (lockout_active ? "yes" : "no"));
-  temp->concatf("--- command mode (pend)     %s\n", (command_mode_pend ? "yes" : "no"));
-  temp->concatf("--- command mode            %s\n", (command_mode ? "yes" : "no"));
-  temp->concatf("--- autoconnect             %s\n", (autoconnect_mode ? "yes" : "no"));
+  temp->concatf("--- lockout_active          %s\n", (_er_flag(RNBASE_FLAG_LOCK_OUT) ? "yes" : "no"));
+  temp->concatf("--- command mode (pend)     %s\n", (_er_flag(RNBASE_FLAG_CMD_PEND) ? "yes" : "no"));
+  temp->concatf("--- command mode            %s\n", (_er_flag(RNBASE_FLAG_CMD_MODE) ? "yes" : "no"));
+  temp->concatf("--- autoconnect             %s\n", (_er_flag(RNBASE_FLAG_AUTOCONN) ? "yes" : "no"));
   if (getVerbosity() > 5) {
     temp->concatf("--- last_gpio5              %u\n", last_gpio_5_event);
     temp->concatf("--- gpio5 state             %s\n\n", ((GPIOB->IDR & GPIO_PIN_10) ? "high" : "low"));

@@ -306,9 +306,6 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 
 */
 
-
-
-
 #ifndef __CPLD_DRIVER_H__
 #define __CPLD_DRIVER_H__
 
@@ -317,7 +314,6 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #include "SPIBusOp.h"
 #include <Kernel.h>
 #include "SPIDeviceWithRegisters.h"
-//#include "Drivers/LSM9DS1/IIU.h"
 
 #include <stm32f7xx_hal_gpio.h>
 #include <stm32f7xx_hal_spi.h>
@@ -326,6 +322,20 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 
 class LSM9DS1_Common;
 class IIU;
+
+#define CPLD_SPI_MAX_QUEUE_PRINT 3     // How many SPI queue items should we print for debug?
+#define PREALLOCATED_SPI_JOBS    10    // How many SPI queue items should we have on-tap?
+
+/*
+* These state flags are hosted by the EventReceiver. This may change in the future.
+* Might be too much convention surrounding their assignment across inherritence.
+*/
+#define CPLD_FLAG_INT_OSC      0x01    // Running on internal oscillator.
+#define CPLD_FLAG_EXT_OSC      0x02    // Running on external oscillator.
+#define CPLD_FLAG_SVC_IRQS     0x04    // Should the CPLD respond to IRQ signals?
+#define CPLD_FLAG_QUEUE_IDLE   0x08    // Is the SPI queue idle?
+#define CPLD_FLAG_QUEUE_GUARD  0x10    // Prevent bus queue floods?
+
 
 /* Codes that are specific to Digitabulum's CPLD */
   #define DIGITABULUM_MSG_IMU_LEGEND           0x0600 // No args? Asking for this legend. One arg: Legend provided.
@@ -398,20 +408,14 @@ class IIU;
 #define CPLD_REG_CS_7          0x2F  // | RESERVED
 
 
-/* Configuration register bits *****************************/
-
-/***********************************************************/
-
-#define CPLD_SPI_MAX_QUEUE_PRINT 3     // How many SPI queue items should we print for debug?
-#define PREALLOCATED_SPI_JOBS    10    // How many SPI queue items should we have on-tap?
-
-
 
 /*
 * The CPLD driver class.
 */
 class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
   public:
+    SPIBusOp* current_queue_item = NULL;
+
     CPLDDriver();
     ~CPLDDriver();       // Should never be called. Here for the sake of completeness.
 
@@ -426,28 +430,22 @@ class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
     int8_t callback_proc(ManuvrRunnable *);
     void procDirectDebugInstruction(StringBuilder*);
 
-
-/* RESCOPE THESE??? */
-    void reset(void);                  // Causes the CPLD to be reset.
-
-    /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
-    /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
-    /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
-    /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
-
-    /* This is a temporary fix until I can migrate SPI control away from the CPLD. */
-    bool step_queues(bool);
-
-    // Members related to the work queue...
-    SPIBusOp* current_queue_item = NULL;
+    /* Members related to the work queue... */
     int8_t advance_work_queue();
+    bool step_queues(bool);
     SPIBusOp* issue_spi_op_obj();
+
+    void reset(void);                 // Causes the CPLD to be reset.
+    uint8_t getCPLDVersion();         // Read the version code in the CPLD.
+
+    /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
+    /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
+    /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
+    /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
+    uint32_t read_imu_irq_pins();     // TODO: Can this be optimized down at all?
 
     // These are interrupt service routines...
     volatile static void irqService_vect_0(void);
-    uint32_t read_imu_irq_pins(void);  // TODO: Can this be optimized down at all?
-
-    uint8_t getCPLDVersion(void);      // Read the version code in the CPLD.
 
 
   protected:
@@ -464,16 +462,23 @@ class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
     ManuvrRunnable event_spi_callback_ready;
     ManuvrRunnable event_spi_timeout;
 
-    uint32_t  digit_interrupts   = 0; // CPLD register. Digit interrupts.
-    uint32_t  pending_interrupts = 0; // These are interrupts that are in the SPI queue but haven't returned results yet.
-
     uint32_t  bus_timeout_millis = 5;
 
     uint8_t   cpld_version       = 0; // CPLD Register. If zero, than the CPLD has not been initialized.
     uint8_t   cpld_conf_value    = 0; // CPLD register. Configuration.
     uint8_t   cpld_status_value  = 0; // CPLD register. Status.
-
     uint8_t   spi_cb_per_event   = 3; // Used to limit the number of callbacks processed per event.
+
+    /* SPI and work queue related members */
+    int  cpld_max_bus_queue_depth     = 300;     // Debug
+    int  spi_prescaler                = SPI_BAUDRATEPRESCALER_16;
+
+    PriorityQueue<SPIBusOp*> work_queue;
+    PriorityQueue<SPIBusOp*> callback_queue;
+    PriorityQueue<SPIBusOp*> preallocated;
+
+    uint32_t preallocation_misses = 0;        // How many times have we starved the preallocation queue?
+    uint32_t specificity_burden   = 0;        // How many queue items have new deleted?
 
     /* Inlines for deriving address and IRQ bit offsets from index. */
     // Address of the inertial half of the LSM9DS1.
@@ -484,19 +489,6 @@ class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
     inline uint8_t _irq_offset_byte(int idx) {  return (idx >> 1);            };
     inline uint8_t _irq_offset_bit(int idx) {   return (idx << 2);            };
 
-    /* SPI and work queue related members */
-    int  cpld_max_bus_queue_depth     = 300;     // Debug
-    int  spi_prescaler                = SPI_BAUDRATEPRESCALER_16;
-    bool cpld_prevent_bus_queue_flood = true;    // Debug
-    bool spi_queue_idle               = true;    // TODO: Convert to bus profiler. Need to know bus use percentage/volume.
-    bool cpld_service_irqs            = false;
-
-    PriorityQueue<SPIBusOp*> work_queue;
-    PriorityQueue<SPIBusOp*> callback_queue;
-    PriorityQueue<SPIBusOp*> preallocated;
-
-    uint32_t preallocation_misses = 0;        // How many times have we starved the preallocation queue?
-    uint32_t specificity_burden   = 0;        // How many queue items have new deleted?
 
     void purge_queued_work();     // Flush the work queue.
     void purge_queued_work_by_dev(SPIOpCallback *dev);   // Flush the work queue by callback match
@@ -511,8 +503,6 @@ class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
 
 
     /* Low-level CPLD register stuff */
-    bool      ext_oscillator_enabled;   // TODO: Collapse into a bitflag.
-    bool      int_oscillator_enabled;   // TODO: Collapse into a bitflag.
     void externalOscillator(bool on);    // Enable or disable the CPLD external oscillator.
     void internalOscillator(bool on);    // Enable or disable the CPLD internal oscillator.
     void setCPLDConfig(uint8_t mask, bool enable);

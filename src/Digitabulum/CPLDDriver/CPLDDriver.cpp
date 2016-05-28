@@ -29,11 +29,6 @@ extern "C" {
   volatile CPLDDriver* cpld = NULL;
 }
 
-
-const uint32_t CPLD_IMU_IRQ_MASK_G    = 0x003F0000;
-const uint32_t CPLD_IMU_IRQ_MASK_XM0  = 0x00003F00;
-const uint32_t CPLD_IMU_IRQ_MASK_XM1  = 0x0000003F;
-
 volatile bool timeout_punch = false;
 
 
@@ -433,13 +428,12 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
 */
 void CPLDDriver::reset() {
   externalOscillator(false);    // Turn off the oscillators...
-  internalOscillator(false);
+  internalOscillator(true);
 
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);  // Drive the reset pin low...
 
   cpld_conf_value   = 0x00;     //   our register representations...
   cpld_version      = 0x00;
-  digit_interrupts  = 0x00;
 
   bus_timeout_millis = 5;
 
@@ -495,7 +489,7 @@ int8_t CPLDDriver::spi_op_callback(SPIBusOp* op) {
   if (SPI_OPCODE_READ == op->opcode) {
     switch (op->reg_idx) {
       case CPLD_REG_VERSION:
-        reg_defs[CPLD_REG_VERSION].unread = false;
+        reg_defs[0].unread = false;
 
         if (getVerbosity() > 3) local_log.concatf("CPLD r%d.\n", value);
         if (17 == value) {
@@ -545,7 +539,7 @@ int8_t CPLDDriver::queue_spi_job(SPIBusOp* op) {
     }
 
     else {    // If there is something already in progress, queue up.
-      if (cpld_prevent_bus_queue_flood && (cpld_max_bus_queue_depth <= work_queue.size())) {
+      if (_er_flag(CPLD_FLAG_QUEUE_GUARD) && (cpld_max_bus_queue_depth <= work_queue.size())) {
         if (getVerbosity() > 3) Kernel::log("CPLDDriver::queue_spi_job(): \t Bus queue at max size. Dropping transaction.\n");
         op->abort(SPI_XFER_ERROR_QUEUE_FLUSH);
         callback_queue.insertIfAbsent(op);
@@ -1004,8 +998,8 @@ volatile void CPLDDriver::irqService_vect_0(void) {
 *   in the CPLD, so we keep track of the state in this class.
 */
 void CPLDDriver::externalOscillator(bool on) {
-  ext_oscillator_enabled = on;
-  // TODO: Enable the timer, connect it to GPIOA, and set the config register in the CPLD.
+  _er_set_flag(CPLD_FLAG_EXT_OSC, on);
+  // TODO: Enable the timer, connect it to GPIO, and set the config register in the CPLD.
 }
 
 
@@ -1014,9 +1008,9 @@ void CPLDDriver::externalOscillator(bool on) {
 *   allow us to enable it manually.
 */
 void CPLDDriver::internalOscillator(bool on) {
-  int_oscillator_enabled = on;
+  _er_set_flag(CPLD_FLAG_INT_OSC, on);
   // TODO: Set the config register in the CPLD, and when the callback arrives,
-  //         disable the timer, and disconnect it to GPIOA.
+  //         disable the timer, and disconnect it from GPIO.
 }
 
 
@@ -1030,8 +1024,8 @@ void CPLDDriver::setCPLDConfig(uint8_t mask, bool state) {
   else {
     cpld_conf_value &= ~mask;
   }
-  reg_defs[CPLD_REG_CONFIG].set(cpld_conf_value);
-  writeRegister(&reg_defs[CPLD_REG_CONFIG]);
+  reg_defs[1].set(cpld_conf_value);
+  writeRegister(&reg_defs[1]);
 }
 
 
@@ -1040,7 +1034,7 @@ void CPLDDriver::setCPLDConfig(uint8_t mask, bool state) {
 *   compatability with older CPLD versions.
 */
 uint8_t CPLDDriver::getCPLDVersion(void) {
-  readRegister(CPLD_REG_VERSION);
+  readRegister((uint8_t) 0);
   return cpld_version;
 }
 
@@ -1056,43 +1050,7 @@ uint8_t CPLDDriver::getCPLDVersion(void) {
 */
 int8_t CPLDDriver::iiu_group_irq() {
   int8_t return_value = 0;
-  uint32_t nu_irqs = ~digit_interrupts & 0x003F3F3F;
-  // Which IRQs did we JUST become aware of?
-  uint32_t serviced_mask = ~(nu_irqs & (nu_irqs ^ pending_interrupts));
-
-  LegendManager *lm = LegendManager::getInstance();
-
-  if (getVerbosity() > 2) local_log.concatf("CPLD iiu_group_irq: (0x%08x):  \n", serviced_mask);
-
-  // serviced_mask has a bit for each copper line that has gone active.
-  if (serviced_mask) {
-    for (uint8_t idx = 0; idx < 17; idx++) {
-      // TODO: Needs to be updated to reflect better CPLD capabilities.
-      //if (serviced_mask & CPLDDriver::imu_map[idx].irq_mask) {
-      //  IIU* current_iiu = lm->fetchIIU(idx);
-      //  if (CPLD_IMU_IRQ_MASK_XM0 & serviced_mask) {
-      //    if (getVerbosity() > 3) Kernel::log("CPLDDriver::iiu_group_irq",0, "(%d):  xm2  %d\n", nu_irqs, idx);
-      //    current_iiu->irq_ag0();
-      //    return_value++;
-      //  }
-      //  if (CPLD_IMU_IRQ_MASK_XM1 & serviced_mask) {
-      //    if (getVerbosity() > 3) Kernel::log("CPLDDriver::iiu_group_irq",0, "(%d):  xm1  %d\n", nu_irqs, idx);
-      //    current_iiu->irq_ag1();
-      //    return_value++;
-      //  }
-      //  if (CPLD_IMU_IRQ_MASK_G & serviced_mask) {
-      //    if (getVerbosity() > 3) Kernel::log("CPLDDriver::iiu_group_irq",0, "(%d):  g   %d\n", nu_irqs, idx);
-      //    current_iiu->irq_m();
-      //    return_value++;
-      //  }
-      //}
-    }
-
-    //pending_interrupts |= serviced_mask;
-  }
-  else if (getVerbosity() > 6) {
-    Kernel::log("CPLDDriver::iiu_group_irq()", 0, "Interrupt cleared or serviced.\n\t Register 0x%08x \n\t Pending 0x%08x \n\t Service mask 0x%08x \n\t nu 0x%08x \n", digit_interrupts, pending_interrupts, serviced_mask, nu_irqs);
-  }
+  if (getVerbosity() > 2) local_log.concatf("CPLD iiu_group_irq: (0x%08x):  \n", 0);
 
   if (local_log.length() > 0) Kernel::log(&local_log);
   return return_value;
@@ -1145,12 +1103,10 @@ void CPLDDriver::printDebug(StringBuilder *output) {
   EventReceiver::printDebug(output);
   //output->concatf("0x%08x OSC IRQs thus far.\n", cpld_osc_irqs);
   output->concatf("--- Conf                0x%02x\n",      cpld_conf_value);
-  output->concatf("--- Osc (Int/Ext)       %s/%s\n",       (int_oscillator_enabled ? "on":"off"), (ext_oscillator_enabled ? "on":"off"));
+  output->concatf("--- Osc (Int/Ext)       %s/%s\n",       (_er_flag(CPLD_FLAG_INT_OSC) ? "on":"off"), (_er_flag(CPLD_FLAG_EXT_OSC) ? "on":"off"));
   if (getVerbosity() > 6) output->concatf("--- volatile *cpld      0x%08x\n---\n", cpld);
 
-  output->concatf("--- pending_interrupts  0x%08x\n",   pending_interrupts);
-  output->concatf("--- digit_interrupts    0x%08x\n",   digit_interrupts);
-  output->concatf("--- IRQ service:        %sabled\n---\n",   (cpld_service_irqs?"en":"dis"));
+  output->concatf("--- IRQ service:        %sabled\n---\n",   (_er_flag(CPLD_FLAG_SVC_IRQS)?"en":"dis"));
 
   output->concat("\n--- SPI BUS\n-------------------------------------------------------\n");
   if (getVerbosity() > 4) {
@@ -1175,7 +1131,7 @@ void CPLDDriver::printDebug(StringBuilder *output) {
     output->concatf("--- SPI Prescaler       %s\n--\n",       prescale_text);
   }
   if (getVerbosity() > 2) {
-    output->concatf("--- Prevent queue flood %s\n",       (cpld_prevent_bus_queue_flood?"yes":"no"));
+    output->concatf("--- Prevent queue flood %s\n",       (_er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no"));
     output->concatf("--- spi_cb_per_event    %d\n---\n",       spi_cb_per_event);
   }
 
@@ -1238,10 +1194,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       switch (temp_byte) {
         case 1:
           local_log.concat("Resetting pending IRQs...\n");
-          digit_interrupts = 0;
-          pending_interrupts = 0;
-          // Efficient != lazy...
-          // Efficient -> Be careful.
+          break;
         default:
           raiseEvent(Kernel::returnEvent(DIGITABULUM_MSG_IMU_IRQ_RAISED));   // Raise an event
           local_log.concat("Manual IRQ raise.\n");
@@ -1272,12 +1225,12 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
      case 'k':     // SPI re-init with prescaler
       switch ((uint16_t) temp_byte*1 ) {  // TODO: Un-lazy this.
         case 1:
-          cpld_prevent_bus_queue_flood = !cpld_prevent_bus_queue_flood;
-          local_log.concatf("CPLD guarding SPI queue from overflow?  %s\n", cpld_prevent_bus_queue_flood?"yes":"no");
+          _er_flip_flag(CPLD_FLAG_QUEUE_GUARD);
+          local_log.concatf("CPLD guarding SPI queue from overflow?  %s\n", _er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no");
           break;
         case 2:
-          cpld_service_irqs = !cpld_service_irqs;
-          local_log.concatf("CPLD servicing IRQs?  %s\n", cpld_service_irqs?"yes":"no");
+          _er_flip_flag(CPLD_FLAG_SVC_IRQS);
+          local_log.concatf("CPLD servicing IRQs?  %s\n", _er_flag(CPLD_FLAG_SVC_IRQS)?"yes":"no");
           break;
         case 16:
           spi_prescaler = SPI_BAUDRATEPRESCALER_16;
@@ -1311,13 +1264,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
           break;
       }
       break;
-
-    //case 'y':
-    //  if (temp_byte) {
-    //    SPIBusOp::spi_cs_delay = temp_byte * 10;
-    //  }
-    //  local_log.concatf("SPIBusOp::spi_cs_delay is %uuS...\n", SPIBusOp::spi_cs_delay);
-    //  break;
 
     case 'p':
       if (temp_byte) {

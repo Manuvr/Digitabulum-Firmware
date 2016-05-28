@@ -32,11 +32,9 @@ TODO: This class is in SORE need of the following things:
 #ifndef __RNBASE_H__
 #define __RNBASE_H__
 
-#include <stm32f7xx.h>
-
 #include <Kernel.h>
-#include "Transports/ManuvrXport.h"
-#include "DataStructures/PriorityQueue.h"
+#include <Transports/ManuvrXport.h>
+#include <DataStructures/PriorityQueue.h>
 
 
 // Bluetooth Modes
@@ -66,7 +64,6 @@ TODO: This class is in SORE need of the following things:
 #define RNBASE_CMD_GET_STOR_BT_ADDR "GR\r\n"   // Gets the BT MAC of the currently bound device.
 
 
-
 #define RNBASE_PROTO_SPP            "AW\r\n"
 
 // Responses that we might get back from the module.
@@ -78,6 +75,20 @@ TODO: This class is in SORE need of the following things:
 
 // These are only relevant for debug.
 #define RNBASE_MAX_QUEUE_PRINT 3
+
+// Resting memory load parameters.
+#define PREALLOCATED_BT_Q_OPS    4    // How many data-carriers should we preallocate?
+#define RNBASE_MAX_BT_Q_DEPTH    5    //
+
+
+/*
+* These state flags are hosted by the EventReceiver. This may change in the future.
+* Might be too much convention surrounding their assignment across inherritence.
+*/
+#define RNBASE_FLAG_LOCK_OUT  0x01    // While this is true, don't interact with the RN.
+#define RNBASE_FLAG_CMD_MODE  0x02    // Set when the module is verified to be in command mode.
+#define RNBASE_FLAG_CMD_PEND  0x04    // Set when we are expecting the module to enter command mode.
+#define RNBASE_FLAG_AUTOCONN  0x08    // Should we connect whenever possible?
 
 
 /*
@@ -94,9 +105,6 @@ TODO: This class is in SORE need of the following things:
 #define RNBASE_RETRY_PRIORITY    6    // Retries should have a higher priority to maintain order WRT other CP messages.
 #define RNBASE_DEFAULT_PRIORITY  2    // New CP messages have a low priority, and will stack in their natural order.
 
-
-#define PREALLOCATED_BT_Q_OPS    4    // How many data-carriers should we preallocate?
-#define RNBASE_MAX_BT_Q_DEPTH    5    //
 
 #define CHARACTER_CHRONOLOGICAL_BREAK 50   // How many ms must pass before we consider the read buffer flushable?
 
@@ -227,8 +235,6 @@ class RNBase : public ManuvrXport {
 
   protected:
     int configured_bitrate;   // The bitrate we have between the CPU and the RN.
-    uint32_t pid_data_lockout    = 0;  // Sometimes we need to prevent ourselves from sensing data to the module.
-
 
     int8_t idleService(void);
     void feed_rx_buffer(unsigned char*, uint8_t len);   // Append to the class receive buffer.
@@ -263,11 +269,6 @@ class RNBase : public ManuvrXport {
     PriorityQueue<BTQueuedOperation*> work_queue;
 
     StringBuilder tx_buf;     // A scratchpad for this class.
-
-    bool lockout_active;      // While this is true, don't interact with the RN.
-    bool command_mode;        // Set when the module is verified to be in command mode.
-    bool command_mode_pend;   // Set when we are expecting the module to enter command mode.
-    bool autoconnect_mode;    // Should we connect whenever possible?
 
     uint32_t insert_into_work_queue(uint8_t opcode, StringBuilder* data);
     int8_t burn_or_recycle_current();   // Called during connection turbulence to handle the queued item.
