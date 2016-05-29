@@ -143,14 +143,6 @@ class SPIBusOp : public BusOp {
 
     bool wait_with_timeout();
 
-    /* This only works because of careful defines. Tread lightly. */
-    inline bool has_bus_control() {
-      return (
-        (xfer_state == XferState::STOP) | (xfer_state == XferState::IO_WAIT) | \
-        (xfer_state == XferState::INITIATE) | (xfer_state == XferState::ADDR)
-      );
-    }
-
 
     static void enableSPI_DMA(bool enable);
 };
