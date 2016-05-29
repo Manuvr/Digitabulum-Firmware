@@ -782,7 +782,7 @@ int8_t LSM9DS1_AG::spi_op_callback(SPIBusOp* op) {
   }
 
   // There is zero chance this object will be a null pointer unless it was done on purpose.
-  if (op->hasError()) {
+  if (op->hasFault()) {
     if (verbosity > 3) {
       local_log.concat("~~~~~~~~LSM9DS1_AG::spi_op_callback   (ERROR CASE -1)\n");
       op->printDebug(&local_log);

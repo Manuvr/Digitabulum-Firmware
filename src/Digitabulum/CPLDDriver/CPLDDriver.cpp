@@ -35,11 +35,11 @@ volatile bool timeout_punch = false;
 void callback_spi_timeout() {
   if (timeout_punch) {
     if (((CPLDDriver*) cpld)->current_queue_item != NULL) {
-      if (((CPLDDriver*) cpld)->current_queue_item->complete()) {
+      if (((CPLDDriver*) cpld)->current_queue_item->isComplete()) {
         ((CPLDDriver*) cpld)->advance_work_queue();
       }
       else {
-        ((CPLDDriver*) cpld)->current_queue_item->abort(SPI_XFER_ERROR_BUS_FAULT);
+        ((CPLDDriver*) cpld)->current_queue_item->abort(XferFault::BUS_FAULT);
       }
       //dirty_bus = true;
     }
@@ -475,7 +475,7 @@ void CPLDDriver::reset() {
 */
 int8_t CPLDDriver::spi_op_callback(SPIBusOp* op) {
   // There is zero chance this object will be a null pointer unless it was done on purpose.
-  if (op->hasError()) {
+  if (op->hasFault()) {
     if (getVerbosity() > 3) local_log.concat("spi_op_callback() rejected a callback because the bus op failed.\n");
     return SPI_CALLBACK_ERROR;
   }
@@ -541,7 +541,7 @@ int8_t CPLDDriver::queue_spi_job(SPIBusOp* op) {
     else {    // If there is something already in progress, queue up.
       if (_er_flag(CPLD_FLAG_QUEUE_GUARD) && (cpld_max_bus_queue_depth <= work_queue.size())) {
         if (getVerbosity() > 3) Kernel::log("CPLDDriver::queue_spi_job(): \t Bus queue at max size. Dropping transaction.\n");
-        op->abort(SPI_XFER_ERROR_QUEUE_FLUSH);
+        op->abort(XferFault::QUEUE_FLUSH);
         callback_queue.insertIfAbsent(op);
         if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
         return -1;
@@ -705,7 +705,7 @@ void CPLDDriver::purge_queued_work_by_dev(SPIOpCallback *dev) {
     while (i < work_queue.size()) {
       current = work_queue.get(i);
       if (current->callback == dev) {
-        current->abort(SPI_XFER_ERROR_QUEUE_FLUSH);
+        current->abort(XferFault::QUEUE_FLUSH);
         work_queue.remove(current);
         reclaim_queue_item(current);
       }
@@ -728,7 +728,7 @@ void CPLDDriver::purge_queued_work() {
   SPIBusOp* current = NULL;
   while (work_queue.hasNext()) {
     current = work_queue.dequeue();
-    current->abort(SPI_XFER_ERROR_QUEUE_FLUSH);
+    current->abort(XferFault::QUEUE_FLUSH);
     reclaim_queue_item(current);
   }
 
@@ -760,7 +760,7 @@ SPIBusOp* CPLDDriver::issue_spi_op_obj() {
 * @param item The SPIBusOp to be reclaimed.
 */
 void CPLDDriver::reclaim_queue_item(SPIBusOp* op) {
-  if (op->hasError() && (getVerbosity() > 1)) {    // Print failures.
+  if (op->hasFault() && (getVerbosity() > 1)) {    // Print failures.
     StringBuilder log;
     op->printDebug(&log);
     Kernel::log(&log);
@@ -790,7 +790,7 @@ void CPLDDriver::reclaim_queue_item(SPIBusOp* op) {
 
 void CPLDDriver::purge_stalled_job() {
   if (current_queue_item != NULL) {
-    current_queue_item->abort(SPI_XFER_ERROR_QUEUE_FLUSH);
+    current_queue_item->abort(XferFault::QUEUE_FLUSH);
     reclaim_queue_item(current_queue_item);
     current_queue_item = NULL;
   }

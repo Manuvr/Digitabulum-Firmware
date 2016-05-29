@@ -30,16 +30,6 @@ This is the class that is used to keep bus operations on the SPI atomic.
   #include <Drivers/DeviceWithRegisters/DeviceRegister.h>
   #include <stm32f7xx_hal_dma.h>
 
-  #define SPI_XFER_ERROR_NONE           0x00   // No error on this transfer.
-  #define SPI_XFER_ERROR_DMA_TIMEOUT    0x01   // DMA timeout.
-  #define SPI_XFER_ERROR_NO_REASON      0x02   // No reason defined, but still errored.
-  #define SPI_XFER_ERROR_QUEUE_FLUSH    0x03   // The work queue was flushed and this was a casualty.
-  #define SPI_XFER_ERROR_BUS_FAULT      0x04   // The bus had a meltdown.
-  #define SPI_XFER_ERROR_ILLEGAL_STATE  0x05   // The bus operation is in an illegal state.
-  #define SPI_XFER_ERROR_HANGING_IRQ    0x06   // One too many IRQs happened for this operation.
-  #define SPI_XFER_ERROR_BAD_XFER_PARM  0x07   // Did you try to send a 0-length message?
-  #define SPI_XFER_ERROR_DMA_FAILURE    0x08   // Something went sideways with DMA that wasn't a timeout.
-
   #define SPI_XFER_FLAG_NO_FLAGS        0x00   // By default, there are no flags set.
   #define SPI_XFER_FLAG_NO_FREE         0x01   // If set in a transaction's flags field, it will not be free()'d.
   #define SPI_XFER_FLAG_PREALLOCATE_Q   0x02   // If set, indicates this object should be returned to the prealloc queue.
@@ -60,11 +50,9 @@ class SPIOpCallback;
 class SPIBusOp : public BusOp {
   public:
     //TODO: This is the new mechanism: uint8_t  xfer_params[4];                      // The address transfer lengths, preamble, etc...
-    uint8_t* buf            = NULL;               // Pointer to the data buffer for the transaction.
     SPIOpCallback* callback = NULL;               // Which class gets pinged when we've finished?
-    uint8_t  bus_addr    = 0x0000;                // The address that this operation is directed toward.
     int16_t  reg_idx     = -1;                    // Optional register index. Makes callbacks faster.
-    uint8_t  buf_len        = 0;                  // How large is the above buffer?
+    uint8_t  bus_addr    = 0x0000;                // The address that this operation is directed toward.
 
     //uint32_t time_began    = 0;   // This is the time when bus access begins.
     //uint32_t time_ended    = 0;   // This is the time when bus access stops (or is aborted).
@@ -83,8 +71,8 @@ class SPIBusOp : public BusOp {
     *
     * @return 0 on success. Non-zero on failure.
     */
-    inline int8_t abort() {    return abort(SPI_XFER_ERROR_NO_REASON); }
-    int8_t abort(uint8_t cause);
+    inline int8_t abort() {    return abort(XferFault::NO_REASON); }
+    int8_t abort(XferFault);
 
     int8_t advance_operation(uint32_t status_reg, uint8_t data_reg);
 
@@ -94,12 +82,6 @@ class SPIBusOp : public BusOp {
     bool shouldReap(bool);    // Override to set the reap behavior.
     bool returnToPrealloc(bool);
     bool devRegisterAdvance(bool);
-
-    /**
-    * @return true if this operation experienced any abnormal condition.
-    */
-    inline bool complete() {     return (XferState::COMPLETE == xfer_state);  }
-    bool set_state(XferState);  // Set the state of this operation.
 
     /**
     * The bus manager calls this fxn to decide if it ought to return this object to the preallocation
@@ -128,10 +110,6 @@ class SPIBusOp : public BusOp {
     */
     inline bool devRegisterAdvance() {  return (flags & SPI_XFER_FLAG_DEVICE_REG_INC);  }
 
-    /**
-    * @return true if this operation experienced any abnormal condition.
-    */
-    inline bool hasError() {          return (SPI_XFER_ERROR_NONE != err_code);      }
 
     /**
     * The bus manager calls this fxn to decide if it ought to free this object after completion.
@@ -141,9 +119,6 @@ class SPIBusOp : public BusOp {
     inline bool shouldReap() {        return ((flags & SPI_XFER_FLAG_NO_FREE) == 0);   }
 
     void printDebug(StringBuilder *);
-
-    /* Logging support */
-    const char* getErrorString();
 
 
     static uint32_t  total_transfers;
@@ -156,7 +131,6 @@ class SPIBusOp : public BusOp {
 
   private:
     uint8_t  flags       = SPI_XFER_FLAG_NO_FLAGS;   // No flags set.
-    int8_t   err_code    = SPI_XFER_ERROR_NONE;      // What is the error code when we've finished?
 
     int8_t init_dma();
 
