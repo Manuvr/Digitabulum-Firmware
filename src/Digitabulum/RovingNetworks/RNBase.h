@@ -132,11 +132,13 @@ class RNBase : public ManuvrXport {
     int8_t read_port();
 
     /* Overrides from EventReceiver */
-    void procDirectDebugInstruction(StringBuilder *);
     virtual const char* getReceiverName() =0;
     void printDebug(StringBuilder *);
     int8_t notify(ManuvrRunnable*);
     int8_t callback_proc(ManuvrRunnable *);
+    #if defined(__MANUVR_CONSOLE_SUPPORT)
+      void procDirectDebugInstruction(StringBuilder*);
+    #endif  //__MANUVR_CONSOLE_SUPPORT
 
     /* These are used to send data to a BT connected device. */
     inline bool roomInQueue() {    return !(work_queue.size() < RNBASE_MAX_BT_Q_DEPTH);  }

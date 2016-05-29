@@ -26,14 +26,11 @@ limitations under the License.
 #include "stm32f7xx_hal.h"
 
 
-
-// If your driver represents a statically-allocated unit, you can do something
-//   like this...
-//volatile IREmitter* IREmitter::INSTANCE = NULL;
+volatile IREmitter* IREmitter::INSTANCE = NULL;
 
 
 IREmitter::IREmitter() {
-  //INSTANCE = this;
+  INSTANCE = (IREmitter*) this;
 }
 
 
@@ -44,7 +41,12 @@ IREmitter::~IREmitter() {
 void IREmitter::gpioSetup() {
   GPIO_InitTypeDef GPIO_InitStruct;
 
-  // We bind timer2-channel1 to the LED pin.
+  /* These Port A pins are under timer2 control:
+  *
+  * #  Default   Purpose
+  * -----------------------------------------------
+  * 2     1      IR_LED
+  */
   GPIO_InitStruct.Pin       = GPIO_PIN_15;
   GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
   GPIO_InitStruct.Pull      = GPIO_NOPULL;
@@ -148,12 +150,12 @@ int8_t IREmitter::notify(ManuvrRunnable *active_event) {
 
 
 
+#if defined(__MANUVR_CONSOLE_SUPPORT)
 void IREmitter::procDirectDebugInstruction(StringBuilder *input) {
-#ifdef __MANUVR_CONSOLE_SUPPORT
   char* str = input->position(0);
 
   switch (*(str)) {
-    case 'f':
+    case 'f':  // Flash the IR LED like a beacon.
       break;
     default:
       #ifdef __MANUVR_DEBUG
@@ -161,6 +163,7 @@ void IREmitter::procDirectDebugInstruction(StringBuilder *input) {
       #endif
       break;
   }
-#endif
+
   if (local_log.length() > 0) {    Kernel::log(&local_log);  }
 }
+#endif  // __MANUVR_CONSOLE_SUPPORT

@@ -160,6 +160,13 @@ SPIBusOp::SPIBusOp(BusOpcode nu_op, uint16_t addr, uint8_t *buf, uint8_t len, SP
   this->buf             = buf;
   this->buf_len         = len;
   this->bus_addr        = addr;
+
+  _param_len     = 0;
+  xfer_params[0] = 0;
+  xfer_params[1] = 0;
+  xfer_params[2] = 0;
+  xfer_params[3] = 0;
+
   callback = requester;
 }
 
@@ -179,6 +186,38 @@ SPIBusOp::~SPIBusOp() {
   if (debug_log.length() > 0) Kernel::log(&debug_log);
 }
 
+
+
+/**
+*/
+void SPIBusOp::setParams(uint8_t _dev_addr, uint8_t _xfer_len, uint8_t _dev_count, uint8_t _reg_addr) {
+  _param_len     = 4;
+  xfer_params[0] = _dev_addr;
+  xfer_params[1] = _xfer_len;
+  xfer_params[2] = _dev_count;
+  xfer_params[3] = _reg_addr;
+}
+
+
+/**
+*/
+void SPIBusOp::setParams(uint8_t _reg_addr, uint8_t _val) {
+  _param_len     = 2;
+  xfer_params[0] = _reg_addr;
+  xfer_params[1] = _val;
+  xfer_params[2] = 0;
+  xfer_params[3] = 0;
+}
+
+/**
+*/
+void SPIBusOp::setParams(uint8_t _reg_addr) {
+  _param_len     = 1;
+  xfer_params[0] = _reg_addr;
+  xfer_params[1] = 0;
+  xfer_params[2] = 0;
+  xfer_params[3] = 0;
+}
 
 
 /**
@@ -240,16 +279,22 @@ int8_t SPIBusOp::init_dma() {
 * Be careful not to blow away the flags that prevent us from being reaped.
 */
 void SPIBusOp::wipe() {
-  set_state(SPI_XFER_STATE_IDLE);
+  set_state(XferState::IDLE);
   // We need to preserve flags that deal with memory management.
   flags       = flags & (SPI_XFER_FLAG_NO_FREE | SPI_XFER_FLAG_PREALLOCATE_Q);
-  err_code    = SPI_XFER_ERROR_NONE;
+  xfer_fault  = XferFault::NONE;
   opcode      = BusOpcode::UNDEF;
-  bus_addr    = 0x0000;
   buf_len     = 0;
   buf         = NULL;
   reg_idx     = -1;
   callback    = NULL;
+
+  _param_len     = 0;
+  xfer_params[0] = 0;
+  xfer_params[1] = 0;
+  xfer_params[2] = 0;
+  xfer_params[3] = 0;
+
   profile(false);
 }
 
@@ -280,37 +325,6 @@ bool SPIBusOp::wait_with_timeout() {
 * 8eee88 8eee8 88eee8    88eee8 8eee8 88  8   88  88   8 8eee8 88eee
 ****************************************************************************************************/
 
-// TODO: This should eventually be the only means of moving state within this class.
-bool SPIBusOp::set_state(uint8_t nu) {
-  if (nu != xfer_state) {
-    // Depending on our new state, we might clean up, or take other special action.
-    switch (nu) {
-      case SPI_XFER_STATE_IDLE:
-        // Reset the job for next use. Assume we will be re-used.
-        err_code    = SPI_XFER_ERROR_NONE;
-        if (debug_log.length() > 0) {
-          printDebug(&debug_log);
-          Kernel::log(&debug_log);
-        }
-        break;
-
-      case SPI_XFER_STATE_INITIATE:
-      case SPI_XFER_STATE_ADDR:
-      case SPI_XFER_STATE_DMA_WAIT:
-      case SPI_XFER_STATE_STOP:
-      case SPI_XFER_STATE_COMPLETE:
-        break;
-
-      default:    // Nope.
-        return false;
-        break;
-    }
-    // Assign the new state.
-    xfer_state = nu;
-  }
-  return true;
-}
-
 
 // Useful trick to mask warnings that the compiler raises, but which we know are
 //   intentional.
@@ -328,7 +342,7 @@ int8_t SPIBusOp::begin() {
   //time_began    = micros();
 
   if (0 == buf_len) {
-    abort(SPI_XFER_ERROR_BAD_XFER_PARM);
+    abort(XferFault::BAD_PARAM);
     return -1;
   }
 
@@ -347,7 +361,7 @@ int8_t SPIBusOp::begin() {
   /* The peripheral should be totally clear at this point. Since the TX FIFO is two slots deep,
      we're going to shovel in both bytes if we have a 16-bit address. Since the ISR only calls
      us back when the bus goes idle, we don't need to worry about tracking the extra IRQ. */
-  xfer_state = SPI_XFER_STATE_ADDR;
+  xfer_state = XferState::ADDR;
   if (bus_addr > 255) {
     //hspi1->DR = (uint8_t) (bus_addr >> 8);
   }
@@ -395,7 +409,7 @@ int8_t SPIBusOp::markComplete() {
 
   //time_ended = micros();
   total_transfers++;
-  xfer_state = SPI_XFER_STATE_COMPLETE;
+  xfer_state = XferState::COMPLETE;
   ((CPLDDriver*) cpld)->step_queues(false);
   return 0;
 }
@@ -407,9 +421,9 @@ int8_t SPIBusOp::markComplete() {
 * @param  cause A failure code to mark the operation with.
 * @return 0 on success. Non-zero on failure.
 */
-int8_t SPIBusOp::abort(uint8_t cause) {
+int8_t SPIBusOp::abort(XferFault cause) {
   SPIBusOp::failed_transfers++;
-  err_code = cause;
+  xfer_fault = cause;
   debug_log.concatf("SPI job aborted at state %s. Cause: %s.\n", getStateString(), getErrorString());
   printDebug(&debug_log);
   return markComplete();
@@ -432,15 +446,22 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
 
   /* These are our transfer-size-invariant cases. */
   switch (xfer_state) {
-    case SPI_XFER_STATE_COMPLETE:
+    case XferState::COMPLETE:
       //if (profile()) transition_time_COMPLETE     = micros();
-      abort(SPI_XFER_ERROR_HANGING_IRQ);
+      abort(XferFault::HUNG_IRQ);
       return 0;
 
+    case XferState::QUEUED:
+    case XferState::ADDR:
+    case XferState::IO_WAIT:
+    case XferState::STOP:
+    case XferState::FAULT:
+    case XferState::UNDEF:
+
     /* Below are the states that we shouldn't be in at this point... */
-    case SPI_XFER_STATE_INITIATE:
-    case SPI_XFER_STATE_IDLE:
-      abort(SPI_XFER_ERROR_ILLEGAL_STATE);
+    case XferState::INITIATE:
+    case XferState::IDLE:
+      abort(XferFault::ILLEGAL_STATE);
       return 0;
   }
 
@@ -450,18 +471,18 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
     */
     if (profile()) debug_log.concatf("IRQ  %s\t status: 0x%08x\n", getStateString(), (unsigned long) status_reg);
     switch (xfer_state) {
-      case SPI_XFER_STATE_ADDR:
+      case XferState::ADDR:
         break;
 
-      case SPI_XFER_STATE_STOP:
+      case XferState::STOP:
         markComplete();
         //if (profile()) transition_time_STOP = micros();
         break;
 
       /* Below are the states that we shouldn't be in at this point... */
-      case SPI_XFER_STATE_DMA_WAIT:
+      case XferState::IO_WAIT:
       default:
-        abort(SPI_XFER_ERROR_ILLEGAL_STATE);
+        abort(XferFault::ILLEGAL_STATE);
         break;
     }
   }
@@ -476,8 +497,8 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
     }
 
     switch (xfer_state) {
-      case SPI_XFER_STATE_ADDR:
-        xfer_state = SPI_XFER_STATE_DMA_WAIT;   // We will only ever end up here ONCE per job.
+      case XferState::ADDR:
+        xfer_state = XferState::IO_WAIT;   // We will only ever end up here ONCE per job.
 
         wait_with_timeout();    // Just in case the bus is still running (it ought not be).
 
@@ -492,32 +513,32 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
         enableSPI_DMA(true);
         break;
 
-      case SPI_XFER_STATE_DMA_WAIT:
+      case XferState::IO_WAIT:
         //if (profile()) transition_time_DMA_WAIT = micros();
         if (0 == __HAL_DMA_GET_COUNTER(&_dma_r_handle)) {
-          xfer_state = SPI_XFER_STATE_STOP;
+          xfer_state = XferState::STOP;
           if (HAL_DMA_GetState(&_dma_r_handle) == HAL_DMA_STATE_RESET) {
             markComplete();
           }
           else {
             //if (profile()) debug_log.concat("\t DMA looks sick...\n");
-            abort(SPI_XFER_ERROR_DMA_TIMEOUT);
+            abort(XferFault::DMA_FAULT);
           }
         }
         else {
           //if (profile()) debug_log.concatf("\tJob 0x%04x looks incomplete, but DMA is IRQ. Advancing state to STOP for next IRQ and hope.\n", txn_id);
           debug_log.concat("\tJob looks incomplete, but DMA is IRQ. Advancing state to STOP for next IRQ and hope.\n");
-          abort(SPI_XFER_ERROR_DMA_TIMEOUT); // TODO: WRONG
+          abort(XferFault::DMA_FAULT); // TODO: WRONG
         }
         break;
 
-      case SPI_XFER_STATE_STOP:
+      case XferState::STOP:
         //if (profile()) transition_time_STOP = micros();
         markComplete();
         break;
 
       default:
-        abort(SPI_XFER_ERROR_ILLEGAL_STATE);
+        abort(XferFault::ILLEGAL_STATE);
         break;
     }
   }
@@ -598,7 +619,7 @@ void SPIBusOp::printDebug(StringBuilder *output) {
   if (NULL == output) return;
   output->concatf("-----SPIBusOp 0x%08x (%s)------------\n", (uint32_t) this, getOpcodeString());
   output->concatf("\t xfer_state        %s\n\t err               %s\n", getStateString(), getErrorString());
-  //if (SPI_XFER_STATE_COMPLETE == xfer_state) {
+  //if (XferState::COMPLETE == xfer_state) {
   //  output->concatf("\t completed (uS)   %u\n",   (unsigned long) time_ended - time_began);
   //}
   output->concatf("\t callback set      %s\n", (callback ? "yes":"no"));
@@ -615,43 +636,4 @@ void SPIBusOp::printDebug(StringBuilder *output) {
     }
   }
   output->concat("\n\n");
-}
-
-
-/**
-* Logging support.
-*
-* @return a const char* containing a human-readable representation of the data.
-*/
-const char* SPIBusOp::getStateString() {
-  switch (xfer_state) {
-    case SPI_XFER_STATE_IDLE:        return "IDLE";
-    case SPI_XFER_STATE_INITIATE:    return "INITIATE";
-    case SPI_XFER_STATE_ADDR:        return "ADDR";
-    case SPI_XFER_STATE_DMA_WAIT:    return "DMA_WAIT";
-    case SPI_XFER_STATE_STOP:        return "STOP";
-    case SPI_XFER_STATE_COMPLETE:    return "COMPLETE";
-    default:                         return "<UNDEFINED STATE>";
-  }
-}
-
-
-/**
-* Logging support.
-*
-* @return a const char* containing a human-readable representation of the data.
-*/
-const char* SPIBusOp::getErrorString() {
-  switch (err_code) {
-    case SPI_XFER_ERROR_QUEUE_FLUSH:   return "QUEUE_FLUSH";
-    case SPI_XFER_ERROR_NONE:          return "NONE";
-    case SPI_XFER_ERROR_DMA_TIMEOUT:   return "DMA_TIMEOUT";
-    case SPI_XFER_ERROR_ILLEGAL_STATE: return "ILLEGAL_STATE";
-    case SPI_XFER_ERROR_HANGING_IRQ:   return "HANGING_IRQ";
-    case SPI_XFER_ERROR_BAD_XFER_PARM: return "BAD_XFER_PARM";
-    case SPI_XFER_ERROR_BUS_FAULT:     return "BUS_FAULT";
-    case SPI_XFER_ERROR_DMA_FAILURE:   return "DMA_FAILURE";
-    case SPI_XFER_ERROR_NO_REASON:     return "NO_REASON";
-    default:                           return "<UNDEFINED ERROR>";
-  }
 }

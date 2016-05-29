@@ -407,12 +407,17 @@ class IIU;
 #define CPLD_REG_CS_6          0x2E  // | RESERVED
 #define CPLD_REG_CS_7          0x2F  // | RESERVED
 
+/* Bitmask defs for the CONFIG register. */
+#define CPLD_CONF_BIT_EXT_CLK  0x01
+#define CPLD_CONF_BIT_GPIO_1   0x20
+#define CPLD_CONF_BIT_GPIO_0   0x40
+#define CPLD_CONF_BIT_DEN_AG_0 0x80
 
 
 /*
 * The CPLD driver class.
 */
-class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
+class CPLDDriver : public EventReceiver, public SPIOpCallback {
   public:
     SPIBusOp* current_queue_item = NULL;
 
@@ -428,7 +433,9 @@ class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
     void printDebug(StringBuilder*);
     int8_t notify(ManuvrRunnable*);
     int8_t callback_proc(ManuvrRunnable *);
-    void procDirectDebugInstruction(StringBuilder*);
+    #if defined(__MANUVR_CONSOLE_SUPPORT)
+      void procDirectDebugInstruction(StringBuilder*);
+    #endif  //__MANUVR_CONSOLE_SUPPORT
 
     /* Members related to the work queue... */
     int8_t advance_work_queue();
@@ -467,11 +474,11 @@ class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
     uint8_t   cpld_version       = 0; // CPLD Register. If zero, than the CPLD has not been initialized.
     uint8_t   cpld_conf_value    = 0; // CPLD register. Configuration.
     uint8_t   cpld_status_value  = 0; // CPLD register. Status.
+    uint8_t   cpld_wakeup_source = 0; // CPLD register. WAKEUP mapping.
     uint8_t   spi_cb_per_event   = 3; // Used to limit the number of callbacks processed per event.
 
     /* SPI and work queue related members */
     int  cpld_max_bus_queue_depth     = 300;     // Debug
-    int  spi_prescaler                = SPI_BAUDRATEPRESCALER_16;
 
     PriorityQueue<SPIBusOp*> work_queue;
     PriorityQueue<SPIBusOp*> callback_queue;
@@ -489,6 +496,8 @@ class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
     inline uint8_t _irq_offset_byte(int idx) {  return (idx >> 1);            };
     inline uint8_t _irq_offset_bit(int idx) {   return (idx << 2);            };
 
+    int8_t readRegister(uint8_t reg_addr);
+    int8_t writeRegister(uint8_t reg_addr, uint8_t val);
 
     void purge_queued_work();     // Flush the work queue.
     void purge_queued_work_by_dev(SPIOpCallback *dev);   // Flush the work queue by callback match

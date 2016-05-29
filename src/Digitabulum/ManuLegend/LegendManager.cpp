@@ -743,6 +743,7 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
 * Code in here only exists for as long as it takes to debug something. Don't write against these.
 ****************************************************************************************************/
 
+#if defined(__MANUVR_CONSOLE_SUPPORT)
 void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
@@ -1176,3 +1177,4 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
 
   if (local_log.length() > 0) {    Kernel::log(&local_log);  }
 }
+#endif  //__MANUVR_CONSOLE_SUPPORT

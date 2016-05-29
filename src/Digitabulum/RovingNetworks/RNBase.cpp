@@ -969,7 +969,7 @@ int8_t RNBase::notify(ManuvrRunnable *active_event) {
 }
 
 
-
+#if defined(__MANUVR_CONSOLE_SUPPORT)
 void RNBase::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
@@ -1077,3 +1077,4 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
 
   if (local_log.length() > 0) {    Kernel::log(&local_log);  }
 }
+#endif  //__MANUVR_CONSOLE_SUPPORT

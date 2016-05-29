@@ -35,11 +35,11 @@ volatile bool timeout_punch = false;
 void callback_spi_timeout() {
   if (timeout_punch) {
     if (((CPLDDriver*) cpld)->current_queue_item != NULL) {
-      if (((CPLDDriver*) cpld)->current_queue_item->complete()) {
+      if (((CPLDDriver*) cpld)->current_queue_item->isComplete()) {
         ((CPLDDriver*) cpld)->advance_work_queue();
       }
       else {
-        ((CPLDDriver*) cpld)->current_queue_item->abort(SPI_XFER_ERROR_BUS_FAULT);
+        ((CPLDDriver*) cpld)->current_queue_item->abort(XferFault::BUS_FAULT);
       }
       //dirty_bus = true;
     }
@@ -140,18 +140,13 @@ DMA_HandleTypeDef _dma_handle_spi2;
 /**
 * Constructor. Also populates the global pointer reference.
 */
-CPLDDriver::CPLDDriver() : SPIDeviceWithRegisters(0, 9) {
+CPLDDriver::CPLDDriver() {
   __class_initializer();
 
   if (NULL == cpld) {
     cpld = this;
     ManuvrMsg::registerMessages(cpld_message_defs, sizeof(cpld_message_defs) / sizeof(MessageTypeDef));
   }
-
-  // Definitions of CPLD registers.
-  reg_defs[0]   = DeviceRegister((bus_addr + CPLD_REG_VERSION), (uint8_t)  0b00000000, &cpld_conf_value,    false, false, false);
-  reg_defs[1]   = DeviceRegister((bus_addr + CPLD_REG_CONFIG),  (uint8_t)  0b00000000, &cpld_version,       false, false, true );
-  reg_defs[2]   = DeviceRegister((bus_addr + CPLD_REG_STATUS),  (uint8_t)  0b00000000, &cpld_version,       false, false, false);
 
   // Build some pre-formed Events.
   event_spi_callback_ready.repurpose(MANUVR_MSG_SPI_CB_QUEUE_READY);
@@ -365,7 +360,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   hspi1.Init.CLKPolarity = cpol_mode;
   hspi1.Init.CLKPhase = cpha_mode;
   hspi1.Init.NSS = SPI_NSS_HARD_OUTPUT;
-  hspi1.Init.BaudRatePrescaler = spi_prescaler;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLED;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
@@ -475,7 +470,7 @@ void CPLDDriver::reset() {
 */
 int8_t CPLDDriver::spi_op_callback(SPIBusOp* op) {
   // There is zero chance this object will be a null pointer unless it was done on purpose.
-  if (op->hasError()) {
+  if (op->hasFault()) {
     if (getVerbosity() > 3) local_log.concat("spi_op_callback() rejected a callback because the bus op failed.\n");
     return SPI_CALLBACK_ERROR;
   }
@@ -485,21 +480,42 @@ int8_t CPLDDriver::spi_op_callback(SPIBusOp* op) {
     return SPI_CALLBACK_ERROR;
   }
 
-  unsigned int value = regValue(op->reg_idx);
-  if (BusOpcode::RX == op->opcode) {
+  if (BusOpcode::RX == op->get_opcode()) {
     switch (op->reg_idx) {
       case CPLD_REG_VERSION:
-        reg_defs[0].unread = false;
-
-        if (getVerbosity() > 3) local_log.concatf("CPLD r%d.\n", value);
-        if (17 == value) {
+        if (getVerbosity() > 3) local_log.concatf("CPLD r%d.\n", cpld_version);
+        if (0 < cpld_version) {
           Kernel::raiseEvent(DIGITABULUM_MSG_CPLD_RESET_COMPLETE, NULL);
         }
+        else {
+          if (getVerbosity() > 1) local_log.concatf("CPLD returned a bad version code: 0x%02x\n", cpld_version);
+        }
+        break;
+      case CPLD_REG_CONFIG:
+        break;
+      case CPLD_REG_STATUS:
+        break;
+      case CPLD_REG_WAKEUP_IRQ:
+        break;
+      default:
+        if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->reg_idx);
         break;
     }
   }
-  else if (BusOpcode::TX == op->opcode) {
-    reg_defs[op->reg_idx].dirty = false;
+  else if (BusOpcode::TX == op->get_opcode()) {
+    switch (op->reg_idx) {
+      case CPLD_REG_VERSION:
+      case CPLD_REG_STATUS:
+        if (getVerbosity() > 2) local_log.concat("An SPIBusOp called back as having written to an RO register.\n");
+        break;
+      case CPLD_REG_CONFIG:
+        break;
+      case CPLD_REG_WAKEUP_IRQ:
+        break;
+      default:
+        if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->reg_idx);
+        break;
+    }
   }
 
   if (local_log.length() > 0) Kernel::log(&local_log);
@@ -523,12 +539,12 @@ int8_t CPLDDriver::queue_spi_job(SPIBusOp* op) {
       op->profile(true);
     }
 
-    if (op->xfer_state != SPI_XFER_STATE_IDLE) {
+    if (op->get_state() != XferState::IDLE) {
       if (getVerbosity() > 3) Kernel::log("Tried to fire a pre-formed bus op that is not in IDLE state.\n");
       return -4;
     }
 
-    op->xfer_state = SPI_XFER_STATE_INITIATE;
+    op->set_state(XferState::INITIATE);
 
     if ((NULL == current_queue_item) && (work_queue.size() == 0)){
       // If the queue is empty, fire the operation now.
@@ -541,7 +557,7 @@ int8_t CPLDDriver::queue_spi_job(SPIBusOp* op) {
     else {    // If there is something already in progress, queue up.
       if (_er_flag(CPLD_FLAG_QUEUE_GUARD) && (cpld_max_bus_queue_depth <= work_queue.size())) {
         if (getVerbosity() > 3) Kernel::log("CPLDDriver::queue_spi_job(): \t Bus queue at max size. Dropping transaction.\n");
-        op->abort(SPI_XFER_ERROR_QUEUE_FLUSH);
+        op->abort(XferFault::QUEUE_FLUSH);
         callback_queue.insertIfAbsent(op);
         if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
         return -1;
@@ -588,7 +604,7 @@ int8_t CPLDDriver::service_callback_queue() {
       int8_t cb_code = temp_op->callback->spi_op_callback(temp_op);
       switch (cb_code) {
         case SPI_CALLBACK_RECYCLE:
-          temp_op->set_state(SPI_XFER_STATE_IDLE);
+          temp_op->set_state(XferState::IDLE);
           queue_spi_job(temp_op);
           break;
 
@@ -631,19 +647,19 @@ int8_t CPLDDriver::advance_work_queue() {
       current_queue_item->printDebug(&local_log);
     }
 
-    switch (current_queue_item->xfer_state) {
-       case SPI_XFER_STATE_IDLE:
+    switch (current_queue_item->get_state()) {
+       case XferState::IDLE:
          if (getVerbosity() > 1) local_log.concat("Not sure how this bus job got here, but it is wrong.\n");
          current_queue_item->printDebug(&local_log);
          break;
 
-       case SPI_XFER_STATE_COMPLETE:
+       case XferState::COMPLETE:
          callback_queue.insert(current_queue_item);
          current_queue_item = NULL;
          if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
          break;
 
-       case SPI_XFER_STATE_INITIATE:
+       case XferState::INITIATE:
          switch (current_queue_item->begin()) {
            case 0:     // Nominal outcome. Transfer started with no problens...
              break;
@@ -662,9 +678,9 @@ int8_t CPLDDriver::advance_work_queue() {
          }
          break;
        /* Cases below ought to be handled by ISR flow... */
-       case SPI_XFER_STATE_ADDR:
-       case SPI_XFER_STATE_STOP:
-       case SPI_XFER_STATE_DMA_WAIT:
+       case XferState::ADDR:
+       case XferState::STOP:
+       case XferState::IO_WAIT:
          if (getVerbosity() > 5) local_log.concatf("State might be corrupted if we tried to advance_queue(). \n");
          break;
        default:
@@ -705,7 +721,7 @@ void CPLDDriver::purge_queued_work_by_dev(SPIOpCallback *dev) {
     while (i < work_queue.size()) {
       current = work_queue.get(i);
       if (current->callback == dev) {
-        current->abort(SPI_XFER_ERROR_QUEUE_FLUSH);
+        current->abort(XferFault::QUEUE_FLUSH);
         work_queue.remove(current);
         reclaim_queue_item(current);
       }
@@ -728,7 +744,7 @@ void CPLDDriver::purge_queued_work() {
   SPIBusOp* current = NULL;
   while (work_queue.hasNext()) {
     current = work_queue.dequeue();
-    current->abort(SPI_XFER_ERROR_QUEUE_FLUSH);
+    current->abort(XferFault::QUEUE_FLUSH);
     reclaim_queue_item(current);
   }
 
@@ -760,7 +776,7 @@ SPIBusOp* CPLDDriver::issue_spi_op_obj() {
 * @param item The SPIBusOp to be reclaimed.
 */
 void CPLDDriver::reclaim_queue_item(SPIBusOp* op) {
-  if (op->hasError() && (getVerbosity() > 1)) {    // Print failures.
+  if (op->hasFault() && (getVerbosity() > 1)) {    // Print failures.
     StringBuilder log;
     op->printDebug(&log);
     Kernel::log(&log);
@@ -781,7 +797,7 @@ void CPLDDriver::reclaim_queue_item(SPIBusOp* op) {
        and wants us to ignore the memory cleanup. But we should at least set it
        back to IDLE.*/
     if (getVerbosity() > 6) local_log.concatf("CPLDDriver::reclaim_queue_item(): \t Dropping....\n");
-    op->set_state(SPI_XFER_STATE_IDLE);
+    op->set_state(XferState::IDLE);
   }
 
   if (local_log.length() > 0) Kernel::log(&local_log);
@@ -790,7 +806,7 @@ void CPLDDriver::reclaim_queue_item(SPIBusOp* op) {
 
 void CPLDDriver::purge_stalled_job() {
   if (current_queue_item != NULL) {
-    current_queue_item->abort(SPI_XFER_ERROR_QUEUE_FLUSH);
+    current_queue_item->abort(XferFault::QUEUE_FLUSH);
     reclaim_queue_item(current_queue_item);
     current_queue_item = NULL;
   }
@@ -798,6 +814,60 @@ void CPLDDriver::purge_stalled_job() {
 
 
 
+int8_t CPLDDriver::readRegister(uint8_t reg_addr) {
+  uint8_t* _real_addr;
+  switch (reg_addr) {
+    case CPLD_REG_VERSION:
+      _real_addr = &cpld_version;
+      break;
+    case CPLD_REG_CONFIG:
+      _real_addr = &cpld_conf_value;
+      break;
+    case CPLD_REG_STATUS:
+      _real_addr = &cpld_status_value;
+      break;
+    case CPLD_REG_WAKEUP_IRQ:
+      _real_addr = &cpld_wakeup_source;
+      break;
+    default:
+      return -1;
+  }
+  SPIBusOp* temp = issue_spi_op_obj();
+  temp->set_opcode(BusOpcode::RX);
+  temp->setParams(reg_addr | 0x80);  // Set the READ bit...
+  temp->buf     = _real_addr;
+  temp->buf_len = 1;
+
+  queue_spi_job(temp);
+  return 0;
+}
+
+
+int8_t CPLDDriver::writeRegister(uint8_t reg_addr, uint8_t val) {
+  uint8_t* _real_addr;
+  switch (reg_addr) {
+    case CPLD_REG_CONFIG:
+      _real_addr = &cpld_conf_value;
+      break;
+    case CPLD_REG_WAKEUP_IRQ:
+      _real_addr = &cpld_wakeup_source;
+      break;
+
+    case CPLD_REG_VERSION:
+    case CPLD_REG_STATUS:
+      // Cannot write to these registers...
+    default:
+      return -1;
+  }
+  SPIBusOp* temp = issue_spi_op_obj();
+  temp->set_opcode(BusOpcode::TX);
+  temp->setParams(reg_addr, val);
+  temp->buf     = _real_addr;
+  temp->buf_len = 2;
+
+  queue_spi_job(temp);
+  return 0;
+}
 
 
 
@@ -999,7 +1069,7 @@ volatile void CPLDDriver::irqService_vect_0(void) {
 */
 void CPLDDriver::externalOscillator(bool on) {
   _er_set_flag(CPLD_FLAG_EXT_OSC, on);
-  // TODO: Enable the timer, connect it to GPIO, and set the config register in the CPLD.
+  // TODO: Enable the timer, connect it to GPIO.
 }
 
 
@@ -1011,6 +1081,12 @@ void CPLDDriver::internalOscillator(bool on) {
   _er_set_flag(CPLD_FLAG_INT_OSC, on);
   // TODO: Set the config register in the CPLD, and when the callback arrives,
   //         disable the timer, and disconnect it from GPIO.
+  if (!on) {
+    // If we are about to disable the internal oscillator, be sure to fire up
+    //   the external clock first. Otherwise, the transfer will never complete.
+    externalOscillator(true);
+  }
+  setCPLDConfig(CPLD_CONF_BIT_EXT_CLK, on);
 }
 
 
@@ -1019,13 +1095,11 @@ void CPLDDriver::internalOscillator(bool on) {
 */
 void CPLDDriver::setCPLDConfig(uint8_t mask, bool state) {
   if (state) {
-    cpld_conf_value |= mask;
+    writeRegister(CPLD_REG_CONFIG, (cpld_conf_value | mask));
   }
   else {
-    cpld_conf_value &= ~mask;
+    writeRegister(CPLD_REG_CONFIG, (cpld_conf_value & ~mask));
   }
-  reg_defs[1].set(cpld_conf_value);
-  writeRegister(&reg_defs[1]);
 }
 
 
@@ -1033,11 +1107,10 @@ void CPLDDriver::setCPLDConfig(uint8_t mask, bool state) {
 * Reads and returns the CPLD version. We need to use this for keeping
 *   compatability with older CPLD versions.
 */
-uint8_t CPLDDriver::getCPLDVersion(void) {
-  readRegister((uint8_t) 0);
+uint8_t CPLDDriver::getCPLDVersion() {
+  readRegister(CPLD_REG_VERSION);
   return cpld_version;
 }
-
 
 
 
@@ -1089,7 +1162,7 @@ uint16_t CPLDDriver::readInternalStates(void) {
 *
 * @return a pointer to a string constant.
 */
-const char* CPLDDriver::getReceiverName() {  return "CPLDDriver";  }
+const char* CPLDDriver::getReceiverName() {  return "CPLD";  }
 
 
 /**
@@ -1109,27 +1182,6 @@ void CPLDDriver::printDebug(StringBuilder *output) {
   output->concatf("--- IRQ service:        %sabled\n---\n",   (_er_flag(CPLD_FLAG_SVC_IRQS)?"en":"dis"));
 
   output->concat("\n--- SPI BUS\n-------------------------------------------------------\n");
-  if (getVerbosity() > 4) {
-    const char* prescale_text;
-    switch (spi_prescaler) {
-      case SPI_BAUDRATEPRESCALER_16:
-        prescale_text = "16";
-        break;
-      case SPI_BAUDRATEPRESCALER_32:
-        prescale_text = "32";
-        break;
-      case SPI_BAUDRATEPRESCALER_64:
-        prescale_text = "64";
-        break;
-      case SPI_BAUDRATEPRESCALER_256:
-        prescale_text = "256";
-        break;
-      default:
-        prescale_text = "<UNKNOWN>";
-        break;
-    }
-    output->concatf("--- SPI Prescaler       %s\n--\n",       prescale_text);
-  }
   if (getVerbosity() > 2) {
     output->concatf("--- Prevent queue flood %s\n",       (_er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no"));
     output->concatf("--- spi_cb_per_event    %d\n---\n",       spi_cb_per_event);
@@ -1162,7 +1214,7 @@ void CPLDDriver::printDebug(StringBuilder *output) {
 }
 
 
-
+#if defined(__MANUVR_CONSOLE_SUPPORT)
 void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
@@ -1180,9 +1232,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
         getCPLDVersion();
       }
       else if (temp_byte == 2) {
-        dumpDevRegs(&local_log);
-      }
-      else if (temp_byte == 3) {
         readInternalStates();
       }
       else {
@@ -1231,34 +1280,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
         case 2:
           _er_flip_flag(CPLD_FLAG_SVC_IRQS);
           local_log.concatf("CPLD servicing IRQs?  %s\n", _er_flag(CPLD_FLAG_SVC_IRQS)?"yes":"no");
-          break;
-        case 16:
-          spi_prescaler = SPI_BAUDRATEPRESCALER_16;
-          local_log.concatf("Reset and SPI re-init with prescaler 16...\n");
-          init_spi(1, 0);  // COL=1, CPHA=0
-          SPIBusOp::spi_wait_timeout = 18;
-          reset();
-          break;
-        case 32:
-          spi_prescaler = SPI_BAUDRATEPRESCALER_32;
-          local_log.concatf("Reset and SPI re-init with prescaler 32...\n");
-          init_spi(1, 0);  // COL=1, CPHA=0
-          SPIBusOp::spi_wait_timeout = 38;
-          reset();
-          break;
-        case 64:
-          spi_prescaler = SPI_BAUDRATEPRESCALER_64;
-          local_log.concatf("Reset and SPI re-init with prescaler 64...\n");
-          init_spi(1, 0);  // COL=1, CPHA=0
-          SPIBusOp::spi_wait_timeout = 76;
-          reset();
-          break;
-        case 255:
-          spi_prescaler = SPI_BAUDRATEPRESCALER_256;
-          local_log.concatf("Reset and SPI re-init with prescaler 256.\n");
-          init_spi(1, 0);  // COL=1, CPHA=0
-          SPIBusOp::spi_wait_timeout = 160;
-          reset();
           break;
         default:
           break;
@@ -1319,8 +1340,29 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
-    case ']':
+    case '+':
       local_log.concatf("Advanced CPLD SPI work queue.\n");
+      Kernel::raiseEvent(MANUVR_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
+      break;
+
+    case '-':
+    case '_':
+      local_log.concatf("%s CPLD_DEN_AG_0.\n", (*(str) == '_' ? "Clearing" : "Setting"));
+      setCPLDConfig(CPLD_CONF_BIT_DEN_AG_0, (*(str) == '-'));
+      Kernel::raiseEvent(MANUVR_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
+      break;
+
+    case '[':
+    case '{':
+      local_log.concatf("%s CPLD_GPIO_0.\n", (*(str) == '[' ? "Clearing" : "Setting"));
+      setCPLDConfig(CPLD_CONF_BIT_GPIO_0, (*(str) == '{'));
+      Kernel::raiseEvent(MANUVR_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
+      break;
+
+    case ']':
+    case '}':
+      local_log.concatf("%s CPLD_GPIO_0.\n", (*(str) == ']' ? "Clearing" : "Setting"));
+      setCPLDConfig(CPLD_CONF_BIT_GPIO_1, (*(str) == '}'));
       Kernel::raiseEvent(MANUVR_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
       break;
 
@@ -1331,3 +1373,4 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
 
   if (local_log.length() > 0) {    Kernel::log(&local_log);  }
 }
+#endif  //__MANUVR_CONSOLE_SUPPORT

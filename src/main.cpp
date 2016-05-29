@@ -174,7 +174,9 @@ static void CDC_Device(void) {
 			//TM_USBD_CDC_Putc(TM_USB_FS, ch);
       if ((ch == '\r') || (ch == '\n') || (ch == '\0')) {
         TM_USBD_CDC_Putc(TM_USB_FS, '\n');
-        kernel->accumulateConsoleInput((uint8_t*)_cmd_buf, strlen(_cmd_buf), true);
+        #if defined(__MANUVR_CONSOLE_SUPPORT)
+          kernel->accumulateConsoleInput((uint8_t*)_cmd_buf, strlen(_cmd_buf), true);
+        #endif  // __MANUVR_CONSOLE_SUPPORT
         _cmd_buf_ptr = 0;
         for (int i = 0; i < CMD_BUFF_SIZE; i++) *(_cmd_buf + i) = '\0';
       }

@@ -122,7 +122,7 @@ void BTQueuedOperation::wipe() {
   this->opcode     = BusOpcode::UNDEF;
   this->tx_buf     = NULL;
   this->tx_len     = 0;
-  this->txn_id     = 0; //randomInt();
+  this->txn_id     = BusOp::next_txn_id++;
   data.clear();
 }
 

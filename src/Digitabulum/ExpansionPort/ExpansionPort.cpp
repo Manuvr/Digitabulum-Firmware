@@ -42,17 +42,6 @@ ExpansionPort::~ExpansionPort() {
 
 
 void ExpansionPort::gpioSetup() {
-  GPIO_InitTypeDef GPIO_InitStruct;
-
-  // GPIO for haptic vibrators...
-  // PB10     ------> TIM2_CH3
-  // PB11     ------> TIM2_CH4
-  GPIO_InitStruct.Pin       = GPIO_PIN_10|GPIO_PIN_11;
-  GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull      = GPIO_NOPULL;
-  GPIO_InitStruct.Speed     = GPIO_SPEED_LOW;
-  GPIO_InitStruct.Alternate = GPIO_AF1_TIM2;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 }
 
 
@@ -148,9 +137,8 @@ int8_t ExpansionPort::notify(ManuvrRunnable *active_event) {
 }
 
 
-
+#if defined(__MANUVR_CONSOLE_SUPPORT)
 void ExpansionPort::procDirectDebugInstruction(StringBuilder *input) {
-#ifdef __MANUVR_CONSOLE_SUPPORT
   char* str = input->position(0);
 
   switch (*(str)) {
@@ -160,6 +148,7 @@ void ExpansionPort::procDirectDebugInstruction(StringBuilder *input) {
       #endif
       break;
   }
-#endif
+
   if (local_log.length() > 0) {    Kernel::log(&local_log);  }
 }
+#endif  //__MANUVR_CONSOLE_SUPPORT

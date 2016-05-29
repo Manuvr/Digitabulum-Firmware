@@ -205,19 +205,16 @@ int8_t SDCard::notify(ManuvrRunnable *active_event) {
 }
 
 
+#if defined(__MANUVR_CONSOLE_SUPPORT)
 void SDCard::procDirectDebugInstruction(StringBuilder *input) {
-#ifdef __MANUVR_CONSOLE_SUPPORT
   char* str = input->position(0);
 
   switch (*(str)) {
-    case 'f':
-      break;
     default:
-      #ifdef __MANUVR_DEBUG
       EventReceiver::procDirectDebugInstruction(input);
-      #endif
       break;
   }
-#endif
+
   if (local_log.length() > 0) {    Kernel::log(&local_log);  }
 }
+#endif  //__MANUVR_CONSOLE_SUPPORT
