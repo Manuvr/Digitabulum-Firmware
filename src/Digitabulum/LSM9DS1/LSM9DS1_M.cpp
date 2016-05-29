@@ -205,8 +205,8 @@ LSM9DS1_M::LSM9DS1_M(uint8_t address, IIU* _integrator) : LSM9DSx_Common("GY ", 
   /* Interrupt discovery. */
   preformed_busop_irq_mag.shouldReap(false);
   preformed_busop_irq_mag.devRegisterAdvance(false);
+  preformed_busop_irq_mag.set_opcode(BusOpcode::RX);
   preformed_busop_irq_mag.callback = (SPIDeviceWithRegisters*) this;
-  preformed_busop_irq_mag.opcode   = BusOpcode::RX;
   preformed_busop_irq_mag.reg_idx  = LSM9DS1_M_INT_SRC;
   preformed_busop_irq_mag.bus_addr = reg_defs[preformed_busop_irq_mag.reg_idx].addr | 0xC0;
   preformed_busop_irq_mag.buf      = reg_defs[preformed_busop_irq_mag.reg_idx].val;
@@ -214,8 +214,8 @@ LSM9DS1_M::LSM9DS1_M(uint8_t address, IIU* _integrator) : LSM9DSx_Common("GY ", 
 
   preformed_busop_read_mag.shouldReap(false);
   preformed_busop_read_mag.devRegisterAdvance(true);
+  preformed_busop_read_mag.set_opcode(BusOpcode::RX);
   preformed_busop_read_mag.callback = (SPIDeviceWithRegisters*) this;
-  preformed_busop_read_mag.opcode   = BusOpcode::RX;
   preformed_busop_read_mag.reg_idx  = LSM9DS1_M_DATA_X;
   preformed_busop_read_mag.bus_addr = reg_defs[preformed_busop_read_mag.reg_idx].addr | 0xC0;
   preformed_busop_read_mag.buf      = reg_defs[preformed_busop_read_mag.reg_idx].val;
@@ -458,7 +458,7 @@ int8_t LSM9DS1_M::spi_op_callback(SPIBusOp* op) {
       op->printDebug(&local_log);
       Kernel::log(&local_log);
     }
-    error_condition = (BusOpcode::RX == op->opcode) ? IMU_ERROR_BUS_OPERATION_FAILED_R : IMU_ERROR_BUS_OPERATION_FAILED_W;
+    error_condition = (BusOpcode::RX == op->get_opcode()) ? IMU_ERROR_BUS_OPERATION_FAILED_R : IMU_ERROR_BUS_OPERATION_FAILED_W;
 
     // TODO: Should think carefully, and...   return_value = SPI_CALLBACK_RECYCLE;   // Re-run the job.
     return SPI_CALLBACK_ERROR;
@@ -471,7 +471,7 @@ int8_t LSM9DS1_M::spi_op_callback(SPIBusOp* op) {
 
   /* Our first choice is: Did we just finish a WRITE or a READ? */
   /* READ Case-offs */
-  if (BusOpcode::RX == op->opcode) {
+  if (BusOpcode::RX == op->get_opcode()) {
     while ((access_len > 0) && (access_idx < reg_count)) {
       value = regValue(access_idx);
       access_len -= reg_defs[access_idx].len;   // Subtract the length.
@@ -550,7 +550,7 @@ int8_t LSM9DS1_M::spi_op_callback(SPIBusOp* op) {
 
 
   /* WRITE Case-offs */
-  else if (BusOpcode::TX == op->opcode) {
+  else if (BusOpcode::TX == op->get_opcode()) {
     while ((access_len > 0) && (access_idx < reg_count)) {
       value = regValue(access_idx);
       access_len -= reg_defs[access_idx].len;   // Subtract the length.

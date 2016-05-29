@@ -486,7 +486,7 @@ int8_t CPLDDriver::spi_op_callback(SPIBusOp* op) {
   }
 
   unsigned int value = regValue(op->reg_idx);
-  if (BusOpcode::RX == op->opcode) {
+  if (BusOpcode::RX == op->get_opcode()) {
     switch (op->reg_idx) {
       case CPLD_REG_VERSION:
         reg_defs[0].unread = false;
@@ -498,7 +498,7 @@ int8_t CPLDDriver::spi_op_callback(SPIBusOp* op) {
         break;
     }
   }
-  else if (BusOpcode::TX == op->opcode) {
+  else if (BusOpcode::TX == op->get_opcode()) {
     reg_defs[op->reg_idx].dirty = false;
   }
 
@@ -523,12 +523,12 @@ int8_t CPLDDriver::queue_spi_job(SPIBusOp* op) {
       op->profile(true);
     }
 
-    if (op->xfer_state != XferState::IDLE) {
+    if (op->get_state() != XferState::IDLE) {
       if (getVerbosity() > 3) Kernel::log("Tried to fire a pre-formed bus op that is not in IDLE state.\n");
       return -4;
     }
 
-    op->xfer_state = XferState::INITIATE;
+    op->set_state(XferState::INITIATE);
 
     if ((NULL == current_queue_item) && (work_queue.size() == 0)){
       // If the queue is empty, fire the operation now.
@@ -631,7 +631,7 @@ int8_t CPLDDriver::advance_work_queue() {
       current_queue_item->printDebug(&local_log);
     }
 
-    switch (current_queue_item->xfer_state) {
+    switch (current_queue_item->get_state()) {
        case XferState::IDLE:
          if (getVerbosity() > 1) local_log.concat("Not sure how this bus job got here, but it is wrong.\n");
          current_queue_item->printDebug(&local_log);

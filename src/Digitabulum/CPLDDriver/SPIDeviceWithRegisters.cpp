@@ -57,10 +57,10 @@ int8_t SPIDeviceWithRegisters::writeRegister(DeviceRegister *reg) {
 
   uint8_t first_byte = reg->addr;
   SPIBusOp* op = ((CPLDDriver*)cpld)->issue_spi_op_obj();
-  op->opcode     = BusOpcode::TX;
   op->buf        = reg->val;
   op->buf_len    = reg->len;
   op->bus_addr   = (bus_addr + first_byte);
+  op->set_opcode(BusOpcode::TX);
 
   for (int i = 0; i < reg_count; i++) {
     if (reg == (reg_defs + (sizeof(DeviceRegister) * i))) {
@@ -100,11 +100,11 @@ int8_t SPIDeviceWithRegisters::writeRegister(uint8_t idx, unsigned int nu_val, b
   SPIBusOp* op;
   if (!defer) {
     op = ((CPLDDriver*)cpld)->issue_spi_op_obj();
-    op->opcode     = BusOpcode::TX;
     op->buf        = reg->val;
     op->buf_len    = reg->len;
     op->bus_addr   = (bus_addr + first_byte);
     op->reg_idx    = idx;
+    op->set_opcode(BusOpcode::TX);
     return SPIDeviceWithRegisters::queue_spi_job(op);
   }
 
@@ -123,7 +123,7 @@ int8_t SPIDeviceWithRegisters::readRegister(uint8_t idx) {
   DeviceRegister *reg = &reg_defs[idx];
   uint8_t first_byte = reg->addr;
   SPIBusOp* op = ((CPLDDriver*)cpld)->issue_spi_op_obj();
-  op->opcode     = BusOpcode::RX;
+  op->set_opcode(BusOpcode::RX);
   op->buf        = reg->val;
   op->buf_len    = reg->len;
   op->bus_addr   = (bus_addr + first_byte);
@@ -140,7 +140,7 @@ int8_t SPIDeviceWithRegisters::readRegister(DeviceRegister *reg) {
 
   uint8_t first_byte = reg->addr;
   SPIBusOp* op = ((CPLDDriver*)cpld)->issue_spi_op_obj();
-  op->opcode     = BusOpcode::RX;
+  op->set_opcode(BusOpcode::RX);
   op->buf        = reg->val;
   op->buf_len    = reg->len;
   op->bus_addr   = (bus_addr + first_byte);

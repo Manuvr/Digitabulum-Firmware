@@ -57,13 +57,11 @@ class SPIOpCallback;
 /*
 * This class represents a single transaction on the bus.
 */
-class SPIBusOp {
+class SPIBusOp : public BusOp {
   public:
     //TODO: This is the new mechanism: uint8_t  xfer_params[4];                      // The address transfer lengths, preamble, etc...
     uint8_t* buf            = NULL;               // Pointer to the data buffer for the transaction.
     SPIOpCallback* callback = NULL;               // Which class gets pinged when we've finished?
-    XferState xfer_state = XferState::UNDEF;      // What state is this transfer in?
-    BusOpcode  opcode    = BusOpcode::UNDEF;      // What is the particular operation being done?
     uint8_t  bus_addr    = 0x0000;                // The address that this operation is directed toward.
     int16_t  reg_idx     = -1;                    // Optional register index. Makes callbacks faster.
     uint8_t  buf_len        = 0;                  // How large is the above buffer?
@@ -100,7 +98,6 @@ class SPIBusOp {
     /**
     * @return true if this operation experienced any abnormal condition.
     */
-    inline bool isIdle() {       return (XferState::IDLE     == xfer_state);  }
     inline bool complete() {     return (XferState::COMPLETE == xfer_state);  }
     bool set_state(XferState);  // Set the state of this operation.
 
@@ -147,8 +144,6 @@ class SPIBusOp {
 
     /* Logging support */
     const char* getErrorString();
-    inline const char* getOpcodeString() {  return BusOp::getOpcodeString(opcode);     };
-    inline const char* getStateString() {   return BusOp::getStateString(xfer_state);  };
 
 
     static uint32_t  total_transfers;

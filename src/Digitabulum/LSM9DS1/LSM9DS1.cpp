@@ -384,7 +384,7 @@ int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t le
 
     SPIBusOp* op = ((CPLDDriver*)cpld)->issue_spi_op_obj();
     op->devRegisterAdvance(advance_regs);
-    op->opcode          = BusOpcode::TX;
+    op->set_opcode(BusOpcode::TX);
     op->buf             = buf;
     op->buf_len         = len;
     op->bus_addr        = (bus_addr + first_byte);
@@ -448,7 +448,7 @@ int8_t LSM9DSx_Common::readRegister(uint8_t reg_index, uint8_t *buf, uint8_t len
 
   SPIBusOp* op = ((CPLDDriver*)cpld)->issue_spi_op_obj();
   op->devRegisterAdvance(advance_regs);
-  op->opcode          = BusOpcode::RX;
+  op->set_opcode(BusOpcode::RX);
   op->buf             = buf;
   op->buf_len         = len;
   op->bus_addr        = (bus_addr + first_byte);
@@ -528,7 +528,7 @@ bool LSM9DSx_Common::fire_preformed_bus_op(SPIBusOp* op) {
 * @return true on success. False on failure.
 */
 bool LSM9DSx_Common::reset_preformed_queue_item(SPIBusOp* op) {
-  switch (op->xfer_state) {
+  switch (op->get_state()) {
     case XferState::IDLE:
       break;
     case XferState::INITIATE:
