@@ -48,7 +48,9 @@ Altera's software is required to build the CPLD. It is presently outside the sco
 
 ----------------------
 ####License
-Apache License, Version 2.0
+Original code is Apache 2.0.
+
+Code adapted from others' work inherits their license terms, which were preserved in the commentary where it applies.
 
 ----------------------
 ####Cred:
