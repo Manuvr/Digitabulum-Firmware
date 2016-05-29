@@ -32,11 +32,12 @@ TODO: This class is in SORE need of the following things:
 #ifndef __RNBASE_H__
 #define __RNBASE_H__
 
-#include <stm32f7xx.h>
-
+#include <inttypes.h>
+#include <DataStructures/PriorityQueue.h>
+#include "BTQueuedOperation.h"
+#include <Drivers/BusQueue/BusQueue.h>
 #include <Kernel.h>
-#include "Transports/ManuvrXport.h"
-#include "DataStructures/PriorityQueue.h"
+#include <Transports/ManuvrXport.h>
 
 
 // Bluetooth Modes
@@ -66,7 +67,6 @@ TODO: This class is in SORE need of the following things:
 #define RNBASE_CMD_GET_STOR_BT_ADDR "GR\r\n"   // Gets the BT MAC of the currently bound device.
 
 
-
 #define RNBASE_PROTO_SPP            "AW\r\n"
 
 // Responses that we might get back from the module.
@@ -79,14 +79,23 @@ TODO: This class is in SORE need of the following things:
 // These are only relevant for debug.
 #define RNBASE_MAX_QUEUE_PRINT 3
 
+// Resting memory load parameters.
+#define PREALLOCATED_BT_Q_OPS    4    // How many data-carriers should we preallocate?
+#define RNBASE_MAX_BT_Q_DEPTH    5    //
+
 
 /*
-* These are the opcodes that we use to represent different types of messages to the RN.
+* These state flags are hosted by the EventReceiver. This may change in the future.
+* Might be too much convention surrounding their assignment across inherritence.
 */
-#define RNBASE_OP_CODE_UNDEFINED       0x00  //
-#define RNBASE_OP_CODE_TX              0x01  // Counterparty-bound message. No waiting for a reply. Session takes it.
-#define RNBASE_OP_CODE_CMD_TX          0x02  // Meant for the RN (command mode).
-#define RNBASE_OP_CODE_CMD_TX_WAIT_RX  0x03  // Meant for the RN (command mode).
+#define RNBASE_FLAG_LOCK_OUT  0x01    // While this is true, don't interact with the RN.
+#define RNBASE_FLAG_CMD_MODE  0x02    // Set when the module is verified to be in command mode.
+#define RNBASE_FLAG_CMD_PEND  0x04    // Set when we are expecting the module to enter command mode.
+#define RNBASE_FLAG_AUTOCONN  0x08    // Should we connect whenever possible?
+#define RNBASE_FLAG_REST_PEND 0x10    // Is a reset pending?
+#define RNBASE_FLAG_FORCE9600 0x20    // Are we forced into 9600 mode?
+#define RNBASE_FLAG_RESERVED0 0x40    //
+#define RNBASE_FLAG_RESERVED1 0x80    //
 
 
 #define RNBASE_CMD_PRIORITY      10   // Command transactions must have a higher priority than CP messages so the queue doesn't block.
@@ -95,76 +104,7 @@ TODO: This class is in SORE need of the following things:
 #define RNBASE_DEFAULT_PRIORITY  2    // New CP messages have a low priority, and will stack in their natural order.
 
 
-#define PREALLOCATED_BT_Q_OPS    4    // How many data-carriers should we preallocate?
-#define RNBASE_MAX_BT_Q_DEPTH    5    //
-
 #define CHARACTER_CHRONOLOGICAL_BREAK 50   // How many ms must pass before we consider the read buffer flushable?
-
-// Forward declarations...
-class RNBase;
-
-
-/*
-* This is the class that represents an item in the work queue.
-*/
-class BTQueuedOperation {
-
-  public:
-    StringBuilder data;       // Might need a raw buffer on the way to DMA...
-
-    uint8_t *tx_buf = NULL;
-    uint32_t tx_len = 0;
-    int       txn_id;          // How are we going to keep track of this item?
-
-    uint16_t  xenomsg_id = 0;
-    uint8_t   opcode;          // What is the nature of this work-queue item?
-
-    bool      completed;       // Can this buffer be reaped?
-    bool      initiated;       // Is this item fresh or is it waiting on a reply?
-
-
-    BTQueuedOperation();
-    BTQueuedOperation(uint8_t nu_op);
-    BTQueuedOperation(uint8_t nu_op, StringBuilder* nu_data);
-    /* Specialized constructor for direct buffer spec. */
-    BTQueuedOperation(uint8_t nu_op, unsigned char *nu_data, uint16_t nu_len);
-
-    ~BTQueuedOperation(void);
-
-    void set_data(uint8_t, StringBuilder*);
-
-    /*
-    * This queue item can begin executing. This is where any bus access should be initiated.
-    */
-    int8_t begin();
-
-    /* Call to mark something completed that may not be. */
-    int8_t abort();
-
-    /* Call to mark complete and follow the nominal message path. */
-    int8_t mark_complete();
-
-    void wipe();
-
-    void printDebug(StringBuilder *);
-
-    static void buildDMAMembers();
-
-
-  private:
-    /*
-    * This is actually the function that does the work of sending things to
-    *   the counterparty. It is to be the last stop for a buffer prior to being fed
-    *   to USART2's DMA channel.
-    */
-    int8_t init_dma();
-
-
-    static const char* getOpcodeString(uint8_t code);
-    static void enable_DMA_IRQ(bool);
-};
-
-
 
 
 /*
@@ -218,19 +158,17 @@ class RNBase : public ManuvrXport {
     volatile static void isr_bt_queue_ready();
     volatile static void bt_gpio_5(unsigned long);
 
-    static void hostRxFlush(void);
+    static void hostRxFlush();
     static void expire_lockout();
-    static void unreset(void);
+    static void unreset();
 
     static inline RNBase* getInstance() { return (RNBase*)INSTANCE; };
 
 
   protected:
     int configured_bitrate;   // The bitrate we have between the CPU and the RN.
-    uint32_t pid_data_lockout    = 0;  // Sometimes we need to prevent ourselves from sensing data to the module.
 
-
-    int8_t idleService(void);
+    int8_t idleService();
     void feed_rx_buffer(unsigned char*, uint8_t len);   // Append to the class receive buffer.
     virtual int8_t sendBuffer(StringBuilder*);
 
@@ -248,11 +186,11 @@ class RNBase : public ManuvrXport {
     *   between destinations (module or counterparty)
     */
     inline void printToHost(char* str) {
-      insert_into_work_queue(RNBASE_OP_CODE_TX, new StringBuilder(str));
+      insert_into_work_queue(BusOpcode::TX, new StringBuilder(str));
     };
 
     inline void printToHost(StringBuilder* str) {
-      insert_into_work_queue(RNBASE_OP_CODE_TX, str);
+      insert_into_work_queue(BusOpcode::TX, str);
     };
 
 
@@ -264,12 +202,7 @@ class RNBase : public ManuvrXport {
 
     StringBuilder tx_buf;     // A scratchpad for this class.
 
-    bool lockout_active;      // While this is true, don't interact with the RN.
-    bool command_mode;        // Set when the module is verified to be in command mode.
-    bool command_mode_pend;   // Set when we are expecting the module to enter command mode.
-    bool autoconnect_mode;    // Should we connect whenever possible?
-
-    uint32_t insert_into_work_queue(uint8_t opcode, StringBuilder* data);
+    uint32_t insert_into_work_queue(BusOpcode opcode, StringBuilder* data);
     int8_t burn_or_recycle_current();   // Called during connection turbulence to handle the queued item.
 
     //int8_t init_dma(uint8_t* buf, unsigned int len);

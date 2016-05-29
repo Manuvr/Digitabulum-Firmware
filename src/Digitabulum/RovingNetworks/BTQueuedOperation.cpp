@@ -25,9 +25,8 @@ TODO: It would be really nice to unify this basic "work-queue" pattern and
 
 
 #include "RNBase.h"
-#include "stm32f7xx.h"
+#include <stm32f7xx.h>
 #include <stm32f7xx_hal_dma.h>
-#include <Kernel.h>
 
 DMA_HandleTypeDef _dma_handle;
 
@@ -78,13 +77,13 @@ BTQueuedOperation::BTQueuedOperation() {
 }
 
 
-BTQueuedOperation::BTQueuedOperation(uint8_t nu_op) {
+BTQueuedOperation::BTQueuedOperation(BusOpcode nu_op) {
   wipe();
   this->opcode    = nu_op;
 }
 
 
-BTQueuedOperation::BTQueuedOperation(uint8_t nu_op, StringBuilder* nu_data) {
+BTQueuedOperation::BTQueuedOperation(BusOpcode nu_op, StringBuilder* nu_data) {
   wipe();
   this->opcode    = nu_op;
   data.concatHandoff(nu_data);
@@ -94,7 +93,7 @@ BTQueuedOperation::BTQueuedOperation(uint8_t nu_op, StringBuilder* nu_data) {
 /*
 * Specialized constructor for direct buffer spec.
 */
-BTQueuedOperation::BTQueuedOperation(uint8_t nu_op, unsigned char *nu_data, uint16_t nu_len) {
+BTQueuedOperation::BTQueuedOperation(BusOpcode nu_op, unsigned char *nu_data, uint16_t nu_len) {
   wipe();
   this->opcode    = nu_op;
   data.concat(nu_data, nu_len);
@@ -109,7 +108,7 @@ BTQueuedOperation::~BTQueuedOperation(void) {
 
 
 
-void BTQueuedOperation::set_data(uint8_t nu_op, StringBuilder* nu_data) {
+void BTQueuedOperation::set_data(BusOpcode nu_op, StringBuilder* nu_data) {
   this->opcode    = nu_op;
   data.concatHandoff(nu_data);
   data.string();
@@ -120,7 +119,7 @@ void BTQueuedOperation::wipe() {
   this->completed  = false;
   this->initiated  = false;
   this->xenomsg_id = 0;
-  this->opcode     = RNBASE_OP_CODE_UNDEFINED;
+  this->opcode     = BusOpcode::UNDEF;
   this->tx_buf     = NULL;
   this->tx_len     = 0;
   this->txn_id     = 0; //randomInt();
@@ -135,9 +134,9 @@ void BTQueuedOperation::wipe() {
 int8_t BTQueuedOperation::begin(void) {
   initiated = true;
   switch (opcode) {
-    case RNBASE_OP_CODE_CMD_TX_WAIT_RX:  // Transmit and remember.
-    case RNBASE_OP_CODE_CMD_TX:          // Transmit and forget.
-    case RNBASE_OP_CODE_TX:              // Transmit and forget.
+    case BusOpcode::TX_CMD_WAIT_RX:  // Transmit and remember.
+    case BusOpcode::TX_CMD:          // Transmit and forget.
+    case BusOpcode::TX:              // Transmit and forget.
       tx_buf = data.string();
       tx_len = data.length();
       if (tx_len == 0) {
@@ -182,14 +181,14 @@ int8_t BTQueuedOperation::mark_complete(void) {
   HAL_DMA_Abort(&_dma_handle);
 
   switch (opcode) {
-    case RNBASE_OP_CODE_CMD_TX_WAIT_RX:
+    case BusOpcode::TX_CMD_WAIT_RX:
       {
       // We need to be able to time out...
       //Kernel::raiseEvent(MANUVR_MSG_BT_RX_BUF_NOT_EMPTY, NULL);
       }
       break;
-    case RNBASE_OP_CODE_CMD_TX:
-    case RNBASE_OP_CODE_TX:
+    case BusOpcode::TX_CMD:
+    case BusOpcode::TX:
       completed = true;
       RNBase::isr_bt_queue_ready();
       break;
@@ -211,7 +210,7 @@ int8_t BTQueuedOperation::mark_complete(void) {
 void BTQueuedOperation::printDebug(StringBuilder *output) {
   if (NULL == output) return;
   output->concatf("\n\t--- txn_id:  0x%08x -------------\n", txn_id);
-  output->concatf("\t  opcode:      %s\n", getOpcodeString(opcode));
+  output->concatf("\t  opcode:      %s\n", BusOp::getOpcodeString(opcode));
   output->concatf("\t  comp/init:   %d/%d\n", completed, initiated);
 
   int tmp_len = data.length();
@@ -269,18 +268,4 @@ int8_t BTQueuedOperation::init_dma() {
   /* Enable the USART Tx DMA request */
   //USART_DMACmd(USART2, USART_DMAReq_Tx, ENABLE);
   return 0;
-}
-
-
-
-/**
-* Debug support. Returns a human-readable representation of an opcode.
-*/
-const char* BTQueuedOperation::getOpcodeString(uint8_t code) {
-  switch (code) {
-    case RNBASE_OP_CODE_TX:               return "TX";
-    case RNBASE_OP_CODE_CMD_TX:           return "CMD_TX";
-    case RNBASE_OP_CODE_CMD_TX_WAIT_RX:   return "CMD_TX/RX";
-    default:                              return "<UNKNOWN>";
-  }
 }

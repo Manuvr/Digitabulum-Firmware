@@ -378,7 +378,7 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
   preformed_busop_read_acc.shouldReap(false);
   preformed_busop_read_acc.devRegisterAdvance(true);
   preformed_busop_read_acc.callback = (SPIDeviceWithRegisters*) this;
-  preformed_busop_read_acc.opcode   = SPI_OPCODE_READ;
+  preformed_busop_read_acc.opcode   = BusOpcode::RX;
   preformed_busop_read_acc.reg_idx  = LSM9DS1_A_DATA_X;
   preformed_busop_read_acc.buf      = reg_defs[preformed_busop_read_acc.reg_idx].val;
   preformed_busop_read_acc.bus_addr = reg_defs[preformed_busop_read_acc.reg_idx].addr | 0x80;
@@ -387,7 +387,7 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
   preformed_busop_read_gyr.shouldReap(false);
   preformed_busop_read_gyr.devRegisterAdvance(true);
   preformed_busop_read_gyr.callback = (SPIDeviceWithRegisters*) this;
-  preformed_busop_read_gyr.opcode   = SPI_OPCODE_READ;
+  preformed_busop_read_gyr.opcode   = BusOpcode::RX;
   preformed_busop_read_gyr.reg_idx  = LSM9DS1_G_DATA_X;
   preformed_busop_read_gyr.buf      = reg_defs[preformed_busop_read_gyr.reg_idx].val;
   preformed_busop_read_gyr.bus_addr = reg_defs[preformed_busop_read_gyr.reg_idx].addr | 0x80;
@@ -396,7 +396,7 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
   preformed_busop_irq_0.shouldReap(false);
   preformed_busop_irq_0.devRegisterAdvance(true);
   preformed_busop_irq_0.callback = (SPIDeviceWithRegisters*) this;
-  preformed_busop_irq_0.opcode   = SPI_OPCODE_READ;
+  preformed_busop_irq_0.opcode   = BusOpcode::RX;
   preformed_busop_irq_0.reg_idx  = LSM9DS1_G_INT_GEN_SRC;
   preformed_busop_irq_0.bus_addr = reg_defs[preformed_busop_irq_0.reg_idx].addr | 0x80;
   preformed_busop_irq_0.buf      = reg_defs[preformed_busop_irq_0.reg_idx].val;
@@ -405,7 +405,7 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
   preformed_busop_irq_1.shouldReap(false);
   preformed_busop_irq_1.devRegisterAdvance(true);
   preformed_busop_irq_1.callback = (SPIDeviceWithRegisters*) this;
-  preformed_busop_irq_1.opcode   = SPI_OPCODE_READ;
+  preformed_busop_irq_1.opcode   = BusOpcode::RX;
   preformed_busop_irq_1.reg_idx  = LSM9DS1_A_INT_GEN_SRC;
   preformed_busop_irq_1.bus_addr = reg_defs[preformed_busop_irq_1.reg_idx].addr | 0x80;
   preformed_busop_irq_1.buf      = reg_defs[preformed_busop_irq_1.reg_idx].val;
@@ -414,7 +414,7 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
   full_register_refresh.shouldReap(false);
   full_register_refresh.devRegisterAdvance(true);
   full_register_refresh.callback = (SPIDeviceWithRegisters*) this;
-  full_register_refresh.opcode   = SPI_OPCODE_READ;
+  full_register_refresh.opcode   = BusOpcode::RX;
   full_register_refresh.reg_idx  = LSM9DS1_AG_FIFO_CTRL;
   full_register_refresh.bus_addr = reg_defs[full_register_refresh.reg_idx].addr | 0x80;
   full_register_refresh.buf      = reg_defs[full_register_refresh.reg_idx].val;
@@ -777,7 +777,7 @@ int8_t LSM9DS1_AG::spi_op_callback(SPIBusOp* op) {
   if (-1 == op->reg_idx) {
     // Our class implementation considers this a serious problem.
     if (verbosity > 3) Kernel::log("~~~~~~~~LSM9DS1_AG::spi_op_callback   (ERROR CASE -2)\n");
-    error_condition = (SPI_OPCODE_READ == op->opcode) ? IMU_ERROR_BUS_OPERATION_FAILED_R : IMU_ERROR_BUS_OPERATION_FAILED_W;
+    error_condition = (BusOpcode::RX == op->opcode) ? IMU_ERROR_BUS_OPERATION_FAILED_R : IMU_ERROR_BUS_OPERATION_FAILED_W;
     return SPI_CALLBACK_ERROR;
   }
 
@@ -788,7 +788,7 @@ int8_t LSM9DS1_AG::spi_op_callback(SPIBusOp* op) {
       op->printDebug(&local_log);
       Kernel::log(&local_log);
     }
-    error_condition = (SPI_OPCODE_READ == op->opcode) ? IMU_ERROR_BUS_OPERATION_FAILED_R : IMU_ERROR_BUS_OPERATION_FAILED_W;
+    error_condition = (BusOpcode::RX == op->opcode) ? IMU_ERROR_BUS_OPERATION_FAILED_R : IMU_ERROR_BUS_OPERATION_FAILED_W;
 
     // TODO: Should think carefully, and...   return_value = SPI_CALLBACK_RECYCLE;   // Re-run the job.
     return SPI_CALLBACK_ERROR;
@@ -797,11 +797,11 @@ int8_t LSM9DS1_AG::spi_op_callback(SPIBusOp* op) {
   uint8_t access_len = op->buf_len;  // The access length lets us know how many things changed.
   int16_t access_idx = op->reg_idx;  // The access length lets us know how many things changed.
   unsigned int value = regValue(access_idx);
-  if (verbosity > 6) local_log.concatf("%s  XM::spi_op_callback(0x%08x): value: %d \t access_idx  %d \t access_len: %d\n", ((SPI_OPCODE_READ == op->opcode) ? "READ  ":"WRITE "), (uint32_t)((SPIOpCallback*) this), value, access_idx, access_len);
+  if (verbosity > 6) local_log.concatf("%s  XM::spi_op_callback(0x%08x): value: %d \t access_idx  %d \t access_len: %d\n", op->getOpcodeString(), (uint32_t)((SPIOpCallback*) this), value, access_idx, access_len);
 
   /* Our first choice is: Did we just finish a WRITE or a READ? */
   /* READ Case-offs */
-  if (SPI_OPCODE_READ == op->opcode) {
+  if (BusOpcode::RX == op->opcode) {
     while ((access_len > 0) && (access_idx < reg_count)) {
       value = regValue(access_idx);
       access_len -= reg_defs[access_idx].len;   // Subtract the length.
@@ -1046,7 +1046,7 @@ int8_t LSM9DS1_AG::spi_op_callback(SPIBusOp* op) {
 
 
   /* WRITE Case-offs */
-  else if (SPI_OPCODE_WRITE == op->opcode) {
+  else if (BusOpcode::TX == op->opcode) {
     while ((access_len > 0) && (access_idx < reg_count)) {
       value = regValue(access_idx);
       access_len -= reg_defs[access_idx].len;   // Subtract the length.

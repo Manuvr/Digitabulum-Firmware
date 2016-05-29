@@ -291,6 +291,11 @@ class LegendManager : public EventReceiver {
     uint32_t _class_flags  = 0;
     uint8_t __dataset[LEGEND_MGR_MAX_DATASET_SIZE];
 
+    /* These are giant strips of DMA-capable memory that are used for raw frame
+         reads from the sensor package. Twice what we need for double-buffering. */
+    uint8_t __frame_buf_i[2 * 17 * 12];  // Inertial data
+    uint8_t __frame_buf_m[2 * 17 * 6];   // Mag data
+
     ManuLegend* operating_legend = NULL;
     IIU iius[17];                        // This is the chirality-invarient list of IIUs.
 

@@ -18,22 +18,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
+This is the class that is used to keep bus operations on the SPI atomic.
 */
 
 
 #ifndef __SPI_BUS_OP_H__
 #define __SPI_BUS_OP_H__
-  /*
-  * This is the struct that is used to keep bus operations on the SPI atomic. We provide
-  *   the callback in the LSM9DS0_Common class because it is the greatest common denominator
-  *   where the logical sensors and their registers are still differentiable.
-  * This is in preparation for the conversion to interrupt mode, and then from there to DMA.
-  */
 
-  #include <inttypes.h>
+  #include <Drivers/BusQueue/BusQueue.h>
+  #include <DataStructures/StringBuilder.h>
+  #include <Drivers/DeviceWithRegisters/DeviceRegister.h>
   #include <stm32f7xx_hal_dma.h>
-  #include "DataStructures/StringBuilder.h"
-  #include "Drivers/DeviceWithRegisters/DeviceRegister.h"
 
   // Bit[2] is the bit that indicates bus control.
   #define SPI_XFER_STATE_IDLE      0b00000000   // Bus op is waiting somewhere outside of the queue.
@@ -77,20 +72,18 @@ class SPIOpCallback;
 class SPIBusOp {
   public:
     SPIOpCallback* callback = NULL;               // Which class gets pinged when we've finished?
-    uint8_t* buf            = NULL;               // Pointer to the data buffer for the transaction.
-    uint8_t  buf_len        = 0;                  // How large is the above buffer?
-
+    BusOpcode  opcode    = BusOpcode::UNDEF;      // What is the particular operation being done?
     uint16_t bus_addr    = 0x0000;                // The address that this operation is directed toward.
     int16_t  reg_idx     = -1;                    // Optional register index. Makes callbacks faster.
-
-    uint8_t  opcode      = SPI_OPCODE_UNDEFINED;  // What is the particular operation being done?
+    uint8_t* buf            = NULL;               // Pointer to the data buffer for the transaction.
+    uint8_t  buf_len        = 0;                  // How large is the above buffer?
     uint8_t  xfer_state  = SPI_XFER_STATE_IDLE;   // What state is this transfer in?
 
     //uint32_t time_began    = 0;   // This is the time when bus access begins.
     //uint32_t time_ended    = 0;   // This is the time when bus access stops (or is aborted).
 
     SPIBusOp();
-    SPIBusOp(uint8_t nu_op, uint16_t addr, uint8_t *buf, uint8_t len, SPIOpCallback* requester);
+    SPIBusOp(BusOpcode nu_op, uint16_t addr, uint8_t *buf, uint8_t len, SPIOpCallback* requester);
     ~SPIBusOp();
 
     /* Job control functions. */
@@ -165,7 +158,7 @@ class SPIBusOp {
 
     /* Logging support */
     const char* getErrorString();
-    const char* getOpcodeString();
+    inline const char* getOpcodeString() {  return BusOp::getOpcodeString(opcode);  };
     const char* getStateString();
 
 
@@ -199,4 +192,4 @@ class SPIBusOp {
     static void enableSPI_DMA(bool enable);
 };
 
-#endif
+#endif  // __SPI_BUS_OP_H__
