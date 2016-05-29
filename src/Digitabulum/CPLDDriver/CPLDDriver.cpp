@@ -140,18 +140,13 @@ DMA_HandleTypeDef _dma_handle_spi2;
 /**
 * Constructor. Also populates the global pointer reference.
 */
-CPLDDriver::CPLDDriver() : SPIDeviceWithRegisters(0, 9) {
+CPLDDriver::CPLDDriver() {
   __class_initializer();
 
   if (NULL == cpld) {
     cpld = this;
     ManuvrMsg::registerMessages(cpld_message_defs, sizeof(cpld_message_defs) / sizeof(MessageTypeDef));
   }
-
-  // Definitions of CPLD registers.
-  reg_defs[0]   = DeviceRegister((bus_addr + CPLD_REG_VERSION), (uint8_t)  0b00000000, &cpld_conf_value,    false, false, false);
-  reg_defs[1]   = DeviceRegister((bus_addr + CPLD_REG_CONFIG),  (uint8_t)  0b00000000, &cpld_version,       false, false, true );
-  reg_defs[2]   = DeviceRegister((bus_addr + CPLD_REG_STATUS),  (uint8_t)  0b00000000, &cpld_version,       false, false, false);
 
   // Build some pre-formed Events.
   event_spi_callback_ready.repurpose(MANUVR_MSG_SPI_CB_QUEUE_READY);
@@ -485,21 +480,42 @@ int8_t CPLDDriver::spi_op_callback(SPIBusOp* op) {
     return SPI_CALLBACK_ERROR;
   }
 
-  unsigned int value = regValue(op->reg_idx);
   if (BusOpcode::RX == op->get_opcode()) {
     switch (op->reg_idx) {
       case CPLD_REG_VERSION:
-        reg_defs[0].unread = false;
-
-        if (getVerbosity() > 3) local_log.concatf("CPLD r%d.\n", value);
-        if (17 == value) {
+        if (getVerbosity() > 3) local_log.concatf("CPLD r%d.\n", cpld_version);
+        if (0 < cpld_version) {
           Kernel::raiseEvent(DIGITABULUM_MSG_CPLD_RESET_COMPLETE, NULL);
         }
+        else {
+          if (getVerbosity() > 1) local_log.concatf("CPLD returned a bad version code: 0x%02x\n", cpld_version);
+        }
+        break;
+      case CPLD_REG_CONFIG:
+        break;
+      case CPLD_REG_STATUS:
+        break;
+      case CPLD_REG_WAKEUP_IRQ:
+        break;
+      default:
+        if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->reg_idx);
         break;
     }
   }
   else if (BusOpcode::TX == op->get_opcode()) {
-    reg_defs[op->reg_idx].dirty = false;
+    switch (op->reg_idx) {
+      case CPLD_REG_VERSION:
+      case CPLD_REG_STATUS:
+        if (getVerbosity() > 2) local_log.concat("An SPIBusOp called back as having written to an RO register.\n");
+        break;
+      case CPLD_REG_CONFIG:
+        break;
+      case CPLD_REG_WAKEUP_IRQ:
+        break;
+      default:
+        if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->reg_idx);
+        break;
+    }
   }
 
   if (local_log.length() > 0) Kernel::log(&local_log);
@@ -1019,13 +1035,11 @@ void CPLDDriver::internalOscillator(bool on) {
 */
 void CPLDDriver::setCPLDConfig(uint8_t mask, bool state) {
   if (state) {
-    cpld_conf_value |= mask;
+    writeRegister(CPLD_REG_CONFIG, (cpld_conf_value | mask));
   }
   else {
-    cpld_conf_value &= ~mask;
+    writeRegister(CPLD_REG_CONFIG, (cpld_conf_value & ~mask));
   }
-  reg_defs[1].set(cpld_conf_value);
-  writeRegister(&reg_defs[1]);
 }
 
 
@@ -1033,11 +1047,66 @@ void CPLDDriver::setCPLDConfig(uint8_t mask, bool state) {
 * Reads and returns the CPLD version. We need to use this for keeping
 *   compatability with older CPLD versions.
 */
-uint8_t CPLDDriver::getCPLDVersion(void) {
-  readRegister((uint8_t) 0);
+uint8_t CPLDDriver::getCPLDVersion() {
+  readRegister(CPLD_REG_VERSION);
   return cpld_version;
 }
 
+
+int8_t CPLDDriver::readRegister(uint8_t reg_addr) {
+  uint8_t* _real_addr;
+  switch (reg_addr) {
+    case CPLD_REG_VERSION:
+      _real_addr = &cpld_version;
+      break;
+    case CPLD_REG_CONFIG:
+      _real_addr = &cpld_conf_value;
+      break;
+    case CPLD_REG_STATUS:
+      _real_addr = &cpld_status_value;
+      break;
+    case CPLD_REG_WAKEUP_IRQ:
+      _real_addr = &cpld_wakeup_source;
+      break;
+    default:
+      return -1;
+  }
+  SPIBusOp* temp = issue_spi_op_obj();
+  temp->set_opcode(BusOpcode::RX);
+  temp->setParams(reg_addr);
+  temp->buf     = _real_addr;
+  temp->buf_len = 1;
+
+  queue_spi_job(temp);
+  return 0;
+}
+
+
+int8_t CPLDDriver::writeRegister(uint8_t reg_addr, uint8_t val) {
+  uint8_t* _real_addr;
+  switch (reg_addr) {
+    case CPLD_REG_CONFIG:
+      _real_addr = &cpld_conf_value;
+      break;
+    case CPLD_REG_WAKEUP_IRQ:
+      _real_addr = &cpld_wakeup_source;
+      break;
+
+    case CPLD_REG_VERSION:
+    case CPLD_REG_STATUS:
+      // Cannot write to these registers...
+    default:
+      return -1;
+  }
+  SPIBusOp* temp = issue_spi_op_obj();
+  temp->set_opcode(BusOpcode::TX);
+  temp->setParams(reg_addr, val);
+  temp->buf     = _real_addr;
+  temp->buf_len = 2;
+
+  queue_spi_job(temp);
+  return 0;
+}
 
 
 
@@ -1159,9 +1228,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
         getCPLDVersion();
       }
       else if (temp_byte == 2) {
-        dumpDevRegs(&local_log);
-      }
-      else if (temp_byte == 3) {
         readInternalStates();
       }
       else {

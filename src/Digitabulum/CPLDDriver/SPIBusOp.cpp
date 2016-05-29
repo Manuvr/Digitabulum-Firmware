@@ -160,6 +160,13 @@ SPIBusOp::SPIBusOp(BusOpcode nu_op, uint16_t addr, uint8_t *buf, uint8_t len, SP
   this->buf             = buf;
   this->buf_len         = len;
   this->bus_addr        = addr;
+
+  _param_len     = 0;
+  xfer_params[0] = 0;
+  xfer_params[1] = 0;
+  xfer_params[2] = 0;
+  xfer_params[3] = 0;
+
   callback = requester;
 }
 
@@ -179,6 +186,38 @@ SPIBusOp::~SPIBusOp() {
   if (debug_log.length() > 0) Kernel::log(&debug_log);
 }
 
+
+
+/**
+*/
+void SPIBusOp::setParams(uint8_t _dev_addr, uint8_t _xfer_len, uint8_t _dev_count, uint8_t _reg_addr) {
+  _param_len     = 4;
+  xfer_params[0] = _dev_addr;
+  xfer_params[1] = _xfer_len;
+  xfer_params[2] = _dev_count;
+  xfer_params[3] = _reg_addr;
+}
+
+
+/**
+*/
+void SPIBusOp::setParams(uint8_t _reg_addr, uint8_t _val) {
+  _param_len     = 2;
+  xfer_params[0] = _reg_addr;
+  xfer_params[1] = _val;
+  xfer_params[2] = 0;
+  xfer_params[3] = 0;
+}
+
+/**
+*/
+void SPIBusOp::setParams(uint8_t _reg_addr) {
+  _param_len     = 1;
+  xfer_params[0] = _reg_addr;
+  xfer_params[1] = 0;
+  xfer_params[2] = 0;
+  xfer_params[3] = 0;
+}
 
 
 /**
@@ -243,13 +282,19 @@ void SPIBusOp::wipe() {
   set_state(XferState::IDLE);
   // We need to preserve flags that deal with memory management.
   flags       = flags & (SPI_XFER_FLAG_NO_FREE | SPI_XFER_FLAG_PREALLOCATE_Q);
-  xfer_fault    = XferFault::NONE;
+  xfer_fault  = XferFault::NONE;
   opcode      = BusOpcode::UNDEF;
-  bus_addr    = 0x0000;
   buf_len     = 0;
   buf         = NULL;
   reg_idx     = -1;
   callback    = NULL;
+
+  _param_len     = 0;
+  xfer_params[0] = 0;
+  xfer_params[1] = 0;
+  xfer_params[2] = 0;
+  xfer_params[3] = 0;
+
   profile(false);
 }
 

@@ -30,6 +30,10 @@ This is the class that is used to keep bus operations on the SPI atomic.
   #include <Drivers/DeviceWithRegisters/DeviceRegister.h>
   #include <stm32f7xx_hal_dma.h>
 
+  /*
+  * These flags are hosted by the member in the BusOp class.
+  * Be careful when scrubing the field between re-use.
+  */
   #define SPI_XFER_FLAG_NO_FLAGS        0x00   // By default, there are no flags set.
   #define SPI_XFER_FLAG_NO_FREE         0x01   // If set in a transaction's flags field, it will not be free()'d.
   #define SPI_XFER_FLAG_PREALLOCATE_Q   0x02   // If set, indicates this object should be returned to the prealloc queue.
@@ -45,14 +49,13 @@ This is the class that is used to keep bus operations on the SPI atomic.
 class SPIOpCallback;
 
 /*
-* This class represents a single transaction on the bus.
+* This class represents a single transaction on the SPI bus.
 */
 class SPIBusOp : public BusOp {
   public:
-    //TODO: This is the new mechanism: uint8_t  xfer_params[4];                      // The address transfer lengths, preamble, etc...
-    SPIOpCallback* callback = NULL;               // Which class gets pinged when we've finished?
-    int16_t  reg_idx     = -1;                    // Optional register index. Makes callbacks faster.
-    uint8_t  bus_addr    = 0x0000;                // The address that this operation is directed toward.
+    SPIOpCallback* callback = NULL;  // Which class gets pinged when we've finished?
+    int16_t   reg_idx     = -1;      // Optional register index. Makes callbacks faster.
+    uint16_t  bus_addr    = 0x0000;  // The address that this operation is directed toward.
 
     //uint32_t time_began    = 0;   // This is the time when bus access begins.
     //uint32_t time_ended    = 0;   // This is the time when bus access stops (or is aborted).
@@ -64,6 +67,11 @@ class SPIBusOp : public BusOp {
     /* Job control functions. */
     int8_t begin();
     int8_t markComplete();
+
+
+    void setParams(uint8_t _dev_addr, uint8_t _xfer_len, uint8_t _dev_count, uint8_t _reg_addr);
+    void setParams(uint8_t _reg_addr, uint8_t _val);
+    void setParams(uint8_t _reg_addr);
 
     /**
     * This will mark the bus operation complete with a given error code.
@@ -130,16 +138,10 @@ class SPIBusOp : public BusOp {
 
 
   private:
-    uint8_t  flags       = SPI_XFER_FLAG_NO_FLAGS;   // No flags set.
+    uint8_t  xfer_params[4];         // The address transfer lengths, preamble, etc...
+    uint8_t  _param_len  = 0;        // The length of transfer parameters to send.
 
     int8_t init_dma();
-
-    /**
-    * How long is this transaction including the addressing overhead?
-    *
-    * @return the full length of the transaction, including addressing overhead.
-    */
-    uint8_t total_len() {     return buf_len + ((bus_addr > 255) ? 2 : 1);    }
 
     bool wait_with_timeout();
 
