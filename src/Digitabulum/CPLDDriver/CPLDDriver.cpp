@@ -814,6 +814,60 @@ void CPLDDriver::purge_stalled_job() {
 
 
 
+int8_t CPLDDriver::readRegister(uint8_t reg_addr) {
+  uint8_t* _real_addr;
+  switch (reg_addr) {
+    case CPLD_REG_VERSION:
+      _real_addr = &cpld_version;
+      break;
+    case CPLD_REG_CONFIG:
+      _real_addr = &cpld_conf_value;
+      break;
+    case CPLD_REG_STATUS:
+      _real_addr = &cpld_status_value;
+      break;
+    case CPLD_REG_WAKEUP_IRQ:
+      _real_addr = &cpld_wakeup_source;
+      break;
+    default:
+      return -1;
+  }
+  SPIBusOp* temp = issue_spi_op_obj();
+  temp->set_opcode(BusOpcode::RX);
+  temp->setParams(reg_addr | 0x80);  // Set the READ bit...
+  temp->buf     = _real_addr;
+  temp->buf_len = 1;
+
+  queue_spi_job(temp);
+  return 0;
+}
+
+
+int8_t CPLDDriver::writeRegister(uint8_t reg_addr, uint8_t val) {
+  uint8_t* _real_addr;
+  switch (reg_addr) {
+    case CPLD_REG_CONFIG:
+      _real_addr = &cpld_conf_value;
+      break;
+    case CPLD_REG_WAKEUP_IRQ:
+      _real_addr = &cpld_wakeup_source;
+      break;
+
+    case CPLD_REG_VERSION:
+    case CPLD_REG_STATUS:
+      // Cannot write to these registers...
+    default:
+      return -1;
+  }
+  SPIBusOp* temp = issue_spi_op_obj();
+  temp->set_opcode(BusOpcode::TX);
+  temp->setParams(reg_addr, val);
+  temp->buf     = _real_addr;
+  temp->buf_len = 2;
+
+  queue_spi_job(temp);
+  return 0;
+}
 
 
 
@@ -1015,7 +1069,7 @@ volatile void CPLDDriver::irqService_vect_0(void) {
 */
 void CPLDDriver::externalOscillator(bool on) {
   _er_set_flag(CPLD_FLAG_EXT_OSC, on);
-  // TODO: Enable the timer, connect it to GPIO, and set the config register in the CPLD.
+  // TODO: Enable the timer, connect it to GPIO.
 }
 
 
@@ -1027,6 +1081,12 @@ void CPLDDriver::internalOscillator(bool on) {
   _er_set_flag(CPLD_FLAG_INT_OSC, on);
   // TODO: Set the config register in the CPLD, and when the callback arrives,
   //         disable the timer, and disconnect it from GPIO.
+  if (!on) {
+    // If we are about to disable the internal oscillator, be sure to fire up
+    //   the external clock first. Otherwise, the transfer will never complete.
+    externalOscillator(true);
+  }
+  setCPLDConfig(CPLD_CONF_BIT_EXT_CLK, on);
 }
 
 
@@ -1050,62 +1110,6 @@ void CPLDDriver::setCPLDConfig(uint8_t mask, bool state) {
 uint8_t CPLDDriver::getCPLDVersion() {
   readRegister(CPLD_REG_VERSION);
   return cpld_version;
-}
-
-
-int8_t CPLDDriver::readRegister(uint8_t reg_addr) {
-  uint8_t* _real_addr;
-  switch (reg_addr) {
-    case CPLD_REG_VERSION:
-      _real_addr = &cpld_version;
-      break;
-    case CPLD_REG_CONFIG:
-      _real_addr = &cpld_conf_value;
-      break;
-    case CPLD_REG_STATUS:
-      _real_addr = &cpld_status_value;
-      break;
-    case CPLD_REG_WAKEUP_IRQ:
-      _real_addr = &cpld_wakeup_source;
-      break;
-    default:
-      return -1;
-  }
-  SPIBusOp* temp = issue_spi_op_obj();
-  temp->set_opcode(BusOpcode::RX);
-  temp->setParams(reg_addr);
-  temp->buf     = _real_addr;
-  temp->buf_len = 1;
-
-  queue_spi_job(temp);
-  return 0;
-}
-
-
-int8_t CPLDDriver::writeRegister(uint8_t reg_addr, uint8_t val) {
-  uint8_t* _real_addr;
-  switch (reg_addr) {
-    case CPLD_REG_CONFIG:
-      _real_addr = &cpld_conf_value;
-      break;
-    case CPLD_REG_WAKEUP_IRQ:
-      _real_addr = &cpld_wakeup_source;
-      break;
-
-    case CPLD_REG_VERSION:
-    case CPLD_REG_STATUS:
-      // Cannot write to these registers...
-    default:
-      return -1;
-  }
-  SPIBusOp* temp = issue_spi_op_obj();
-  temp->set_opcode(BusOpcode::TX);
-  temp->setParams(reg_addr, val);
-  temp->buf     = _real_addr;
-  temp->buf_len = 2;
-
-  queue_spi_job(temp);
-  return 0;
 }
 
 
@@ -1158,7 +1162,7 @@ uint16_t CPLDDriver::readInternalStates(void) {
 *
 * @return a pointer to a string constant.
 */
-const char* CPLDDriver::getReceiverName() {  return "CPLDDriver";  }
+const char* CPLDDriver::getReceiverName() {  return "CPLD";  }
 
 
 /**
@@ -1336,8 +1340,29 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
-    case ']':
+    case '+':
       local_log.concatf("Advanced CPLD SPI work queue.\n");
+      Kernel::raiseEvent(MANUVR_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
+      break;
+
+    case '-':
+    case '_':
+      local_log.concatf("%s CPLD_DEN_AG_0.\n", (*(str) == '_' ? "Clearing" : "Setting"));
+      setCPLDConfig(CPLD_CONF_BIT_DEN_AG_0, (*(str) == '-'));
+      Kernel::raiseEvent(MANUVR_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
+      break;
+
+    case '[':
+    case '{':
+      local_log.concatf("%s CPLD_GPIO_0.\n", (*(str) == '[' ? "Clearing" : "Setting"));
+      setCPLDConfig(CPLD_CONF_BIT_GPIO_0, (*(str) == '{'));
+      Kernel::raiseEvent(MANUVR_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
+      break;
+
+    case ']':
+    case '}':
+      local_log.concatf("%s CPLD_GPIO_0.\n", (*(str) == ']' ? "Clearing" : "Setting"));
+      setCPLDConfig(CPLD_CONF_BIT_GPIO_1, (*(str) == '}'));
       Kernel::raiseEvent(MANUVR_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
       break;
 

@@ -407,6 +407,11 @@ class IIU;
 #define CPLD_REG_CS_6          0x2E  // | RESERVED
 #define CPLD_REG_CS_7          0x2F  // | RESERVED
 
+/* Bitmask defs for the CONFIG register. */
+#define CPLD_CONF_BIT_EXT_CLK  0x01
+#define CPLD_CONF_BIT_GPIO_1   0x20
+#define CPLD_CONF_BIT_GPIO_0   0x40
+#define CPLD_CONF_BIT_DEN_AG_0 0x80
 
 
 /*
