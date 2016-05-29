@@ -365,7 +365,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   hspi1.Init.CLKPolarity = cpol_mode;
   hspi1.Init.CLKPhase = cpha_mode;
   hspi1.Init.NSS = SPI_NSS_HARD_OUTPUT;
-  hspi1.Init.BaudRatePrescaler = spi_prescaler;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLED;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
@@ -523,12 +523,12 @@ int8_t CPLDDriver::queue_spi_job(SPIBusOp* op) {
       op->profile(true);
     }
 
-    if (op->xfer_state != SPI_XFER_STATE_IDLE) {
+    if (op->xfer_state != XferState::IDLE) {
       if (getVerbosity() > 3) Kernel::log("Tried to fire a pre-formed bus op that is not in IDLE state.\n");
       return -4;
     }
 
-    op->xfer_state = SPI_XFER_STATE_INITIATE;
+    op->xfer_state = XferState::INITIATE;
 
     if ((NULL == current_queue_item) && (work_queue.size() == 0)){
       // If the queue is empty, fire the operation now.
@@ -588,7 +588,7 @@ int8_t CPLDDriver::service_callback_queue() {
       int8_t cb_code = temp_op->callback->spi_op_callback(temp_op);
       switch (cb_code) {
         case SPI_CALLBACK_RECYCLE:
-          temp_op->set_state(SPI_XFER_STATE_IDLE);
+          temp_op->set_state(XferState::IDLE);
           queue_spi_job(temp_op);
           break;
 
@@ -632,18 +632,18 @@ int8_t CPLDDriver::advance_work_queue() {
     }
 
     switch (current_queue_item->xfer_state) {
-       case SPI_XFER_STATE_IDLE:
+       case XferState::IDLE:
          if (getVerbosity() > 1) local_log.concat("Not sure how this bus job got here, but it is wrong.\n");
          current_queue_item->printDebug(&local_log);
          break;
 
-       case SPI_XFER_STATE_COMPLETE:
+       case XferState::COMPLETE:
          callback_queue.insert(current_queue_item);
          current_queue_item = NULL;
          if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
          break;
 
-       case SPI_XFER_STATE_INITIATE:
+       case XferState::INITIATE:
          switch (current_queue_item->begin()) {
            case 0:     // Nominal outcome. Transfer started with no problens...
              break;
@@ -662,9 +662,9 @@ int8_t CPLDDriver::advance_work_queue() {
          }
          break;
        /* Cases below ought to be handled by ISR flow... */
-       case SPI_XFER_STATE_ADDR:
-       case SPI_XFER_STATE_STOP:
-       case SPI_XFER_STATE_DMA_WAIT:
+       case XferState::ADDR:
+       case XferState::STOP:
+       case XferState::IO_WAIT:
          if (getVerbosity() > 5) local_log.concatf("State might be corrupted if we tried to advance_queue(). \n");
          break;
        default:
@@ -781,7 +781,7 @@ void CPLDDriver::reclaim_queue_item(SPIBusOp* op) {
        and wants us to ignore the memory cleanup. But we should at least set it
        back to IDLE.*/
     if (getVerbosity() > 6) local_log.concatf("CPLDDriver::reclaim_queue_item(): \t Dropping....\n");
-    op->set_state(SPI_XFER_STATE_IDLE);
+    op->set_state(XferState::IDLE);
   }
 
   if (local_log.length() > 0) Kernel::log(&local_log);
@@ -1109,27 +1109,6 @@ void CPLDDriver::printDebug(StringBuilder *output) {
   output->concatf("--- IRQ service:        %sabled\n---\n",   (_er_flag(CPLD_FLAG_SVC_IRQS)?"en":"dis"));
 
   output->concat("\n--- SPI BUS\n-------------------------------------------------------\n");
-  if (getVerbosity() > 4) {
-    const char* prescale_text;
-    switch (spi_prescaler) {
-      case SPI_BAUDRATEPRESCALER_16:
-        prescale_text = "16";
-        break;
-      case SPI_BAUDRATEPRESCALER_32:
-        prescale_text = "32";
-        break;
-      case SPI_BAUDRATEPRESCALER_64:
-        prescale_text = "64";
-        break;
-      case SPI_BAUDRATEPRESCALER_256:
-        prescale_text = "256";
-        break;
-      default:
-        prescale_text = "<UNKNOWN>";
-        break;
-    }
-    output->concatf("--- SPI Prescaler       %s\n--\n",       prescale_text);
-  }
   if (getVerbosity() > 2) {
     output->concatf("--- Prevent queue flood %s\n",       (_er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no"));
     output->concatf("--- spi_cb_per_event    %d\n---\n",       spi_cb_per_event);
@@ -1231,34 +1210,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
         case 2:
           _er_flip_flag(CPLD_FLAG_SVC_IRQS);
           local_log.concatf("CPLD servicing IRQs?  %s\n", _er_flag(CPLD_FLAG_SVC_IRQS)?"yes":"no");
-          break;
-        case 16:
-          spi_prescaler = SPI_BAUDRATEPRESCALER_16;
-          local_log.concatf("Reset and SPI re-init with prescaler 16...\n");
-          init_spi(1, 0);  // COL=1, CPHA=0
-          SPIBusOp::spi_wait_timeout = 18;
-          reset();
-          break;
-        case 32:
-          spi_prescaler = SPI_BAUDRATEPRESCALER_32;
-          local_log.concatf("Reset and SPI re-init with prescaler 32...\n");
-          init_spi(1, 0);  // COL=1, CPHA=0
-          SPIBusOp::spi_wait_timeout = 38;
-          reset();
-          break;
-        case 64:
-          spi_prescaler = SPI_BAUDRATEPRESCALER_64;
-          local_log.concatf("Reset and SPI re-init with prescaler 64...\n");
-          init_spi(1, 0);  // COL=1, CPHA=0
-          SPIBusOp::spi_wait_timeout = 76;
-          reset();
-          break;
-        case 255:
-          spi_prescaler = SPI_BAUDRATEPRESCALER_256;
-          local_log.concatf("Reset and SPI re-init with prescaler 256.\n");
-          init_spi(1, 0);  // COL=1, CPHA=0
-          SPIBusOp::spi_wait_timeout = 160;
-          reset();
           break;
         default:
           break;

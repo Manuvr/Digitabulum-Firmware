@@ -558,8 +558,8 @@ void LSM9DS1_AG::reset() {
   discards_remain_gyr = 0;
   discards_total_gyr  = 0;
 
-  preformed_busop_irq_0.xfer_state = SPI_XFER_STATE_IDLE;
-  preformed_busop_irq_1.xfer_state = SPI_XFER_STATE_IDLE;
+  preformed_busop_irq_0.xfer_state = XferState::IDLE;
+  preformed_busop_irq_1.xfer_state = XferState::IDLE;
 
   noise_floor_acc.set(0.0f, 0.0f, 0.0f);
   noise_floor_gyr.set(0.0f, 0.0f, 0.0f);

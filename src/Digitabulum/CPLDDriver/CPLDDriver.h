@@ -471,7 +471,6 @@ class CPLDDriver : public EventReceiver, public SPIDeviceWithRegisters {
 
     /* SPI and work queue related members */
     int  cpld_max_bus_queue_depth     = 300;     // Debug
-    int  spi_prescaler                = SPI_BAUDRATEPRESCALER_16;
 
     PriorityQueue<SPIBusOp*> work_queue;
     PriorityQueue<SPIBusOp*> callback_queue;

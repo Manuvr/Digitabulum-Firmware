@@ -72,12 +72,12 @@ class SPIOpCallback;
 class SPIBusOp {
   public:
     SPIOpCallback* callback = NULL;               // Which class gets pinged when we've finished?
+    XferState xfer_state = XferState::UNDEF;      // What state is this transfer in?
     BusOpcode  opcode    = BusOpcode::UNDEF;      // What is the particular operation being done?
     uint16_t bus_addr    = 0x0000;                // The address that this operation is directed toward.
     int16_t  reg_idx     = -1;                    // Optional register index. Makes callbacks faster.
     uint8_t* buf            = NULL;               // Pointer to the data buffer for the transaction.
     uint8_t  buf_len        = 0;                  // How large is the above buffer?
-    uint8_t  xfer_state  = SPI_XFER_STATE_IDLE;   // What state is this transfer in?
 
     //uint32_t time_began    = 0;   // This is the time when bus access begins.
     //uint32_t time_ended    = 0;   // This is the time when bus access stops (or is aborted).
@@ -111,9 +111,9 @@ class SPIBusOp {
     /**
     * @return true if this operation experienced any abnormal condition.
     */
-    inline bool isIdle() {       return (SPI_XFER_STATE_IDLE == xfer_state);      }
-    inline bool complete() {     return (SPI_XFER_STATE_COMPLETE == xfer_state);  }
-    bool set_state(uint8_t);  // Set the state of this operation.
+    inline bool isIdle() {       return (XferState::IDLE     == xfer_state);  }
+    inline bool complete() {     return (XferState::COMPLETE == xfer_state);  }
+    bool set_state(XferState);  // Set the state of this operation.
 
     /**
     * The bus manager calls this fxn to decide if it ought to return this object to the preallocation
@@ -158,8 +158,8 @@ class SPIBusOp {
 
     /* Logging support */
     const char* getErrorString();
-    inline const char* getOpcodeString() {  return BusOp::getOpcodeString(opcode);  };
-    const char* getStateString();
+    inline const char* getOpcodeString() {  return BusOp::getOpcodeString(opcode);     };
+    inline const char* getStateString() {   return BusOp::getStateString(xfer_state);  };
 
 
     static uint32_t  total_transfers;
@@ -186,7 +186,12 @@ class SPIBusOp {
     bool wait_with_timeout();
 
     /* This only works because of careful defines. Tread lightly. */
-    inline bool has_bus_control() {     return (xfer_state & 0x04);   }
+    inline bool has_bus_control() {
+      return (
+        (xfer_state == XferState::STOP) | (xfer_state == XferState::IO_WAIT) | \
+        (xfer_state == XferState::INITIATE) | (xfer_state == XferState::ADDR)
+      );
+    }
 
 
     static void enableSPI_DMA(bool enable);

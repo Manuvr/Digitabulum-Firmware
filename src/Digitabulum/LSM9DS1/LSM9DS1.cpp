@@ -529,13 +529,13 @@ bool LSM9DSx_Common::fire_preformed_bus_op(SPIBusOp* op) {
 */
 bool LSM9DSx_Common::reset_preformed_queue_item(SPIBusOp* op) {
   switch (op->xfer_state) {
-    case SPI_XFER_STATE_IDLE:
+    case XferState::IDLE:
       break;
-    case SPI_XFER_STATE_INITIATE:
-    case SPI_XFER_STATE_ADDR:
-    case SPI_XFER_STATE_DMA_WAIT:
-    case SPI_XFER_STATE_STOP:
-    case SPI_XFER_STATE_COMPLETE:
+    case XferState::INITIATE:
+    case XferState::ADDR:
+    case XferState::IO_WAIT:
+    case XferState::STOP:
+    case XferState::COMPLETE:
     default:   // Functions like a primitive semaphore.
       if (verbosity > 2) {
         local_log.concatf("reset_preformed_queue_item() failed because it had state %s\n", op->getStateString());
@@ -545,7 +545,7 @@ bool LSM9DSx_Common::reset_preformed_queue_item(SPIBusOp* op) {
       return false;
   }
 
-  op->set_state(SPI_XFER_ERROR_NONE);
+  op->set_state(XferState::IDLE);
   return true;
 }
 
