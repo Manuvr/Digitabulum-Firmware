@@ -36,9 +36,10 @@
 #include "stm32f7xx_it.h"
 #include "cmsis_os.h"
 
-/* USER CODE BEGIN 0 */
+//#include <Platform/Platform.h>
 
-/* USER CODE END 0 */
+extern volatile uint32_t millis_since_reset;
+
 
 /* External variables --------------------------------------------------------*/
 extern void xPortSysTickHandler(void);
@@ -51,6 +52,7 @@ extern void xPortSysTickHandler(void);
 * @brief This function handles System tick timer.
 */
 void SysTick_Handler(void) {
+  millis_since_reset++;
   HAL_IncTick();
 }
 

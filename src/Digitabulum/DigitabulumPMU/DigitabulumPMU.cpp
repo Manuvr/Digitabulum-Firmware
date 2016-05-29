@@ -104,8 +104,14 @@ int8_t PMU::cpu_scale(uint8_t _freq) {
 void PMU::gpioSetup() {
   GPIO_InitTypeDef GPIO_InitStruct;
 
-  // We bind timer2-channel1 to the LED pin.
-  GPIO_InitStruct.Pin   = GPIO_PIN_1|GPIO_PIN_0;
+  /* These Port B pins are inputs:
+  *
+  * #  Default   Purpose
+  * -----------------------------------------------
+  * 0     0      CHG_STAT_1
+  * 1     0      CHG_STAT_2
+  */
+  GPIO_InitStruct.Pin   = GPIO_PIN_1 | GPIO_PIN_0;
   GPIO_InitStruct.Mode  = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull  = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
@@ -208,21 +214,61 @@ int8_t PMU::notify(ManuvrRunnable *active_event) {
 }
 
 
-void PMU::procDirectDebugInstruction(StringBuilder *input) {
 #ifdef __MANUVR_CONSOLE_SUPPORT
-  char* str = input->position(0);
+void PMU::procDirectDebugInstruction(StringBuilder *input) {
+  const char* str = (char *) input->position(0);
+  char c    = *str;
+  int temp_int = 0;
 
-  switch (*(str)) {
+  if (input->count() > 1) {
+    // If there is a second token, we proceed on good-faith that it's an int.
+    temp_int = input->position_as_int(1);
+  }
+  else if (strlen(str) > 1) {
+    // We allow a short-hand for the sake of short commands that involve a single int.
+    temp_int = atoi(str + 1);
+  }
+
+  switch (c) {
     case 'f':
     case 'F':
       cpu_scale(*(str) == 'f' ? 0 : 1);
       break;
+
+    case 'm':   // Set the system-wide power mode.
+      if (255 != temp_int) {
+        ManuvrRunnable* event = Kernel::returnEvent(MANUVR_MSG_SYS_POWER_MODE);
+        event->addArg((uint8_t) temp_int);
+        EventReceiver::raiseEvent(event);
+        local_log.concatf("Power mode is now %d.\n", temp_int);
+      }
+      else {
+      }
+      break;
+
     default:
-      #ifdef __MANUVR_DEBUG
       EventReceiver::procDirectDebugInstruction(input);
-      #endif
       break;
   }
-#endif
+
   if (local_log.length() > 0) {    Kernel::log(&local_log);  }
 }
+#endif  // __MANUVR_CONSOLE_SUPPORT
+
+
+
+/****************************************************************************************************
+ ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄       ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄
+▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌     ▐░▌          ▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░▌
+ ▀▀▀▀█░█▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌     ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌░▌     ▐░▌▐░█▀▀▀▀▀▀▀█░▌
+     ▐░▌     ▐░▌          ▐░▌       ▐░▌     ▐░▌          ▐░▌       ▐░▌▐░▌▐░▌    ▐░▌▐░▌       ▐░▌
+     ▐░▌     ▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌     ▐░▌          ▐░█▄▄▄▄▄▄▄█░▌▐░▌ ▐░▌   ▐░▌▐░▌       ▐░▌
+     ▐░▌     ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌     ▐░▌          ▐░░░░░░░░░░░▌▐░▌  ▐░▌  ▐░▌▐░▌       ▐░▌
+     ▐░▌      ▀▀▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀█░█▀▀      ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌   ▐░▌ ▐░▌▐░▌       ▐░▌
+     ▐░▌               ▐░▌▐░▌     ▐░▌       ▐░▌          ▐░▌       ▐░▌▐░▌    ▐░▌▐░▌▐░▌       ▐░▌
+ ▄▄▄▄█░█▄▄▄▄  ▄▄▄▄▄▄▄▄▄█░▌▐░▌      ▐░▌      ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌       ▐░▌▐░▌     ▐░▐░▌▐░█▄▄▄▄▄▄▄█░▌
+▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌     ▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░▌      ▐░░▌▐░░░░░░░░░░▌
+ ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀       ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀        ▀▀  ▀▀▀▀▀▀▀▀▀▀
+
+Interrupt service routine support functions...
+****************************************************************************************************/

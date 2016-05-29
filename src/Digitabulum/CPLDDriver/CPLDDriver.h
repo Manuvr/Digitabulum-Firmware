@@ -433,7 +433,9 @@ class CPLDDriver : public EventReceiver, public SPIOpCallback {
     void printDebug(StringBuilder*);
     int8_t notify(ManuvrRunnable*);
     int8_t callback_proc(ManuvrRunnable *);
-    void procDirectDebugInstruction(StringBuilder*);
+    #if defined(__MANUVR_CONSOLE_SUPPORT)
+      void procDirectDebugInstruction(StringBuilder*);
+    #endif  //__MANUVR_CONSOLE_SUPPORT
 
     /* Members related to the work queue... */
     int8_t advance_work_queue();

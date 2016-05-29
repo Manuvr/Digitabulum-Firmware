@@ -1214,7 +1214,7 @@ void CPLDDriver::printDebug(StringBuilder *output) {
 }
 
 
-
+#if defined(__MANUVR_CONSOLE_SUPPORT)
 void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
@@ -1373,3 +1373,4 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
 
   if (local_log.length() > 0) {    Kernel::log(&local_log);  }
 }
+#endif  //__MANUVR_CONSOLE_SUPPORT

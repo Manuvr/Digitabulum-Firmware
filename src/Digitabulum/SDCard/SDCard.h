@@ -44,9 +44,11 @@ class SDCard : public EventReceiver {
     /* Overrides from EventReceiver */
     int8_t notify(ManuvrRunnable*);
     int8_t callback_proc(ManuvrRunnable *);
-    void procDirectDebugInstruction(StringBuilder *);
     const char* getReceiverName();
     void printDebug(StringBuilder*);
+    #if defined(__MANUVR_CONSOLE_SUPPORT)
+      void procDirectDebugInstruction(StringBuilder*);
+    #endif  //__MANUVR_CONSOLE_SUPPORT
 
 
   protected:

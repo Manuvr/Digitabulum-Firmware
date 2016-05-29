@@ -263,7 +263,9 @@ class LegendManager : public EventReceiver {
     int8_t notify(ManuvrRunnable*);
     int8_t callback_proc(ManuvrRunnable *);
     int8_t writeFrameToBuffer(StringBuilder*);
-    void procDirectDebugInstruction(StringBuilder *);
+    #if defined(__MANUVR_CONSOLE_SUPPORT)
+      void procDirectDebugInstruction(StringBuilder*);
+    #endif  //__MANUVR_CONSOLE_SUPPORT
 
     uint32_t totalSamples();
 
