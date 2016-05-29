@@ -30,18 +30,6 @@ This is the class that is used to keep bus operations on the SPI atomic.
   #include <Drivers/DeviceWithRegisters/DeviceRegister.h>
   #include <stm32f7xx_hal_dma.h>
 
-  // Bit[2] is the bit that indicates bus control.
-  #define SPI_XFER_STATE_IDLE      0b00000000   // Bus op is waiting somewhere outside of the queue.
-  #define SPI_XFER_STATE_INITIATE  0b00000001   // Waiting for initiation
-  #define SPI_XFER_STATE_ADDR      0b00000100   // Sending the register address.
-  #define SPI_XFER_STATE_DMA_WAIT  0b00000101   // Waiting for DMA operation to complete.
-  #define SPI_XFER_STATE_STOP      0b00000110   // Release the CS line
-  #define SPI_XFER_STATE_COMPLETE  0b00001000   // We have cleaned up everything and are awaiting reap.
-
-  #define SPI_OPCODE_UNDEFINED     0x00
-  #define SPI_OPCODE_READ          0x01
-  #define SPI_OPCODE_WRITE         0x02
-
   #define SPI_XFER_ERROR_NONE           0x00   // No error on this transfer.
   #define SPI_XFER_ERROR_DMA_TIMEOUT    0x01   // DMA timeout.
   #define SPI_XFER_ERROR_NO_REASON      0x02   // No reason defined, but still errored.
@@ -71,12 +59,12 @@ class SPIOpCallback;
 */
 class SPIBusOp {
   public:
+    uint8_t* buf            = NULL;               // Pointer to the data buffer for the transaction.
     SPIOpCallback* callback = NULL;               // Which class gets pinged when we've finished?
     XferState xfer_state = XferState::UNDEF;      // What state is this transfer in?
     BusOpcode  opcode    = BusOpcode::UNDEF;      // What is the particular operation being done?
     uint16_t bus_addr    = 0x0000;                // The address that this operation is directed toward.
     int16_t  reg_idx     = -1;                    // Optional register index. Makes callbacks faster.
-    uint8_t* buf            = NULL;               // Pointer to the data buffer for the transaction.
     uint8_t  buf_len        = 0;                  // How large is the above buffer?
 
     //uint32_t time_began    = 0;   // This is the time when bus access begins.

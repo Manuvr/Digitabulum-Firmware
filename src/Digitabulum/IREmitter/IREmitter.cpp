@@ -26,14 +26,11 @@ limitations under the License.
 #include "stm32f7xx_hal.h"
 
 
-
-// If your driver represents a statically-allocated unit, you can do something
-//   like this...
-//volatile IREmitter* IREmitter::INSTANCE = NULL;
+volatile IREmitter* IREmitter::INSTANCE = NULL;
 
 
 IREmitter::IREmitter() {
-  //INSTANCE = this;
+  INSTANCE = (IREmitter*) this;
 }
 
 
@@ -153,7 +150,7 @@ void IREmitter::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
   switch (*(str)) {
-    case 'f':
+    case 'f':  // Flash the IR LED like a beacon.
       break;
     default:
       #ifdef __MANUVR_DEBUG
