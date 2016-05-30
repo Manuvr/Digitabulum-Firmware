@@ -135,8 +135,6 @@ void isr_pmu_test_2() {
 
 
 void PMU::gpioSetup() {
-  GPIO_InitTypeDef GPIO_InitStruct;
-
   /* These Port B pins are inputs:
   *
   * #  Default   Purpose
@@ -144,12 +142,6 @@ void PMU::gpioSetup() {
   * 0     0      CHG_STAT_1
   * 1     0      CHG_STAT_2
   */
-  //GPIO_InitStruct.Pin   = GPIO_PIN_1 | GPIO_PIN_0;
-  //GPIO_InitStruct.Mode  = GPIO_MODE_INPUT;
-  //GPIO_InitStruct.Pull  = GPIO_PULLUP;
-  //GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
-  //HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
   // This will cause interrupts to be enabled for these pins.
   setPinFxn(_stat1_pin, CHANGE_PULL_UP, mcp73833_stat1_isr);
   setPinFxn(_stat2_pin, CHANGE_PULL_UP, mcp73833_stat2_isr);
