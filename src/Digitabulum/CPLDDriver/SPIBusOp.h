@@ -68,7 +68,6 @@ class SPIBusOp : public BusOp {
     int8_t begin();
     int8_t markComplete();
 
-
     void setParams(uint8_t _dev_addr, uint8_t _xfer_len, uint8_t _dev_count, uint8_t _reg_addr);
     void setParams(uint8_t _reg_addr, uint8_t _val);
     void setParams(uint8_t _reg_addr);

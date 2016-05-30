@@ -266,8 +266,8 @@ int main(void) {
   // Pins 58 and 63 are the reset and IRQ pin, respectively.
   // This is translated to pins 10 and 13 on PortD.
   ADP8866 leds(58, 63, 0x27);
-  kernel->subscribe((EventReceiver*) &leds);
   i2c.addSlaveDevice(&leds);
+  kernel->subscribe((EventReceiver*) &leds);
 
   RN4677 bt;
   kernel->subscribe((EventReceiver*) &bt);

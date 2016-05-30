@@ -229,10 +229,3 @@ void SDMMC1_IRQHandler(void) {
 */
 void RNG_IRQHandler(void) {
 }
-
-
-/*
-*
-*/
-void fxn(void) {
-}
