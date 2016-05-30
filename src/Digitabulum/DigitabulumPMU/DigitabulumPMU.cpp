@@ -23,7 +23,7 @@ limitations under the License.
 #include "DigitabulumPMU.h"
 #include <DataStructures/StringBuilder.h>
 
-#include "stm32f7xx_hal.h"
+#include <Platform/Platform.h>
 
 
 /****************************************************************************************************
@@ -101,21 +101,33 @@ int8_t PMU::cpu_scale(uint8_t _freq) {
 }
 
 
+void isr_pmu_test_1() {
+  Kernel::log("CHARGE_STAT_1.\n");
+}
+
+void isr_pmu_test_2() {
+  Kernel::log("CHARGE_STAT_2.\n");
+}
+
+
 void PMU::gpioSetup() {
   GPIO_InitTypeDef GPIO_InitStruct;
 
-  /* These Port B pins are inputs:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 0     0      CHG_STAT_1
-  * 1     0      CHG_STAT_2
-  */
-  GPIO_InitStruct.Pin   = GPIO_PIN_1 | GPIO_PIN_0;
-  GPIO_InitStruct.Mode  = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull  = GPIO_PULLUP;
-  GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  ///* These Port B pins are inputs:
+  //*
+  //* #  Default   Purpose
+  //* -----------------------------------------------
+  //* 0     0      CHG_STAT_1
+  //* 1     0      CHG_STAT_2
+  //*/
+  //GPIO_InitStruct.Pin   = GPIO_PIN_1 | GPIO_PIN_0;
+  //GPIO_InitStruct.Mode  = GPIO_MODE_INPUT;
+  //GPIO_InitStruct.Pull  = GPIO_PULLUP;
+  //GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
+  //HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  setPinFxn(16, FALLING_PULL_UP, isr_pmu_test_1);
+  setPinFxn(17, FALLING_PULL_UP, isr_pmu_test_2);
 }
 
 
