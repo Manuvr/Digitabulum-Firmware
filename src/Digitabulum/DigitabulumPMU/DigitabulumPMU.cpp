@@ -37,6 +37,12 @@ limitations under the License.
 * Static members and initializers should be located here. Initializers first, functions second.
 ****************************************************************************************************/
 
+volatile static unsigned long _stat1_change_time = 0;
+volatile static unsigned long _stat2_change_time = 0;
+volatile static unsigned int  _stat1_prior_delta = 0;
+volatile static unsigned int  _stat2_prior_delta = 0;
+
+
 volatile PMU* PMU::INSTANCE = NULL;
 
 int PMU::pmu_cpu_clock_rate(CPUFreqSetting _setting) {
@@ -46,6 +52,22 @@ int PMU::pmu_cpu_clock_rate(CPUFreqSetting _setting) {
     case CPUFreqSetting::CPU_CLK_UNDEF:  return 0;
   }
   return 0;
+}
+
+/**
+* Debug and logging support.
+*
+* @return a const char* containing a human-readable representation of a fault code.
+*/
+const char* PMU::getChargeStateString(ChargeState code) {
+  switch (code) {
+    case ChargeState::FULL:      return "FULL";
+    case ChargeState::CHARGING:  return "CHARGING";
+    case ChargeState::DRAINING:  return "DRAINING";
+    case ChargeState::TEST:      return "TEST";
+    case ChargeState::ERROR:     return "ERROR";
+    default:                     return "<UNDEF>";
+  }
 }
 
 
@@ -61,6 +83,8 @@ int PMU::pmu_cpu_clock_rate(CPUFreqSetting _setting) {
 PMU::PMU() {
   INSTANCE   = this;
   _cpu_clock = CPUFreqSetting::CPU_CLK_UNDEF;
+  _stat1_pin = 16;
+  _stat2_pin = 17;
 }
 
 
@@ -113,21 +137,66 @@ void isr_pmu_test_2() {
 void PMU::gpioSetup() {
   GPIO_InitTypeDef GPIO_InitStruct;
 
-  ///* These Port B pins are inputs:
-  //*
-  //* #  Default   Purpose
-  //* -----------------------------------------------
-  //* 0     0      CHG_STAT_1
-  //* 1     0      CHG_STAT_2
-  //*/
+  /* These Port B pins are inputs:
+  *
+  * #  Default   Purpose
+  * -----------------------------------------------
+  * 0     0      CHG_STAT_1
+  * 1     0      CHG_STAT_2
+  */
   //GPIO_InitStruct.Pin   = GPIO_PIN_1 | GPIO_PIN_0;
   //GPIO_InitStruct.Mode  = GPIO_MODE_INPUT;
   //GPIO_InitStruct.Pull  = GPIO_PULLUP;
   //GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
   //HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  setPinFxn(16, FALLING_PULL_UP, isr_pmu_test_1);
-  setPinFxn(17, FALLING_PULL_UP, isr_pmu_test_2);
+  // This will cause interrupts to be enabled for these pins.
+  setPinFxn(_stat1_pin, CHANGE_PULL_UP, mcp73833_stat1_isr);
+  setPinFxn(_stat2_pin, CHANGE_PULL_UP, mcp73833_stat2_isr);
+  _er_set_flag(DIGITAB_PMU_FLAG_STAT1, readPin(_stat1_pin));
+  _er_set_flag(DIGITAB_PMU_FLAG_STAT2, readPin(_stat2_pin));
+}
+
+/*
+* Updates the local state if warranted, but always returns local state.
+*/
+ChargeState PMU::getChargeState() {
+  uint8_t idx = 0;
+  bool s1 = readPin(_stat1_pin);
+  bool s2 = readPin(_stat2_pin);
+  _er_set_flag(DIGITAB_PMU_FLAG_STAT1, s1);
+  _er_set_flag(DIGITAB_PMU_FLAG_STAT2, s2);
+  idx += s1 ? 1 : 0;
+  idx += s2 ? 2 : 0;
+  switch (idx) {
+    case 0:
+      _charge_state = ChargeState::TEST;
+      break;
+    case 1:
+      _charge_state = ChargeState::FULL;
+      break;
+    case 2:
+      _charge_state = ChargeState::CHARGING;
+      break;
+    case 3:
+      // Both pins high. No inference possible.
+    default:
+      break;
+  }
+  return _charge_state;
+}
+
+
+void PMU::set_stat1_delta(unsigned int nu) {
+  getChargeState();
+  local_log.concatf("STAT1 delta: %u\n", nu);
+  Kernel::log(&local_log);
+}
+
+void PMU::set_stat2_delta(unsigned int nu) {
+  getChargeState();
+  local_log.concatf("STAT2 delta: %u\n", nu);
+  Kernel::log(&local_log);
 }
 
 
@@ -162,7 +231,17 @@ const char* PMU::getReceiverName() {  return "PMU";  }
 */
 void PMU::printDebug(StringBuilder* output) {
   EventReceiver::printDebug(output);
-  output->concatf("-- CPU freq                  %d MHz\n",      pmu_cpu_clock_rate(_cpu_clock));
+  output->concatf("-- CPU freq                  %d MHz\n",  pmu_cpu_clock_rate(_cpu_clock));
+  output->concatf("-- Charge state              %s\n",      getChargeStateString());
+  output->concatf("-- STAT1                     %s\n",      (_er_flag(DIGITAB_PMU_FLAG_STAT1) ? "hi" : "lo"));
+  output->concatf("-- STAT2                     %s\n",      (_er_flag(DIGITAB_PMU_FLAG_STAT2) ? "hi" : "lo"));
+  output->concatf("-- _stat1_delta              %u\n",      _stat1_delta);
+  output->concatf("-- _stat2_delta              %u\n",      _stat2_delta);
+
+  output->concatf("-- _stat1_change_time        %lu\n",      _stat1_change_time);
+  output->concatf("-- _stat2_change_time        %lu\n",      _stat2_change_time);
+  output->concatf("-- _stat1_prior_delta        %lu\n",      _stat1_prior_delta);
+  output->concatf("-- _stat2_prior_delta        %lu\n",      _stat2_prior_delta);
 }
 
 
@@ -284,3 +363,31 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
 
 Interrupt service routine support functions...
 ****************************************************************************************************/
+
+/*
+* This is an ISR.
+*/
+void mcp73833_stat1_isr() {
+  unsigned long current = millis();
+  unsigned int delta = (current >= _stat1_change_time) ? (current - _stat1_change_time) : (_stat1_change_time - current);
+  _stat1_change_time = current;
+  delta = delta >> 2;   // Filter small deviations in timing that are not significant.
+  if (delta != _stat1_prior_delta) {
+    ((PMU*) PMU::INSTANCE)->set_stat1_delta(delta);
+    _stat1_prior_delta = delta;
+  }
+}
+
+/*
+* This is an ISR.
+*/
+void mcp73833_stat2_isr() {
+  unsigned long current = millis();
+  unsigned int delta = (current >= _stat2_change_time) ? (current - _stat2_change_time) : (_stat2_change_time - current);
+  _stat2_change_time = current;
+  delta = delta >> 2;   // Filter small deviations in timing that are not significant.
+  if (delta != _stat2_prior_delta) {
+    ((PMU*) PMU::INSTANCE)->set_stat2_delta(delta);
+    _stat2_prior_delta = delta;
+  }
+}
