@@ -69,7 +69,7 @@ void RN4677::gpioSetup(void) {
   GPIO_InitStruct.Pin        = GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_8;
   GPIO_InitStruct.Mode       = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
+  GPIO_InitStruct.Speed      = GPIO_SPEED_HIGH;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* These Port C pins are inputs:
@@ -121,7 +121,7 @@ void RN4677::gpioSetup(void) {
   GPIO_InitStruct.Pin        = GPIO_PIN_5;
   GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
+  GPIO_InitStruct.Speed      = GPIO_SPEED_HIGH;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
 

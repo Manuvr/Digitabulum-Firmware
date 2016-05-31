@@ -26,15 +26,44 @@ Digitabulum's power-management subsystem consists of...
   * A TI INA219 (Voltage monitor and consumption rate)
   * A Microchip MCP73833 (LiPo charge management)
 
+
+Regarding the battery in Digitabulum
+================================================================================
+r1 uses a 1485mAh LiPo.
+
+
+Regarding the MCP73833 (charge controller)
+================================================================================
+Any other statX combinations are meaningless because it could mean many things.
+
+stat1 stat2   Condition             This table is complicated by the fact that
+---------------------------------     the stat lines were intended to be hooked
+  L     H     Charge-in-progress      to LEDs for a human. So they pulse and do
+  H     L     Charge complete         other things. For this reason, we track
+  L     L     System test mode        the system time of falling edges.
+
+
+Regarding the INA219 (fuel gauge)
+================================================================================
+In Digitabulum, the shunt resistor is Yageo part number RL1210FR-070R2L. It is
+  0.2-ohm.
+
 */
 
 #ifndef __DIGITABULUM_PMU_DRIVER_H__
 #define __DIGITABULUM_PMU_DRIVER_H__
 
 #include <Kernel.h>
-
 #include <Drivers/INA219/INA219.h>
 #include <Drivers/MCP73833/MCP73833.h>
+
+/*
+* These state flags are hosted by the EventReceiver. This may change in the future.
+* Might be too much convention surrounding their assignment across inherritence.
+*/
+#define DIGITAB_PMU_FLAG_STAT1      0x01    // The state of STAT1.
+#define DIGITAB_PMU_FLAG_STAT2      0x02    // The state of STAT2.
+
 
 // Valid CPU frequencies.
 enum class CPUFreqSetting {
@@ -42,6 +71,19 @@ enum class CPUFreqSetting {
   CPU_216,
   CPU_CLK_UNDEF
 };
+
+enum class ChargeState {
+  FULL,      // Implies we are connected to a charging source.
+  CHARGING,  // The battery is not full, but it is charging.
+  DRAINING,  // No charging source. We are burning fuel..
+  TEST,      // System test mode.
+  ERROR,     // Charge error. This means a hardware fault. Absent battery?
+  UNDEF
+};
+
+/* These fxns are out-of-class ISRs. */
+void mcp73833_stat1_isr();
+void mcp73833_stat2_isr();
 
 
 class PMU : public EventReceiver {
@@ -58,6 +100,15 @@ class PMU : public EventReceiver {
       void procDirectDebugInstruction(StringBuilder*);
     #endif  //__MANUVR_CONSOLE_SUPPORT
 
+    /* These are called by ISR to keep track of the STAT pin timings. */
+
+    ChargeState getChargeState();
+    void set_stat1_delta(unsigned int);
+    void set_stat2_delta(unsigned int);
+
+    /* Inlines for object-style usage of static functions... */
+    inline const char* getChargeStateString() {  return getChargeStateString(_charge_state); };
+
     static volatile PMU *INSTANCE;
     static int pmu_cpu_clock_rate(CPUFreqSetting);
 
@@ -67,10 +118,19 @@ class PMU : public EventReceiver {
 
 
   private:
+    /* Values for the MCP73833 charge controller. */
+    unsigned int _stat1_delta;
+    unsigned int _stat2_delta;
+    uint8_t      _stat1_pin;
+    uint8_t      _stat2_pin;
+
     CPUFreqSetting _cpu_clock;
+    ChargeState    _charge_state = ChargeState::UNDEF;
 
     void gpioSetup();
     int8_t cpu_scale(uint8_t _freq);
+
+    static const char* getChargeStateString(ChargeState);
 };
 
 #endif //__DIGITABULUM_PMU_DRIVER_H__
