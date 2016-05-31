@@ -269,6 +269,9 @@ int main(void) {
   i2c.addSlaveDevice(&leds);
   kernel->subscribe((EventReceiver*) &leds);
 
+  INA219 ina219(0x4A);
+  i2c.addSlaveDevice(&ina219);
+
   RN4677 bt;
   kernel->subscribe((EventReceiver*) &bt);
 
@@ -381,9 +384,11 @@ void SystemClock_Config(void) {
 
   /* We are going to setup the 48MHz source to be consistent regardless of CPU clock. */
   PeriphClkInitStruct.PLLSAI.PLLSAIN = 192;
-  PeriphClkInitStruct.PLLSAI.PLLSAIQ = 4;
+  PeriphClkInitStruct.PLLSAI.PLLSAIQ = 2;
   PeriphClkInitStruct.PLLSAI.PLLSAIR = 2;
   PeriphClkInitStruct.PLLSAI.PLLSAIP = RCC_PLLSAIP_DIV4;
+  PeriphClkInitStruct.PLLSAIDivQ = 1;
+  PeriphClkInitStruct.PLLSAIDivR = RCC_PLLSAIDIVR_2;
 
 
   if(HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct)  != HAL_OK) {

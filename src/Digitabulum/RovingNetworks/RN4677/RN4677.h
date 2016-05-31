@@ -52,6 +52,16 @@ class RN4677 : public RNBase {
 
 
   private:
+    uint8_t _pin_p04 = 0;
+    uint8_t _pin_p15 = 0;
+    uint8_t _pin_p05 = 0;
+    uint8_t _pin_p20 = 0;
+
+    uint8_t _pin_p31 = 0;
+    uint8_t _pin_p32 = 0;
+    uint8_t _pin_p33 = 0;
+    uint8_t _pin_p34 = 0;
+    uint8_t _pin_p37 = 0;
 };
 
 
