@@ -73,9 +73,11 @@ const MessageTypeDef digitabulum_message_defs[] = {
     compile time.
   */
   #if defined (__ENABLE_MSG_SEMANTICS)
+  {  DIGITABULUM_MSG_GPIO_VIBRATE_0  , MSG_FLAG_EXPORTABLE,  "RN_RESET"             , ManuvrMsg::MSG_ARGS_NONE }, //
   {  DIGITABULUM_MSG_GPIO_VIBRATE_0  , MSG_FLAG_EXPORTABLE,  "VIBRATE_0"            , MSG_ARGS_VIBRATE }, // Some class wants to trigger vibrator 0.
   {  DIGITABULUM_MSG_GPIO_VIBRATE_1  , MSG_FLAG_EXPORTABLE,  "VIBRATE_1"            , MSG_ARGS_VIBRATE }, // Some class wants to trigger vibrator 1.
   #else
+  {  DIGITABULUM_MSG_GPIO_VIBRATE_0  , 0x000,                "RN_RESET"             , ManuvrMsg::MSG_ARGS_NONE, NULL }, //
   {  DIGITABULUM_MSG_GPIO_VIBRATE_0  , MSG_FLAG_EXPORTABLE,  "VIBRATE_0"            , MSG_ARGS_VIBRATE, NULL }, // Some class wants to trigger vibrator 0.
   {  DIGITABULUM_MSG_GPIO_VIBRATE_1  , MSG_FLAG_EXPORTABLE,  "VIBRATE_1"            , MSG_ARGS_VIBRATE, NULL }, // Some class wants to trigger vibrator 1.
   #endif
@@ -272,7 +274,15 @@ int main(void) {
   INA219 ina219(0x4A);
   i2c.addSlaveDevice(&ina219);
 
-  RN4677 bt;
+  /* These Port E pins are push-pull outputs:
+  *
+  * #  Default   Purpose
+  * -----------------------------------------------
+  * 4     0      ~BT_RESET
+  * 5     1      BT_EAN
+  * 6     1      BT_PIO_24
+  */
+  RN4677 bt(68);
   kernel->subscribe((EventReceiver*) &bt);
 
   SDCard sd;

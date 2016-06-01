@@ -40,6 +40,8 @@ TODO: This class is in SORE need of the following things:
 #include <Transports/ManuvrXport.h>
 
 
+#define MANUVR_MSG_BT_EXIT_RESET     0x4295
+
 // Bluetooth Modes
 #define RNBASE_MODE_COMMAND       "$$$"
 #define RNBASE_MODE_EXITCOMMAND   "---\r\n"
@@ -49,8 +51,12 @@ TODO: This class is in SORE need of the following things:
 #define RNBASE_MODE_MANUCONNECT   "SM,4\r\n"
 #define RNBASE_MODE_STATUS        "SO,/#\r\n"
 
+#define RNBASE_AUTH_MODE_SIMPLE   "SA,1\r\n"  // 6-digit pin code
+#define RNBASE_AUTH_MODE_JUSTWORK "SA,2\r\n"  // No auth
+#define RNBASE_AUTH_MODE_PININPUT "SA,3\r\n"  // We must feed code to the RN module.
+#define RNBASE_AUTH_MODE_LEGACY   "SA,4\r\n"  // 4 digit pin code
+
 // Specific command to the module
-#define RNBASE_CMD_REBOOT           "R,1\r\n"
 #define RNBASE_CMD_RECONNECT        "C\r\n"   // Tries to reconnect to the address given by "GR".
 #define RNBASE_CMD_CHANGE_NAME      "SN,"
 #define RNBASE_CMD_GET_FIRMWARE_REV "V\r\n"
@@ -65,6 +71,7 @@ TODO: This class is in SORE need of the following things:
 #define RNBASE_CMD_GET_OUR_BT_ADDR  "GB\r\n"   // Gets our BT MAC.
 #define RNBASE_CMD_GET_CP_BT_ADDR   "GF\r\n"   // Gets the BT MAC of the currently connected device.
 #define RNBASE_CMD_GET_STOR_BT_ADDR "GR\r\n"   // Gets the BT MAC of the currently bound device.
+#define RNBASE_CMD_REBOOT         "R,1\r\n"
 
 
 #define RNBASE_PROTO_SPP            "AW\r\n"
@@ -120,7 +127,7 @@ TODO: This class is in SORE need of the following things:
 */
 class RNBase : public ManuvrXport {
   public:
-    RNBase();
+    RNBase(uint8_t _rst_pin);
     virtual ~RNBase();
 
     /* Overrides from the Transport class. */
@@ -162,7 +169,6 @@ class RNBase : public ManuvrXport {
 
     static void hostRxFlush();
     static void expire_lockout();
-    static void unreset();
 
     static inline RNBase* getInstance() { return (RNBase*)INSTANCE; };
 
@@ -179,7 +185,7 @@ class RNBase : public ManuvrXport {
 
     // Mandatory overrides.
     virtual void factoryReset(void)    =0;   // Perform the sequence that will factory-reset the RN.
-    virtual void gpioSetup(void)       =0;
+    virtual void gpioSetup();
     virtual void force_9600_mode(bool) =0;   // Call with 'true' to force the module into 9600bps.
     virtual void set_bitrate(int)      =0;   //
 
@@ -198,6 +204,8 @@ class RNBase : public ManuvrXport {
 
   private:
     ManuvrRunnable event_bt_queue_ready;
+
+    uint8_t _reset_pin = 0;
 
     /* Members concerned with the work queue and keeping messages atomic. */
     PriorityQueue<BTQueuedOperation*> work_queue;
