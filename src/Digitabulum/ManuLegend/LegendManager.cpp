@@ -148,10 +148,14 @@ LegendManager::LegendManager() {
   _preformed_read_m.devRegisterAdvance(true);
   _preformed_read_m.set_opcode(BusOpcode::RX);
   _preformed_read_m.callback = (SPIDeviceWithRegisters*) this;
+
+  // Starting from the first magnetometer...
   // Read 6 bytes...
-  _preformed_read_m.reg_idx  = LSM9DS1_M_DATA_X;  // ...from this base address...
   // ...across 17 sensors...
-  // ...starting from this sensor.
+  // ...from this base address...
+  _preformed_read_m.setParams(CPLD_REG_IMU_DM_P_M|0x80, 6, 17, LSM9DS1_M_DATA_X);
+
+  // ...and drop the results here.
   _preformed_read_m.buf      = (uint8_t*) __frame_buf_m;
   _preformed_read_m.buf_len  = 102;
 
@@ -434,11 +438,6 @@ int8_t LegendManager::spi_op_callback(SPIBusOp* op) {
   // There is zero chance this object will be a null pointer unless it was done on purpose.
   if (op->hasFault()) {
     if (getVerbosity() > 3) local_log.concat("spi_op_callback() rejected a callback because the bus op failed.\n");
-    return SPI_CALLBACK_ERROR;
-  }
-
-  if (-1 == op->reg_idx) {
-    if (getVerbosity() > 3) local_log.concat("spi_op_callback() rejected a callback because there was no way to ref the register.\n");
     return SPI_CALLBACK_ERROR;
   }
 

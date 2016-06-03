@@ -379,46 +379,67 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
   preformed_busop_read_acc.devRegisterAdvance(true);
   preformed_busop_read_acc.set_opcode(BusOpcode::RX);
   preformed_busop_read_acc.callback = (SPIDeviceWithRegisters*) this;
-  preformed_busop_read_acc.reg_idx  = LSM9DS1_A_DATA_X;
-  preformed_busop_read_acc.buf      = reg_defs[preformed_busop_read_acc.reg_idx].val;
-  preformed_busop_read_acc.bus_addr = reg_defs[preformed_busop_read_acc.reg_idx].addr | 0x80;
+  preformed_busop_read_acc.buf      = reg_defs[LSM9DS1_A_DATA_X].val;
   preformed_busop_read_acc.buf_len  = 6;
+  preformed_busop_read_acc.setParams(
+    bus_addr|0x80,
+    preformed_busop_read_acc.buf_len,
+    1,
+    (reg_defs[LSM9DS1_A_DATA_X].addr | 0x80)
+  );
 
   preformed_busop_read_gyr.shouldReap(false);
   preformed_busop_read_gyr.devRegisterAdvance(true);
   preformed_busop_read_gyr.set_opcode(BusOpcode::RX);
   preformed_busop_read_gyr.callback = (SPIDeviceWithRegisters*) this;
-  preformed_busop_read_gyr.reg_idx  = LSM9DS1_G_DATA_X;
-  preformed_busop_read_gyr.buf      = reg_defs[preformed_busop_read_gyr.reg_idx].val;
-  preformed_busop_read_gyr.bus_addr = reg_defs[preformed_busop_read_gyr.reg_idx].addr | 0x80;
+  preformed_busop_read_gyr.buf      = reg_defs[LSM9DS1_G_DATA_X].val;
   preformed_busop_read_gyr.buf_len  = 6;
+  preformed_busop_read_gyr.setParams(
+    bus_addr|0x80,
+    preformed_busop_read_gyr.buf_len,
+    1,
+    (reg_defs[LSM9DS1_G_DATA_X].addr | 0x80)
+  );
+
 
   preformed_busop_irq_0.shouldReap(false);
   preformed_busop_irq_0.devRegisterAdvance(true);
   preformed_busop_irq_0.set_opcode(BusOpcode::RX);
   preformed_busop_irq_0.callback = (SPIDeviceWithRegisters*) this;
-  preformed_busop_irq_0.reg_idx  = LSM9DS1_G_INT_GEN_SRC;
-  preformed_busop_irq_0.bus_addr = reg_defs[preformed_busop_irq_0.reg_idx].addr | 0x80;
-  preformed_busop_irq_0.buf      = reg_defs[preformed_busop_irq_0.reg_idx].val;
+  preformed_busop_irq_0.buf      = reg_defs[LSM9DS1_G_INT_GEN_SRC].val;
   preformed_busop_irq_0.buf_len  = 22;
+  preformed_busop_irq_0.setParams(
+    bus_addr|0x80,
+    preformed_busop_irq_0.buf_len,
+    1,
+    (reg_defs[LSM9DS1_G_INT_GEN_SRC].addr | 0x80)
+  );
 
   preformed_busop_irq_1.shouldReap(false);
   preformed_busop_irq_1.devRegisterAdvance(true);
   preformed_busop_irq_1.set_opcode(BusOpcode::RX);
   preformed_busop_irq_1.callback = (SPIDeviceWithRegisters*) this;
-  preformed_busop_irq_1.reg_idx  = LSM9DS1_A_INT_GEN_SRC;
-  preformed_busop_irq_1.bus_addr = reg_defs[preformed_busop_irq_1.reg_idx].addr | 0x80;
-  preformed_busop_irq_1.buf      = reg_defs[preformed_busop_irq_1.reg_idx].val;
+  preformed_busop_irq_1.buf      = reg_defs[LSM9DS1_A_INT_GEN_SRC].val;
   preformed_busop_irq_1.buf_len  = 3;
+  preformed_busop_irq_1.setParams(
+    bus_addr|0x80,
+    preformed_busop_irq_1.buf_len,
+    1,
+    (reg_defs[LSM9DS1_A_INT_GEN_SRC].addr | 0x80)
+  );
 
   full_register_refresh.shouldReap(false);
   full_register_refresh.devRegisterAdvance(true);
   full_register_refresh.set_opcode(BusOpcode::RX);
   full_register_refresh.callback = (SPIDeviceWithRegisters*) this;
-  full_register_refresh.reg_idx  = LSM9DS1_AG_FIFO_CTRL;
-  full_register_refresh.bus_addr = reg_defs[full_register_refresh.reg_idx].addr | 0x80;
-  full_register_refresh.buf      = reg_defs[full_register_refresh.reg_idx].val;
+  full_register_refresh.buf      = reg_defs[LSM9DS1_AG_FIFO_CTRL].val;
   full_register_refresh.buf_len  = 18;
+  full_register_refresh.setParams(
+    bus_addr|0x80,
+    full_register_refresh.buf_len,
+    1,
+    (reg_defs[LSM9DS1_AG_FIFO_CTRL].addr | 0x80)
+  );
 
   // Local class stuff...
   last_val_acc(0.0f, 0.0f, 0.0f);
@@ -774,13 +795,6 @@ void LSM9DS1_AG::dumpPreformedElements(StringBuilder *output) {
 int8_t LSM9DS1_AG::spi_op_callback(SPIBusOp* op) {
   int8_t return_value = SPI_CALLBACK_NOMINAL;
 
-  if (-1 == op->reg_idx) {
-    // Our class implementation considers this a serious problem.
-    if (verbosity > 3) Kernel::log("~~~~~~~~LSM9DS1_AG::spi_op_callback   (ERROR CASE -2)\n");
-    error_condition = (BusOpcode::RX == op->get_opcode()) ? IMU_ERROR_BUS_OPERATION_FAILED_R : IMU_ERROR_BUS_OPERATION_FAILED_W;
-    return SPI_CALLBACK_ERROR;
-  }
-
   // There is zero chance this object will be a null pointer unless it was done on purpose.
   if (op->hasFault()) {
     if (verbosity > 3) {
@@ -795,7 +809,7 @@ int8_t LSM9DS1_AG::spi_op_callback(SPIBusOp* op) {
   }
 
   uint8_t access_len = op->buf_len;  // The access length lets us know how many things changed.
-  int16_t access_idx = op->reg_idx;  // The access length lets us know how many things changed.
+  int16_t access_idx = op->getRegAddr();  // The access length lets us know how many things changed.
   unsigned int value = regValue(access_idx);
   if (verbosity > 6) local_log.concatf("%s  XM::spi_op_callback(0x%08x): value: %d \t access_idx  %d \t access_len: %d\n", op->getOpcodeString(), (uint32_t)((SPIOpCallback*) this), value, access_idx, access_len);
 

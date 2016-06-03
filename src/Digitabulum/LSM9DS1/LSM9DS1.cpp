@@ -387,9 +387,8 @@ int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t le
     op->set_opcode(BusOpcode::TX);
     op->buf             = buf;
     op->buf_len         = len;
-    op->bus_addr        = (bus_addr + first_byte);
-    op->reg_idx         = reg_index;
     op->callback        = this;
+    op->setParams(bus_addr, len, 1, first_byte);
 
     // TODO: Add this to a local-scope linked list, and throw all bus ops into the queue in one call.
     // This will keep bus operations for a single IMU atomic in the priority queue.
@@ -451,9 +450,8 @@ int8_t LSM9DSx_Common::readRegister(uint8_t reg_index, uint8_t *buf, uint8_t len
   op->set_opcode(BusOpcode::RX);
   op->buf             = buf;
   op->buf_len         = len;
-  op->bus_addr        = (bus_addr + first_byte);
-  op->reg_idx         = reg_index;
   op->callback        = this;
+  op->setParams(bus_addr|0x80, len, 1, first_byte);
 
   if (profile) {
     op->profile(true);

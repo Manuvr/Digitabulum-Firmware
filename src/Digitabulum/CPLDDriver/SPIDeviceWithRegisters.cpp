@@ -29,7 +29,7 @@ extern volatile CPLDDriver* cpld;
 
 SPIDeviceWithRegisters::SPIDeviceWithRegisters(uint8_t bus_address, uint8_t r_count) : DeviceWithRegisters(r_count) {
   reg_defs = (reg_count > 0) ? (DeviceRegister*) malloc(sizeof(DeviceRegister) * reg_count) : NULL;
-  bus_addr = ((uint16_t) bus_address) << 8;
+  bus_addr = bus_address;
 }
 
 SPIDeviceWithRegisters::~SPIDeviceWithRegisters() {
@@ -55,19 +55,11 @@ int8_t SPIDeviceWithRegisters::queue_spi_job(SPIBusOp* op) {
 int8_t SPIDeviceWithRegisters::writeRegister(DeviceRegister *reg) {
   if (reg == NULL) return -1;
 
-  uint8_t first_byte = reg->addr;
   SPIBusOp* op = ((CPLDDriver*)cpld)->issue_spi_op_obj();
+  op->set_opcode(BusOpcode::TX);
   op->buf        = reg->val;
   op->buf_len    = reg->len;
-  op->bus_addr   = (bus_addr + first_byte);
-  op->set_opcode(BusOpcode::TX);
-
-  for (int i = 0; i < reg_count; i++) {
-    if (reg == (reg_defs + (sizeof(DeviceRegister) * i))) {
-      op->reg_idx = i;
-      break;
-    }
-  }
+  op->setParams(bus_addr, reg->len, 1, reg->addr);
 
   reg->dirty = true;
   return SPIDeviceWithRegisters::queue_spi_job(op);
@@ -78,7 +70,6 @@ int8_t SPIDeviceWithRegisters::writeRegister(uint8_t idx, unsigned int nu_val, b
   if (idx >= reg_count) return -1;
 
   DeviceRegister *reg = &reg_defs[idx];
-  uint8_t first_byte = reg->addr;
   switch (reg->len) {
     case 1:
       *((uint8_t *) reg->val) = (uint8_t) (0xFF & nu_val);
@@ -100,11 +91,11 @@ int8_t SPIDeviceWithRegisters::writeRegister(uint8_t idx, unsigned int nu_val, b
   SPIBusOp* op;
   if (!defer) {
     op = ((CPLDDriver*)cpld)->issue_spi_op_obj();
+    op->set_opcode(BusOpcode::TX);
     op->buf        = reg->val;
     op->buf_len    = reg->len;
-    op->bus_addr   = (bus_addr + first_byte);
-    op->reg_idx    = idx;
-    op->set_opcode(BusOpcode::TX);
+    op->setParams(bus_addr, reg->len, 1, reg->addr);
+
     return SPIDeviceWithRegisters::queue_spi_job(op);
   }
 
@@ -119,38 +110,18 @@ int8_t SPIDeviceWithRegisters::writeRegister(uint8_t idx, uint8_t nu_val) {
 
 int8_t SPIDeviceWithRegisters::readRegister(uint8_t idx) {
   if (idx >= reg_count) return -1;
-
-  DeviceRegister *reg = &reg_defs[idx];
-  uint8_t first_byte = reg->addr;
-  SPIBusOp* op = ((CPLDDriver*)cpld)->issue_spi_op_obj();
-  op->set_opcode(BusOpcode::RX);
-  op->buf        = reg->val;
-  op->buf_len    = reg->len;
-  op->bus_addr   = (bus_addr + first_byte);
-  op->reg_idx    = idx;
-
-  reg->unread = true;
-  reg->dirty = false;   // TODO: Reading a register will cancel a write operation.
-  return SPIDeviceWithRegisters::queue_spi_job(op);
+  return readRegister(&reg_defs[idx]);
 }
 
 
 int8_t SPIDeviceWithRegisters::readRegister(DeviceRegister *reg) {
   if (reg == NULL) return -1;
 
-  uint8_t first_byte = reg->addr;
   SPIBusOp* op = ((CPLDDriver*)cpld)->issue_spi_op_obj();
   op->set_opcode(BusOpcode::RX);
   op->buf        = reg->val;
   op->buf_len    = reg->len;
-  op->bus_addr   = (bus_addr + first_byte);
-
-  for (int i = 0; i < reg_count; i++) {
-    if (reg == (reg_defs + (sizeof(DeviceRegister) * i))) {
-      op->reg_idx = i;
-      break;
-    }
-  }
+  op->setParams(bus_addr, reg->len, 1, reg->addr);
 
   reg->unread = true;
   reg->dirty = false;   // TODO: Reading a register will cancel a write operation.

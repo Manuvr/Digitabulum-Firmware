@@ -207,19 +207,27 @@ LSM9DS1_M::LSM9DS1_M(uint8_t address, IIU* _integrator) : LSM9DSx_Common("GY ", 
   preformed_busop_irq_mag.devRegisterAdvance(false);
   preformed_busop_irq_mag.set_opcode(BusOpcode::RX);
   preformed_busop_irq_mag.callback = (SPIDeviceWithRegisters*) this;
-  preformed_busop_irq_mag.reg_idx  = LSM9DS1_M_INT_SRC;
-  preformed_busop_irq_mag.bus_addr = reg_defs[preformed_busop_irq_mag.reg_idx].addr | 0xC0;
-  preformed_busop_irq_mag.buf      = reg_defs[preformed_busop_irq_mag.reg_idx].val;
+  preformed_busop_irq_mag.buf      = reg_defs[LSM9DS1_M_INT_SRC].val;
   preformed_busop_irq_mag.buf_len  = 1;
+  preformed_busop_read_mag.setParams(
+    bus_addr|0x80,
+    preformed_busop_irq_mag.buf_len,
+    1,
+    (reg_defs[LSM9DS1_M_INT_SRC].addr | 0xC0)
+  );
 
   preformed_busop_read_mag.shouldReap(false);
   preformed_busop_read_mag.devRegisterAdvance(true);
   preformed_busop_read_mag.set_opcode(BusOpcode::RX);
   preformed_busop_read_mag.callback = (SPIDeviceWithRegisters*) this;
-  preformed_busop_read_mag.reg_idx  = LSM9DS1_M_DATA_X;
-  preformed_busop_read_mag.bus_addr = reg_defs[preformed_busop_read_mag.reg_idx].addr | 0xC0;
-  preformed_busop_read_mag.buf      = reg_defs[preformed_busop_read_mag.reg_idx].val;
+  preformed_busop_read_mag.buf      = reg_defs[LSM9DS1_M_DATA_X].val;
   preformed_busop_read_mag.buf_len  = 6;
+  preformed_busop_read_mag.setParams(
+    bus_addr|0x80,
+    preformed_busop_read_mag.buf_len,
+    1,
+    (reg_defs[LSM9DS1_M_DATA_X].addr | 0xC0)
+  );
 
   last_val_mag(0.0f, 0.0f, 0.0f);
   noise_floor_mag(0, 0, 0);
@@ -445,12 +453,6 @@ void LSM9DS1_M::dumpPreformedElements(StringBuilder *output) {
 int8_t LSM9DS1_M::spi_op_callback(SPIBusOp* op) {
   int8_t return_value = SPI_CALLBACK_NOMINAL;
 
-  if (-1 == op->reg_idx) {
-    // Our class implementation considers this a serious problem.
-    if (verbosity > 3) Kernel::log("~~~~~~~~LSM9DS1_M::spi_op_callback   (ERROR CASE -2)\n");
-    return SPI_CALLBACK_ERROR;
-  }
-
   // There is zero chance this object will be a null pointer unless it was done on purpose.
   if (op->hasFault()) {
     if (verbosity > 3) {
@@ -465,7 +467,7 @@ int8_t LSM9DS1_M::spi_op_callback(SPIBusOp* op) {
   }
 
   unsigned int access_len = op->buf_len;  // The access length lets us know how many things changed.
-  unsigned int access_idx = op->reg_idx;  // The access length lets us know how many things changed.
+  unsigned int access_idx = op->getRegAddr();  // The access length lets us know how many things changed.
   unsigned int value = regValue(access_idx);
   if (verbosity > 6) local_log.concatf("%s  G::spi_op_callback(0x%08x): value: %d \t access_idx  %d \t access_len: %d\n", op->getOpcodeString(), (uint32_t)((SPIOpCallback*) this), value, access_idx, access_len);
 

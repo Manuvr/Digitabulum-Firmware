@@ -475,13 +475,8 @@ int8_t CPLDDriver::spi_op_callback(SPIBusOp* op) {
     return SPI_CALLBACK_ERROR;
   }
 
-  if (-1 == op->reg_idx) {
-    if (getVerbosity() > 3) local_log.concat("spi_op_callback() rejected a callback because there was no way to ref the register.\n");
-    return SPI_CALLBACK_ERROR;
-  }
-
   if (BusOpcode::RX == op->get_opcode()) {
-    switch (op->reg_idx) {
+    switch (op->getRegAddr()) {
       case CPLD_REG_VERSION:
         if (getVerbosity() > 3) local_log.concatf("CPLD r%d.\n", cpld_version);
         if (0 < cpld_version) {
@@ -498,12 +493,12 @@ int8_t CPLDDriver::spi_op_callback(SPIBusOp* op) {
       case CPLD_REG_WAKEUP_IRQ:
         break;
       default:
-        if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->reg_idx);
+        if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->getRegAddr());
         break;
     }
   }
   else if (BusOpcode::TX == op->get_opcode()) {
-    switch (op->reg_idx) {
+    switch (op->getRegAddr()) {
       case CPLD_REG_VERSION:
       case CPLD_REG_STATUS:
         if (getVerbosity() > 2) local_log.concat("An SPIBusOp called back as having written to an RO register.\n");
@@ -513,7 +508,7 @@ int8_t CPLDDriver::spi_op_callback(SPIBusOp* op) {
       case CPLD_REG_WAKEUP_IRQ:
         break;
       default:
-        if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->reg_idx);
+        if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->getRegAddr());
         break;
     }
   }

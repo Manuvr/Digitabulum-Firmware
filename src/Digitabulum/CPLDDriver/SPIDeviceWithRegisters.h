@@ -33,7 +33,7 @@ limitations under the License.
   */
   class SPIDeviceWithRegisters : public DeviceWithRegisters, public SPIOpCallback {
     public:
-      uint16_t    bus_addr;            // What is our address on the bus?
+      uint8_t     bus_addr;            // What is our address on the bus?
 
       SPIDeviceWithRegisters(uint8_t bus_address, uint8_t r_count);
       ~SPIDeviceWithRegisters();

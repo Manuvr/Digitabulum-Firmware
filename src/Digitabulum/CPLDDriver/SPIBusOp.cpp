@@ -46,6 +46,7 @@ DMA_HandleTypeDef _dma_w_handle;
 *   as a sort of /dev/zero. This never contains any meaningful data.
 */
 uint32_t STATIC_ZERO = 0;
+uint32_t STATIC_SINK = 0;
 
 
 /****************************************************************************************************
@@ -159,7 +160,6 @@ SPIBusOp::SPIBusOp(BusOpcode nu_op, uint16_t addr, uint8_t *buf, uint8_t len, SP
   this->opcode          = nu_op;
   this->buf             = buf;
   this->buf_len         = len;
-  this->bus_addr        = addr;
 
   _param_len     = 0;
   xfer_params[0] = 0;
@@ -207,6 +207,8 @@ void SPIBusOp::setParams(uint8_t _reg_addr, uint8_t _val) {
   xfer_params[1] = _val;
   xfer_params[2] = 0;
   xfer_params[3] = 0;
+  this->buf      = NULL;
+  this->buf_len  = 0;
 }
 
 /**
@@ -286,7 +288,6 @@ void SPIBusOp::wipe() {
   opcode      = BusOpcode::UNDEF;
   buf_len     = 0;
   buf         = NULL;
-  reg_idx     = -1;
   callback    = NULL;
 
   _param_len     = 0;
@@ -362,10 +363,6 @@ int8_t SPIBusOp::begin() {
      we're going to shovel in both bytes if we have a 16-bit address. Since the ISR only calls
      us back when the bus goes idle, we don't need to worry about tracking the extra IRQ. */
   xfer_state = XferState::ADDR;
-  if (bus_addr > 255) {
-    //hspi1->DR = (uint8_t) (bus_addr >> 8);
-  }
-
   if (!wait_with_timeout()) {
     debug_log.concatf("SPI op aborted halfway into ADDR phase?!\n");
     abort();
@@ -625,8 +622,6 @@ void SPIBusOp::printDebug(StringBuilder *output) {
   output->concatf("\t callback set      %s\n", (callback ? "yes":"no"));
   output->concatf("\t will reap?        %s\n", shouldReap()?"yes":"no");
   output->concatf("\t ret to prealloc?  %s\n", returnToPrealloc()?"yes":"no");
-  output->concatf("\t reg_idx           %d\n", reg_idx);
-  output->concatf("\t bus_addr          0x%04x\n", bus_addr);
   output->concatf("\t buf_len           %d\n", buf_len);
   output->concatf("\t buf *(0x%08x) ", (uint32_t) buf);
 
