@@ -141,7 +141,6 @@ class SPIBusOp : public BusOp {
     //static uint32_t  spi_cs_delay;       // In microseconds.
 
     static void buildDMAMembers();
-    static void assertCS(bool);
 
 
   private:

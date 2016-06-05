@@ -25,6 +25,10 @@ limitations under the License.
 
 #include "Kernel.h"
 
+/* Vibrator codes */
+#define DIGITABULUM_MSG_GPIO_VIBRATE_0       0xA000 // Some class wants to trigger vibrator 0.
+#define DIGITABULUM_MSG_GPIO_VIBRATE_1       0xA001 // Some class wants to trigger vibrator 1.
+
 
 class HapticStrap : public EventReceiver {
   public:

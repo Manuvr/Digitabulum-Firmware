@@ -62,9 +62,6 @@ Kernel* kernel      = NULL;
 TIM_HandleTypeDef htim2;  // This is the timer for the CPLD clock.
 
 
-// Milliseconds to vibrate, Pulse count.
-const unsigned char MSG_ARGS_VIBRATE[] = {  UINT16_FM, UINT8_FM, 0  };
-
 // Messages that are specific to Digitabulum.
 const MessageTypeDef digitabulum_message_defs[] = {
   /*
@@ -73,13 +70,9 @@ const MessageTypeDef digitabulum_message_defs[] = {
     compile time.
   */
   #if defined (__ENABLE_MSG_SEMANTICS)
-  {  DIGITABULUM_MSG_GPIO_VIBRATE_0  , MSG_FLAG_EXPORTABLE,  "RN_RESET"             , ManuvrMsg::MSG_ARGS_NONE }, //
-  {  DIGITABULUM_MSG_GPIO_VIBRATE_0  , MSG_FLAG_EXPORTABLE,  "VIBRATE_0"            , MSG_ARGS_VIBRATE }, // Some class wants to trigger vibrator 0.
-  {  DIGITABULUM_MSG_GPIO_VIBRATE_1  , MSG_FLAG_EXPORTABLE,  "VIBRATE_1"            , MSG_ARGS_VIBRATE }, // Some class wants to trigger vibrator 1.
+  {  MANUVR_MSG_BT_EXIT_RESET        , 0x000,                "RN_RESET"             , ManuvrMsg::MSG_ARGS_NONE }, //
   #else
-  {  DIGITABULUM_MSG_GPIO_VIBRATE_0  , 0x000,                "RN_RESET"             , ManuvrMsg::MSG_ARGS_NONE, NULL }, //
-  {  DIGITABULUM_MSG_GPIO_VIBRATE_0  , MSG_FLAG_EXPORTABLE,  "VIBRATE_0"            , MSG_ARGS_VIBRATE, NULL }, // Some class wants to trigger vibrator 0.
-  {  DIGITABULUM_MSG_GPIO_VIBRATE_1  , MSG_FLAG_EXPORTABLE,  "VIBRATE_1"            , MSG_ARGS_VIBRATE, NULL }, // Some class wants to trigger vibrator 1.
+  {  MANUVR_MSG_BT_EXIT_RESET        , 0x000,                "RN_RESET"             , ManuvrMsg::MSG_ARGS_NONE, NULL }, //
   #endif
 };
 
@@ -255,6 +248,11 @@ int main(void) {
   #if defined(__MANUVR_DEBUG)
     kernel->profiler(true);
   #endif
+
+  ManuvrMsg::registerMessages(
+    digitabulum_message_defs,
+    sizeof(digitabulum_message_defs) / sizeof(MessageTypeDef)
+  );
 
   CPLDDriver _cpld;
   kernel->subscribe(&_cpld);

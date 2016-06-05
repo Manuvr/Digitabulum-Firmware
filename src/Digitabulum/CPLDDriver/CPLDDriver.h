@@ -335,6 +335,9 @@ class IIU;
 #define CPLD_FLAG_SVC_IRQS     0x04    // Should the CPLD respond to IRQ signals?
 #define CPLD_FLAG_QUEUE_IDLE   0x08    // Is the SPI queue idle?
 #define CPLD_FLAG_QUEUE_GUARD  0x10    // Prevent bus queue floods?
+#define CPLD_FLAG_RESERVED     0x20    //
+#define CPLD_FLAG_SPI1_READY   0x40    // Is SPI1 initialized?
+#define CPLD_FLAG_SPI2_READY   0x80    // Is SPI2 initialized?
 
 
 /* Codes that are specific to Digitabulum's CPLD */
@@ -350,9 +353,9 @@ class IIU;
   #define DIGITABULUM_MSG_IMU_TAP              0x060A // The given IMU experienced a tap.
   #define DIGITABULUM_MSG_IMU_DOUBLE_TAP       0x060B // The given IMU experienced a double tap.
 
-/* Vibrator codes */
-  #define DIGITABULUM_MSG_GPIO_VIBRATE_0       0xA000 // Some class wants to trigger vibrator 0.
-  #define DIGITABULUM_MSG_GPIO_VIBRATE_1       0xA001 // Some class wants to trigger vibrator 1.
+  // SPI
+  #define DIGITABULUM_MSG_SPI_QUEUE_READY      0x0230 // There is a new job in the SPI bus queue.
+  #define DIGITABULUM_MSG_SPI_CB_QUEUE_READY   0x0231 // There is something ready in the callback queue.
 
 
 /* CPLD register map ***************************************/
@@ -509,6 +512,7 @@ class CPLDDriver : public EventReceiver, public SPIOpCallback {
     /* Setup and init fxns. */
     void gpioSetup(void);
     void init_spi(uint8_t cpol, uint8_t cpha);  // Pass 0 for CPHA 0.
+    void init_spi_soft();
 
 
     /* Low-level CPLD register stuff */
@@ -529,6 +533,8 @@ class CPLDDriver : public EventReceiver, public SPIOpCallback {
     uint16_t readInternalStates(void);
 
     static SPIBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
+
+    static void assertCS(bool);
 };
 
 #endif

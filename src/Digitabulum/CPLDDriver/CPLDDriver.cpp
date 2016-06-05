@@ -35,6 +35,7 @@ volatile bool timeout_punch = false;
 void callback_spi_timeout() {
   if (timeout_punch) {
     if (((CPLDDriver*) cpld)->current_queue_item != NULL) {
+      Kernel::log("callback_spi_timeout()\n");
       if (((CPLDDriver*) cpld)->current_queue_item->isComplete()) {
         ((CPLDDriver*) cpld)->advance_work_queue();
       }
@@ -77,8 +78,39 @@ void cpld_gpio_isr_1() {
 }
 
 void spi_bus_op_isr(){
+  HAL_NVIC_DisableIRQ(EXTI4_IRQn);
   Kernel::log("spi_bus_op_isr()\n");
 }
+
+void cpld_wakeup_isr(){
+  Kernel::log("cpld_wakeup_isr()\n");
+}
+
+
+/*
+*
+*/
+void DMA1_Stream3_IRQHandler() {
+  HAL_NVIC_DisableIRQ(DMA1_Stream3_IRQn);
+  Kernel::log("DMA1_Stream3_IRQHandler\n");
+}
+
+
+/*
+*
+*/
+void SPI1_IRQHandler() {
+  Kernel::log("SPI1_IRQHandler\n");
+}
+
+
+/*
+*
+*/
+void SPI2_IRQHandler() {
+  Kernel::log("SPI2_IRQHandler\n");
+}
+
 
 
 /****************************************************************************************************
@@ -139,24 +171,51 @@ const unsigned char MSG_ARGS_IMU_MAP_STATE[] = {
 
 const MessageTypeDef cpld_message_defs[] = {
   /* These are messages specific to Digitabulum. */
-  {  DIGITABULUM_MSG_IMU_IRQ_RAISED       , 0x0000,               "IMU_IRQ_RAISED"       , ManuvrMsg::MSG_ARGS_NONE }, // IRQ asserted by CPLD.
-  {  DIGITABULUM_MSG_IMU_READ             , 0x0000,               "IMU_READ"             , MSG_ARGS_IMU_READ },  // IMU read request. Argument is the ID.
-  {  DIGITABULUM_MSG_IMU_MAP_STATE        , MSG_FLAG_EXPORTABLE,  "IMU_MAP_STATE"        , MSG_ARGS_IMU_MAP_STATE }, //
-  {  DIGITABULUM_MSG_IMU_INIT             , MSG_FLAG_EXPORTABLE,  "IMU_INIT"             , ManuvrMsg::MSG_ARGS_U8 }, // Signal to build the IMUs.
+  {  DIGITABULUM_MSG_IMU_IRQ_RAISED       , 0x0000,               "IMU_IRQ_RAISED"     , ManuvrMsg::MSG_ARGS_NONE }, // IRQ asserted by CPLD.
+  {  DIGITABULUM_MSG_IMU_READ             , 0x0000,               "IMU_READ"           , MSG_ARGS_IMU_READ },  // IMU read request. Argument is the ID.
+  {  DIGITABULUM_MSG_IMU_MAP_STATE        , MSG_FLAG_EXPORTABLE,  "IMU_MAP_STATE"      , MSG_ARGS_IMU_MAP_STATE }, //
+  {  DIGITABULUM_MSG_IMU_INIT             , MSG_FLAG_EXPORTABLE,  "IMU_INIT"           , ManuvrMsg::MSG_ARGS_U8 }, // Signal to build the IMUs.
 
-  {  DIGITABULUM_MSG_CPLD_RESET_COMPLETE  , 0x0000,               "CPLD_RESET_COMPLETE"  , ManuvrMsg::MSG_ARGS_NONE }, //
-  {  DIGITABULUM_MSG_CPLD_RESET_CALLBACK  , 0x0000,               "CPLD_RESET_CALLBACK"  , ManuvrMsg::MSG_ARGS_NONE }, //
-  {  DIGITABULUM_MSG_IMU_LEGEND           , MSG_FLAG_EXPORTABLE,  "IMU_LEGEND"           , MSG_ARGS_IMU_LEGEND }, // No args? Asking for this legend. Many args: Legend provided.
+  {  DIGITABULUM_MSG_CPLD_RESET_COMPLETE  , 0x0000,               "CPLD_RST_COMPLETE"  , ManuvrMsg::MSG_ARGS_NONE }, //
+  {  DIGITABULUM_MSG_CPLD_RESET_CALLBACK  , 0x0000,               "CPLD_RST_CALLBACK"  , ManuvrMsg::MSG_ARGS_NONE }, //
+  {  DIGITABULUM_MSG_IMU_LEGEND           , MSG_FLAG_EXPORTABLE,  "IMU_LEGEND"         , MSG_ARGS_IMU_LEGEND }, // No args? Asking for this legend. Many args: Legend provided.
 
-  {  DIGITABULUM_MSG_IMU_QUAT_CRUNCH      , 0x0000,               "IMU_QUAT_CRUNCH"      , ManuvrMsg::MSG_ARGS_U8 }, //
-  {  DIGITABULUM_MSG_IMU_TAP              , MSG_FLAG_EXPORTABLE,  "IMU_TAP"              , MSG_ARGS_U8_FLOAT }, // IMU id and optional threshold.
-  {  DIGITABULUM_MSG_IMU_DOUBLE_TAP       , MSG_FLAG_EXPORTABLE,  "IMU_DOUBLE_TAP"       , MSG_ARGS_U8_FLOAT }, // IMU id and optional threshold.
+  {  DIGITABULUM_MSG_IMU_QUAT_CRUNCH      , 0x0000,               "IMU_QUAT_CRUNCH"    , ManuvrMsg::MSG_ARGS_U8 }, //
+  {  DIGITABULUM_MSG_IMU_TAP              , MSG_FLAG_EXPORTABLE,  "IMU_TAP"            , MSG_ARGS_U8_FLOAT }, // IMU id and optional threshold.
+  {  DIGITABULUM_MSG_IMU_DOUBLE_TAP       , MSG_FLAG_EXPORTABLE,  "IMU_DOUBLE_TAP"     , MSG_ARGS_U8_FLOAT }, // IMU id and optional threshold.
+
+  {  DIGITABULUM_MSG_SPI_QUEUE_READY      , 0x0000,               "SPI_Q_RDY"          , ManuvrMsg::MSG_ARGS_NONE }, //
+  {  DIGITABULUM_MSG_SPI_CB_QUEUE_READY   , 0x0000,               "SPICB_RDY"          , ManuvrMsg::MSG_ARGS_NONE }, //
 };
 
 TIM_HandleTypeDef htim1;
 SPI_HandleTypeDef hspi1;
 SPI_HandleTypeDef hspi2;
 DMA_HandleTypeDef _dma_handle_spi2;
+
+
+bool cs_asserted = false;
+
+
+void CPLDDriver::assertCS(bool _asserted) {
+  GPIO_InitTypeDef GPIO_InitStruct;
+  GPIO_InitStruct.Pin   = GPIO_PIN_4;
+  GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
+  GPIO_InitStruct.Pull  = GPIO_PULLUP;
+  if (_asserted) {
+    GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_OD;
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  }
+  else {
+    GPIO_InitStruct.Mode  = GPIO_MODE_IT_RISING;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  }
+  cs_asserted = _asserted;
+}
+
+
+
 
 
 /****************************************************************************************************
@@ -180,13 +239,13 @@ CPLDDriver::CPLDDriver() {
   }
 
   // Build some pre-formed Events.
-  event_spi_callback_ready.repurpose(MANUVR_MSG_SPI_CB_QUEUE_READY);
+  event_spi_callback_ready.repurpose(DIGITABULUM_MSG_SPI_CB_QUEUE_READY);
   event_spi_callback_ready.isManaged(true);
   event_spi_callback_ready.specific_target = (EventReceiver*) this;
   event_spi_callback_ready.originator      = (EventReceiver*) this;
   event_spi_callback_ready.priority        = 5;
 
-  event_spi_queue_ready.repurpose(MANUVR_MSG_SPI_QUEUE_READY);
+  event_spi_queue_ready.repurpose(DIGITABULUM_MSG_SPI_QUEUE_READY);
   event_spi_queue_ready.isManaged(true);
   event_spi_queue_ready.specific_target    = (EventReceiver*) this;
   event_spi_queue_ready.originator         = (EventReceiver*) this;
@@ -207,13 +266,16 @@ CPLDDriver::CPLDDriver() {
 * Destructor. Should probably never be called.
 */
 CPLDDriver::~CPLDDriver() {
-  __SPI1_CLK_DISABLE();
-  __SPI2_CLK_DISABLE();
   HAL_GPIO_DeInit(GPIOA, GPIO_PIN_4|GPIO_PIN_6|GPIO_PIN_5|GPIO_PIN_7);
   HAL_GPIO_DeInit(GPIOB, GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15);
 
   __TIM1_CLK_DISABLE();
   HAL_GPIO_DeInit(GPIOA, GPIO_PIN_8);
+
+  HAL_SPI_DeInit(&hspi1);
+  HAL_SPI_DeInit(&hspi2);
+  __HAL_RCC_SPI1_CLK_DISABLE();
+  __HAL_RCC_SPI2_CLK_DISABLE();
 }
 
 
@@ -243,11 +305,7 @@ void CPLDDriver::gpioSetup(void) {
   * -----------------------------------------------
   * 13    0      IRQ_WAKEUP
   */
-  GPIO_InitStruct.Pin        = GPIO_PIN_13;
-  GPIO_InitStruct.Mode       = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+  setPinFxn(45, CHANGE, cpld_wakeup_isr);
 
   /* These Port E pins are inputs:
   *
@@ -336,24 +394,12 @@ void CPLDDriver::gpioSetup(void) {
 }
 
 
-/*
-* Init of SPI peripherals 1 and 2. This is broken out because we might be bringing it up and
-*   down in a single runtime for debug reasons.
-*/
-void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
-  uint8_t cpha_mode = (cpha) ? SPI_PHASE_2EDGE : SPI_PHASE_1EDGE;
-  uint8_t cpol_mode = (cpol) ? SPI_POLARITY_HIGH : SPI_POLARITY_LOW;
-
+void CPLDDriver::init_spi_soft() {
   GPIO_InitTypeDef GPIO_InitStruct;
 
-  /* These Port A pins are associated with the SPI1 peripheral:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 4   SPI1_CS
-  */
-  __SPI1_CLK_ENABLE();
-  setPinFxn(4, RISING_PULL_UP, spi_bus_op_isr);
+  _er_clear_flag(CPLD_FLAG_SPI1_READY | CPLD_FLAG_SPI2_READY);
+  HAL_SPI_DeInit(&hspi1);
+  HAL_SPI_DeInit(&hspi2);
 
   /* These Port A pins are associated with the SPI1 peripheral:
   *
@@ -363,14 +409,17 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   * 6   SPI1_MISO
   * 7   SPI1_MOSI
   */
-  __SPI1_CLK_ENABLE();
-  GPIO_InitStruct.Pin = GPIO_PIN_6|GPIO_PIN_5|GPIO_PIN_7;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pin = GPIO_PIN_5|GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
+  GPIO_InitStruct.Pin = GPIO_PIN_6;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
 
   /* These Port B pins are associated with the SPI2 peripheral:
@@ -382,7 +431,59 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   * 14  SPI2_MISO
   * 15  SPI2_MOSI
   */
-  __SPI2_CLK_ENABLE();
+  GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_15;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  GPIO_InitStruct.Pin = GPIO_PIN_14;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  setPinFxn(4, RISING_PULL_UP, spi_bus_op_isr);
+}
+
+
+/*
+* Init of SPI peripherals 1 and 2. This is broken out because we might be bringing it up and
+*   down in a single runtime for debug reasons.
+*/
+void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
+  GPIO_InitTypeDef GPIO_InitStruct;
+  uint8_t cpha_mode = (cpha) ? SPI_PHASE_2EDGE : SPI_PHASE_1EDGE;
+  uint8_t cpol_mode = (cpol) ? SPI_POLARITY_HIGH : SPI_POLARITY_LOW;
+
+  _er_clear_flag(CPLD_FLAG_SPI1_READY | CPLD_FLAG_SPI2_READY);
+  __HAL_RCC_SPI1_CLK_ENABLE();
+  __HAL_RCC_SPI2_CLK_ENABLE();
+
+  /* These Port A pins are associated with the SPI1 peripheral:
+  *
+  * #  Default   Purpose
+  * -----------------------------------------------
+  * 5   SPI1_CLK
+  * 6   SPI1_MISO
+  * 7   SPI1_MOSI
+  */
+  GPIO_InitStruct.Pin = GPIO_PIN_6|GPIO_PIN_5|GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
+  GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* These Port B pins are associated with the SPI2 peripheral:
+  *
+  * #  Default   Purpose
+  * -----------------------------------------------
+  * 12  SPI2_CS
+  * 13  SPI2_CLK
+  * 14  SPI2_MISO
+  * 15  SPI2_MOSI
+  */
   GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
@@ -398,33 +499,36 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   hspi1.Init.DataSize       = SPI_DATASIZE_8BIT;
   hspi1.Init.CLKPolarity    = cpol_mode;
   hspi1.Init.CLKPhase       = cpha_mode;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
   hspi1.Init.FirstBit       = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode         = SPI_TIMODE_DISABLED;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
   hspi1.Init.CRCPolynomial  = 7;
   hspi1.Init.CRCLength      = SPI_CRC_LENGTH_DATASIZE;
   hspi1.Init.NSSPMode       = SPI_NSS_PULSE_DISABLED;
-  HAL_SPI_Init(&hspi1);
+  _er_set_flag(CPLD_FLAG_SPI1_READY, (HAL_OK == HAL_SPI_Init(&hspi1)));
   //SPI_I2S_ITConfig(SPI1, SPI_I2S_IT_ERR | I2S_IT_UDR| SPI_IT_CRCERR | SPI_IT_MODF | SPI_I2S_IT_RXNE | SPI_I2S_IT_TXE, DISABLE);
   //SPI_I2S_ITConfig(SPI1, SPI_I2S_IT_RXNE , ENABLE);  // Interrupt when byte is done moving.
 
   hspi2.Instance            = SPI2;
   hspi2.Init.Mode           = SPI_MODE_SLAVE;
   hspi2.Init.Direction      = SPI_DIRECTION_2LINES_RXONLY;
+  //hspi2.Init.NSS            = SPI_NSS_HARD_INPUT;
+  hspi2.Init.NSS            = SPI_NSS_SOFT;
   hspi2.Init.DataSize       = SPI_DATASIZE_8BIT;
   hspi2.Init.CLKPolarity    = cpol_mode;
   hspi2.Init.CLKPhase       = cpha_mode;
-  hspi2.Init.NSS            = SPI_NSS_HARD_INPUT;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
   hspi2.Init.FirstBit       = SPI_FIRSTBIT_MSB;
   hspi2.Init.TIMode         = SPI_TIMODE_DISABLED;
   hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
   hspi2.Init.CRCPolynomial  = 7;
   hspi2.Init.CRCLength      = SPI_CRC_LENGTH_DATASIZE;
   hspi2.Init.NSSPMode       = SPI_NSS_PULSE_DISABLED;
-  HAL_SPI_Init(&hspi2);
+  _er_set_flag(CPLD_FLAG_SPI2_READY, (HAL_OK == HAL_SPI_Init(&hspi2)));
 
   // We handle SPI2 in this class. Setup the DMA members.
-  HAL_DMA_DeInit(&_dma_handle_spi2);
+  //HAL_DMA_DeInit(&_dma_handle_spi2);
 
   _dma_handle_spi2.Instance                 = DMA1_Stream3;
   _dma_handle_spi2.Init.Channel             = DMA_CHANNEL_0;
@@ -448,6 +552,14 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
 
   HAL_DMA_Start_IT(&_dma_handle_spi2, (uint32_t) hspi2.pTxBuffPtr, (uint32_t) _irq_data_0, 11);
+
+  /* These Port A pins are associated with the SPI1 peripheral:
+  *
+  * #  Default   Purpose
+  * -----------------------------------------------
+  * 4   SPI1_CS
+  */
+  setPinFxn(4, RISING_PULL_UP, spi_bus_op_isr);
 }
 
 
@@ -572,11 +684,9 @@ int8_t CPLDDriver::queue_spi_job(SPIBusOp* op) {
     }
 
     if (op->get_state() != XferState::IDLE) {
-      if (getVerbosity() > 3) Kernel::log("Tried to fire a pre-formed bus op that is not in IDLE state.\n");
+      if (getVerbosity() > 3) Kernel::log("Tried to fire a bus op that is not in IDLE state.\n");
       return -4;
     }
-
-    op->set_state(XferState::INITIATE);
 
     if ((NULL == current_queue_item) && (work_queue.size() == 0)){
       // If the queue is empty, fire the operation now.
@@ -680,20 +790,27 @@ int8_t CPLDDriver::advance_work_queue() {
     }
 
     switch (current_queue_item->get_state()) {
-       case XferState::IDLE:
-         if (getVerbosity() > 1) local_log.concat("Not sure how this bus job got here, but it is wrong.\n");
-         current_queue_item->printDebug(&local_log);
-         break;
-
+       case XferState::IO_WAIT:
+         if (current_queue_item->hasFault()) {
+           if (getVerbosity() > 3) local_log.concat("CPLDDriver::advance_work_queue():\t Failed at IO_WAIT.\n");
+         }
+         else {
+           current_queue_item->markComplete();
+         }
+         // No break on purpose.
        case XferState::COMPLETE:
          callback_queue.insert(current_queue_item);
          current_queue_item = NULL;
          if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
          break;
 
+       case XferState::IDLE:
        case XferState::INITIATE:
          switch (current_queue_item->begin()) {
            case 0:     // Nominal outcome. Transfer started with no problens...
+             assertCS(true);
+             // Disassert and let CPLD release it when the transfer is finished.
+             assertCS(false);
              break;
            case -1:    // Bus appears to be in-use. State did not change.
              // Re-throw queue_ready event and try again later.
@@ -701,7 +818,6 @@ int8_t CPLDDriver::advance_work_queue() {
              //Kernel::staticRaiseEvent(&event_spi_queue_ready);  // Bypass our method. Jump right to the target.
              break;
            case -2:    // Began the transfer, and it barffed... was aborted.
-             //move_to_callback_queue();
              if (getVerbosity() > 3) local_log.concat("CPLDDriver::advance_work_queue():\t Failed to begin transfer after starting.\n");
              callback_queue.insert(current_queue_item);
              current_queue_item = NULL;
@@ -709,10 +825,10 @@ int8_t CPLDDriver::advance_work_queue() {
              break;
          }
          break;
+
        /* Cases below ought to be handled by ISR flow... */
        case XferState::ADDR:
        case XferState::STOP:
-       case XferState::IO_WAIT:
          if (getVerbosity() > 5) local_log.concatf("State might be corrupted if we tried to advance_queue(). \n");
          break;
        default:
@@ -969,10 +1085,10 @@ int8_t CPLDDriver::callback_proc(ManuvrRunnable *event) {
 
   /* Some class-specific set of conditionals below this line. */
   switch (event->event_code) {
-    case MANUVR_MSG_SPI_QUEUE_READY:
+    case DIGITABULUM_MSG_SPI_QUEUE_READY:
       return_value = ((work_queue.size() > 0) || (NULL != current_queue_item)) ? EVENT_CALLBACK_RETURN_RECYCLE : return_value;
       break;
-    case MANUVR_MSG_SPI_CB_QUEUE_READY:
+    case DIGITABULUM_MSG_SPI_CB_QUEUE_READY:
       return_value = (callback_queue.size() > 0) ? EVENT_CALLBACK_RETURN_RECYCLE : return_value;
       break;
     default:
@@ -1031,12 +1147,12 @@ int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
     case DIGITABULUM_MSG_IMU_IRQ_RAISED:
       return_value = 1;
       break;
-    case MANUVR_MSG_SPI_QUEUE_READY:
+    case DIGITABULUM_MSG_SPI_QUEUE_READY:
       advance_work_queue();
       //dirty_bus = true;
       return_value = 1;
       break;
-    case MANUVR_MSG_SPI_CB_QUEUE_READY:
+    case DIGITABULUM_MSG_SPI_CB_QUEUE_READY:
       service_callback_queue();
       return_value = 1;
       break;
@@ -1174,31 +1290,41 @@ void CPLDDriver::printDebug(StringBuilder *output) {
 
   EventReceiver::printDebug(output);
   //output->concatf("0x%08x OSC IRQs thus far.\n", cpld_osc_irqs);
-  output->concatf("--- Conf                0x%02x\n",      cpld_conf_value);
-  output->concatf("--- Osc (Int/Ext)       %s/%s\n",       (_er_flag(CPLD_FLAG_INT_OSC) ? "on":"off"), (_er_flag(CPLD_FLAG_EXT_OSC) ? "on":"off"));
-  output->concatf("--- CPLD_GPIO (0/1)     %s/%s\n",       (readPin(75) ? "hi":"lo"), (readPin(78) ? "hi":"lo"));
-  if (getVerbosity() > 6) output->concatf("--- volatile *cpld      0x%08x\n---\n", cpld);
+  output->concatf("-- Conf                0x%02x\n",      cpld_conf_value);
+  output->concatf("-- Osc (Int/Ext)       %s/%s\n",       (_er_flag(CPLD_FLAG_INT_OSC) ? "on":"off"), (_er_flag(CPLD_FLAG_EXT_OSC) ? "on":"off"));
+  output->concatf("-- CPLD_GPIO (0/1)     %s/%s\n",       (readPin(75) ? "hi":"lo"), (readPin(78) ? "hi":"lo"));
+  if (getVerbosity() > 6) output->concatf("-- volatile *cpld      0x%08x\n--\n", cpld);
 
-  output->concatf("--- IRQ service:        %sabled\n---\n",   (_er_flag(CPLD_FLAG_SVC_IRQS)?"en":"dis"));
+  output->concatf("-- IRQ service:        %sabled\n--\n",   (_er_flag(CPLD_FLAG_SVC_IRQS)?"en":"dis"));
 
-  output->concat("\n--- SPI BUS\n-------------------------------------------------------\n");
+  output->concatf("\n-- SPI1 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI1_READY)?"on":"OFF"));
+  if (cs_asserted) {
+    output->concat("-- cs_asserted         yes\n");
+  }
+  else {
+    output->concatf("-- cs state            %s\n", (readPin(4) ? "hi":"lo"));
+  }
+  output->concatf("-- hspi1.State:        0x%08x\n", (unsigned long) hspi1.State);
+  output->concatf("-- hspi1.ErrorCode:    0x%08x\n", (unsigned long) hspi1.ErrorCode);
+  output->concatf("-- hspi1.TxXferCount:  0x%04x\n",     hspi1.TxXferCount);
+  output->concatf("-- hspi1.RxXferCount:  0x%04x\n--\n", hspi1.RxXferCount);
   if (getVerbosity() > 2) {
-    output->concatf("--- Prevent queue flood %s\n",       (_er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no"));
-    output->concatf("--- spi_cb_per_event    %d\n---\n",       spi_cb_per_event);
+    output->concatf("-- Guarding queue      %s\n",       (_er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no"));
+    output->concatf("-- spi_cb_per_event    %d\n--\n",   spi_cb_per_event);
   }
 
-  output->concatf("--- prealloc queue size %d\n",       preallocated.size());
-  output->concatf("--- prealloc_misses     %u\n",       (unsigned long) preallocation_misses);
-  output->concatf("--- total_transfers     %u\n",       (unsigned long) SPIBusOp::total_transfers);
-  output->concatf("--- failed_transfers    %u\n",       (unsigned long) SPIBusOp::failed_transfers);
-  output->concatf("--- specificity_burden  %u\n---\n",  (unsigned long) specificity_burden);
+  output->concatf("-- prealloc queue size %d\n",     preallocated.size());
+  output->concatf("-- prealloc_misses     %u\n",     (unsigned long) preallocation_misses);
+  output->concatf("-- total_transfers     %u\n",     (unsigned long) SPIBusOp::total_transfers);
+  output->concatf("-- failed_transfers    %u\n",     (unsigned long) SPIBusOp::failed_transfers);
+  output->concatf("-- specificity_burden  %u\n--\n", (unsigned long) specificity_burden);
 
-  output->concatf("--- bus queue depth:      %d\n--- callback queue depth  %d\n\n", work_queue.size(), callback_queue.size());
+  output->concatf("-- bus queue depth:    %d\n-- callback q depth    %d\n\n", work_queue.size(), callback_queue.size());
 
 
   if (getVerbosity() > 3) {
     if (current_queue_item != NULL) {
-      output->concat("\tCurrently being serviced:");
+      output->concat("\tCurrently being serviced:\n");
       current_queue_item->printDebug(output);
     }
 
@@ -1211,6 +1337,7 @@ void CPLDDriver::printDebug(StringBuilder *output) {
       output->concat("\n");
     }
   }
+  output->concatf("\n-- SPI2 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI2_READY)?"on":"OFF"));
 }
 
 
@@ -1218,28 +1345,46 @@ void CPLDDriver::printDebug(StringBuilder *output) {
 void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
-  uint8_t temp_byte = 0;
-  if (*(str) != 0) {
-    temp_byte = atoi((char*) str+1);
-  }
-
-  StringBuilder parse_mule;
+  uint8_t temp_byte = ((*(str) != 0) ? atoi((char*) str+1) : 0);
 
   switch (*(str)) {
     // IMU DEBUG //////////////////////////////////////////////////////////////////
     case 'i':        // Readback test
-      if (temp_byte == 1) {
-        getCPLDVersion();
-      }
-      else if (temp_byte == 2) {
-        readInternalStates();
-      }
-      else {
-        printDebug(&local_log);
+      switch (temp_byte) {
+        case 1:
+          getCPLDVersion();
+          break;
+        case 2:
+          readInternalStates();
+          break;
+        default:
+          printDebug(&local_log);
+          break;
       }
       break;
 
-    case 's':
+    case 's':     // SPI1 initialization...
+      switch (temp_byte) {
+        case 1:
+          init_spi(0, 0);  // COL=0, CPHA=0, HW-driven
+          break;
+        case 2:
+          init_spi(0, 1);  // COL=0, CPHA=1, HW-driven
+          break;
+        case 3:
+          init_spi(1, 1);  // COL=1, CPHA=1, HW-driven
+          break;
+        case 4:
+          init_spi_soft(); // Direct GPIO manipulation.
+          break;
+        default:
+          init_spi(1, 0);  // COL=1, CPHA=0, HW-driven
+          break;
+      }
+      local_log.concat("Re-initialized SPI1.\n");
+      break;
+
+    case '*':
       raiseEvent(Kernel::returnEvent(DIGITABULUM_MSG_IMU_IRQ_RAISED));   // Raise an event
       local_log.concat("Manual IRQ raise.\n");
       break;
@@ -1258,63 +1403,43 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       local_log.concatf("SPI bus timeout is now %u\n", bus_timeout_millis);
       break;
 
-    case '*':
+    case 't':     // Set the SPI1 timeout.
+      if (temp_byte) SPIBusOp::spi_wait_timeout = temp_byte * 10;
+      local_log.concatf("SPIBusOp::spi_wait_timeout is %uuS...\n", SPIBusOp::spi_wait_timeout);
+      break;
+    case 'g':     // SPI1 queue-guard (overflow protection).
+      _er_flip_flag(CPLD_FLAG_QUEUE_GUARD);
+      local_log.concatf("CPLD guarding SPI queue from overflow?  %s\n", _er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no");
+      break;
+    case 'm':     // Set the number of callbacks per event.
       if (temp_byte) spi_cb_per_event = temp_byte;
       local_log.concatf("CPLD spi_cb_per_event:  %d\n", spi_cb_per_event);
       break;
 
 
-     case 'k':     // SPI re-init with prescaler
-      switch ((uint16_t) temp_byte*1 ) {  // TODO: Un-lazy this.
-        case 1:
-          _er_flip_flag(CPLD_FLAG_QUEUE_GUARD);
-          local_log.concatf("CPLD guarding SPI queue from overflow?  %s\n", _er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no");
-          break;
-        case 2:
-          _er_flip_flag(CPLD_FLAG_SVC_IRQS);
-          local_log.concatf("CPLD servicing IRQs?  %s\n", _er_flag(CPLD_FLAG_SVC_IRQS)?"yes":"no");
-          break;
-        default:
-          break;
-      }
+    case 'k':     // SPI IRQ service?
+      _er_flip_flag(CPLD_FLAG_SVC_IRQS);
+      local_log.concatf("CPLD servicing IRQs?  %s\n", _er_flag(CPLD_FLAG_SVC_IRQS)?"yes":"no");
       break;
 
-    case 'p':
-      if (temp_byte) {
-        SPIBusOp::spi_wait_timeout = temp_byte * 10;
-      }
-      local_log.concatf("SPIBusOp::spi_wait_timeout is %uuS...\n", SPIBusOp::spi_wait_timeout);
-      break;
-
-    case 'o':        // CPLD internal oscillator (1 to engage)
-      if (temp_byte) {
-        local_log.concatf("Enabling CPLD internal oscillator...\n");
-        internalOscillator(true);
+    case 'o':        // CPLD internal oscillator. 1 to engage.
+    case 'O':        // CPLD external oscillator. 1 to engage.
+      local_log.concatf(
+        "%sabling CPLD %sternal oscillator...\n",
+        (temp_byte ? "En" : "Dis"),
+        ('O' == *(str) ? "ex" : "in")
+      );
+      if ('O' == *(str)) {
+        externalOscillator(temp_byte > 0);
       }
       else {
-        local_log.concatf("Disabling CPLD internal oscillator...\n");
-        internalOscillator(false);
+        internalOscillator(temp_byte > 0);
       }
       break;
 
-    case 'O':        // CPLD external oscillator (1 to engage)
-      if (temp_byte) {
-        local_log.concatf("Enabling CPLD external oscillator...\n");
-        externalOscillator(true);
-      }
-      else {
-        local_log.concatf("Disabling CPLD external oscillator...\n");
-        externalOscillator(false);
-      }
-      break;
-
-    case '1':
-      local_log.concatf("Resetting CPLD...\n");
-      reset();
-      break;
-    case '3':
+    case 'p':     // Purge the SPI1 work queue.
       purge_queued_work();
-      local_log.concat("CPLD SPI queue purged.\n");
+      local_log.concat("SPI1 queue purged.\n");
       break;
 
     case 'd':
@@ -1335,28 +1460,39 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
 
     case '+':
       local_log.concatf("Advanced CPLD SPI work queue.\n");
-      Kernel::raiseEvent(MANUVR_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
+      Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
       break;
 
     case '-':
     case '_':
       local_log.concatf("%s CPLD_DEN_AG_0.\n", (*(str) == '_' ? "Clearing" : "Setting"));
       setCPLDConfig(CPLD_CONF_BIT_DEN_AG_0, (*(str) == '-'));
-      Kernel::raiseEvent(MANUVR_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
+      Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
       break;
 
     case '[':
     case '{':
       local_log.concatf("%s CPLD_GPIO_0.\n", (*(str) == '[' ? "Clearing" : "Setting"));
       setCPLDConfig(CPLD_CONF_BIT_GPIO_0, (*(str) == '{'));
-      Kernel::raiseEvent(MANUVR_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
+      Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
       break;
 
     case ']':
     case '}':
       local_log.concatf("%s CPLD_GPIO_1.\n", (*(str) == ']' ? "Clearing" : "Setting"));
       setCPLDConfig(CPLD_CONF_BIT_GPIO_1, (*(str) == '}'));
-      Kernel::raiseEvent(MANUVR_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
+      Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
+      break;
+
+    case 'R':
+      if (temp_byte) {
+        local_log.concat("CPLD reset pin driven high.\n");
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);  // Drive the reset pin high...
+      }
+      else {
+        local_log.concat("CPLD reset pin driven low.\n");
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);  // Drive the reset pin low...
+      }
       break;
 
     case 'r':
