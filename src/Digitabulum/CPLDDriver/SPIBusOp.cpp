@@ -384,16 +384,17 @@ int8_t SPIBusOp::begin() {
   }
   //assertCS(true);
   if (0 == buf_len) {
-    xfer_state = XferState::IO_WAIT;
+    // If this transfer is all that we are going to do...
+    set_state(XferState::IO_WAIT);
   }
   else {
-    xfer_state = XferState::ADDR;
+    // Otherwise, let the ISR feed the next DMA operation.
+    set_state(XferState::ADDR);
   }
 
   /* In this case, we need to clear any pending interrupts for the SPI, and to do that, we must
      read this register, even though we don't care about the result.  */
-  volatile uint8_t throw_away;
-  if (__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_RXNE)) {} // throw_away = hspi1->DR;   // Clear the Rx flag (if set).
+  //volatile uint8_t throw_away;
 
   /* The peripheral should be totally clear at this point. Since the TX FIFO is two slots deep,
      we're going to shovel in both bytes if we have a 16-bit address. Since the ISR only calls
@@ -403,8 +404,13 @@ int8_t SPIBusOp::begin() {
     abort(XferFault::BUS_BUSY);
     return -2;
   }
+  if (__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_RXNE)) {
+    debug_log.concatf("SPI op leftovers: 0x%04x\n", hspi1.Instance->DR);
+    Kernel::log(&debug_log);
+  }
   /* Shovel in the last (or only) address byte... */
   //hspi1->DR = (uint8_t) xfer_params[0];
+
 
   return 0;
 }

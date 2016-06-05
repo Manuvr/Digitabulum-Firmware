@@ -210,6 +210,7 @@ void CPLDDriver::assertCS(bool _asserted) {
   else {
     GPIO_InitStruct.Mode  = GPIO_MODE_IT_RISING;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+    HAL_NVIC_EnableIRQ(EXTI4_IRQn);
   }
   cs_asserted = _asserted;
 }
@@ -548,10 +549,10 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   HAL_DMA_Init(&_dma_handle_spi2);
 
   /* Enable DMA Stream Transfer Complete interrupt */
-  __HAL_DMA_ENABLE_IT(&_dma_handle_spi2, DMA_IT_TC);
-  HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
+  //__HAL_DMA_ENABLE_IT(&_dma_handle_spi2, DMA_IT_TC);
+  //HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
 
-  HAL_DMA_Start_IT(&_dma_handle_spi2, (uint32_t) hspi2.pTxBuffPtr, (uint32_t) _irq_data_0, 11);
+  //HAL_DMA_Start_IT(&_dma_handle_spi2, (uint32_t) hspi2.pTxBuffPtr, (uint32_t) _irq_data_0, 11);
 
   /* These Port A pins are associated with the SPI1 peripheral:
   *
@@ -1059,7 +1060,7 @@ int8_t CPLDDriver::bootComplete() {
   event_spi_timeout.alterSchedule(bus_timeout_millis, -1, false, callback_spi_timeout);
   event_spi_timeout.isManaged(true);
 
-  //reset();
+  reset();
   return 1;
 }
 
