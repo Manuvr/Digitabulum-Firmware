@@ -157,20 +157,6 @@ void DMA2_Stream1_IRQHandler(void) {
 /*
 *
 */
-void DMA2_Stream2_IRQHandler(void) {
-}
-
-
-/*
-*
-*/
-void DMA2_Stream3_IRQHandler(void) {
-}
-
-
-/*
-*
-*/
 void DMA2_Stream4_IRQHandler(void) {
 }
 

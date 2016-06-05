@@ -59,12 +59,14 @@ class SPIBusOp : public BusOp {
     //uint32_t time_ended    = 0;   // This is the time when bus access stops (or is aborted).
 
     SPIBusOp();
-    SPIBusOp(BusOpcode nu_op, uint16_t addr, uint8_t *buf, uint8_t len, SPIOpCallback* requester);
+    SPIBusOp(BusOpcode nu_op, SPIOpCallback* requester);
     ~SPIBusOp();
 
     /* Job control functions. */
     int8_t begin();
     int8_t markComplete();
+
+    void setBuffer(uint8_t *buf, uint8_t len);
 
     void setParams(uint8_t _dev_addr, uint8_t _xfer_len, uint8_t _dev_count, uint8_t _reg_addr);
     void setParams(uint8_t _reg_addr, uint8_t _val);
@@ -139,6 +141,7 @@ class SPIBusOp : public BusOp {
     //static uint32_t  spi_cs_delay;       // In microseconds.
 
     static void buildDMAMembers();
+    static void assertCS(bool);
 
 
   private:

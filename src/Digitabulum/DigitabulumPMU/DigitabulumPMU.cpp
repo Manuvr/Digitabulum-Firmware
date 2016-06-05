@@ -125,14 +125,6 @@ int8_t PMU::cpu_scale(uint8_t _freq) {
 }
 
 
-void isr_pmu_test_1() {
-  Kernel::log("CHARGE_STAT_1.\n");
-}
-
-void isr_pmu_test_2() {
-  Kernel::log("CHARGE_STAT_2.\n");
-}
-
 
 void PMU::gpioSetup() {
   /* These Port B pins are inputs:
@@ -181,14 +173,14 @@ ChargeState PMU::getChargeState() {
 
 void PMU::set_stat1_delta(unsigned int nu) {
   getChargeState();
-  local_log.concatf("STAT1 delta: %u\n", nu);
-  Kernel::log(&local_log);
+  //local_log.concatf("STAT1 delta: %u\n", nu);
+  //Kernel::log(&local_log);
 }
 
 void PMU::set_stat2_delta(unsigned int nu) {
   getChargeState();
-  local_log.concatf("STAT2 delta: %u\n", nu);
-  Kernel::log(&local_log);
+  //local_log.concatf("STAT2 delta: %u\n", nu);
+  //Kernel::log(&local_log);
 }
 
 

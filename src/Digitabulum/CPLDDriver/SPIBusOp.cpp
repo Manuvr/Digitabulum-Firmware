@@ -49,6 +49,28 @@ uint32_t STATIC_ZERO = 0;
 uint32_t STATIC_SINK = 0;
 
 
+/*
+*
+*/
+void DMA2_Stream2_IRQHandler(void) {
+  Kernel::log("DMA2_Stream2_IRQHandler()\n");
+  __HAL_DMA_DISABLE_IT(&_dma_r_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+  __HAL_DMA_DISABLE_IT(&_dma_w_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+}
+
+
+/*
+*
+*/
+void DMA2_Stream3_IRQHandler(void) {
+  Kernel::log("DMA2_Stream3_IRQHandler()\n");
+  __HAL_DMA_DISABLE_IT(&_dma_r_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+  __HAL_DMA_DISABLE_IT(&_dma_w_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+}
+
+
+
+
 /****************************************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
 *     /       |           |   /   \  |           ||  |  /      |   /       |
@@ -65,6 +87,25 @@ uint32_t SPIBusOp::total_transfers  = 0;  // How many total SPI transfers have w
 uint32_t SPIBusOp::failed_transfers = 0;  // How many failed SPI transfers have we seen?
 uint16_t SPIBusOp::spi_wait_timeout = 20; // In microseconds. Per-byte.
 //uint32_t SPIBusOp::spi_cs_delay     = 0;  // How many microseconds to delay before CS disassertion?
+
+bool cs_asserted = false;
+
+void SPIBusOp::assertCS(bool _asserted) {
+  GPIO_InitTypeDef GPIO_InitStruct;
+  GPIO_InitStruct.Pin   = GPIO_PIN_4;
+  GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
+  GPIO_InitStruct.Pull  = GPIO_PULLUP;
+  if (_asserted) {
+    GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_OD;
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  }
+  else {
+    GPIO_InitStruct.Mode  = GPIO_MODE_IT_RISING;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  }
+  cs_asserted = _asserted;
+}
 
 
 /**
@@ -118,10 +159,10 @@ void SPIBusOp::buildDMAMembers() {
 */
 void SPIBusOp::enableSPI_DMA(bool enable) {
   if (!enable) {
-    NVIC_DisableIRQ(DMA2_Stream0_IRQn);
+    //NVIC_DisableIRQ(DMA2_Stream0_IRQn);
   }
   else {
-    NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+    //NVIC_EnableIRQ(DMA2_Stream0_IRQn);
   }
 }
 
@@ -156,17 +197,9 @@ SPIBusOp::SPIBusOp() {
 * @param  len        The length of the transaction.
 * @param  requester  The object to be notified when the bus operation completes with success.
 */
-SPIBusOp::SPIBusOp(BusOpcode nu_op, uint16_t addr, uint8_t *buf, uint8_t len, SPIOpCallback* requester) {
+SPIBusOp::SPIBusOp(BusOpcode nu_op, SPIOpCallback* requester) {
+  wipe();
   this->opcode          = nu_op;
-  this->buf             = buf;
-  this->buf_len         = len;
-
-  _param_len     = 0;
-  xfer_params[0] = 0;
-  xfer_params[1] = 0;
-  xfer_params[2] = 0;
-  xfer_params[3] = 0;
-
   callback = requester;
 }
 
@@ -186,6 +219,14 @@ SPIBusOp::~SPIBusOp() {
   if (debug_log.length() > 0) Kernel::log(&debug_log);
 }
 
+
+
+/**
+*/
+void SPIBusOp::setBuffer(uint8_t *buf, uint8_t len) {
+  this->buf     = buf;
+  this->buf_len = len;
+}
 
 
 /**
@@ -352,7 +393,7 @@ int8_t SPIBusOp::begin() {
     return -1;
   }
 
-  //assertCS(true);
+  assertCS(true);
 
   /* In this case, we need to clear any pending interrupts for the SPI, and to do that, we must
      read this register, even though we don't care about the result.  */
@@ -369,7 +410,10 @@ int8_t SPIBusOp::begin() {
     return -1;
   }
   /* Shovel in the last (or only) address byte... */
-  //hspi1->DR = (uint8_t) bus_addr;
+  //hspi1->DR = (uint8_t) xfer_params[0];
+
+  // Disassert and let CPLD release it when the transfer is finished.
+  assertCS(false);
 
   return 0;
 }
@@ -400,8 +444,6 @@ int8_t SPIBusOp::markComplete() {
       __HAL_DMA_DISABLE(&_dma_w_handle);
       __HAL_DMA_CLEAR_FLAG(&_dma_w_handle, DMA_FLAG_TCIF3_7 | DMA_FLAG_HTIF3_7 | DMA_FLAG_TEIF3_7 | DMA_FLAG_DMEIF3_7 | DMA_FLAG_FEIF3_7);
     }
-
-    //assertCS(false);
   }
 
   //time_ended = micros();
@@ -550,8 +592,6 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
 * Memory-management and cleanup support.                                                            *
 ****************************************************************************************************/
 
-
-
 /**
 * The client class calls this fxn to set this object's post-completion behavior.
 * If this fxn is never called, the default behavior of the class is to allow itself to be free()'d.
@@ -619,10 +659,25 @@ void SPIBusOp::printDebug(StringBuilder *output) {
   //if (XferState::COMPLETE == xfer_state) {
   //  output->concatf("\t completed (uS)   %u\n",   (unsigned long) time_ended - time_began);
   //}
+  if (cs_asserted) {
+    output->concat("\t cs_asserted       yes\n");
+  }
+  else {
+    output->concatf("\t cs state          %s\n", (readPin(4) ? "hi":"lo"));
+  }
   output->concatf("\t callback set      %s\n", (callback ? "yes":"no"));
   output->concatf("\t will reap?        %s\n", shouldReap()?"yes":"no");
   output->concatf("\t ret to prealloc?  %s\n", returnToPrealloc()?"yes":"no");
-  output->concatf("\t buf_len           %d\n", buf_len);
+  output->concatf("\t param_len         %d\n", _param_len);
+  output->concat("\t params            ");
+
+  if (_param_len > 0) {
+    for (uint8_t i = 0; i < _param_len; i++) {
+      output->concatf("0x%02x ", xfer_params[i]);
+    }
+  }
+
+  output->concatf("\n\t buf_len           %d\n", buf_len);
   output->concatf("\t buf *(0x%08x) ", (uint32_t) buf);
 
   if (buf_len > 0) {

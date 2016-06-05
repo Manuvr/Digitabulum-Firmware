@@ -51,6 +51,37 @@ void callback_spi_timeout() {
 
 
 /****************************************************************************************************
+ ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄       ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄
+▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌     ▐░▌          ▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░▌
+ ▀▀▀▀█░█▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌     ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌░▌     ▐░▌▐░█▀▀▀▀▀▀▀█░▌
+     ▐░▌     ▐░▌          ▐░▌       ▐░▌     ▐░▌          ▐░▌       ▐░▌▐░▌▐░▌    ▐░▌▐░▌       ▐░▌
+     ▐░▌     ▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌     ▐░▌          ▐░█▄▄▄▄▄▄▄█░▌▐░▌ ▐░▌   ▐░▌▐░▌       ▐░▌
+     ▐░▌     ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌     ▐░▌          ▐░░░░░░░░░░░▌▐░▌  ▐░▌  ▐░▌▐░▌       ▐░▌
+     ▐░▌      ▀▀▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀█░█▀▀      ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌   ▐░▌ ▐░▌▐░▌       ▐░▌
+     ▐░▌               ▐░▌▐░▌     ▐░▌       ▐░▌          ▐░▌       ▐░▌▐░▌    ▐░▌▐░▌▐░▌       ▐░▌
+ ▄▄▄▄█░█▄▄▄▄  ▄▄▄▄▄▄▄▄▄█░▌▐░▌      ▐░▌      ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌       ▐░▌▐░▌     ▐░▐░▌▐░█▄▄▄▄▄▄▄█░▌
+▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌     ▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░▌      ▐░░▌▐░░░░░░░░░░▌
+ ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀       ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀        ▀▀  ▀▀▀▀▀▀▀▀▀▀
+
+Interrupt service routine support functions...
+A quick note is in order. These functions are static class members that are called directly from
+  the ISRs in stm32f7xx_it.c. They are not themselves ISRs. Keep them as short as possible.
+****************************************************************************************************/
+
+void cpld_gpio_isr_0() {
+  Kernel::log("CPLD_GPIO0 state.\n");
+}
+
+void cpld_gpio_isr_1() {
+  Kernel::log("CPLD_GPIO1 state.\n");
+}
+
+void spi_bus_op_isr(){
+  Kernel::log("spi_bus_op_isr()\n");
+}
+
+
+/****************************************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
 *     /       |           |   /   \  |           ||  |  /      |   /       |
 *    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
@@ -225,11 +256,8 @@ void CPLDDriver::gpioSetup(void) {
   * 11    0      CPLD_GPIO_0
   * 14    0      CPLD_GPIO_1
   */
-  GPIO_InitStruct.Pin        = GPIO_PIN_11 | GPIO_PIN_14;
-  GPIO_InitStruct.Mode       = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
-  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+  setPinFxn(75, CHANGE, cpld_gpio_isr_0);
+  setPinFxn(78, CHANGE, cpld_gpio_isr_1);
 
   /* These Port C pins are push-pull outputs:
   *
@@ -323,17 +351,27 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   * #  Default   Purpose
   * -----------------------------------------------
   * 4   SPI1_CS
+  */
+  __SPI1_CLK_ENABLE();
+  setPinFxn(4, RISING_PULL_UP, spi_bus_op_isr);
+
+  /* These Port A pins are associated with the SPI1 peripheral:
+  *
+  * #  Default   Purpose
+  * -----------------------------------------------
   * 5   SPI1_CLK
   * 6   SPI1_MISO
   * 7   SPI1_MOSI
   */
   __SPI1_CLK_ENABLE();
-  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_6|GPIO_PIN_5|GPIO_PIN_7;
+  GPIO_InitStruct.Pin = GPIO_PIN_6|GPIO_PIN_5|GPIO_PIN_7;
   GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
   GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+
 
   /* These Port B pins are associated with the SPI2 peripheral:
   *
@@ -353,20 +391,19 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 
-  hspi1.Instance = SPI1;
-  hspi1.Init.Mode = SPI_MODE_MASTER;
-  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi1.Init.CLKPolarity = cpol_mode;
-  hspi1.Init.CLKPhase = cpha_mode;
-  hspi1.Init.NSS = SPI_NSS_HARD_OUTPUT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
-  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi1.Init.TIMode = SPI_TIMODE_DISABLED;
+  hspi1.Instance            = SPI1;
+  hspi1.Init.Mode           = SPI_MODE_SLAVE;
+  hspi1.Init.Direction      = SPI_DIRECTION_2LINES;
+  hspi1.Init.NSS            = SPI_NSS_SOFT;
+  hspi1.Init.DataSize       = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity    = cpol_mode;
+  hspi1.Init.CLKPhase       = cpha_mode;
+  hspi1.Init.FirstBit       = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode         = SPI_TIMODE_DISABLED;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
-  hspi1.Init.CRCPolynomial = 7;
-  hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLED;
+  hspi1.Init.CRCPolynomial  = 7;
+  hspi1.Init.CRCLength      = SPI_CRC_LENGTH_DATASIZE;
+  hspi1.Init.NSSPMode       = SPI_NSS_PULSE_DISABLED;
   HAL_SPI_Init(&hspi1);
   //SPI_I2S_ITConfig(SPI1, SPI_I2S_IT_ERR | I2S_IT_UDR| SPI_IT_CRCERR | SPI_IT_MODF | SPI_I2S_IT_RXNE | SPI_I2S_IT_TXE, DISABLE);
   //SPI_I2S_ITConfig(SPI1, SPI_I2S_IT_RXNE , ENABLE);  // Interrupt when byte is done moving.
@@ -423,7 +460,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
 */
 void CPLDDriver::reset() {
   externalOscillator(false);    // Turn off the oscillators...
-  internalOscillator(true);
+  _er_set_flag(CPLD_FLAG_INT_OSC, true);
 
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);  // Drive the reset pin low...
 
@@ -857,8 +894,6 @@ int8_t CPLDDriver::writeRegister(uint8_t reg_addr, uint8_t val) {
   SPIBusOp* temp = issue_spi_op_obj();
   temp->set_opcode(BusOpcode::TX);
   temp->setParams(reg_addr, val);
-  temp->buf     = _real_addr;
-  temp->buf_len = 2;
 
   queue_spi_job(temp);
   return 0;
@@ -1009,7 +1044,7 @@ int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
       HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);
       if (getVerbosity() > 4) local_log.concat("CPLD reset.\n");
       return_value = 1;
-      getCPLDVersion();
+      //getCPLDVersion();
       break;
     default:
       return_value += EventReceiver::notify(active_event);
@@ -1019,37 +1054,6 @@ int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
   if (local_log.length() > 0) {    Kernel::log(&local_log);  }
   return return_value;
 }
-
-
-/****************************************************************************************************
- ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄       ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄
-▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌     ▐░▌          ▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░▌
- ▀▀▀▀█░█▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌     ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌░▌     ▐░▌▐░█▀▀▀▀▀▀▀█░▌
-     ▐░▌     ▐░▌          ▐░▌       ▐░▌     ▐░▌          ▐░▌       ▐░▌▐░▌▐░▌    ▐░▌▐░▌       ▐░▌
-     ▐░▌     ▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌     ▐░▌          ▐░█▄▄▄▄▄▄▄█░▌▐░▌ ▐░▌   ▐░▌▐░▌       ▐░▌
-     ▐░▌     ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌     ▐░▌          ▐░░░░░░░░░░░▌▐░▌  ▐░▌  ▐░▌▐░▌       ▐░▌
-     ▐░▌      ▀▀▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀█░█▀▀      ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌   ▐░▌ ▐░▌▐░▌       ▐░▌
-     ▐░▌               ▐░▌▐░▌     ▐░▌       ▐░▌          ▐░▌       ▐░▌▐░▌    ▐░▌▐░▌▐░▌       ▐░▌
- ▄▄▄▄█░█▄▄▄▄  ▄▄▄▄▄▄▄▄▄█░▌▐░▌      ▐░▌      ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌       ▐░▌▐░▌     ▐░▐░▌▐░█▄▄▄▄▄▄▄█░▌
-▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌     ▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░▌      ▐░░▌▐░░░░░░░░░░▌
- ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀       ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀        ▀▀  ▀▀▀▀▀▀▀▀▀▀
-
-Interrupt service routine support functions...
-A quick note is in order. These functions are static class members that are called directly from
-  the ISRs in stm32f7xx_it.c. They are not themselves ISRs. Keep them as short as possible.
-****************************************************************************************************/
-
-volatile void CPLDDriver::irqService_vect_0(void) {
-  //Kernel::log(__PRETTY_FUNCTION__);
-
-  /* DEBUG CPLD r6. */
-  /* This is attached to the CPLD internal oscillator via a tri-state
-     buffer that is controlled by IRQ_VECT_SEL. It will IRQ when A4 is high
-     or during CPLD reset (the oscillator drives internal reset logic). */
-  //cpld_osc_irqs++;
-  /* DEBUG CPLD r6. */
-}
-
 
 
 
@@ -1172,6 +1176,7 @@ void CPLDDriver::printDebug(StringBuilder *output) {
   //output->concatf("0x%08x OSC IRQs thus far.\n", cpld_osc_irqs);
   output->concatf("--- Conf                0x%02x\n",      cpld_conf_value);
   output->concatf("--- Osc (Int/Ext)       %s/%s\n",       (_er_flag(CPLD_FLAG_INT_OSC) ? "on":"off"), (_er_flag(CPLD_FLAG_EXT_OSC) ? "on":"off"));
+  output->concatf("--- CPLD_GPIO (0/1)     %s/%s\n",       (readPin(75) ? "hi":"lo"), (readPin(78) ? "hi":"lo"));
   if (getVerbosity() > 6) output->concatf("--- volatile *cpld      0x%08x\n---\n", cpld);
 
   output->concatf("--- IRQ service:        %sabled\n---\n",   (_er_flag(CPLD_FLAG_SVC_IRQS)?"en":"dis"));
@@ -1235,15 +1240,8 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     case 's':
-      switch (temp_byte) {
-        case 1:
-          local_log.concat("Resetting pending IRQs...\n");
-          break;
-        default:
-          raiseEvent(Kernel::returnEvent(DIGITABULUM_MSG_IMU_IRQ_RAISED));   // Raise an event
-          local_log.concat("Manual IRQ raise.\n");
-          break;
-      }
+      raiseEvent(Kernel::returnEvent(DIGITABULUM_MSG_IMU_IRQ_RAISED));   // Raise an event
+      local_log.concat("Manual IRQ raise.\n");
       break;
 
     case 'b':
@@ -1356,9 +1354,13 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
 
     case ']':
     case '}':
-      local_log.concatf("%s CPLD_GPIO_0.\n", (*(str) == ']' ? "Clearing" : "Setting"));
+      local_log.concatf("%s CPLD_GPIO_1.\n", (*(str) == ']' ? "Clearing" : "Setting"));
       setCPLDConfig(CPLD_CONF_BIT_GPIO_1, (*(str) == '}'));
       Kernel::raiseEvent(MANUVR_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
+      break;
+
+    case 'r':
+      reset();
       break;
 
     default:
