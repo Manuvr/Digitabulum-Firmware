@@ -46,6 +46,29 @@ DMA_HandleTypeDef _dma_w_handle;
 *   as a sort of /dev/zero. This never contains any meaningful data.
 */
 uint32_t STATIC_ZERO = 0;
+uint32_t STATIC_SINK = 0;
+
+
+/*
+*
+*/
+void DMA2_Stream2_IRQHandler(void) {
+  Kernel::log("DMA2_Stream2_IRQHandler()\n");
+  __HAL_DMA_DISABLE_IT(&_dma_r_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+  __HAL_DMA_DISABLE_IT(&_dma_w_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+}
+
+
+/*
+*
+*/
+void DMA2_Stream3_IRQHandler(void) {
+  Kernel::log("DMA2_Stream3_IRQHandler()\n");
+  __HAL_DMA_DISABLE_IT(&_dma_r_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+  __HAL_DMA_DISABLE_IT(&_dma_w_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+}
+
+
 
 
 /****************************************************************************************************
@@ -64,7 +87,6 @@ uint32_t SPIBusOp::total_transfers  = 0;  // How many total SPI transfers have w
 uint32_t SPIBusOp::failed_transfers = 0;  // How many failed SPI transfers have we seen?
 uint16_t SPIBusOp::spi_wait_timeout = 20; // In microseconds. Per-byte.
 //uint32_t SPIBusOp::spi_cs_delay     = 0;  // How many microseconds to delay before CS disassertion?
-
 
 /**
 * This is called upon CPLD instantiation to build the DMA init structures for the bus operation.
@@ -117,10 +139,10 @@ void SPIBusOp::buildDMAMembers() {
 */
 void SPIBusOp::enableSPI_DMA(bool enable) {
   if (!enable) {
-    NVIC_DisableIRQ(DMA2_Stream0_IRQn);
+    //NVIC_DisableIRQ(DMA2_Stream0_IRQn);
   }
   else {
-    NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+    //NVIC_EnableIRQ(DMA2_Stream0_IRQn);
   }
 }
 
@@ -155,18 +177,9 @@ SPIBusOp::SPIBusOp() {
 * @param  len        The length of the transaction.
 * @param  requester  The object to be notified when the bus operation completes with success.
 */
-SPIBusOp::SPIBusOp(BusOpcode nu_op, uint16_t addr, uint8_t *buf, uint8_t len, SPIOpCallback* requester) {
+SPIBusOp::SPIBusOp(BusOpcode nu_op, SPIOpCallback* requester) {
+  wipe();
   this->opcode          = nu_op;
-  this->buf             = buf;
-  this->buf_len         = len;
-  this->bus_addr        = addr;
-
-  _param_len     = 0;
-  xfer_params[0] = 0;
-  xfer_params[1] = 0;
-  xfer_params[2] = 0;
-  xfer_params[3] = 0;
-
   callback = requester;
 }
 
@@ -190,6 +203,14 @@ SPIBusOp::~SPIBusOp() {
 
 /**
 */
+void SPIBusOp::setBuffer(uint8_t *buf, uint8_t len) {
+  this->buf     = buf;
+  this->buf_len = len;
+}
+
+
+/**
+*/
 void SPIBusOp::setParams(uint8_t _dev_addr, uint8_t _xfer_len, uint8_t _dev_count, uint8_t _reg_addr) {
   _param_len     = 4;
   xfer_params[0] = _dev_addr;
@@ -207,6 +228,8 @@ void SPIBusOp::setParams(uint8_t _reg_addr, uint8_t _val) {
   xfer_params[1] = _val;
   xfer_params[2] = 0;
   xfer_params[3] = 0;
+  this->buf      = NULL;
+  this->buf_len  = 0;
 }
 
 /**
@@ -286,7 +309,6 @@ void SPIBusOp::wipe() {
   opcode      = BusOpcode::UNDEF;
   buf_len     = 0;
   buf         = NULL;
-  reg_idx     = -1;
   callback    = NULL;
 
   _param_len     = 0;
@@ -303,10 +325,10 @@ bool SPIBusOp::wait_with_timeout() {
   uint32_t to_mark = micros();
   uint32_t timeout_val = (2 * spi_wait_timeout) + (buf_len * spi_wait_timeout);
   uint32_t m_mark = micros();
-  while(__HAL_SPI_GET_FLAG(&hspi1, HAL_SPI_STATE_BUSY) && ((max(to_mark, m_mark) - min(to_mark, m_mark)) <= timeout_val) ) {
+  while(__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_BSY) && ((max(to_mark, m_mark) - min(to_mark, m_mark)) <= timeout_val) ) {
     m_mark = micros();
   } // wait until bus is not busy, JIC.
-  if (__HAL_SPI_GET_FLAG(&hspi1, HAL_SPI_STATE_BUSY)) {
+  if (__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_BSY)) {
     debug_log.concatf("SPI Bus timeout after %uuS.\n", timeout_val);
     return false;
   }
@@ -324,7 +346,7 @@ bool SPIBusOp::wait_with_timeout() {
 * e   88 8   8 88   8    88   e 8   8 88  8   88  88   8 8   8 88
 * 8eee88 8eee8 88eee8    88eee8 8eee8 88  8   88  88   8 8eee8 88eee
 ****************************************************************************************************/
-
+static uint16_t  _hackish_patch = 0;
 
 // Useful trick to mask warnings that the compiler raises, but which we know are
 //   intentional.
@@ -341,38 +363,54 @@ bool SPIBusOp::wait_with_timeout() {
 int8_t SPIBusOp::begin() {
   //time_began    = micros();
 
-  if (0 == buf_len) {
+  if (0 == _param_len) {
     abort(XferFault::BAD_PARAM);
     return -1;
   }
 
   if (!wait_with_timeout()) {
     debug_log.concat("SPI op aborted before taking bus control.\n");
+    abort(XferFault::BUS_BUSY);
     return -1;
   }
 
+  set_state(XferState::INITIATE);  // Indicate that we now have bus control.
+
+  if (2 == _param_len) {
+    _hackish_patch     = (xfer_params[0] << 16) + (xfer_params[1]);
+    hspi1.pTxBuffPtr   = (uint8_t*) _hackish_patch;
+    hspi1.Instance->DR = *((uint16_t*)hspi1.pTxBuffPtr);
+    hspi1.pTxBuffPtr  += sizeof(uint16_t);
+  }
   //assertCS(true);
+  if (0 == buf_len) {
+    // If this transfer is all that we are going to do...
+    set_state(XferState::IO_WAIT);
+  }
+  else {
+    // Otherwise, let the ISR feed the next DMA operation.
+    set_state(XferState::ADDR);
+  }
 
   /* In this case, we need to clear any pending interrupts for the SPI, and to do that, we must
      read this register, even though we don't care about the result.  */
-  volatile uint8_t throw_away;
-  if (__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_RXNE)) {} // throw_away = hspi1->DR;   // Clear the Rx flag (if set).
+  //volatile uint8_t throw_away;
 
   /* The peripheral should be totally clear at this point. Since the TX FIFO is two slots deep,
      we're going to shovel in both bytes if we have a 16-bit address. Since the ISR only calls
      us back when the bus goes idle, we don't need to worry about tracking the extra IRQ. */
-  xfer_state = XferState::ADDR;
-  if (bus_addr > 255) {
-    //hspi1->DR = (uint8_t) (bus_addr >> 8);
-  }
-
   if (!wait_with_timeout()) {
     debug_log.concatf("SPI op aborted halfway into ADDR phase?!\n");
-    abort();
-    return -1;
+    abort(XferFault::BUS_BUSY);
+    return -2;
+  }
+  if (__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_RXNE)) {
+    debug_log.concatf("SPI op leftovers: 0x%04x\n", hspi1.Instance->DR);
+    Kernel::log(&debug_log);
   }
   /* Shovel in the last (or only) address byte... */
-  //hspi1->DR = (uint8_t) bus_addr;
+  //hspi1->DR = (uint8_t) xfer_params[0];
+
 
   return 0;
 }
@@ -403,8 +441,6 @@ int8_t SPIBusOp::markComplete() {
       __HAL_DMA_DISABLE(&_dma_w_handle);
       __HAL_DMA_CLEAR_FLAG(&_dma_w_handle, DMA_FLAG_TCIF3_7 | DMA_FLAG_HTIF3_7 | DMA_FLAG_TEIF3_7 | DMA_FLAG_DMEIF3_7 | DMA_FLAG_FEIF3_7);
     }
-
-    //assertCS(false);
   }
 
   //time_ended = micros();
@@ -444,6 +480,9 @@ int8_t SPIBusOp::abort(XferFault cause) {
 int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
   int8_t return_value = 0;
 
+  debug_log.concatf("advance_operation(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
+  Kernel::log(&debug_log);
+
   /* These are our transfer-size-invariant cases. */
   switch (xfer_state) {
     case XferState::COMPLETE:
@@ -451,11 +490,16 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
       abort(XferFault::HUNG_IRQ);
       return 0;
 
+    case XferState::IO_WAIT:
+      markComplete();
+      return 0;
+
+    case XferState::FAULT:
+      return 0;
+
     case XferState::QUEUED:
     case XferState::ADDR:
-    case XferState::IO_WAIT:
     case XferState::STOP:
-    case XferState::FAULT:
     case XferState::UNDEF:
 
     /* Below are the states that we shouldn't be in at this point... */
@@ -465,83 +509,83 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
       return 0;
   }
 
-  if (buf_len == 1) {
-    /*
-    * This is the IRQ-only block.
-    */
-    if (profile()) debug_log.concatf("IRQ  %s\t status: 0x%08x\n", getStateString(), (unsigned long) status_reg);
-    switch (xfer_state) {
-      case XferState::ADDR:
-        break;
-
-      case XferState::STOP:
-        markComplete();
-        //if (profile()) transition_time_STOP = micros();
-        break;
-
-      /* Below are the states that we shouldn't be in at this point... */
-      case XferState::IO_WAIT:
-      default:
-        abort(XferFault::ILLEGAL_STATE);
-        break;
-    }
-  }
-
-  else {
-    /*
-    * This is the DMA block.
-    */
-    if (profile()) {
-      uint16_t count_0 = __HAL_DMA_GET_COUNTER(&_dma_r_handle);
-      debug_log.concatf("DMA  %s\t DMA0: %d \t buf_len: %d \t status: 0x%08x\n", getStateString(), (uint16_t) count_0, buf_len, (unsigned long) hspi1.State);
-    }
-
-    switch (xfer_state) {
-      case XferState::ADDR:
-        xfer_state = XferState::IO_WAIT;   // We will only ever end up here ONCE per job.
-
-        wait_with_timeout();    // Just in case the bus is still running (it ought not be).
-
-        if (__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_RXNE)) {
-          //data_reg = hspi1->DR;   // Clear the Rx flag (if set).
-          //debug_log.concatf("\t DMA had to wait on a byte before address setup: 0x%02x. SR is now 0x%04x \n", data_reg, hspi1->SR);
-        }
-
-        init_dma();
-        //SPI_I2S_DMACmd(hspi1, SPI_I2S_DMAReq_Rx, ENABLE);
-        //SPI_I2S_DMACmd(hspi1, SPI_I2S_DMAReq_Tx, ENABLE);
-        enableSPI_DMA(true);
-        break;
-
-      case XferState::IO_WAIT:
-        //if (profile()) transition_time_DMA_WAIT = micros();
-        if (0 == __HAL_DMA_GET_COUNTER(&_dma_r_handle)) {
-          xfer_state = XferState::STOP;
-          if (HAL_DMA_GetState(&_dma_r_handle) == HAL_DMA_STATE_RESET) {
-            markComplete();
-          }
-          else {
-            //if (profile()) debug_log.concat("\t DMA looks sick...\n");
-            abort(XferFault::DMA_FAULT);
-          }
-        }
-        else {
-          //if (profile()) debug_log.concatf("\tJob 0x%04x looks incomplete, but DMA is IRQ. Advancing state to STOP for next IRQ and hope.\n", txn_id);
-          debug_log.concat("\tJob looks incomplete, but DMA is IRQ. Advancing state to STOP for next IRQ and hope.\n");
-          abort(XferFault::DMA_FAULT); // TODO: WRONG
-        }
-        break;
-
-      case XferState::STOP:
-        //if (profile()) transition_time_STOP = micros();
-        markComplete();
-        break;
-
-      default:
-        abort(XferFault::ILLEGAL_STATE);
-        break;
-    }
-  }
+//  if (buf_len == 1) {
+//    /*
+//    * This is the IRQ-only block.
+//    */
+//    if (profile()) debug_log.concatf("IRQ  %s\t status: 0x%08x\n", getStateString(), (unsigned long) status_reg);
+//    switch (xfer_state) {
+//      case XferState::ADDR:
+//        break;
+//
+//      case XferState::STOP:
+//        markComplete();
+//        //if (profile()) transition_time_STOP = micros();
+//        break;
+//
+//      /* Below are the states that we shouldn't be in at this point... */
+//      case XferState::IO_WAIT:
+//      default:
+//        abort(XferFault::ILLEGAL_STATE);
+//        break;
+//    }
+//  }
+//
+//  else {
+//    /*
+//    * This is the DMA block.
+//    */
+//    if (profile()) {
+//      uint16_t count_0 = __HAL_DMA_GET_COUNTER(&_dma_r_handle);
+//      debug_log.concatf("DMA  %s\t DMA0: %d \t buf_len: %d \t status: 0x%08x\n", getStateString(), (uint16_t) count_0, buf_len, (unsigned long) hspi1.State);
+//    }
+//
+//    switch (xfer_state) {
+//      case XferState::ADDR:
+//        xfer_state = XferState::IO_WAIT;   // We will only ever end up here ONCE per job.
+//
+//        wait_with_timeout();    // Just in case the bus is still running (it ought not be).
+//
+//        if (__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_RXNE)) {
+//          //data_reg = hspi1->DR;   // Clear the Rx flag (if set).
+//          //debug_log.concatf("\t DMA had to wait on a byte before address setup: 0x%02x. SR is now 0x%04x \n", data_reg, hspi1->SR);
+//        }
+//
+//        init_dma();
+//        //SPI_I2S_DMACmd(hspi1, SPI_I2S_DMAReq_Rx, ENABLE);
+//        //SPI_I2S_DMACmd(hspi1, SPI_I2S_DMAReq_Tx, ENABLE);
+//        enableSPI_DMA(true);
+//        break;
+//
+//      case XferState::IO_WAIT:
+//        //if (profile()) transition_time_DMA_WAIT = micros();
+//        if (0 == __HAL_DMA_GET_COUNTER(&_dma_r_handle)) {
+//          xfer_state = XferState::STOP;
+//          if (HAL_DMA_GetState(&_dma_r_handle) == HAL_DMA_STATE_RESET) {
+//            markComplete();
+//          }
+//          else {
+//            //if (profile()) debug_log.concat("\t DMA looks sick...\n");
+//            abort(XferFault::DMA_FAULT);
+//          }
+//        }
+//        else {
+//          //if (profile()) debug_log.concatf("\tJob 0x%04x looks incomplete, but DMA is IRQ. Advancing state to STOP for next IRQ and hope.\n", txn_id);
+//          debug_log.concat("\tJob looks incomplete, but DMA is IRQ. Advancing state to STOP for next IRQ and hope.\n");
+//          abort(XferFault::DMA_FAULT); // TODO: WRONG
+//        }
+//        break;
+//
+//      case XferState::STOP:
+//        //if (profile()) transition_time_STOP = micros();
+//        markComplete();
+//        break;
+//
+//      default:
+//        abort(XferFault::ILLEGAL_STATE);
+//        break;
+//    }
+//  }
 
   return return_value;
 }
@@ -552,8 +596,6 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
 /****************************************************************************************************
 * Memory-management and cleanup support.                                                            *
 ****************************************************************************************************/
-
-
 
 /**
 * The client class calls this fxn to set this object's post-completion behavior.
@@ -625,9 +667,16 @@ void SPIBusOp::printDebug(StringBuilder *output) {
   output->concatf("\t callback set      %s\n", (callback ? "yes":"no"));
   output->concatf("\t will reap?        %s\n", shouldReap()?"yes":"no");
   output->concatf("\t ret to prealloc?  %s\n", returnToPrealloc()?"yes":"no");
-  output->concatf("\t reg_idx           %d\n", reg_idx);
-  output->concatf("\t bus_addr          0x%04x\n", bus_addr);
-  output->concatf("\t buf_len           %d\n", buf_len);
+  output->concatf("\t param_len         %d\n", _param_len);
+  output->concat("\t params            ");
+
+  if (_param_len > 0) {
+    for (uint8_t i = 0; i < _param_len; i++) {
+      output->concatf("0x%02x ", xfer_params[i]);
+    }
+  }
+
+  output->concatf("\n\t buf_len           %d\n", buf_len);
   output->concatf("\t buf *(0x%08x) ", (uint32_t) buf);
 
   if (buf_len > 0) {

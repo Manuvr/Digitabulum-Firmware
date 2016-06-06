@@ -62,9 +62,6 @@ Kernel* kernel      = NULL;
 TIM_HandleTypeDef htim2;  // This is the timer for the CPLD clock.
 
 
-// Milliseconds to vibrate, Pulse count.
-const unsigned char MSG_ARGS_VIBRATE[] = {  UINT16_FM, UINT8_FM, 0  };
-
 // Messages that are specific to Digitabulum.
 const MessageTypeDef digitabulum_message_defs[] = {
   /*
@@ -73,11 +70,9 @@ const MessageTypeDef digitabulum_message_defs[] = {
     compile time.
   */
   #if defined (__ENABLE_MSG_SEMANTICS)
-  {  DIGITABULUM_MSG_GPIO_VIBRATE_0  , MSG_FLAG_EXPORTABLE,  "VIBRATE_0"            , MSG_ARGS_VIBRATE }, // Some class wants to trigger vibrator 0.
-  {  DIGITABULUM_MSG_GPIO_VIBRATE_1  , MSG_FLAG_EXPORTABLE,  "VIBRATE_1"            , MSG_ARGS_VIBRATE }, // Some class wants to trigger vibrator 1.
+  {  MANUVR_MSG_BT_EXIT_RESET        , 0x000,                "RN_RESET"             , ManuvrMsg::MSG_ARGS_NONE }, //
   #else
-  {  DIGITABULUM_MSG_GPIO_VIBRATE_0  , MSG_FLAG_EXPORTABLE,  "VIBRATE_0"            , MSG_ARGS_VIBRATE, NULL }, // Some class wants to trigger vibrator 0.
-  {  DIGITABULUM_MSG_GPIO_VIBRATE_1  , MSG_FLAG_EXPORTABLE,  "VIBRATE_1"            , MSG_ARGS_VIBRATE, NULL }, // Some class wants to trigger vibrator 1.
+  {  MANUVR_MSG_BT_EXIT_RESET        , 0x000,                "RN_RESET"             , ManuvrMsg::MSG_ARGS_NONE, NULL }, //
   #endif
 };
 
@@ -254,6 +249,11 @@ int main(void) {
     kernel->profiler(true);
   #endif
 
+  ManuvrMsg::registerMessages(
+    digitabulum_message_defs,
+    sizeof(digitabulum_message_defs) / sizeof(MessageTypeDef)
+  );
+
   CPLDDriver _cpld;
   kernel->subscribe(&_cpld);
 
@@ -272,7 +272,15 @@ int main(void) {
   INA219 ina219(0x4A);
   i2c.addSlaveDevice(&ina219);
 
-  RN4677 bt;
+  /* These Port E pins are push-pull outputs:
+  *
+  * #  Default   Purpose
+  * -----------------------------------------------
+  * 4     0      ~BT_RESET
+  * 5     1      BT_EAN
+  * 6     1      BT_PIO_24
+  */
+  RN4677 bt(68);
   kernel->subscribe((EventReceiver*) &bt);
 
   SDCard sd;

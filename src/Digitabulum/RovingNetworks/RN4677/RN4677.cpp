@@ -38,7 +38,7 @@ up to par.
 UART_HandleTypeDef huart2;
 
 
-RN4677::RN4677() : RNBase() {
+RN4677::RN4677(uint8_t _rst_pin) : RNBase(_rst_pin) {
 }
 
 
@@ -55,7 +55,7 @@ RN4677::~RN4677() {
 /**
 * Setup GPIO pins and their bindings to on-chip peripherals, if required.
 */
-void RN4677::gpioSetup(void) {
+void RN4677::gpioSetup() {
   GPIO_InitTypeDef GPIO_InitStruct;
 
   /* These Port B pins are inputs:
@@ -159,12 +159,11 @@ void RN4677::gpioSetup(void) {
   * 5     1      BT_EAN
   * 6     1      BT_PIO_24
   */
-  GPIO_InitStruct.Pin        = GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6;
+  GPIO_InitStruct.Pin        = GPIO_PIN_5 | GPIO_PIN_6;
   GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull       = GPIO_NOPULL;
   GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_4, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5 | GPIO_PIN_6, GPIO_PIN_SET);
 
 
@@ -243,7 +242,7 @@ void RN4677::force_9600_mode(bool force_low_speed) {
   }
   else {
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
-    set_bitrate(921600);
+    set_bitrate(115200);
   }
 
   reset();
@@ -253,9 +252,104 @@ void RN4677::factoryReset() {
   // TODO: This should probably be done...
 }
 
+
+
+
+/****************************************************************************************************
+ ▄▄▄▄▄▄▄▄▄▄▄  ▄               ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄
+▐░░░░░░░░░░░▌▐░▌             ▐░▌▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
+▐░█▀▀▀▀▀▀▀▀▀  ▐░▌           ▐░▌ ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌░▌     ▐░▌ ▀▀▀▀█░█▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀
+▐░▌            ▐░▌         ▐░▌  ▐░▌          ▐░▌▐░▌    ▐░▌     ▐░▌     ▐░▌
+▐░█▄▄▄▄▄▄▄▄▄    ▐░▌       ▐░▌   ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌ ▐░▌   ▐░▌     ▐░▌     ▐░█▄▄▄▄▄▄▄▄▄
+▐░░░░░░░░░░░▌    ▐░▌     ▐░▌    ▐░░░░░░░░░░░▌▐░▌  ▐░▌  ▐░▌     ▐░▌     ▐░░░░░░░░░░░▌
+▐░█▀▀▀▀▀▀▀▀▀      ▐░▌   ▐░▌     ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌   ▐░▌ ▐░▌     ▐░▌      ▀▀▀▀▀▀▀▀▀█░▌
+▐░▌                ▐░▌ ▐░▌      ▐░▌          ▐░▌    ▐░▌▐░▌     ▐░▌               ▐░▌
+▐░█▄▄▄▄▄▄▄▄▄        ▐░▐░▌       ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌     ▐░▐░▌     ▐░▌      ▄▄▄▄▄▄▄▄▄█░▌
+▐░░░░░░░░░░░▌        ▐░▌        ▐░░░░░░░░░░░▌▐░▌      ▐░░▌     ▐░▌     ▐░░░░░░░░░░░▌
+ ▀▀▀▀▀▀▀▀▀▀▀          ▀          ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀       ▀       ▀▀▀▀▀▀▀▀▀▀▀
+
+These are overrides from EventReceiver interface...
+****************************************************************************************************/
 /**
 * Debug support function.
 *
 * @return a pointer to a string constant.
 */
 const char* RN4677::getReceiverName() {  return "RN4677";  }
+
+
+/**
+* If we find ourselves in this fxn, it means an event that this class built (the argument)
+*   has been serviced and we are now getting the chance to see the results. The argument
+*   to this fxn will never be NULL.
+*
+* Depending on class implementations, we might choose to handle the completed Event differently. We
+*   might add values to event's Argument chain and return RECYCLE. We may also free() the event
+*   ourselves and return DROP. By default, we will return REAP to instruct the Kernel
+*   to either free() the event or return it to it's preallocate queue, as appropriate. If the event
+*   was crafted to not be in the heap in its own allocation, we will return DROP instead.
+*
+* @param  event  The event for which service has been completed.
+* @return A callback return code.
+*/
+int8_t RN4677::callback_proc(ManuvrRunnable *event) {
+  /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
+     Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
+  int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
+
+  /* Some class-specific set of conditionals below this line. */
+  switch (event->event_code) {
+    case MANUVR_MSG_XPORT_SEND:
+      event->clearArgs();
+      break;
+    default:
+      break;
+  }
+
+  return return_value;
+}
+
+
+/**
+* Debug support method. This fxn is only present in debug builds.
+*
+* @param   StringBuilder* The buffer into which this fxn should write its output.
+*/
+void RN4677::printDebug(StringBuilder *temp) {
+  RNBase::printDebug(temp);
+}
+
+
+
+int8_t RN4677::notify(ManuvrRunnable *active_event) {
+  int8_t return_value = 0;
+
+  switch (active_event->event_code) {
+    default:
+      return_value += RNBase::notify(active_event);
+      break;
+  }
+
+  if (local_log.length() > 0) Kernel::log(&local_log);
+  return return_value;
+}
+
+
+#if defined(__MANUVR_CONSOLE_SUPPORT)
+void RN4677::procDirectDebugInstruction(StringBuilder *input) {
+  char* str = input->position(0);
+
+  uint8_t temp_byte = 0;
+  if (*(str) != 0) {
+    temp_byte = atoi((char*) str+1);
+  }
+
+  switch (*(str)) {
+    default:
+      RNBase::procDirectDebugInstruction(input);
+      break;
+  }
+
+  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+}
+#endif  //__MANUVR_CONSOLE_SUPPORT

@@ -193,7 +193,7 @@ $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: lib
 	$(CP) -O binary $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin
 
 
-program: $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
+program:
 #	$(TOOLCHAIN)/arm-none-eabi-gdb $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf --eval-command="tar extended-remote :4242" --eval-command="load"
 	dfu-util -d 0483:df11 -a 0  -s 0x08000000 -D $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin --reset
 

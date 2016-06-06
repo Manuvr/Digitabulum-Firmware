@@ -39,6 +39,9 @@ extern "C" {
 * Static members and initializers should be located here. Initializers first, functions second.
 ****************************************************************************************************/
 
+SPIBusOp LegendManager::_preformed_read_ag;
+SPIBusOp LegendManager::_preformed_read_m;
+
 Vector3<int16_t> LegendManager::reflection_mag;
 Vector3<int16_t> LegendManager::reflection_acc;
 Vector3<int16_t> LegendManager::reflection_gyr;
@@ -141,6 +144,21 @@ LegendManager::LegendManager() {
   reflection_gyr.y = 1;
   reflection_gyr.z = -1;
 
+  _preformed_read_m.shouldReap(false);
+  _preformed_read_m.devRegisterAdvance(true);
+  _preformed_read_m.set_opcode(BusOpcode::RX);
+  _preformed_read_m.callback = (SPIDeviceWithRegisters*) this;
+
+  // Starting from the first magnetometer...
+  // Read 6 bytes...
+  // ...across 17 sensors...
+  // ...from this base address...
+  _preformed_read_m.setParams(CPLD_REG_IMU_DM_P_M|0x80, 6, 17, LSM9DS1_M_DATA_X);
+
+  // ...and drop the results here.
+  _preformed_read_m.buf      = (uint8_t*) __frame_buf_m;
+  _preformed_read_m.buf_len  = 102;
+
     /* Populate all the static preallocation slots for measurements. */
   for (uint16_t i = 0; i < PREALLOCATED_IIU_MEASUREMENTS; i++) {
     __prealloc[i].wipe();
@@ -158,7 +176,7 @@ LegendManager::LegendManager() {
 
   *(_ptr_sequence) = 0;
 
-  _legend_is_stable(true);  // Ick....
+  _er_set_flag(LEGEND_MGR_FLAGS_LEGEND_STABLE, true);  // Ick....
   operating_legend = new ManuLegend();
   operating_legend->sensorEnabled(true);
   //operating_legend->accNullGravity(true);
@@ -245,7 +263,7 @@ int8_t LegendManager::refreshIMU() {
 */
 int8_t LegendManager::send_map_event() {
   event_legend_frame_ready.specific_target = NULL;
-  if (operating_legend && _legend_sent()) {
+  if (operating_legend && _er_flag(LEGEND_MGR_FLAGS_LEGEND_SENT)) {
     operating_legend->copy_frame();
     Kernel::staticRaiseEvent(&event_legend_frame_ready);
     return 0;
@@ -295,10 +313,10 @@ int8_t LegendManager::reconfigure_data_map() {
 // Calling causes a pointer dance that reconfigures the data we send to the host.
 // Don't do anything unless the legend is stable. This is concurrency-control.
 int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
-  if (_legend_is_stable()) {
+  if (_er_flag(LEGEND_MGR_FLAGS_LEGEND_STABLE)) {
     // Only reconfigure if stable.
-    _legend_is_stable(false);   // Mark as unstable.
-    _legend_sent(false);
+    _er_clear_flag(LEGEND_MGR_FLAGS_LEGEND_STABLE);   // Mark as unstable.
+    _er_clear_flag(LEGEND_MGR_FLAGS_LEGEND_SENT);
 
     if (!nu_legend->finallized()) {
       // Finallize the ManuLegend prior to installing it.
@@ -404,6 +422,47 @@ uint32_t LegendManager::totalSamples() {
   }
   return return_value;
 }
+
+
+
+
+
+/****************************************************************************************************
+* Overrides from the SPI apparatus...                                                               *
+****************************************************************************************************/
+
+/*
+* When a bus operation completes, it is passed back to the class that created it.
+*/
+int8_t LegendManager::spi_op_callback(SPIBusOp* op) {
+  // There is zero chance this object will be a null pointer unless it was done on purpose.
+  if (op->hasFault()) {
+    if (getVerbosity() > 3) local_log.concat("spi_op_callback() rejected a callback because the bus op failed.\n");
+    return SPI_CALLBACK_ERROR;
+  }
+
+  // Yes... we will switch on a pointer.
+  if (op == &_preformed_read_ag) {
+  }
+  else if (op == &_preformed_read_m) {
+  }
+
+  if (local_log.length() > 0) Kernel::log(&local_log);
+  return SPI_CALLBACK_NOMINAL;
+}
+
+
+/*
+* This is what we call when this class wants to conduct a transaction on the SPI bus.
+* We simply forward to the CPLD.
+*/
+int8_t LegendManager::queue_spi_job(SPIBusOp* op) {
+  if (NULL == op->callback) {
+    op->callback = (SPIOpCallback*) this;
+  }
+  return ((CPLDDriver*)cpld)->queue_spi_job(op);
+}
+
 
 
 
@@ -562,12 +621,12 @@ int8_t LegendManager::callback_proc(ManuvrRunnable *event) {
 
     case DIGITABULUM_MSG_IMU_LEGEND:
       // We take this as an indication that our notice of altered Legend was sent.
-      _legend_sent(true);
+      _er_set_flag(LEGEND_MGR_FLAGS_LEGEND_SENT);
       break;
 
     case DIGITABULUM_MSG_IMU_MAP_STATE:
       *(_ptr_sequence) = *(_ptr_sequence) + 1;
-      if (operating_legend && _legend_sent()) {
+      if (operating_legend && _er_flag(LEGEND_MGR_FLAGS_LEGEND_SENT)) {
         operating_legend->copy_frame();
         Kernel::staticRaiseEvent(&event_legend_frame_ready);
         return 0;

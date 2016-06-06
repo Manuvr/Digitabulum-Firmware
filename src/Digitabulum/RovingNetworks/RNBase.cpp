@@ -119,13 +119,13 @@ void RNBase::reclaimPreallocation(BTQueuedOperation* obj) {
 void RNBase::expire_lockout() {
   if (INSTANCE == NULL) return;
 
-  if (((EventReceiver*) INSTANCE)->getVerbosity() > 4) Kernel::log("oneshot_rn42_reenable()\n");
+  if (((EventReceiver*) INSTANCE)->getVerbosity() > 4) Kernel::log("oneshot_rn_reenable()\n");
   ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_LOCK_OUT);
   ((RNBase*) INSTANCE)->idleService();
 }
 
 /* Scheduler one-shot. Re-allows modules communication. */
-void oneshot_rn42_reenable() {
+void oneshot_rn_reenable() {
   RNBase::expire_lockout();
 }
 
@@ -134,23 +134,9 @@ void RNBase::start_lockout(uint32_t milliseconds) {
   if (INSTANCE == NULL) return;
 
   // TODO: Need a cleaner way to accomplish this...
-  __kernel->addSchedule(new ManuvrRunnable(milliseconds,  0, true, oneshot_rn42_reenable));
+  __kernel->addSchedule(new ManuvrRunnable(milliseconds,  0, true, oneshot_rn_reenable));
   _er_set_flag(RNBASE_FLAG_LOCK_OUT);
 }
-
-
-/* Static. Reset callback. */
-void RNBase::unreset() {
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
-  ((RNBase*) INSTANCE)->start_lockout(550);   // Spec says to wait 500ms after reset.
-  ((RNBase*) INSTANCE)->initialized(true);
-}
-
-/* Scheduler one-shot. Disasserts the reset pin and starts the lockout timer rolling. */
-void oneshot_rn42_reset_disassert() {
-  RNBase::unreset();   // Spec says to wait 500ms after reset.
-}
-
 
 
 /* Scheduler one-shot. Flushes the RX queue. */
@@ -178,10 +164,12 @@ void host_read_abort() {
 * Constructors/destructors, class initialization functions and so-forth...
 ****************************************************************************************************/
 
-RNBase::RNBase() {
+RNBase::RNBase(uint8_t rst_pin) {
   //__class_initializer();
   //BTQueuedOperation::buildDMAMembers();
   //INSTANCE = this;
+
+  _reset_pin = rst_pin;
 
   ///* Populate all the static preallocation slots for messages. */
   //for (uint16_t i = 0; i < PREALLOCATED_BT_Q_OPS; i++) {
@@ -219,6 +207,14 @@ RNBase::~RNBase() {
 }
 
 
+/**
+* Setup GPIO pins and their bindings to on-chip peripherals, if required.
+*/
+void RNBase::gpioSetup() {
+  gpioDefine(_reset_pin, OUTPUT_OD);
+  setPin(_reset_pin, false);
+}
+
 
 int8_t RNBase::connect() {
   return 0;
@@ -234,7 +230,7 @@ int8_t RNBase::listen() {
 * If we call this before the boot process is complete, we will not come out of reset.
 */
 int8_t RNBase::reset() {
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);     // Drive reset pin low.
+  setPin(_reset_pin, false);     // Drive reset pin low.
   initialized(false);
 
   while (work_queue.hasNext()) {
@@ -254,7 +250,15 @@ int8_t RNBase::reset() {
   tx_buf.clear();
 
   // Used to disassert the reset line.  TODO: Need a cleaner way to accomplish this...
-  __kernel->addSchedule(new ManuvrRunnable(510,  0, true, oneshot_rn42_reset_disassert));
+  ManuvrRunnable* event = Kernel::returnEvent(MANUVR_MSG_BT_EXIT_RESET);
+  event->addArg((EventReceiver*) this);
+  event->originator      = (EventReceiver*) this;
+  event->specific_target = (EventReceiver*) this;
+  event->alterScheduleRecurrence(0);
+  event->alterSchedulePeriod(510);
+  event->autoClear(true);
+  event->enableSchedule(true);
+  __kernel->addSchedule(event);
   return 0;
 }
 
@@ -861,41 +865,41 @@ int8_t RNBase::callback_proc(ManuvrRunnable *event) {
 */
 void RNBase::printDebug(StringBuilder *temp) {
   ManuvrXport::printDebug(temp);
-  temp->concatf("--- queue_floods            %u\n---\n", (unsigned long) rejected_host_messages);
+  temp->concatf("-- queue_floods            %u\n--\n", (unsigned long) rejected_host_messages);
 
-  temp->concatf("--- __prealloc_pool addres: 0x%08x\n", (uint32_t) __prealloc_pool);
-  temp->concatf("--- prealloc depth:         %d\n", preallocated.size());
-  temp->concatf("--- queue_floods:           %u\n", (unsigned long) queue_floods);
-  temp->concatf("--- _heap_instantiations:   %u\n", (unsigned long) _heap_instantiations);
-  temp->concatf("--- _heap_frees:            %u\n---\n", (unsigned long) _heap_frees);
+  temp->concatf("-- __prealloc_pool addres: 0x%08x\n", (uint32_t) __prealloc_pool);
+  temp->concatf("-- prealloc depth:         %d\n", preallocated.size());
+  temp->concatf("-- queue_floods:           %u\n", (unsigned long) queue_floods);
+  temp->concatf("-- _heap_instantiations:   %u\n", (unsigned long) _heap_instantiations);
+  temp->concatf("-- _heap_frees:            %u\n--\n", (unsigned long) _heap_frees);
 
-  temp->concatf("--- bitrate to module       %d\n", configured_bitrate);
-  temp->concatf("--- lockout_active          %s\n", (_er_flag(RNBASE_FLAG_LOCK_OUT) ? "yes" : "no"));
-  temp->concatf("--- command mode (pend)     %s\n", (_er_flag(RNBASE_FLAG_CMD_PEND) ? "yes" : "no"));
-  temp->concatf("--- command mode            %s\n", (_er_flag(RNBASE_FLAG_CMD_MODE) ? "yes" : "no"));
-  temp->concatf("--- autoconnect             %s\n", (_er_flag(RNBASE_FLAG_AUTOCONN) ? "yes" : "no"));
+  temp->concatf("-- bitrate to module       %d\n", configured_bitrate);
+  temp->concatf("-- lockout_active          %s\n", (_er_flag(RNBASE_FLAG_LOCK_OUT) ? "yes" : "no"));
+  temp->concatf("-- command mode (pend)     %s\n", (_er_flag(RNBASE_FLAG_CMD_PEND) ? "yes" : "no"));
+  temp->concatf("-- command mode            %s\n", (_er_flag(RNBASE_FLAG_CMD_MODE) ? "yes" : "no"));
+  temp->concatf("-- autoconnect             %s\n", (_er_flag(RNBASE_FLAG_AUTOCONN) ? "yes" : "no"));
   if (getVerbosity() > 5) {
-    temp->concatf("--- last_gpio5              %u\n", last_gpio_5_event);
-    temp->concatf("--- gpio5 state             %s\n\n", ((GPIOB->IDR & GPIO_PIN_10) ? "high" : "low"));
+    temp->concatf("-- last_gpio5              %u\n", last_gpio_5_event);
+    temp->concatf("-- gpio5 state             %s\n\n", ((GPIOB->IDR & GPIO_PIN_10) ? "high" : "low"));
   }
 
   BTQueuedOperation* q_item = NULL;
 
   if (NULL != current_work_item) {
-    temp->concat("\n--- In working slot:");
+    temp->concat("\n-- In working slot:");
     current_work_item->printDebug(temp);
   }
 
   if (getVerbosity() > 3) {
     if (work_queue.hasNext()) {
-      temp->concatf("\n--- Queue Listing (top %d of %d)", RNBASE_MAX_QUEUE_PRINT, work_queue.size());
+      temp->concatf("\n-- Queue Listing (top %d of %d)", RNBASE_MAX_QUEUE_PRINT, work_queue.size());
       for (int i = 0; i < min(work_queue.size(), RNBASE_MAX_QUEUE_PRINT); i++) {
         q_item = work_queue.get(i);
         q_item->printDebug(temp);
       }
     }
     else {
-      temp->concat("--- No Queue\n\n");
+      temp->concat("-- No Queue\n\n");
     }
   }
 }
@@ -953,6 +957,13 @@ int8_t RNBase::notify(ManuvrRunnable *active_event) {
       }
       break;
 
+    case MANUVR_MSG_BT_EXIT_RESET:
+      setPin(_reset_pin, true);     // Drive reset pin high.
+      start_lockout(550);   // Spec says to wait 500ms after reset.
+      initialized(true);
+      return_value++;
+      break;
+
     case MANUVR_MSG_BT_EXITED_CMD_MODE:
     case MANUVR_MSG_BT_QUEUE_READY:
       idleService();
@@ -994,7 +1005,7 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
         if (tmp_str_len > 0) {
           *((char*) str+tmp_str_len) = 0x00; // Careful... tricky...
           StringBuilder *temp = new StringBuilder((char*) str+1);
-          local_log.concatf("Sending \"%s\" to RN42.\n", ((char*) str+1));
+          local_log.concatf("Sending \"%s\" to RN.\n", ((char*) str+1));
           //temp->concat("\r\n");
           printToHost(temp);
         }
@@ -1008,7 +1019,7 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
           *((char*) str+tmp_str_len) = 0x00; // Careful... tricky...
           StringBuilder *temp = new StringBuilder((char*) str+1);
           temp->concat("\r\n");
-          local_log.concatf("Sending command \"%s\" to RN42.\n", temp->string());
+          local_log.concatf("Sending command \"%s\" to RN.\n", temp->string());
           sendGeneralCommand(temp);
         }
       }

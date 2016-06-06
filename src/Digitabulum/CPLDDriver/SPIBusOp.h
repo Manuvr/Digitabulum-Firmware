@@ -54,19 +54,19 @@ class SPIOpCallback;
 class SPIBusOp : public BusOp {
   public:
     SPIOpCallback* callback = NULL;  // Which class gets pinged when we've finished?
-    int16_t   reg_idx     = -1;      // Optional register index. Makes callbacks faster.
-    uint16_t  bus_addr    = 0x0000;  // The address that this operation is directed toward.
 
     //uint32_t time_began    = 0;   // This is the time when bus access begins.
     //uint32_t time_ended    = 0;   // This is the time when bus access stops (or is aborted).
 
     SPIBusOp();
-    SPIBusOp(BusOpcode nu_op, uint16_t addr, uint8_t *buf, uint8_t len, SPIOpCallback* requester);
+    SPIBusOp(BusOpcode nu_op, SPIOpCallback* requester);
     ~SPIBusOp();
 
     /* Job control functions. */
     int8_t begin();
     int8_t markComplete();
+
+    void setBuffer(uint8_t *buf, uint8_t len);
 
     void setParams(uint8_t _dev_addr, uint8_t _xfer_len, uint8_t _dev_count, uint8_t _reg_addr);
     void setParams(uint8_t _reg_addr, uint8_t _val);
@@ -119,6 +119,13 @@ class SPIBusOp : public BusOp {
 
 
     /**
+    * @return The address of the internal register this operation addresses.
+    */
+    inline uint8_t getRegAddr() {
+      return ((4 == _param_len) ? xfer_params[3] : xfer_params[0] );
+    };
+
+    /**
     * The bus manager calls this fxn to decide if it ought to free this object after completion.
     *
     * @return true if the bus manager class should free() this object. False otherwise.
@@ -137,8 +144,9 @@ class SPIBusOp : public BusOp {
 
 
   private:
-    uint8_t  xfer_params[4];         // The address transfer lengths, preamble, etc...
-    uint8_t  _param_len  = 0;        // The length of transfer parameters to send.
+    uint8_t  xfer_params[4];   // The address transfer lengths, preamble, etc...
+    uint8_t  _param_len  = 0;  // The length of transfer parameters to send.
+    uint8_t  flags       = 0;  // No flags set.
 
     int8_t init_dma();
 

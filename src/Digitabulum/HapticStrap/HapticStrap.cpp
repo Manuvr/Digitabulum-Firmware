@@ -39,6 +39,24 @@ limitations under the License.
 
 volatile HapticStrap* HapticStrap::INSTANCE = NULL;
 
+// Milliseconds to vibrate, Pulse count.
+const unsigned char MSG_ARGS_VIBRATE[] = {  UINT16_FM, UINT8_FM, 0  };
+
+const MessageTypeDef haptic_message_defs[] = {
+  /*
+    For messages that have arguments, we have the option of defining inline lables for each parameter.
+    This is advantageous for debugging and writing front-ends. We case-off here to make this choice at
+    compile time.
+  */
+  #if defined (__ENABLE_MSG_SEMANTICS)
+  {  DIGITABULUM_MSG_GPIO_VIBRATE_0  , MSG_FLAG_EXPORTABLE,  "VIBRATE_0"            , MSG_ARGS_VIBRATE }, // Some class wants to trigger vibrator 0.
+  {  DIGITABULUM_MSG_GPIO_VIBRATE_1  , MSG_FLAG_EXPORTABLE,  "VIBRATE_1"            , MSG_ARGS_VIBRATE }, // Some class wants to trigger vibrator 1.
+  #else
+  {  DIGITABULUM_MSG_GPIO_VIBRATE_0  , MSG_FLAG_EXPORTABLE,  "VIBRATE_0"            , MSG_ARGS_VIBRATE, NULL }, // Some class wants to trigger vibrator 0.
+  {  DIGITABULUM_MSG_GPIO_VIBRATE_1  , MSG_FLAG_EXPORTABLE,  "VIBRATE_1"            , MSG_ARGS_VIBRATE, NULL }, // Some class wants to trigger vibrator 1.
+  #endif
+};
+
 
 /****************************************************************************************************
 *   ___ _              ___      _ _              _      _
@@ -50,7 +68,13 @@ volatile HapticStrap* HapticStrap::INSTANCE = NULL;
 ****************************************************************************************************/
 
 HapticStrap::HapticStrap() {
-  INSTANCE = this;
+  if (NULL == INSTANCE) {
+    INSTANCE = this;
+    ManuvrMsg::registerMessages(
+      haptic_message_defs,
+      sizeof(haptic_message_defs) / sizeof(haptic_message_defs)
+    );
+  }
 }
 
 
