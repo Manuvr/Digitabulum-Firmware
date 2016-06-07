@@ -36,13 +36,12 @@
 #include "stm32f7xx_it.h"
 #include "cmsis_os.h"
 
-//#include <Platform/Platform.h>
-
 extern volatile uint32_t millis_since_reset;
 
 
 /* External variables --------------------------------------------------------*/
 extern void xPortSysTickHandler(void);
+extern volatile void _hack_sadvance();
 
 /******************************************************************************/
 /*            Cortex-M7 Processor Interruption and Exception Handlers         */
@@ -53,6 +52,7 @@ extern void xPortSysTickHandler(void);
 */
 void SysTick_Handler(void) {
   millis_since_reset++;
+  _hack_sadvance();
   HAL_IncTick();
 }
 

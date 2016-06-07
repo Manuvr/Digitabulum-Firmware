@@ -364,12 +364,13 @@ int8_t SPIBusOp::begin() {
   //time_began    = micros();
 
   if (0 == _param_len) {
+    // Obvious invalidity. We must have at least one transfer parameter.
     abort(XferFault::BAD_PARAM);
     return -1;
   }
 
   if (!wait_with_timeout()) {
-    debug_log.concat("SPI op aborted before taking bus control.\n");
+    Kernel::log("SPI op aborted before taking bus control.\n");
     abort(XferFault::BUS_BUSY);
     return -1;
   }
@@ -382,7 +383,7 @@ int8_t SPIBusOp::begin() {
     hspi1.Instance->DR = *((uint16_t*)hspi1.pTxBuffPtr);
     hspi1.pTxBuffPtr  += sizeof(uint16_t);
   }
-  //assertCS(true);
+
   if (0 == buf_len) {
     // If this transfer is all that we are going to do...
     set_state(XferState::IO_WAIT);
@@ -400,7 +401,7 @@ int8_t SPIBusOp::begin() {
      we're going to shovel in both bytes if we have a 16-bit address. Since the ISR only calls
      us back when the bus goes idle, we don't need to worry about tracking the extra IRQ. */
   if (!wait_with_timeout()) {
-    debug_log.concatf("SPI op aborted halfway into ADDR phase?!\n");
+    Kernel::log("SPI op aborted halfway into ADDR phase?!\n");
     abort(XferFault::BUS_BUSY);
     return -2;
   }

@@ -95,4 +95,8 @@ void unused_gpio() {
   // Digitabulum doesn't use these ports...
   __GPIOF_CLK_DISABLE();
   __GPIOG_CLK_DISABLE();
+  __GPIOI_CLK_DISABLE();
+
+  // TODO: Might-could disable this too? Only pin in-use is the EXT CLK input.
+  //__GPIOH_CLK_DISABLE();
 }

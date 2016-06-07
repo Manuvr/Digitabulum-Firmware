@@ -472,6 +472,8 @@ class CPLDDriver : public EventReceiver, public SPIOpCallback {
     ManuvrRunnable event_spi_callback_ready;
     ManuvrRunnable event_spi_timeout;
 
+    ManuvrRunnable event_spi_toggle;
+
     uint32_t  bus_timeout_millis = 5;
 
     uint8_t   cpld_version       = 0; // CPLD Register. If zero, than the CPLD has not been initialized.
@@ -535,6 +537,7 @@ class CPLDDriver : public EventReceiver, public SPIOpCallback {
     static SPIBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
 
     static void assertCS(bool);
+    static void softSend(uint8_t val_0, uint8_t val_1);
 };
 
 #endif
