@@ -227,7 +227,7 @@ SPI_HandleTypeDef hspi1;
 SPI_HandleTypeDef hspi2;
 DMA_HandleTypeDef _dma_handle_spi2;
 
-
+int _spi1_datawrap_stored = 6;
 
 void CPLDDriver::assertCS(bool _asserted) {
   GPIO_InitTypeDef GPIO_InitStruct;
@@ -238,7 +238,7 @@ void CPLDDriver::assertCS(bool _asserted) {
     _temp_spi_r_h = 0;
     _temp_spi_r = 0;
     _spi1_clks = 0;
-    _spi1_datawrap = 0;
+    _spi1_datawrap = _spi1_datawrap_stored;
     GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_OD;
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
@@ -1596,6 +1596,16 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
     case ';':
       event_spi_toggle.enableSchedule(false);
       local_log.concatf("Periodic bus clock disabled.\n");
+      break;
+
+    case 'X':
+      _spi1_datawrap_stored = temp_byte;
+      local_log.concatf("_spi1_datawrap_stored is now %d\n", _spi1_datawrap_stored);
+      break;
+
+    case 'x':
+      softSend(0x80 | temp_byte, 0);
+      local_log.concatf("softSend(%d, 0)\n", (0x80 | temp_byte));
       break;
 
 
