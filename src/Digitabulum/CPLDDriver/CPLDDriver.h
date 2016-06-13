@@ -537,7 +537,8 @@ class CPLDDriver : public EventReceiver, public SPIOpCallback {
     static SPIBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
 
     static void assertCS(bool);
-    static void softSend(uint8_t val_0, uint8_t val_1);
+    static void softSend(uint8_t, uint8_t);
+    static void softSend(uint32_t);
 };
 
 #endif

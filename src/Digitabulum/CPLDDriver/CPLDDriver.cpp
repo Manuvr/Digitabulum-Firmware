@@ -56,13 +56,9 @@ void callback_spi_timeout() {
 
 bool _soft_spi = false;
 bool cs_asserted = false;
-volatile static uint8_t _temp_spi_r = 0;
-volatile static uint8_t _temp_spi_r_h = 0;
-
-void hackish_delay() {
-  unsigned long temp = micros();
-  while ((micros() - temp) < 90000) {}
-}
+volatile static uint32_t _temp_spi_r = 0;
+volatile static uint32_t _temp_spi_w = 0;
+volatile static int _spi1_clks = 0;
 
 
 /****************************************************************************************************
@@ -91,19 +87,17 @@ void cpld_gpio_isr_1() {
   Kernel::log("ADDR_LOADED\n");
 }
 
-volatile int _spi1_clks = 0;
-volatile int _spi1_addrdata = 0xA8;
-volatile int _spi1_datawrap = 0;
-
 void spi_clk_isr() {
   _spi1_clks++;
-  _temp_spi_r = (_temp_spi_r << 1) + (readPin(7) ? 1:0);
+  _temp_spi_r = _temp_spi_r << 1;
+  _temp_spi_r += (readPin(7) ? 1:0);
 
-  _spi1_datawrap++;
+  Kernel::log("spi_clk_isr()\n");
+
   HAL_GPIO_WritePin(
     GPIOA,
     GPIO_PIN_6,
-    ((_spi1_addrdata >> (7 - (_spi1_datawrap % 8))) & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET
+    ((_temp_spi_w >> (31 - (_spi1_clks % 32))) & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET
   );
 }
 
@@ -227,7 +221,6 @@ SPI_HandleTypeDef hspi1;
 SPI_HandleTypeDef hspi2;
 DMA_HandleTypeDef _dma_handle_spi2;
 
-int _spi1_datawrap_stored = 6;
 
 void CPLDDriver::assertCS(bool _asserted) {
   GPIO_InitTypeDef GPIO_InitStruct;
@@ -235,10 +228,9 @@ void CPLDDriver::assertCS(bool _asserted) {
   GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
   GPIO_InitStruct.Pull  = GPIO_PULLUP;
   if (_asserted) {
-    _temp_spi_r_h = 0;
     _temp_spi_r = 0;
     _spi1_clks = 0;
-    _spi1_datawrap = _spi1_datawrap_stored;
+
     GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_OD;
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
@@ -254,16 +246,29 @@ void CPLDDriver::assertCS(bool _asserted) {
 
 void CPLDDriver::softSend(uint8_t val_0, uint8_t val_1) {
   if (_soft_spi) {
-    _spi1_addrdata = val_0;
-
+    _temp_spi_w = (val_0 << 24) + (val_1 << 16);
     HAL_GPIO_WritePin(
       GPIOA,
       GPIO_PIN_6,
-      ((_spi1_addrdata >> (7 - (_spi1_datawrap % 8))) & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET
+      ((_temp_spi_w & 0x80000000) ? GPIO_PIN_SET : GPIO_PIN_RESET)
     );
     assertCS(true);
 
-    Kernel::log("\nReading 8 bits...\n");
+    Kernel::log("\nI/O 16 bits...\n");
+  }
+}
+
+void CPLDDriver::softSend(uint32_t val_0) {
+  if (_soft_spi) {
+    _temp_spi_w = val_0;
+    HAL_GPIO_WritePin(
+      GPIOA,
+      GPIO_PIN_6,
+      ((_temp_spi_w & 0x80000000) ? GPIO_PIN_SET : GPIO_PIN_RESET)
+    );
+    assertCS(true);
+
+    Kernel::log("\nI/O 32 bits...\n");
   }
 }
 
@@ -1212,11 +1217,11 @@ int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
         assertCS(false);
       }
       if (_spi_clk_o_state) {
-        Kernel::log("CLK_F\n");
+        Kernel::log("CLK_F\t");
         HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
       }
       else {
-        Kernel::log("CLK_R\n");
+        Kernel::log("CLK_R\t");
         HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
       }
       return_value = 1;
@@ -1385,8 +1390,8 @@ void CPLDDriver::printDebug(StringBuilder *output) {
     output->concatf("-- SPI1_MOSI           %s\n", (readPin(7) ? "hi":"lo"));
     output->concatf("-- SPI1_CLK            %s\n", (readPin(5) ? "hi":"lo"));
     output->concatf("-- _spi1_clks          %d\n", _spi1_clks);
-    output->concatf("-- _temp_spi_r         0x%02x\n", _temp_spi_r);
-    output->concatf("-- _temp_spi_r_h       0x%02x\n", _temp_spi_r_h);
+    output->concatf("-- _temp_spi_r         0x%08x\n", _temp_spi_r);
+    output->concatf("-- _temp_spi_r_h       0x%08x\n", _temp_spi_w);
   }
 
   //output->concatf("-- hspi1.State:        0x%08x\n", (unsigned long) hspi1.State);
@@ -1596,16 +1601,28 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
     case ';':
       event_spi_toggle.enableSchedule(false);
       local_log.concatf("Periodic bus clock disabled.\n");
+      Kernel::log("CLK_R\t");
+      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
+      break;
+
+    case 'Z':
+      local_log.concatf("softSend(0x28, %d)\n", temp_byte);
+      softSend(0x28, temp_byte);
       break;
 
     case 'X':
-      _spi1_datawrap_stored = temp_byte;
-      local_log.concatf("_spi1_datawrap_stored is now %d\n", _spi1_datawrap_stored);
+      local_log.concatf("softSend(0x29, %d)\n", temp_byte);
+      softSend(0x29, temp_byte);
+      break;
+
+    case 'z':
+      local_log.concat("Reading version register.\n");
+      softSend(0xA8, 0);
       break;
 
     case 'x':
-      softSend(0x80 | temp_byte, 0);
-      local_log.concatf("softSend(%d, 0)\n", (0x80 | temp_byte));
+      local_log.concat("Reading status register.\n");
+      softSend(0xA9, 0);
       break;
 
 
@@ -1635,33 +1652,26 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
             HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET);
             break;
 
-          case 5:
-            Kernel::log("\nCycle\n");
-            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
-            hackish_delay();
-            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
-            hackish_delay();
-            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
-            hackish_delay();
-            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
-            break;
           case 8:
-            Kernel::log("CLK_F\n");
+            Kernel::log("CLK_F\t");
             HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
             break;
           case 9:
-            Kernel::log("CLK_R\n");
+            Kernel::log("CLK_R\t");
             HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
             break;
 
           case 55:
-            softSend(0xA8, 0);
+            // Try to read the identity register of the main PCB IMU.
+            softSend(0x80010100 | (CPLD_REG_IMU_DM_P_M << 24) | 0x0F);
             break;
           case 66:
-            softSend(0x00, 0);
+            // Try to read the identity register of the main PCB IMU.
+            softSend(0x80010100 | (CPLD_REG_IMU_DM_P_I << 24) | 0x0F);
             break;
           case 77:
-            softSend(CPLD_REG_IMU_D3_P_I, 0);
+            // Try to read the identity register of all IMUs.
+            softSend(0x80011100 | (CPLD_REG_IMU_D3_P_I << 24) | 0x0F);
             break;
 
           default:
