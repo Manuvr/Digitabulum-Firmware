@@ -46,20 +46,18 @@ This is the class that is used to keep bus operations on the SPI atomic.
   #define SPI_CALLBACK_RECYCLE   1
 
 
-class SPIOpCallback;
-
 /*
 * This class represents a single transaction on the SPI bus.
 */
 class SPIBusOp : public BusOp {
   public:
-    SPIOpCallback* callback = NULL;  // Which class gets pinged when we've finished?
+    BusOpCallback* callback = NULL;  // Which class gets pinged when we've finished?
 
     //uint32_t time_began    = 0;   // This is the time when bus access begins.
     //uint32_t time_ended    = 0;   // This is the time when bus access stops (or is aborted).
 
     SPIBusOp();
-    SPIBusOp(BusOpcode nu_op, SPIOpCallback* requester);
+    SPIBusOp(BusOpcode nu_op, BusOpCallback* requester);
     ~SPIBusOp();
 
     /* Job control functions. */

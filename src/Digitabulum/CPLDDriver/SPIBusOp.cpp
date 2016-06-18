@@ -177,7 +177,7 @@ SPIBusOp::SPIBusOp() {
 * @param  len        The length of the transaction.
 * @param  requester  The object to be notified when the bus operation completes with success.
 */
-SPIBusOp::SPIBusOp(BusOpcode nu_op, SPIOpCallback* requester) {
+SPIBusOp::SPIBusOp(BusOpcode nu_op, BusOpCallback* requester) {
   wipe();
   this->opcode          = nu_op;
   callback = requester;

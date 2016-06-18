@@ -21,7 +21,6 @@ limitations under the License.
 */
 
 #include "CPLDDriver.h"
-#include "SPIOpCallback.h"
 #include "../LSM9DS1/IIU.h"
 #include "../ManuLegend/ManuLegend.h"
 
@@ -673,10 +672,12 @@ void CPLDDriver::reset() {
 /*
 * When a bus operation completes, it is passed back to the class that created it.
 */
-int8_t CPLDDriver::spi_op_callback(SPIBusOp* op) {
+int8_t CPLDDriver::io_op_callback(BusOp* _op) {
+  SPIBusOp* op = (SPIBusOp*) _op;
+
   // There is zero chance this object will be a null pointer unless it was done on purpose.
   if (op->hasFault()) {
-    if (getVerbosity() > 3) local_log.concat("spi_op_callback() rejected a callback because the bus op failed.\n");
+    if (getVerbosity() > 3) local_log.concat("io_op_callback() rejected a callback because the bus op failed.\n");
     return SPI_CALLBACK_ERROR;
   }
 
@@ -729,13 +730,15 @@ int8_t CPLDDriver::spi_op_callback(SPIBusOp* op) {
 *   callback population before clobbering it. This is because this class is also the
 *   SPI driver. This might end up being reworked later.
 */
-int8_t CPLDDriver::queue_spi_job(SPIBusOp* op) {
+int8_t CPLDDriver::queue_io_job(BusOp* _op) {
+  SPIBusOp* op = (SPIBusOp*) _op;
+
   if (NULL != op) {
     if (NULL == op->callback) {
-      op->callback = (SPIOpCallback*) this;
+      op->callback = (BusOpCallback*) this;
     }
 
-    if ((getVerbosity() > 6) && (op->callback == (SPIOpCallback*) this)) {
+    if ((getVerbosity() > 6) && (op->callback == (BusOpCallback*) this)) {
       op->profile(true);
     }
 
@@ -753,7 +756,7 @@ int8_t CPLDDriver::queue_spi_job(SPIBusOp* op) {
 
     else {    // If there is something already in progress, queue up.
       if (_er_flag(CPLD_FLAG_QUEUE_GUARD) && (cpld_max_bus_queue_depth <= work_queue.size())) {
-        if (getVerbosity() > 3) Kernel::log("CPLDDriver::queue_spi_job(): \t Bus queue at max size. Dropping transaction.\n");
+        if (getVerbosity() > 3) Kernel::log("CPLDDriver::queue_io_job(): \t Bus queue at max size. Dropping transaction.\n");
         op->abort(XferFault::QUEUE_FLUSH);
         callback_queue.insertIfAbsent(op);
         if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
@@ -762,7 +765,7 @@ int8_t CPLDDriver::queue_spi_job(SPIBusOp* op) {
 
       if (0 > work_queue.insertIfAbsent(op)) {
         if (getVerbosity() > 2) {
-          local_log.concat("CPLDDriver::queue_spi_job(): \t Double-insertion. Dropping transaction with no status change.\n");
+          local_log.concat("CPLDDriver::queue_io_job(): \t Double-insertion. Dropping transaction with no status change.\n");
           op->printDebug(&local_log);
           Kernel::log(&local_log);
         }
@@ -798,11 +801,11 @@ int8_t CPLDDriver::service_callback_queue() {
         Kernel::log(&local_log);
       }
 
-      int8_t cb_code = temp_op->callback->spi_op_callback(temp_op);
+      int8_t cb_code = temp_op->callback->io_op_callback(temp_op);
       switch (cb_code) {
         case SPI_CALLBACK_RECYCLE:
           temp_op->set_state(XferState::IDLE);
-          queue_spi_job(temp_op);
+          queue_io_job(temp_op);
           break;
 
         case SPI_CALLBACK_ERROR:
@@ -915,7 +918,7 @@ int8_t CPLDDriver::advance_work_queue() {
 }
 
 
-void CPLDDriver::purge_queued_work_by_dev(SPIOpCallback *dev) {
+void CPLDDriver::purge_queued_work_by_dev(BusOpCallback *dev) {
   if (NULL == dev) return;
   SPIBusOp* current = NULL;
 
@@ -1040,7 +1043,7 @@ int8_t CPLDDriver::readRegister(uint8_t reg_addr) {
   temp->buf     = _real_addr;
   temp->buf_len = 1;
 
-  queue_spi_job(temp);
+  queue_io_job(temp);
   return 0;
 }
 
@@ -1065,7 +1068,7 @@ int8_t CPLDDriver::writeRegister(uint8_t reg_addr, uint8_t val) {
   temp->set_opcode(BusOpcode::TX);
   temp->setParams(reg_addr, val);
 
-  queue_spi_job(temp);
+  queue_io_job(temp);
   return 0;
 }
 
@@ -1663,15 +1666,19 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
 
           case 55:
             // Try to read the identity register of the main PCB IMU.
-            softSend(0x80010100 | (CPLD_REG_IMU_DM_P_M << 24) | 0x0F);
+            softSend(0x80010100 | (CPLD_REG_IMU_DM_P_M << 24) | 0x8F);
             break;
           case 66:
             // Try to read the identity register of the main PCB IMU.
-            softSend(0x80010100 | (CPLD_REG_IMU_DM_P_I << 24) | 0x0F);
+            softSend(0x80010100 | (CPLD_REG_IMU_DM_P_I << 24) | 0x8F);
             break;
           case 77:
             // Try to read the identity register of all IMUs.
-            softSend(0x80011100 | (CPLD_REG_IMU_D3_P_I << 24) | 0x0F);
+            softSend(0x80011100 | (CPLD_REG_IMU_DM_P_I << 24) | 0x8F);
+            break;
+          case 88:
+            // Try to read the identity register of a port3 IMU..
+            softSend(0x80010100 | (CPLD_REG_IMU_D3_P_I << 24) | 0x8F);
             break;
 
           default:

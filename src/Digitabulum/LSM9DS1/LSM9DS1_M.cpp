@@ -450,13 +450,14 @@ void LSM9DS1_M::dumpPreformedElements(StringBuilder *output) {
 * All notifications of bus activity enter the class here. This is probably where
 *   we should act on data coming in.
 */
-int8_t LSM9DS1_M::spi_op_callback(SPIBusOp* op) {
+int8_t LSM9DS1_M::io_op_callback(BusOp* _op) {
+  SPIBusOp* op = (SPIBusOp*) _op;
   int8_t return_value = SPI_CALLBACK_NOMINAL;
 
   // There is zero chance this object will be a null pointer unless it was done on purpose.
   if (op->hasFault()) {
     if (verbosity > 3) {
-      local_log.concat("~~~~~~~~LSM9DS1_M::spi_op_callback   (ERROR CASE -1)\n");
+      local_log.concat("~~~~~~~~LSM9DS1_M::io_op_callback   (ERROR CASE -1)\n");
       op->printDebug(&local_log);
       Kernel::log(&local_log);
     }
@@ -469,7 +470,7 @@ int8_t LSM9DS1_M::spi_op_callback(SPIBusOp* op) {
   unsigned int access_len = op->buf_len;  // The access length lets us know how many things changed.
   unsigned int access_idx = op->getRegAddr();  // The access length lets us know how many things changed.
   unsigned int value = regValue(access_idx);
-  if (verbosity > 6) local_log.concatf("%s  G::spi_op_callback(0x%08x): value: %d \t access_idx  %d \t access_len: %d\n", op->getOpcodeString(), (uint32_t)((SPIOpCallback*) this), value, access_idx, access_len);
+  if (verbosity > 6) local_log.concatf("%s  G::io_op_callback(0x%08x): value: %d \t access_idx  %d \t access_len: %d\n", op->getOpcodeString(), (uint32_t)((BusOpCallback*) this), value, access_idx, access_len);
 
   /* Our first choice is: Did we just finish a WRITE or a READ? */
   /* READ Case-offs */

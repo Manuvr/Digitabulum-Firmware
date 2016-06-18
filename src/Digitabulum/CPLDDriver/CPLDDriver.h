@@ -310,8 +310,6 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #define __CPLD_DRIVER_H__
 
 #include "SPIBusOp.h"
-#include "SPIOpCallback.h"
-#include "SPIBusOp.h"
 #include <Kernel.h>
 #include "SPIDeviceWithRegisters.h"
 
@@ -420,7 +418,7 @@ class IIU;
 /*
 * The CPLD driver class.
 */
-class CPLDDriver : public EventReceiver, public SPIOpCallback {
+class CPLDDriver : public EventReceiver, public BusOpCallback {
   public:
     SPIBusOp* current_queue_item = NULL;
 
@@ -428,8 +426,8 @@ class CPLDDriver : public EventReceiver, public SPIOpCallback {
     ~CPLDDriver();       // Should never be called. Here for the sake of completeness.
 
     /* Overrides from the SPICallback interface */
-    virtual int8_t spi_op_callback(SPIBusOp*);
-    int8_t queue_spi_job(SPIBusOp*);
+    int8_t io_op_callback(BusOp*);
+    int8_t queue_io_job(BusOp*);
 
     /* Overrides from EventReceiver */
     const char* getReceiverName();
@@ -505,7 +503,7 @@ class CPLDDriver : public EventReceiver, public SPIOpCallback {
     int8_t writeRegister(uint8_t reg_addr, uint8_t val);
 
     void purge_queued_work();     // Flush the work queue.
-    void purge_queued_work_by_dev(SPIOpCallback *dev);   // Flush the work queue by callback match
+    void purge_queued_work_by_dev(BusOpCallback *dev);   // Flush the work queue by callback match
     void purge_stalled_job();     // TODO: Misnomer. Really purges the active job.
     int8_t service_callback_queue();
     void reclaim_queue_item(SPIBusOp*);
