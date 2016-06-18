@@ -105,7 +105,8 @@ void spi_clk_isr() {
 * ISR called when the SPI1_CS pin rises (is released by the CPLD).
 */
 void spi_bus_op_isr(){
-  HAL_NVIC_DisableIRQ(EXTI4_IRQn);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
+  cs_asserted = false;
   Kernel::log("spi_bus_op_isr()\n");
 }
 
@@ -222,22 +223,21 @@ DMA_HandleTypeDef _dma_handle_spi2;
 
 
 void CPLDDriver::assertCS(bool _asserted) {
-  GPIO_InitTypeDef GPIO_InitStruct;
-  GPIO_InitStruct.Pin   = GPIO_PIN_4;
-  GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
-  GPIO_InitStruct.Pull  = GPIO_PULLUP;
+
   if (_asserted) {
     _temp_spi_r = 0;
     _spi1_clks = 0;
 
-    GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_OD;
-    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+    //GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_OD;
+    //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+    //HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
   }
   else {
-    GPIO_InitStruct.Mode  = GPIO_MODE_IT_RISING;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-    HAL_NVIC_EnableIRQ(EXTI4_IRQn);
+    //GPIO_InitStruct.Mode  = GPIO_MODE_IT_RISING;
+    //HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+    //HAL_NVIC_EnableIRQ(EXTI4_IRQn);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
   }
   cs_asserted = _asserted;
 }
@@ -463,11 +463,12 @@ void CPLDDriver::init_spi_soft() {
   *
   * #  Default   Purpose
   * -----------------------------------------------
+  * 4   SPI1_CS
   * 5   SPI1_CLK
   * 6   SPI1_MISO
   * 7   SPI1_MOSI
   */
-  GPIO_InitStruct.Pin = GPIO_PIN_5|GPIO_PIN_7;
+  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_7;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
@@ -519,6 +520,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   *
   * #  Default   Purpose
   * -----------------------------------------------
+  * 4   SPI1_CS
   * 5   SPI1_CLK
   * 6   SPI1_MISO
   * 7   SPI1_MOSI
@@ -528,6 +530,10 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
   GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  GPIO_InitStruct.Pin = GPIO_PIN_4;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* These Port B pins are associated with the SPI2 peripheral:
@@ -549,7 +555,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   hspi1.Instance            = SPI1;
   hspi1.Init.Mode           = SPI_MODE_SLAVE;
   hspi1.Init.Direction      = SPI_DIRECTION_2LINES;
-  hspi1.Init.NSS            = SPI_NSS_SOFT;
+  hspi1.Init.NSS            = SPI_NSS_HARD_INPUT;
   hspi1.Init.DataSize       = SPI_DATASIZE_8BIT;
   hspi1.Init.CLKPolarity    = cpol_mode;
   hspi1.Init.CLKPhase       = cpha_mode;
@@ -567,8 +573,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   hspi2.Instance            = SPI2;
   hspi2.Init.Mode           = SPI_MODE_SLAVE;
   hspi2.Init.Direction      = SPI_DIRECTION_2LINES_RXONLY;
-  //hspi2.Init.NSS            = SPI_NSS_HARD_INPUT;
-  hspi2.Init.NSS            = SPI_NSS_SOFT;
+  hspi2.Init.NSS            = SPI_NSS_HARD_INPUT;
   hspi2.Init.DataSize       = SPI_DATASIZE_8BIT;
   hspi2.Init.CLKPolarity    = cpol_mode;
   hspi2.Init.CLKPhase       = cpha_mode;
@@ -607,13 +612,6 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
 
   //HAL_DMA_Start_IT(&_dma_handle_spi2, (uint32_t) hspi2.pTxBuffPtr, (uint32_t) _irq_data_0, 11);
 
-  /* These Port A pins are associated with the SPI1 peripheral:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 4   SPI1_CS
-  */
-  setPinFxn(4, RISING_PULL_UP, spi_bus_op_isr);
   _soft_spi = false;
 }
 
@@ -1049,18 +1047,14 @@ int8_t CPLDDriver::readRegister(uint8_t reg_addr) {
 
 
 int8_t CPLDDriver::writeRegister(uint8_t reg_addr, uint8_t val) {
-  uint8_t* _real_addr;
   switch (reg_addr) {
     case CPLD_REG_CONFIG:
-      _real_addr = &cpld_conf_value;
       break;
     case CPLD_REG_WAKEUP_IRQ:
-      _real_addr = &cpld_wakeup_source;
       break;
 
-    case CPLD_REG_VERSION:
+    case CPLD_REG_VERSION:   // Cannot write to these registers...
     case CPLD_REG_STATUS:
-      // Cannot write to these registers...
     default:
       return -1;
   }
