@@ -26,6 +26,32 @@ limitations under the License.
 
 extern "C" {
   volatile CPLDDriver* cpld = NULL;
+
+  TIM_HandleTypeDef htim1;
+  SPI_HandleTypeDef hspi1;
+  SPI_HandleTypeDef hspi2;
+  DMA_HandleTypeDef _dma_handle_spi2;
+
+
+  /* TIM1 Break and TIM9          */
+  void TIM1_BRK_TIM9_IRQHandler() {
+    Kernel::log("TIM1_BRK_IRQHandler\n");
+  }
+
+  /* TIM1 Update and TIM10        */
+  void TIM1_UP_TIM10_IRQHandler() {
+    Kernel::log("TIM1_UP_IRQHandler\n");
+  }
+
+  /* TIM1 Trigger and Commutation and TIM11 */
+  void TIM1_TRG_COM_TIM11_IRQHandler() {
+    Kernel::log("TIM1_TRG_COM_IRQHandler\n");
+  }
+
+  /* TIM1 Capture Compare         */
+  void TIM1_CC_IRQHandler() {
+    Kernel::log("TIM1_CC_IRQHandler\n");
+  }
 }
 
 volatile bool timeout_punch = false;
@@ -86,12 +112,11 @@ void cpld_gpio_isr_1() {
   Kernel::log("ADDR_LOADED\n");
 }
 
+
 void spi_clk_isr() {
   _spi1_clks++;
   _temp_spi_r = _temp_spi_r << 1;
   _temp_spi_r += (readPin(7) ? 1:0);
-
-  Kernel::log("spi_clk_isr()\n");
 
   HAL_GPIO_WritePin(
     GPIOA,
@@ -216,27 +241,14 @@ const MessageTypeDef cpld_message_defs[] = {
   {  DIGITABULUM_MSG_SPI_CB_QUEUE_READY   , 0x0000,               "SPICB_RDY"          , ManuvrMsg::MSG_ARGS_NONE }, //
 };
 
-TIM_HandleTypeDef htim1;
-SPI_HandleTypeDef hspi1;
-SPI_HandleTypeDef hspi2;
-DMA_HandleTypeDef _dma_handle_spi2;
 
-
-void CPLDDriver::assertCS(bool _asserted) {
-
+void CPLDDriver::transferSignal(bool _asserted) {
   if (_asserted) {
     _temp_spi_r = 0;
     _spi1_clks = 0;
-
-    //GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_OD;
-    //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-    //HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
   }
   else {
-    //GPIO_InitStruct.Mode  = GPIO_MODE_IT_RISING;
-    //HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-    //HAL_NVIC_EnableIRQ(EXTI4_IRQn);
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
   }
   cs_asserted = _asserted;
@@ -251,7 +263,7 @@ void CPLDDriver::softSend(uint8_t val_0, uint8_t val_1) {
       GPIO_PIN_6,
       ((_temp_spi_w & 0x80000000) ? GPIO_PIN_SET : GPIO_PIN_RESET)
     );
-    assertCS(true);
+    transferSignal(true);
 
     Kernel::log("\nI/O 16 bits...\n");
   }
@@ -265,7 +277,7 @@ void CPLDDriver::softSend(uint32_t val_0) {
       GPIO_PIN_6,
       ((_temp_spi_w & 0x80000000) ? GPIO_PIN_SET : GPIO_PIN_RESET)
     );
-    assertCS(true);
+    transferSignal(true);
 
     Kernel::log("\nI/O 32 bits...\n");
   }
@@ -387,7 +399,26 @@ void CPLDDriver::gpioSetup(void) {
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
 
 
+  /* These Port A pins are outputs at the discretion of the timer:
+  *
+  * #  Default   Purpose
+  * -----------------------------------------------
+  * 8     1      CPLD_EXT_CLK
+  */
+  //GPIO_InitStruct.Pin        = GPIO_PIN_8;
+  ////GPIO_InitStruct.Mode       = GPIO_MODE_AF_PP;
+  //GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_PP;
+  //GPIO_InitStruct.Pull       = GPIO_NOPULL;
+  //GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
+  ////GPIO_InitStruct.Alternate  = GPIO_AF1_TIM1;
+  //HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
+}
+
+
+void CPLDDriver::init_ext_clk() {
   __TIM1_CLK_ENABLE();
+  GPIO_InitTypeDef GPIO_InitStruct;
 
   /* These Port A pins are outputs at the discretion of the timer:
   *
@@ -396,24 +427,21 @@ void CPLDDriver::gpioSetup(void) {
   * 8     1      CPLD_EXT_CLK
   */
   GPIO_InitStruct.Pin        = GPIO_PIN_8;
-  //GPIO_InitStruct.Mode       = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Mode       = GPIO_MODE_AF_PP;
   GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
-  //GPIO_InitStruct.Alternate  = GPIO_AF1_TIM1;
+  GPIO_InitStruct.Speed      = GPIO_SPEED_HIGH;
+  GPIO_InitStruct.Alternate  = GPIO_AF1_TIM1;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
 
   // TODO: Everything below is un-audited auto-generated init code from CubeMX.
-  TIM_ClockConfigTypeDef sClockSourceConfig;
-  TIM_MasterConfigTypeDef sMasterConfig;
+  TIM_ClockConfigTypeDef         sClockSourceConfig;
+  TIM_MasterConfigTypeDef        sMasterConfig;
   TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig;
-  TIM_OC_InitTypeDef sConfigOC;
 
   htim1.Instance               = TIM1;
   htim1.Init.Prescaler         = 0;
   htim1.Init.CounterMode       = TIM_COUNTERMODE_UP;
-  htim1.Init.Period            = 0;
+  htim1.Init.Period            = 0x8000;
   htim1.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   HAL_TIM_Base_Init(&htim1);
@@ -441,14 +469,21 @@ void CPLDDriver::gpioSetup(void) {
   sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
   HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig);
 
-  sConfigOC.OCMode = TIM_OCMODE_TIMING;
+  TIM_OC_InitTypeDef             sConfigOC;
+  //sConfigOC.OCMode = TIM_OCMODE_TIMING;
+  sConfigOC.OCMode = TIM_OCMODE_TOGGLE;
   sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
-  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  sConfigOC.OCIdleState = TIM_OCIDLESTATE_SET;
+  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_SET;
   HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1);
+
+  //HAL_NVIC_EnableIRQ(TIM1_BRK_TIM9_IRQn);
+  //HAL_NVIC_EnableIRQ(TIM1_UP_TIM10_IRQn);
+  //HAL_NVIC_EnableIRQ(TIM1_TRG_COM_TIM11_IRQn);
+  //HAL_NVIC_EnableIRQ(TIM1_CC_IRQn);
 }
 
 
@@ -864,9 +899,9 @@ int8_t CPLDDriver::advance_work_queue() {
        case XferState::INITIATE:
          switch (current_queue_item->begin()) {
            case 0:     // Nominal outcome. Transfer started with no problens...
-             assertCS(true);
+             transferSignal(true);
              // Disassert and let CPLD release it when the transfer is finished.
-             assertCS(false);
+             transferSignal(false);
              break;
            case -1:    // Bus appears to be in-use. State did not change.
              // Re-throw queue_ready event and try again later.
@@ -1211,7 +1246,7 @@ int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
     case DIGITABULUM_MSG_IMU_IRQ_RAISED:
       _spi_clk_o_state = !_spi_clk_o_state;
       if (cs_asserted && (_spi1_clks == 1)) {
-        assertCS(false);
+        transferSignal(false);
       }
       if (_spi_clk_o_state) {
         Kernel::log("CLK_F\t");
@@ -1262,7 +1297,6 @@ void CPLDDriver::externalOscillator(bool on) {
   // TODO: Enable the timer, connect it to GPIO.
   //if (on) {
   //}
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, on ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
 
@@ -1280,7 +1314,6 @@ void CPLDDriver::internalOscillator(bool on) {
   //  externalOscillator(true);
   //}
   //setCPLDConfig(CPLD_CONF_BIT_EXT_CLK, !on);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, on ? GPIO_PIN_RESET : GPIO_PIN_SET);
 }
 
 
@@ -1390,6 +1423,9 @@ void CPLDDriver::printDebug(StringBuilder *output) {
     output->concatf("-- _temp_spi_r         0x%08x\n", _temp_spi_r);
     output->concatf("-- _temp_spi_r_h       0x%08x\n", _temp_spi_w);
   }
+
+  output->concatf("-- Base GetState       0x%08x\n", HAL_TIM_Base_GetState(&htim1));
+  output->concatf("-- PWM GetState        0x%08x\n", HAL_TIM_PWM_GetState(&htim1));
 
   //output->concatf("-- hspi1.State:        0x%08x\n", (unsigned long) hspi1.State);
   //output->concatf("-- hspi1.ErrorCode:    0x%08x\n", (unsigned long) hspi1.ErrorCode);
@@ -1586,6 +1622,13 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       reset();
       break;
 
+    case '|':
+      local_log.concat("Enabling hardware timer... ");
+      init_ext_clk();
+      //HAL_TIM_OC_Start(&htim1, TIM_CHANNEL_1);
+      local_log.concatf("Result %d\n", HAL_TIM_OC_Start(&htim1, TIM_CHANNEL_1));
+      break;
+
     case ':':
       if (temp_byte) {
         event_spi_toggle.alterSchedulePeriod(temp_byte*10);
@@ -1628,11 +1671,11 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
         switch (temp_byte) {
           case 0:
             local_log.concat("DISASSERTING CS\n");
-            assertCS(false);
+            transferSignal(false);
             break;
           case 1:
             local_log.concat("ASSERTING CS\n");
-            assertCS(true);
+            transferSignal(true);
             break;
           case 2:
             event_spi_toggle.alterScheduleRecurrence(8);

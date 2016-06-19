@@ -511,6 +511,7 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
 
     /* Setup and init fxns. */
     void gpioSetup(void);
+    void init_ext_clk();
     void init_spi(uint8_t cpol, uint8_t cpha);  // Pass 0 for CPHA 0.
     void init_spi_soft();
 
@@ -534,7 +535,7 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
 
     static SPIBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
 
-    static void assertCS(bool);
+    static void transferSignal(bool);
     static void softSend(uint8_t, uint8_t);
     static void softSend(uint32_t);
 };
