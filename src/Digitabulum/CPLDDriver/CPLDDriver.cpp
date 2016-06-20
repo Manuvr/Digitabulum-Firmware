@@ -49,15 +49,17 @@ extern "C" {
   }
 
   void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
-    if (NULL != cpld->current_queue_item) {
-      cpld->current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
-    }
+    ((CPLDDriver*)cpld)->advance_work_queue();
+    //if (NULL != cpld->current_queue_item) {
+    //  cpld->current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
+    //}
   }
 
   void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
-    if (NULL != cpld->current_queue_item) {
-      cpld->current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
-    }
+    ((CPLDDriver*)cpld)->advance_work_queue();
+    //if (NULL != cpld->current_queue_item) {
+    //  cpld->current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
+    //}
   }
 
   /*
@@ -661,8 +663,9 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
   }
 
   if (BusOpcode::RX == op->get_opcode()) {
-    switch (op->getRegAddr()) {
+    switch (0x7F & op->getRegAddr()) {
       case CPLD_REG_VERSION:
+        cpld_version = op->getTransferParam(3);
         if (getVerbosity() > 3) local_log.concatf("CPLD r%d.\n", cpld_version);
         if (0 < cpld_version) {
           Kernel::raiseEvent(DIGITABULUM_MSG_CPLD_RESET_COMPLETE, NULL);
@@ -671,11 +674,8 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
           if (getVerbosity() > 1) local_log.concatf("CPLD returned a bad version code: 0x%02x\n", cpld_version);
         }
         break;
-      case CPLD_REG_CONFIG:
-        break;
       case CPLD_REG_STATUS:
-        break;
-      case CPLD_REG_WAKEUP_IRQ:
+        cpld_status_value = op->getTransferParam(3);
         break;
       default:
         if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->getRegAddr());
@@ -684,13 +684,11 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
   }
   else if (BusOpcode::TX == op->get_opcode()) {
     switch (op->getRegAddr()) {
-      case CPLD_REG_VERSION:
-      case CPLD_REG_STATUS:
-        //if (getVerbosity() > 2) local_log.concat("An SPIBusOp called back as having written to an RO register.\n");
-        break;
       case CPLD_REG_CONFIG:
+        cpld_conf_value = op->getTransferParam(3);
         break;
       case CPLD_REG_WAKEUP_IRQ:
+        cpld_wakeup_source = op->getTransferParam(3);
         break;
       default:
         if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->getRegAddr());
@@ -989,43 +987,18 @@ void CPLDDriver::purge_stalled_job() {
 
 
 int8_t CPLDDriver::readRegister(uint8_t reg_addr) {
-  switch (reg_addr) {
-    case CPLD_REG_VERSION:
-      break;
-    case CPLD_REG_CONFIG:
-      break;
-    case CPLD_REG_STATUS:
-      break;
-    case CPLD_REG_WAKEUP_IRQ:
-      break;
-    default:
-      return -1;
-  }
   SPIBusOp* temp = issue_spi_op_obj();
   temp->set_opcode(BusOpcode::RX);
   temp->setParams(reg_addr | 0x80, 0);  // Set the READ bit...
-
   queue_io_job(temp);
   return 0;
 }
 
 
 int8_t CPLDDriver::writeRegister(uint8_t reg_addr, uint8_t val) {
-  switch (reg_addr) {
-    case CPLD_REG_CONFIG:
-      break;
-    case CPLD_REG_WAKEUP_IRQ:
-      break;
-    case CPLD_REG_VERSION:   // Cannot write to these registers...
-    case CPLD_REG_STATUS:
-      break;
-    default:
-      return -1;
-  }
   SPIBusOp* temp = issue_spi_op_obj();
   temp->set_opcode(BusOpcode::TX);
   temp->setParams(reg_addr, val);
-
   queue_io_job(temp);
   return 0;
 }

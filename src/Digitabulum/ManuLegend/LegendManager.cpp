@@ -735,18 +735,12 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
 
 
     case DIGITABULUM_MSG_CPLD_RESET_COMPLETE:
-      {
-        if (getVerbosity() > 3) local_log.concatf("Initializing IMUs...\n");
+      if (getVerbosity() > 3) local_log.concatf("Initializing IMUs...\n");
+      // Range-bind everything....
+      for (uint8_t i = 0; i < 17; i++) iius[i].rangeBind(true);
 
-        // Range-bind everything....
-        for (uint8_t i = 0; i < 17; i++) {
-          iius[i].rangeBind(true);
-        }
-
-        // Fire the event to put the IMUs into INIT-1.
-        ManuvrRunnable *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
-        raiseEvent(event);
-      }
+      // Fire the event to put the IMUs into INIT-1.
+      //raiseEvent(Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT));
       return_value++;
       break;
 

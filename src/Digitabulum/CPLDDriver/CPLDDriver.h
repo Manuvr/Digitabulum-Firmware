@@ -400,9 +400,9 @@ class IIU;
 #define CPLD_REG_RANK_D_M      0x27  // |
 
 #define CPLD_REG_VERSION       0x28  // | Holds CPLD revision number.
-#define CPLD_REG_CONFIG        0x29  // | CPLD operating parameters
-#define CPLD_REG_STATUS        0x2A  // | Status
-#define CPLD_REG_WAKEUP_IRQ    0x2B  // | WAKEUP mapping
+#define CPLD_REG_CONFIG        0x28  // | CPLD operating parameters
+#define CPLD_REG_STATUS        0x29  // | Status
+#define CPLD_REG_WAKEUP_IRQ    0x29  // | WAKEUP mapping
 #define CPLD_REG_CS_4          0x2C  // | RESERVED
 #define CPLD_REG_CS_5          0x2D  // | RESERVED
 #define CPLD_REG_CS_6          0x2E  // | RESERVED

@@ -132,6 +132,7 @@ class SPIBusOp : public BusOp {
 
     void printDebug(StringBuilder *);
 
+    inline uint8_t getTransferParam(int x) {  return xfer_params[x]; }
 
     static uint32_t  total_transfers;
     static uint32_t  failed_transfers;
