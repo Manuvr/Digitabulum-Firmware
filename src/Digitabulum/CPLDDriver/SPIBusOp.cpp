@@ -138,11 +138,13 @@ void SPIBusOp::buildDMAMembers() {
 * @param bool enable the interrupts?
 */
 void SPIBusOp::enableSPI_DMA(bool enable) {
-  if (!enable) {
-    //NVIC_DisableIRQ(DMA2_Stream0_IRQn);
+  if (enable) {
+    NVIC_EnableIRQ(DMA2_Stream2_IRQn);
+    NVIC_EnableIRQ(DMA2_Stream3_IRQn);
   }
   else {
-    //NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+    NVIC_DisableIRQ(DMA2_Stream2_IRQn);
+    NVIC_DisableIRQ(DMA2_Stream3_IRQn);
   }
 }
 
@@ -240,6 +242,8 @@ void SPIBusOp::setParams(uint8_t _reg_addr) {
   xfer_params[1] = 0;
   xfer_params[2] = 0;
   xfer_params[3] = 0;
+  this->buf      = NULL;
+  this->buf_len  = 0;
 }
 
 
@@ -346,8 +350,6 @@ bool SPIBusOp::wait_with_timeout() {
 * e   88 8   8 88   8    88   e 8   8 88  8   88  88   8 8   8 88
 * 8eee88 8eee8 88eee8    88eee8 8eee8 88  8   88  88   8 8eee8 88eee
 ****************************************************************************************************/
-static uint16_t  _hackish_patch = 0;
-
 // Useful trick to mask warnings that the compiler raises, but which we know are
 //   intentional.
 //   http://stackoverflow.com/questions/3378560/how-to-disable-gcc-warnings-for-a-few-lines-of-code
@@ -362,7 +364,6 @@ static uint16_t  _hackish_patch = 0;
 */
 int8_t SPIBusOp::begin() {
   //time_began    = micros();
-
   if (0 == _param_len) {
     // Obvious invalidity. We must have at least one transfer parameter.
     abort(XferFault::BAD_PARAM);
@@ -377,11 +378,11 @@ int8_t SPIBusOp::begin() {
 
   set_state(XferState::INITIATE);  // Indicate that we now have bus control.
 
-  if (2 == _param_len) {
-    _hackish_patch     = (xfer_params[0] << 16) + (xfer_params[1]);
-    hspi1.pTxBuffPtr   = (uint8_t*) _hackish_patch;
-    hspi1.Instance->DR = *((uint16_t*)hspi1.pTxBuffPtr);
-    hspi1.pTxBuffPtr  += sizeof(uint16_t);
+  if (opcode == BusOpcode::TX) {
+    HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) xfer_params, _param_len);
+  }
+  else {
+    HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, ((uint8_t*) xfer_params+2), 2);
   }
 
   if (0 == buf_len) {
@@ -392,27 +393,6 @@ int8_t SPIBusOp::begin() {
     // Otherwise, let the ISR feed the next DMA operation.
     set_state(XferState::ADDR);
   }
-
-  /* In this case, we need to clear any pending interrupts for the SPI, and to do that, we must
-     read this register, even though we don't care about the result.  */
-  //volatile uint8_t throw_away;
-
-  /* The peripheral should be totally clear at this point. Since the TX FIFO is two slots deep,
-     we're going to shovel in both bytes if we have a 16-bit address. Since the ISR only calls
-     us back when the bus goes idle, we don't need to worry about tracking the extra IRQ. */
-  if (!wait_with_timeout()) {
-    Kernel::log("SPI op aborted halfway into ADDR phase?!\n");
-    abort(XferFault::BUS_BUSY);
-    return -2;
-  }
-  if (__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_RXNE)) {
-    debug_log.concatf("SPI op leftovers: 0x%04x\n", hspi1.Instance->DR);
-    Kernel::log(&debug_log);
-  }
-  /* Shovel in the last (or only) address byte... */
-  //hspi1->DR = (uint8_t) xfer_params[0];
-
-
   return 0;
 }
 
@@ -433,6 +413,7 @@ int8_t SPIBusOp::begin() {
 int8_t SPIBusOp::markComplete() {
   if (has_bus_control() || (((CPLDDriver*) cpld)->current_queue_item == this) ) {
     // If this job has bus control, we need to release the bus and tidy up IRQs.
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
     if (buf_len > 1) {
       // We have DMA cruft to clean.
       enableSPI_DMA(false);
@@ -447,7 +428,7 @@ int8_t SPIBusOp::markComplete() {
   //time_ended = micros();
   total_transfers++;
   xfer_state = XferState::COMPLETE;
-  ((CPLDDriver*) cpld)->step_queues(false);
+  ((CPLDDriver*) cpld)->step_queues();
   return 0;
 }
 

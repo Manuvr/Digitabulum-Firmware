@@ -409,10 +409,14 @@ class IIU;
 #define CPLD_REG_CS_7          0x2F  // | RESERVED
 
 /* Bitmask defs for the CONFIG register. */
-#define CPLD_CONF_BIT_EXT_CLK  0x01
-#define CPLD_CONF_BIT_GPIO_1   0x20
-#define CPLD_CONF_BIT_GPIO_0   0x40
-#define CPLD_CONF_BIT_DEN_AG_0 0x80
+#define CPLD_CONF_BIT_EXT_CLK    0x01
+#define CPLD_CONF_BIT_IRQ_SCAN   0x02  // Enable IRQ scanning
+#define CPLD_CONF_BIT_IRQ_73     0x04  // Set IRQ bit-73
+#define CPLD_CONF_BIT_RESERVED   0x08  //
+#define CPLD_CONF_BIT_IRQ_STREAM 0x10  // Constantly stream IRQ data
+#define CPLD_CONF_BIT_GPIO_0     0x20  // Set GPIO_0 state
+#define CPLD_CONF_BIT_GPIO_1     0x40  // Set GPIO_1 state
+#define CPLD_CONF_BIT_DEN_AG_0   0x80  // Set The MC IMU DEN_AG pin
 
 
 /*
@@ -440,7 +444,7 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
 
     /* Members related to the work queue... */
     int8_t advance_work_queue();
-    bool step_queues(bool);
+    inline void step_queues(){  Kernel::isrRaiseEvent(&event_spi_queue_ready); }
     SPIBusOp* issue_spi_op_obj();
 
     void reset(void);                 // Causes the CPLD to be reset.
@@ -469,8 +473,6 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     ManuvrRunnable event_spi_queue_ready;
     ManuvrRunnable event_spi_callback_ready;
     ManuvrRunnable event_spi_timeout;
-
-    ManuvrRunnable event_spi_toggle;
 
     uint32_t  bus_timeout_millis = 5;
 
@@ -535,7 +537,7 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
 
     static SPIBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
 
-    static void transferSignal(bool);
+    static void transferSignal();
     static void softSend(uint8_t, uint8_t);
     static void softSend(uint32_t);
 };
