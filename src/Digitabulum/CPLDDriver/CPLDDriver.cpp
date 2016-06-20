@@ -332,7 +332,7 @@ CPLDDriver::~CPLDDriver() {
 /**
 * Setup GPIO pins and their bindings to on-chip peripherals, if required.
 */
-void CPLDDriver::gpioSetup(void) {
+void CPLDDriver::gpioSetup() {
   __HAL_RCC_SPI2_CLK_ENABLE();
 
   GPIO_InitTypeDef GPIO_InitStruct;
@@ -443,7 +443,10 @@ void CPLDDriver::gpioSetup(void) {
 }
 
 
-
+/**
+* Init the timer to provide the CPLD with an external clock. This clock is the
+*   most-flexible, and we use it by default.
+*/
 void CPLDDriver::init_ext_clk() {
   __TIM1_CLK_ENABLE();
   GPIO_InitTypeDef GPIO_InitStruct;
@@ -506,6 +509,10 @@ void CPLDDriver::init_ext_clk() {
 }
 
 
+/**
+* Init of SPI peripheral 1 in software mode.
+* This will be struck when the CPLD is debugged.
+*/
 void CPLDDriver::init_spi_soft() {
   GPIO_InitTypeDef GPIO_InitStruct;
 
@@ -542,9 +549,12 @@ void CPLDDriver::init_spi_soft() {
 }
 
 
-/*
-* Init of SPI peripherals 1 and 2. This is broken out because we might be bringing it up and
-*   down in a single runtime for debug reasons.
+/**
+* Init of SPI peripheral 1. This is broken out because we might be bringing it
+*   up and down in a single runtime for debug reasons.
+*
+* @param  cpol  Clock polartiy
+* @param  cpha  Clock phase
 */
 void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   GPIO_InitTypeDef GPIO_InitStruct;
@@ -608,12 +618,12 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
 */
 void CPLDDriver::reset() {
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);  // Drive the reset pin low...
+  externalOscillator(true);    // Turn on the oscillators...
 
-  externalOscillator(false);    // Turn off the oscillators...
-  _er_set_flag(CPLD_FLAG_INT_OSC, true);
-
-  cpld_conf_value   = 0x00;     //   our register representations...
-  cpld_version      = 0x00;
+  cpld_conf_value    = 0x00;     //   our register representations...
+  cpld_version       = 0x00;
+  cpld_wakeup_source = 0x00;
+  cpld_status_value  = 0x00;
 
   bus_timeout_millis = 5;
 
@@ -625,6 +635,33 @@ void CPLDDriver::reset() {
 }
 
 
+/**
+* This function evaluates the last-known state against the new state of the
+*   the configuration register, and processes consequences.
+*
+* @param  nu  The updated value of the config register.
+*/
+void CPLDDriver::_process_conf_update(uint8_t nu) {
+  uint8_t diff = cpld_conf_value ^ nu;
+  if (diff & CPLD_CONF_BIT_INT_CLK) {
+    if (nu & CPLD_CONF_BIT_INT_CLK) {
+      // TODO: Optimize the branches out of this once it is shown to work.
+      _er_set_flag(CPLD_FLAG_INT_OSC, true);
+      // We needed to wait for the last write operation before doing this...
+      externalOscillator(false);
+    }
+    else {
+      _er_set_flag(CPLD_FLAG_INT_OSC, false);
+    }
+  }
+  if (diff & CPLD_CONF_BIT_GPIO_0) {
+  }
+  if (diff & CPLD_CONF_BIT_GPIO_1) {
+  }
+  if (diff & CPLD_CONF_BIT_DEN_AG_0) {
+  }
+  cpld_conf_value = nu;
+}
 
 
 
@@ -650,8 +687,11 @@ void CPLDDriver::reset() {
 *     Move all the bytes required by the operation and close the bus.
 ****************************************************************************************************/
 
-/*
+/**
 * When a bus operation completes, it is passed back to the class that created it.
+*
+* @param  _op  The bus operation that was completed.
+* @return SPI_CALLBACK_NOMINAL on success, or appropriate error code.
 */
 int8_t CPLDDriver::io_op_callback(BusOp* _op) {
   SPIBusOp* op = (SPIBusOp*) _op;
@@ -685,7 +725,7 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
   else if (BusOpcode::TX == op->get_opcode()) {
     switch (op->getRegAddr()) {
       case CPLD_REG_CONFIG:
-        cpld_conf_value = op->getTransferParam(3);
+        _process_conf_update(op->getTransferParam(3));
         break;
       case CPLD_REG_WAKEUP_IRQ:
         cpld_wakeup_source = op->getTransferParam(3);
@@ -701,11 +741,14 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
 }
 
 
-/*
+/**
 * This is what we call when this class wants to conduct a transaction on the SPI bus.
 * Note that this is different from other class implementations, in that it checks for
 *   callback population before clobbering it. This is because this class is also the
 *   SPI driver. This might end up being reworked later.
+*
+* @param  _op  The bus operation to execute.
+* @return Zero on success, or appropriate error code.
 */
 int8_t CPLDDriver::queue_io_job(BusOp* _op) {
   SPIBusOp* op = (SPIBusOp*) _op;
@@ -755,6 +798,8 @@ int8_t CPLDDriver::queue_io_job(BusOp* _op) {
 
 
 /**
+* Execute any I/O callbacks that are pending. The function is present because
+*   this class contains the bus implementation.
 *
 * @return the number of callbacks proc'd.
 */
@@ -801,10 +846,11 @@ int8_t CPLDDriver::service_callback_queue() {
 }
 
 
-
 /**
 * Calling this function will advance the work queue after performing cleanup operations
 *   on the present or pending operation.
+*
+* @return the number of bus operations proc'd.
 */
 int8_t CPLDDriver::advance_work_queue() {
   int8_t return_value = 0;
@@ -885,6 +931,12 @@ int8_t CPLDDriver::advance_work_queue() {
 }
 
 
+/**
+* Purges only the jobs belonging to the given device from the work_queue.
+* Leaves the currently-executing job.
+*
+* @param  dev  The device pointer that owns jobs we wish purged.
+*/
 void CPLDDriver::purge_queued_work_by_dev(BusOpCallback *dev) {
   if (NULL == dev) return;
   SPIBusOp* current = NULL;
@@ -909,7 +961,7 @@ void CPLDDriver::purge_queued_work_by_dev(BusOpCallback *dev) {
 }
 
 
-/*
+/**
 * Purges only the work_queue. Leaves the currently-executing job.
 */
 void CPLDDriver::purge_queued_work() {
@@ -976,6 +1028,9 @@ void CPLDDriver::reclaim_queue_item(SPIBusOp* op) {
 }
 
 
+/**
+* Purges a stalled job from the active slot.
+*/
 void CPLDDriver::purge_stalled_job() {
   if (current_queue_item != NULL) {
     current_queue_item->abort(XferFault::QUEUE_FLUSH);
@@ -986,6 +1041,15 @@ void CPLDDriver::purge_stalled_job() {
 
 
 
+/****************************************************************************************************
+* CPLD register manipulation and integral hardware functions.                                       *
+****************************************************************************************************/
+/**
+* Read an arbitrary CPLD register.
+*
+* @param  reg_addr  The address.
+* @return 0 on success. Nonzero on failure.
+*/
 int8_t CPLDDriver::readRegister(uint8_t reg_addr) {
   SPIBusOp* temp = issue_spi_op_obj();
   temp->set_opcode(BusOpcode::RX);
@@ -994,13 +1058,138 @@ int8_t CPLDDriver::readRegister(uint8_t reg_addr) {
   return 0;
 }
 
-
+/**
+* Write an arbitrary CPLD register.
+*
+* @param  reg_addr  The address.
+* @param  val       The byte-sized value to place there.
+* @return 0 on success. Nonzero on failure.
+*/
 int8_t CPLDDriver::writeRegister(uint8_t reg_addr, uint8_t val) {
   SPIBusOp* temp = issue_spi_op_obj();
   temp->set_opcode(BusOpcode::TX);
   temp->setParams(reg_addr, val);
   queue_io_job(temp);
   return 0;
+}
+
+/**
+* Pass 'true' to enable the CPLD osciallator. False to disable it.
+* This oscillator being enabled is a precondition for various other features
+*   in the CPLD, so we keep track of the state in this class.
+*
+* @param  on  Should the osciallator be enabled?
+*/
+void CPLDDriver::externalOscillator(bool on) {
+  _er_set_flag(CPLD_FLAG_EXT_OSC, on);
+  if (on) {
+    HAL_TIM_OC_Start(&htim1, TIM_CHANNEL_1);
+  }
+  else {
+    HAL_TIM_OC_Stop(&htim1, TIM_CHANNEL_1);
+  }
+}
+
+/**
+* The CPLD has an internal oscillator that can continue running if we put the
+*   CPU to sleep.
+* If we are about to disable the internal oscillator, be sure to fire up the
+*   external clock first. Otherwise, the transfer will never complete. When the
+*   I/O callback arrives, disable the timer.
+*
+* @param  on  Should the osciallator be enabled?
+*/
+void CPLDDriver::internalOscillator(bool on) {
+  if (!on) {
+    externalOscillator(true);
+  }
+  setCPLDConfig(CPLD_CONF_BIT_INT_CLK, on);
+}
+
+/**
+* Calling this function will set the CPLD config register.
+*
+* @param  mask   Combination of flags to change.
+* @param  state  Should the flags be cleared or set?
+*/
+void CPLDDriver::setCPLDConfig(uint8_t mask, bool state) {
+  if (state) {
+    writeRegister(CPLD_REG_CONFIG, (cpld_conf_value | mask));
+  }
+  else {
+    writeRegister(CPLD_REG_CONFIG, (cpld_conf_value & ~mask));
+  }
+}
+
+/**
+* Reads and returns the CPLD version. We need to use this for keeping
+*   compatability with older CPLD versions.
+*
+* @return The CPLD version, or 0 if it hasn't been read yet.
+*/
+uint8_t CPLDDriver::getCPLDVersion() {
+  readRegister(CPLD_REG_VERSION);
+  return cpld_version;
+}
+
+
+
+/****************************************************************************************************
+* This is where IMU-related functions live.                                                         *
+****************************************************************************************************/
+/**
+* Given an address, find the associated IIU.
+*
+* @param  test_addr The address to query.
+* @return A pointer to the IIU responsible for the given address.
+*/
+IIU* CPLDDriver::fetch_iiu_by_bus_addr(uint8_t test_addr) {
+  if (CPLD_REG_IMU_D5_D_M < test_addr) {
+    // Too big. Not an IMU address.
+    return NULL;
+  }
+  else if (CPLD_REG_IMU_D5_D_I < test_addr) {
+    // Magnetic aspect.
+    return LegendManager::getInstance()->fetchIIU(test_addr - CPLD_REG_IMU_D5_D_I);
+  }
+  else {
+    // Inertial aspect. Bus address and index are equal.
+    return LegendManager::getInstance()->fetchIIU(test_addr);
+  }
+}
+
+/**
+* Given an address, find the associated IIU.
+*
+* @param  test_addr The address to query.
+* @return An index to the IIU responsible for the given address.
+*/
+int8_t CPLDDriver::fetch_iiu_index_by_bus_addr(uint8_t test_addr) {
+  if (CPLD_REG_IMU_D5_D_M < test_addr) {
+    // Too big. Not an IMU address.
+    return -1;
+  }
+  else if (CPLD_REG_IMU_D5_D_I < test_addr) {
+    // Magnetic aspect.
+    return (test_addr - CPLD_REG_IMU_D5_D_I);
+  }
+  else {
+    // Inertial aspect. Bus address and index are equal.
+    return test_addr;
+  }
+}
+
+/**
+*
+*
+* @return The index of the IMU with an outstanding IRQ.
+*/
+int8_t CPLDDriver::iiu_group_irq() {
+  int8_t return_value = 0;
+  if (getVerbosity() > 2) local_log.concatf("CPLD iiu_group_irq: (0x%08x):  \n", 0);
+
+  if (local_log.length() > 0) Kernel::log(&local_log);
+  return return_value;
 }
 
 
@@ -1020,6 +1209,12 @@ int8_t CPLDDriver::writeRegister(uint8_t reg_addr, uint8_t val) {
 *
 * These are overrides from EventReceiver interface...
 ****************************************************************************************************/
+/**
+* Debug support function.
+*
+* @return a pointer to a string constant.
+*/
+const char* CPLDDriver::getReceiverName() {  return "CPLD";  }
 
 
 /**
@@ -1088,38 +1283,6 @@ int8_t CPLDDriver::callback_proc(ManuvrRunnable *event) {
 }
 
 
-IIU* CPLDDriver::fetch_iiu_by_bus_addr(uint8_t test_addr) {
-  if (CPLD_REG_IMU_D5_D_M < test_addr) {
-    // Too big. Not an IMU address.
-    return NULL;
-  }
-  else if (CPLD_REG_IMU_D5_D_I < test_addr) {
-    // Magnetic aspect.
-    return LegendManager::getInstance()->fetchIIU(test_addr - CPLD_REG_IMU_D5_D_I);
-  }
-  else {
-    // Inertial aspect. Bus address and index are equal.
-    return LegendManager::getInstance()->fetchIIU(test_addr);
-  }
-}
-
-
-int8_t CPLDDriver::fetch_iiu_index_by_bus_addr(uint8_t test_addr) {
-  if (CPLD_REG_IMU_D5_D_M < test_addr) {
-    // Too big. Not an IMU address.
-    return -1;
-  }
-  else if (CPLD_REG_IMU_D5_D_I < test_addr) {
-    // Magnetic aspect.
-    return (test_addr - CPLD_REG_IMU_D5_D_I);
-  }
-  else {
-    // Inertial aspect. Bus address and index are equal.
-    return test_addr;
-  }
-}
-
-
 int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
   int8_t return_value = 0;
   switch (active_event->event_code) {
@@ -1161,85 +1324,6 @@ int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
 
 
 /****************************************************************************************************
-* CPLD register manipulation and integral hardware functions.                                       *
-****************************************************************************************************/
-
-/*
-* Pass 'true' to enable the CPLD osciallator. False to disable it.
-* This oscillator being enabled is a precondition for various other features
-*   in the CPLD, so we keep track of the state in this class.
-*/
-void CPLDDriver::externalOscillator(bool on) {
-  _er_set_flag(CPLD_FLAG_EXT_OSC, on);
-  // TODO: Enable the timer, connect it to GPIO.
-  if (on) {
-    HAL_TIM_OC_Start(&htim1, TIM_CHANNEL_1);
-  }
-  else {
-    HAL_TIM_OC_Stop(&htim1, TIM_CHANNEL_1);
-  }
-}
-
-
-/*
-* The CPLD has an internal oscillator that is used to aid synchronous refresh. This will
-*   allow us to enable it manually.
-*/
-void CPLDDriver::internalOscillator(bool on) {
-  _er_set_flag(CPLD_FLAG_INT_OSC, on);
-  // TODO: Set the config register in the CPLD, and when the callback arrives,
-  //         disable the timer.
-  if (!on) {
-    // If we are about to disable the internal oscillator, be sure to fire up
-    //   the external clock first. Otherwise, the transfer will never complete.
-    externalOscillator(true);
-  }
-  //setCPLDConfig(CPLD_CONF_BIT_EXT_CLK, !on);
-}
-
-
-/*
-* Calling this function will set the CPLD config register.
-*/
-void CPLDDriver::setCPLDConfig(uint8_t mask, bool state) {
-  if (state) {
-    writeRegister(CPLD_REG_VERSION, (cpld_conf_value | mask));
-  }
-  else {
-    writeRegister(CPLD_REG_VERSION, (cpld_conf_value & ~mask));
-  }
-}
-
-
-/*
-* Reads and returns the CPLD version. We need to use this for keeping
-*   compatability with older CPLD versions.
-*/
-uint8_t CPLDDriver::getCPLDVersion() {
-  readRegister(CPLD_REG_VERSION);
-  return cpld_version;
-}
-
-
-
-/****************************************************************************************************
-* This is where IMU-related functions live.                                                         *
-****************************************************************************************************/
-
-/*
-*
-*/
-int8_t CPLDDriver::iiu_group_irq() {
-  int8_t return_value = 0;
-  if (getVerbosity() > 2) local_log.concatf("CPLD iiu_group_irq: (0x%08x):  \n", 0);
-
-  if (local_log.length() > 0) Kernel::log(&local_log);
-  return return_value;
-}
-
-
-
-/****************************************************************************************************
 *  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄         ▄  ▄▄▄▄▄▄▄▄▄▄▄
 * ▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░▌       ▐░▌▐░░░░░░░░░░░▌
 * ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌▐░█▀▀▀▀▀▀▀▀▀
@@ -1254,24 +1338,6 @@ int8_t CPLDDriver::iiu_group_irq() {
 *
 * Code in here only exists for as long as it takes to debug something. Don't write against these.
 ****************************************************************************************************/
-
-
-/*
-* Reads the state of the internal debug sensors.
-*/
-uint16_t CPLDDriver::readInternalStates(void) {
-  uint16_t return_value = 0;
-  return return_value;
-}
-
-
-/**
-* Debug support function.
-*
-* @return a pointer to a string constant.
-*/
-const char* CPLDDriver::getReceiverName() {  return "CPLD";  }
-
 
 /**
 * Debug support method. This fxn is only present in debug builds.
@@ -1353,14 +1419,10 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
   uint8_t temp_byte = ((*(str) != 0) ? atoi((char*) str+1) : 0);
 
   switch (*(str)) {
-    // IMU DEBUG //////////////////////////////////////////////////////////////////
     case 'i':        // Readback test
       switch (temp_byte) {
         case 1:
           getCPLDVersion();
-          break;
-        case 2:
-          readInternalStates();
           break;
         default:
           printDebug(&local_log);
@@ -1370,15 +1432,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
 
     case 's':     // SPI1 initialization...
       switch (temp_byte) {
-        case 1:
-          init_spi(0, 0);  // COL=0, CPHA=0, HW-driven
-          break;
-        case 2:
-          init_spi(0, 1);  // COL=0, CPHA=1, HW-driven
-          break;
-        case 3:
-          init_spi(1, 1);  // COL=1, CPHA=1, HW-driven
-          break;
         case 4:
           init_spi_soft(); // Direct GPIO manipulation.
           break;
@@ -1502,11 +1555,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'r':
       reset();
-      break;
-
-    case '|':
-      local_log.concat("Enabling hardware timer... ");
-      HAL_TIM_OC_Start(&htim1, TIM_CHANNEL_1);
       break;
 
     case 'Z':

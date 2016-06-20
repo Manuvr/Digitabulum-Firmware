@@ -409,7 +409,7 @@ class IIU;
 #define CPLD_REG_CS_7          0x2F  // | RESERVED
 
 /* Bitmask defs for the CONFIG register. */
-#define CPLD_CONF_BIT_EXT_CLK    0x01
+#define CPLD_CONF_BIT_INT_CLK    0x01
 #define CPLD_CONF_BIT_IRQ_SCAN   0x02  // Enable IRQ scanning
 #define CPLD_CONF_BIT_IRQ_73     0x04  // Set IRQ bit-73
 #define CPLD_CONF_BIT_RESERVED   0x08  //
@@ -522,6 +522,8 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     void externalOscillator(bool on);    // Enable or disable the CPLD external oscillator.
     void internalOscillator(bool on);    // Enable or disable the CPLD internal oscillator.
     void setCPLDConfig(uint8_t mask, bool enable);
+
+    void _process_conf_update(uint8_t nu);
 
     int8_t iiu_group_irq();
 
