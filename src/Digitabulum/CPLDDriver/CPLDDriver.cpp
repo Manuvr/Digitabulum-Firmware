@@ -119,15 +119,25 @@ A quick note is in order. These functions are static class members that are call
   the ISRs in stm32f7xx_it.c. They are not themselves ISRs. Keep them as short as possible.
 ****************************************************************************************************/
 
+/**
+* ISR for CPLD GPIO.
+*/
 void cpld_gpio_isr_0() {
   Kernel::log("CPLD_GPIO_0\n");
 }
 
+/**
+* ISR for CPLD GPIO.
+*/
 void cpld_gpio_isr_1() {
   Kernel::log("CPLD_GPIO_1\n");
 }
 
 
+/**
+* ISR called when the SPI1_CLK falls.
+* This is only used for software-driven SPI and will be removed after debug.
+*/
 void spi_clk_isr() {
   _spi1_clks++;
   _temp_spi_r = _temp_spi_r << 1;
@@ -141,14 +151,18 @@ void spi_clk_isr() {
 }
 
 
-/*
+/**
 * ISR called when the SPI1_CS pin rises (is released by the CPLD).
+* This is only used for software-driven SPI and will be removed after debug.
 */
 void spi_bus_op_isr(){
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
   Kernel::log("spi_bus_op_isr()\n");
 }
 
+/**
+* ISR called by the selectable IRQ source.
+*/
 void cpld_wakeup_isr(){
   Kernel::log("cpld_wakeup_isr()\n");
 }
@@ -584,7 +598,6 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-
   hspi1.Instance            = SPI1;
   hspi1.Init.Mode           = SPI_MODE_SLAVE;
   hspi1.Init.Direction      = SPI_DIRECTION_2LINES;
@@ -607,7 +620,6 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
 
   _soft_spi = false;
 }
-
 
 
 /**

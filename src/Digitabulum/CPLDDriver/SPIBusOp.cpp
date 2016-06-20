@@ -204,6 +204,11 @@ SPIBusOp::~SPIBusOp() {
 
 
 /**
+* Set the buffer parameters. Note the there is only ONE buffer, despite this
+*   bus being full-duplex.
+*
+* @param  buf The transfer buffer.
+* @param  len The length of the buffer.
 */
 void SPIBusOp::setBuffer(uint8_t *buf, uint8_t len) {
   this->buf     = buf;
@@ -212,6 +217,12 @@ void SPIBusOp::setBuffer(uint8_t *buf, uint8_t len) {
 
 
 /**
+* This set of parameters is used for IMU access.
+*
+* @param  _dev_addr  The first CPLD transfer parameter.
+* @param  _xfer_len  The second CPLD transfer parameter.
+* @param  _dev_count The third CPLD transfer parameter.
+* @param  _reg_addr  The fourth CPLD transfer parameter.
 */
 void SPIBusOp::setParams(uint8_t _dev_addr, uint8_t _xfer_len, uint8_t _dev_count, uint8_t _reg_addr) {
   _param_len     = 4;
@@ -223,23 +234,15 @@ void SPIBusOp::setParams(uint8_t _dev_addr, uint8_t _xfer_len, uint8_t _dev_coun
 
 
 /**
+* This set of parameters is used for internal CPLD register access.
+*
+* @param  _reg_addr The first CPLD transfer parameter.
+* @param  _val      The second CPLD transfer parameter.
 */
 void SPIBusOp::setParams(uint8_t _reg_addr, uint8_t _val) {
   _param_len     = 2;
   xfer_params[0] = _reg_addr;
   xfer_params[1] = _val;
-  xfer_params[2] = 0;
-  xfer_params[3] = 0;
-  this->buf      = NULL;
-  this->buf_len  = 0;
-}
-
-/**
-*/
-void SPIBusOp::setParams(uint8_t _reg_addr) {
-  _param_len     = 1;
-  xfer_params[0] = _reg_addr;
-  xfer_params[1] = 0;
   xfer_params[2] = 0;
   xfer_params[3] = 0;
   this->buf      = NULL;
@@ -325,6 +328,12 @@ void SPIBusOp::wipe() {
 }
 
 
+/**
+* Ensure that the bus is free prior to beginning a new operation. This function
+*   will return after spi_wait_timeout milliseconds.
+*
+* @return true if the bus is available. False otherwise.
+*/
 bool SPIBusOp::wait_with_timeout() {
   uint32_t to_mark = micros();
   uint32_t timeout_val = (2 * spi_wait_timeout) + (buf_len * spi_wait_timeout);
@@ -395,10 +404,7 @@ int8_t SPIBusOp::begin() {
   }
   return 0;
 }
-
 #pragma GCC diagnostic pop
-
-
 
 
 /**
@@ -446,9 +452,6 @@ int8_t SPIBusOp::abort(XferFault cause) {
   printDebug(&debug_log);
   return markComplete();
 }
-
-
-
 
 
 /**
@@ -568,7 +571,6 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
 //        break;
 //    }
 //  }
-
   return return_value;
 }
 #pragma GCC diagnostic pop
@@ -626,7 +628,6 @@ bool SPIBusOp::devRegisterAdvance(bool _reg_advance) {
   flags = (_reg_advance) ? (flags | SPI_XFER_FLAG_DEVICE_REG_INC) : (flags & (uint8_t) ~SPI_XFER_FLAG_DEVICE_REG_INC);
   return ((flags & SPI_XFER_FLAG_DEVICE_REG_INC) == 0);
 }
-
 
 
 

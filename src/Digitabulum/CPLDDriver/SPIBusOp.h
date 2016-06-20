@@ -68,7 +68,9 @@ class SPIBusOp : public BusOp {
 
     void setParams(uint8_t _dev_addr, uint8_t _xfer_len, uint8_t _dev_count, uint8_t _reg_addr);
     void setParams(uint8_t _reg_addr, uint8_t _val);
-    void setParams(uint8_t _reg_addr);
+    inline void setParams(uint8_t _reg_addr) {  setParams(_reg_addr, 0);  }
+
+    inline uint8_t getTransferParam(int x) {  return xfer_params[x]; }
 
     /**
     * This will mark the bus operation complete with a given error code.
@@ -131,8 +133,6 @@ class SPIBusOp : public BusOp {
     inline bool shouldReap() {        return ((flags & SPI_XFER_FLAG_NO_FREE) == 0);   }
 
     void printDebug(StringBuilder *);
-
-    inline uint8_t getTransferParam(int x) {  return xfer_params[x]; }
 
     static uint32_t  total_transfers;
     static uint32_t  failed_transfers;
