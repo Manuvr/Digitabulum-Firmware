@@ -44,10 +44,11 @@ SPIDeviceWithRegisters::~SPIDeviceWithRegisters() {
 * Ultimately, all bus access this class does passes to this function as its last-stop
 *   before becoming folded into the SPI bus queue.
 */
-int8_t SPIDeviceWithRegisters::queue_spi_job(SPIBusOp* op) {
+int8_t SPIDeviceWithRegisters::queue_io_job(BusOp* _op) {
+  SPIBusOp* op = (SPIBusOp*) _op;
   if (NULL == op) return -1;   // This should never happen.
   op->callback = this;         // Notify us of the results.
-  return ((CPLDDriver*)cpld)->queue_spi_job(op);     // Pass it to the CPLD for bus access.
+  return ((CPLDDriver*)cpld)->queue_io_job(op);     // Pass it to the CPLD for bus access.
 }
 
 
@@ -62,7 +63,7 @@ int8_t SPIDeviceWithRegisters::writeRegister(DeviceRegister *reg) {
   op->setParams(bus_addr, reg->len, 1, reg->addr);
 
   reg->dirty = true;
-  return SPIDeviceWithRegisters::queue_spi_job(op);
+  return SPIDeviceWithRegisters::queue_io_job(op);
 }
 
 
@@ -96,7 +97,7 @@ int8_t SPIDeviceWithRegisters::writeRegister(uint8_t idx, unsigned int nu_val, b
     op->buf_len    = reg->len;
     op->setParams(bus_addr, reg->len, 1, reg->addr);
 
-    return SPIDeviceWithRegisters::queue_spi_job(op);
+    return SPIDeviceWithRegisters::queue_io_job(op);
   }
 
   return 0;
@@ -125,7 +126,7 @@ int8_t SPIDeviceWithRegisters::readRegister(DeviceRegister *reg) {
 
   reg->unread = true;
   reg->dirty = false;   // TODO: Reading a register will cancel a write operation.
-  return SPIDeviceWithRegisters::queue_spi_job(op);
+  return SPIDeviceWithRegisters::queue_io_job(op);
 }
 
 

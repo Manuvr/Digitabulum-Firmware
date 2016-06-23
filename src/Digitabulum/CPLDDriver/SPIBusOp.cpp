@@ -138,11 +138,13 @@ void SPIBusOp::buildDMAMembers() {
 * @param bool enable the interrupts?
 */
 void SPIBusOp::enableSPI_DMA(bool enable) {
-  if (!enable) {
-    //NVIC_DisableIRQ(DMA2_Stream0_IRQn);
+  if (enable) {
+    NVIC_EnableIRQ(DMA2_Stream2_IRQn);
+    NVIC_EnableIRQ(DMA2_Stream3_IRQn);
   }
   else {
-    //NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+    NVIC_DisableIRQ(DMA2_Stream2_IRQn);
+    NVIC_DisableIRQ(DMA2_Stream3_IRQn);
   }
 }
 
@@ -177,7 +179,7 @@ SPIBusOp::SPIBusOp() {
 * @param  len        The length of the transaction.
 * @param  requester  The object to be notified when the bus operation completes with success.
 */
-SPIBusOp::SPIBusOp(BusOpcode nu_op, SPIOpCallback* requester) {
+SPIBusOp::SPIBusOp(BusOpcode nu_op, BusOpCallback* requester) {
   wipe();
   this->opcode          = nu_op;
   callback = requester;
@@ -202,6 +204,11 @@ SPIBusOp::~SPIBusOp() {
 
 
 /**
+* Set the buffer parameters. Note the there is only ONE buffer, despite this
+*   bus being full-duplex.
+*
+* @param  buf The transfer buffer.
+* @param  len The length of the buffer.
 */
 void SPIBusOp::setBuffer(uint8_t *buf, uint8_t len) {
   this->buf     = buf;
@@ -210,6 +217,12 @@ void SPIBusOp::setBuffer(uint8_t *buf, uint8_t len) {
 
 
 /**
+* This set of parameters is used for IMU access.
+*
+* @param  _dev_addr  The first CPLD transfer parameter.
+* @param  _xfer_len  The second CPLD transfer parameter.
+* @param  _dev_count The third CPLD transfer parameter.
+* @param  _reg_addr  The fourth CPLD transfer parameter.
 */
 void SPIBusOp::setParams(uint8_t _dev_addr, uint8_t _xfer_len, uint8_t _dev_count, uint8_t _reg_addr) {
   _param_len     = 4;
@@ -221,6 +234,10 @@ void SPIBusOp::setParams(uint8_t _dev_addr, uint8_t _xfer_len, uint8_t _dev_coun
 
 
 /**
+* This set of parameters is used for internal CPLD register access.
+*
+* @param  _reg_addr The first CPLD transfer parameter.
+* @param  _val      The second CPLD transfer parameter.
 */
 void SPIBusOp::setParams(uint8_t _reg_addr, uint8_t _val) {
   _param_len     = 2;
@@ -230,16 +247,6 @@ void SPIBusOp::setParams(uint8_t _reg_addr, uint8_t _val) {
   xfer_params[3] = 0;
   this->buf      = NULL;
   this->buf_len  = 0;
-}
-
-/**
-*/
-void SPIBusOp::setParams(uint8_t _reg_addr) {
-  _param_len     = 1;
-  xfer_params[0] = _reg_addr;
-  xfer_params[1] = 0;
-  xfer_params[2] = 0;
-  xfer_params[3] = 0;
 }
 
 
@@ -321,6 +328,12 @@ void SPIBusOp::wipe() {
 }
 
 
+/**
+* Ensure that the bus is free prior to beginning a new operation. This function
+*   will return after spi_wait_timeout milliseconds.
+*
+* @return true if the bus is available. False otherwise.
+*/
 bool SPIBusOp::wait_with_timeout() {
   uint32_t to_mark = micros();
   uint32_t timeout_val = (2 * spi_wait_timeout) + (buf_len * spi_wait_timeout);
@@ -346,8 +359,6 @@ bool SPIBusOp::wait_with_timeout() {
 * e   88 8   8 88   8    88   e 8   8 88  8   88  88   8 8   8 88
 * 8eee88 8eee8 88eee8    88eee8 8eee8 88  8   88  88   8 8eee8 88eee
 ****************************************************************************************************/
-static uint16_t  _hackish_patch = 0;
-
 // Useful trick to mask warnings that the compiler raises, but which we know are
 //   intentional.
 //   http://stackoverflow.com/questions/3378560/how-to-disable-gcc-warnings-for-a-few-lines-of-code
@@ -362,62 +373,44 @@ static uint16_t  _hackish_patch = 0;
 */
 int8_t SPIBusOp::begin() {
   //time_began    = micros();
-
   if (0 == _param_len) {
+    // Obvious invalidity. We must have at least one transfer parameter.
     abort(XferFault::BAD_PARAM);
     return -1;
   }
 
   if (!wait_with_timeout()) {
-    debug_log.concat("SPI op aborted before taking bus control.\n");
+    Kernel::log("SPI op aborted before taking bus control.\n");
     abort(XferFault::BUS_BUSY);
     return -1;
   }
 
   set_state(XferState::INITIATE);  // Indicate that we now have bus control.
 
-  if (2 == _param_len) {
-    _hackish_patch     = (xfer_params[0] << 16) + (xfer_params[1]);
-    hspi1.pTxBuffPtr   = (uint8_t*) _hackish_patch;
-    hspi1.Instance->DR = *((uint16_t*)hspi1.pTxBuffPtr);
-    hspi1.pTxBuffPtr  += sizeof(uint16_t);
-  }
-  //assertCS(true);
-  if (0 == buf_len) {
-    // If this transfer is all that we are going to do...
-    set_state(XferState::IO_WAIT);
+  if ((opcode == BusOpcode::TX) || (_param_len > 2)) {
+    if (0 == buf_len) {
+      // If this transfer is all that we are going to do...
+      set_state(XferState::IO_WAIT);
+    }
+    else {
+      // Otherwise, let the ISR feed the next DMA operation.
+      set_state(XferState::ADDR);
+    }
+    // If we don't care about the values returning from the bus, our task is easy.
+    // If we DO care about the return values, and the buffer will be
+    //   required to capture it all.
+    HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) xfer_params, _param_len);
   }
   else {
-    // Otherwise, let the ISR feed the next DMA operation.
-    set_state(XferState::ADDR);
+    set_state(XferState::IO_WAIT);
+    // If we do care, and our transfer length is half the array size, we won't
+    //   bother with DMA, as we can accomplish the task on a single ISR.
+    HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, ((uint8_t*) xfer_params+2), 2);
   }
-
-  /* In this case, we need to clear any pending interrupts for the SPI, and to do that, we must
-     read this register, even though we don't care about the result.  */
-  //volatile uint8_t throw_away;
-
-  /* The peripheral should be totally clear at this point. Since the TX FIFO is two slots deep,
-     we're going to shovel in both bytes if we have a 16-bit address. Since the ISR only calls
-     us back when the bus goes idle, we don't need to worry about tracking the extra IRQ. */
-  if (!wait_with_timeout()) {
-    debug_log.concatf("SPI op aborted halfway into ADDR phase?!\n");
-    abort(XferFault::BUS_BUSY);
-    return -2;
-  }
-  if (__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_RXNE)) {
-    debug_log.concatf("SPI op leftovers: 0x%04x\n", hspi1.Instance->DR);
-    Kernel::log(&debug_log);
-  }
-  /* Shovel in the last (or only) address byte... */
-  //hspi1->DR = (uint8_t) xfer_params[0];
-
 
   return 0;
 }
-
 #pragma GCC diagnostic pop
-
-
 
 
 /**
@@ -432,6 +425,7 @@ int8_t SPIBusOp::begin() {
 int8_t SPIBusOp::markComplete() {
   if (has_bus_control() || (((CPLDDriver*) cpld)->current_queue_item == this) ) {
     // If this job has bus control, we need to release the bus and tidy up IRQs.
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
     if (buf_len > 1) {
       // We have DMA cruft to clean.
       enableSPI_DMA(false);
@@ -446,7 +440,7 @@ int8_t SPIBusOp::markComplete() {
   //time_ended = micros();
   total_transfers++;
   xfer_state = XferState::COMPLETE;
-  ((CPLDDriver*) cpld)->step_queues(false);
+  ((CPLDDriver*) cpld)->step_queues();
   return 0;
 }
 
@@ -464,9 +458,6 @@ int8_t SPIBusOp::abort(XferFault cause) {
   printDebug(&debug_log);
   return markComplete();
 }
-
-
-
 
 
 /**
@@ -586,7 +577,6 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
 //        break;
 //    }
 //  }
-
   return return_value;
 }
 #pragma GCC diagnostic pop
@@ -644,7 +634,6 @@ bool SPIBusOp::devRegisterAdvance(bool _reg_advance) {
   flags = (_reg_advance) ? (flags | SPI_XFER_FLAG_DEVICE_REG_INC) : (flags & (uint8_t) ~SPI_XFER_FLAG_DEVICE_REG_INC);
   return ((flags & SPI_XFER_FLAG_DEVICE_REG_INC) == 0);
 }
-
 
 
 

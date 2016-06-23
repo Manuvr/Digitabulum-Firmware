@@ -53,8 +53,9 @@ void unused_gpio() {
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Pin  = GPIO_PIN_All;
-  HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOI, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PD7 PD0 PD5 PD1
                            PD4 PD15 PD14 PD12
@@ -64,13 +65,6 @@ void unused_gpio() {
                           |GPIO_PIN_11|GPIO_PIN_9|GPIO_PIN_8;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PI7 PI6 PI5 PI3
-                           PI2 PI8 PI9 PI4
-                           PI1 PI10 PI11 PI0 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_6|GPIO_PIN_5|GPIO_PIN_3
-                          |GPIO_PIN_2|GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_4
-                          |GPIO_PIN_1|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_0;
-  HAL_GPIO_Init(GPIOI, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PH15 PH13 PH14 PH2
                            PH3 PH4 PH5 PH12
@@ -95,4 +89,8 @@ void unused_gpio() {
   // Digitabulum doesn't use these ports...
   __GPIOF_CLK_DISABLE();
   __GPIOG_CLK_DISABLE();
+  __GPIOI_CLK_DISABLE();
+
+  // TODO: Might-could disable this too? Only pin in-use is the EXT CLK input.
+  //__GPIOH_CLK_DISABLE();
 }

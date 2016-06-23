@@ -23,15 +23,15 @@ limitations under the License.
 #ifndef __OFFBOARD_REGISTER_SPI_DEV_H__
   #define __OFFBOARD_REGISTER_SPI_DEV_H__ 1
 
-  #include "Drivers/DeviceWithRegisters/DeviceWithRegisters.h"
-  #include "Drivers/DeviceWithRegisters/DeviceRegister.h"
-  #include "SPIOpCallback.h"
+  #include <Drivers/DeviceWithRegisters/DeviceWithRegisters.h>
+  #include <Drivers/DeviceWithRegisters/DeviceRegister.h>
+  #include <Drivers/BusQueue/BusQueue.h>
 
   /*
   * This class is a representation of a generic offboard device that contains
   *   its own registers.
   */
-  class SPIDeviceWithRegisters : public DeviceWithRegisters, public SPIOpCallback {
+  class SPIDeviceWithRegisters : public DeviceWithRegisters, public BusOpCallback {
     public:
       uint8_t     bus_addr;            // What is our address on the bus?
 
@@ -39,8 +39,8 @@ limitations under the License.
       ~SPIDeviceWithRegisters();
 
       /* Overrides from the SPICallback interface */
-      virtual int8_t spi_op_callback(SPIBusOp*) = 0;
-      int8_t queue_spi_job(SPIBusOp*);         // Implemented here.
+      virtual int8_t io_op_callback(BusOp*) = 0;
+      int8_t queue_io_job(BusOp*);         // Implemented here.
 
 
     protected:
@@ -56,8 +56,6 @@ limitations under the License.
            as possible.*/
       // TODO: Need a variadic.
       int8_t readAll();
-
   };
-
 
 #endif

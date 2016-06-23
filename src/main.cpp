@@ -62,6 +62,10 @@ Kernel* kernel      = NULL;
 TIM_HandleTypeDef htim2;  // This is the timer for the CPLD clock.
 
 
+volatile void _hack_sadvance() {
+  if (kernel) kernel->advanceScheduler();
+}
+
 // Messages that are specific to Digitabulum.
 const MessageTypeDef digitabulum_message_defs[] = {
   /*

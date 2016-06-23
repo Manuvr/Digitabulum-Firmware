@@ -81,7 +81,6 @@ InertialMeasurement* LegendManager::fetchMeasurement(uint8_t type_code) {
 }
 
 
-
 /**
 * Reclaims the given InertialMeasurement so its memory can be re-used.
 *
@@ -115,8 +114,6 @@ void LegendManager::reclaimMeasurement(InertialMeasurement* obj) {
     delete obj;
   }
 }
-
-
 
 
 
@@ -434,10 +431,11 @@ uint32_t LegendManager::totalSamples() {
 /*
 * When a bus operation completes, it is passed back to the class that created it.
 */
-int8_t LegendManager::spi_op_callback(SPIBusOp* op) {
+int8_t LegendManager::io_op_callback(BusOp* _op) {
+  SPIBusOp* op = (SPIBusOp*) _op;
   // There is zero chance this object will be a null pointer unless it was done on purpose.
   if (op->hasFault()) {
-    if (getVerbosity() > 3) local_log.concat("spi_op_callback() rejected a callback because the bus op failed.\n");
+    if (getVerbosity() > 3) local_log.concat("io_op_callback() rejected a callback because the bus op failed.\n");
     return SPI_CALLBACK_ERROR;
   }
 
@@ -456,11 +454,12 @@ int8_t LegendManager::spi_op_callback(SPIBusOp* op) {
 * This is what we call when this class wants to conduct a transaction on the SPI bus.
 * We simply forward to the CPLD.
 */
-int8_t LegendManager::queue_spi_job(SPIBusOp* op) {
+int8_t LegendManager::queue_io_job(BusOp* _op) {
+  SPIBusOp* op = (SPIBusOp*) _op;
   if (NULL == op->callback) {
-    op->callback = (SPIOpCallback*) this;
+    op->callback = (BusOpCallback*) this;
   }
-  return ((CPLDDriver*)cpld)->queue_spi_job(op);
+  return ((CPLDDriver*)cpld)->queue_io_job(op);
 }
 
 
@@ -736,18 +735,12 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
 
 
     case DIGITABULUM_MSG_CPLD_RESET_COMPLETE:
-      {
-        if (getVerbosity() > 3) local_log.concatf("Initializing IMUs...\n");
+      if (getVerbosity() > 3) local_log.concatf("Initializing IMUs...\n");
+      // Range-bind everything....
+      for (uint8_t i = 0; i < 17; i++) iius[i].rangeBind(true);
 
-        // Range-bind everything....
-        for (uint8_t i = 0; i < 17; i++) {
-          iius[i].rangeBind(true);
-        }
-
-        // Fire the event to put the IMUs into INIT-1.
-        ManuvrRunnable *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
-        raiseEvent(event);
-      }
+      // Fire the event to put the IMUs into INIT-1.
+      //raiseEvent(Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT));
       return_value++;
       break;
 

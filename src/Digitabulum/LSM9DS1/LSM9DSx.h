@@ -40,6 +40,7 @@ IMUs need to be aware of their own bus addresses so that bus access can be encap
 
 #include <DataStructures/InertialMeasurement.h>
 #include "../CPLDDriver/SPIDeviceWithRegisters.h"
+#include "../CPLDDriver/SPIBusOp.h"
 
 class CPLDDriver;
 
@@ -158,8 +159,8 @@ class LSM9DSx_Common : public SPIDeviceWithRegisters {
     virtual void dumpPreformedElements(StringBuilder*);
 
 
-    /* Overrides from the SPICallback interface */
-    virtual int8_t spi_op_callback(SPIBusOp*) = 0;
+    /* Overrides from the BusOpCallback interface */
+    virtual int8_t io_op_callback(BusOp*) = 0;
 
     /* Functions called by the IIU */
     virtual int8_t readSensor(void) =0;      // Call to poll the sensor's registers and take any appropriate action.

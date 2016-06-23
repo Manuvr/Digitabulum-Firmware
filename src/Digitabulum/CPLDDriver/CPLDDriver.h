@@ -310,8 +310,6 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #define __CPLD_DRIVER_H__
 
 #include "SPIBusOp.h"
-#include "SPIOpCallback.h"
-#include "SPIBusOp.h"
 #include <Kernel.h>
 #include "SPIDeviceWithRegisters.h"
 
@@ -402,25 +400,29 @@ class IIU;
 #define CPLD_REG_RANK_D_M      0x27  // |
 
 #define CPLD_REG_VERSION       0x28  // | Holds CPLD revision number.
-#define CPLD_REG_CONFIG        0x29  // | CPLD operating parameters
-#define CPLD_REG_STATUS        0x2A  // | Status
-#define CPLD_REG_WAKEUP_IRQ    0x2B  // | WAKEUP mapping
+#define CPLD_REG_CONFIG        0x28  // | CPLD operating parameters
+#define CPLD_REG_STATUS        0x29  // | Status
+#define CPLD_REG_WAKEUP_IRQ    0x29  // | WAKEUP mapping
 #define CPLD_REG_CS_4          0x2C  // | RESERVED
 #define CPLD_REG_CS_5          0x2D  // | RESERVED
 #define CPLD_REG_CS_6          0x2E  // | RESERVED
 #define CPLD_REG_CS_7          0x2F  // | RESERVED
 
 /* Bitmask defs for the CONFIG register. */
-#define CPLD_CONF_BIT_EXT_CLK  0x01
-#define CPLD_CONF_BIT_GPIO_1   0x20
-#define CPLD_CONF_BIT_GPIO_0   0x40
-#define CPLD_CONF_BIT_DEN_AG_0 0x80
+#define CPLD_CONF_BIT_INT_CLK    0x01
+#define CPLD_CONF_BIT_IRQ_SCAN   0x02  // Enable IRQ scanning
+#define CPLD_CONF_BIT_IRQ_73     0x04  // Set IRQ bit-73
+#define CPLD_CONF_BIT_RESERVED   0x08  //
+#define CPLD_CONF_BIT_IRQ_STREAM 0x10  // Constantly stream IRQ data
+#define CPLD_CONF_BIT_GPIO_0     0x20  // Set GPIO_0 state
+#define CPLD_CONF_BIT_GPIO_1     0x40  // Set GPIO_1 state
+#define CPLD_CONF_BIT_DEN_AG_0   0x80  // Set The MC IMU DEN_AG pin
 
 
 /*
 * The CPLD driver class.
 */
-class CPLDDriver : public EventReceiver, public SPIOpCallback {
+class CPLDDriver : public EventReceiver, public BusOpCallback {
   public:
     SPIBusOp* current_queue_item = NULL;
 
@@ -428,8 +430,8 @@ class CPLDDriver : public EventReceiver, public SPIOpCallback {
     ~CPLDDriver();       // Should never be called. Here for the sake of completeness.
 
     /* Overrides from the SPICallback interface */
-    virtual int8_t spi_op_callback(SPIBusOp*);
-    int8_t queue_spi_job(SPIBusOp*);
+    int8_t io_op_callback(BusOp*);
+    int8_t queue_io_job(BusOp*);
 
     /* Overrides from EventReceiver */
     const char* getReceiverName();
@@ -442,7 +444,7 @@ class CPLDDriver : public EventReceiver, public SPIOpCallback {
 
     /* Members related to the work queue... */
     int8_t advance_work_queue();
-    bool step_queues(bool);
+    inline void step_queues(){  Kernel::isrRaiseEvent(&event_spi_queue_ready); }
     SPIBusOp* issue_spi_op_obj();
 
     void reset(void);                 // Causes the CPLD to be reset.
@@ -503,7 +505,7 @@ class CPLDDriver : public EventReceiver, public SPIOpCallback {
     int8_t writeRegister(uint8_t reg_addr, uint8_t val);
 
     void purge_queued_work();     // Flush the work queue.
-    void purge_queued_work_by_dev(SPIOpCallback *dev);   // Flush the work queue by callback match
+    void purge_queued_work_by_dev(BusOpCallback *dev);   // Flush the work queue by callback match
     void purge_stalled_job();     // TODO: Misnomer. Really purges the active job.
     int8_t service_callback_queue();
     void reclaim_queue_item(SPIBusOp*);
@@ -511,6 +513,7 @@ class CPLDDriver : public EventReceiver, public SPIOpCallback {
 
     /* Setup and init fxns. */
     void gpioSetup(void);
+    void init_ext_clk();
     void init_spi(uint8_t cpol, uint8_t cpha);  // Pass 0 for CPHA 0.
     void init_spi_soft();
 
@@ -519,6 +522,8 @@ class CPLDDriver : public EventReceiver, public SPIOpCallback {
     void externalOscillator(bool on);    // Enable or disable the CPLD external oscillator.
     void internalOscillator(bool on);    // Enable or disable the CPLD internal oscillator.
     void setCPLDConfig(uint8_t mask, bool enable);
+
+    void _process_conf_update(uint8_t nu);
 
     int8_t iiu_group_irq();
 
@@ -534,7 +539,9 @@ class CPLDDriver : public EventReceiver, public SPIOpCallback {
 
     static SPIBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
 
-    static void assertCS(bool);
+    static void transferSignal();
+    static void softSend(uint8_t, uint8_t);
+    static void softSend(uint32_t);
 };
 
 #endif

@@ -46,20 +46,18 @@ This is the class that is used to keep bus operations on the SPI atomic.
   #define SPI_CALLBACK_RECYCLE   1
 
 
-class SPIOpCallback;
-
 /*
 * This class represents a single transaction on the SPI bus.
 */
 class SPIBusOp : public BusOp {
   public:
-    SPIOpCallback* callback = NULL;  // Which class gets pinged when we've finished?
+    BusOpCallback* callback = NULL;  // Which class gets pinged when we've finished?
 
     //uint32_t time_began    = 0;   // This is the time when bus access begins.
     //uint32_t time_ended    = 0;   // This is the time when bus access stops (or is aborted).
 
     SPIBusOp();
-    SPIBusOp(BusOpcode nu_op, SPIOpCallback* requester);
+    SPIBusOp(BusOpcode nu_op, BusOpCallback* requester);
     ~SPIBusOp();
 
     /* Job control functions. */
@@ -70,7 +68,9 @@ class SPIBusOp : public BusOp {
 
     void setParams(uint8_t _dev_addr, uint8_t _xfer_len, uint8_t _dev_count, uint8_t _reg_addr);
     void setParams(uint8_t _reg_addr, uint8_t _val);
-    void setParams(uint8_t _reg_addr);
+    inline void setParams(uint8_t _reg_addr) {  setParams(_reg_addr, 0);  }
+
+    inline uint8_t getTransferParam(int x) {  return xfer_params[x]; }
 
     /**
     * This will mark the bus operation complete with a given error code.
@@ -133,7 +133,6 @@ class SPIBusOp : public BusOp {
     inline bool shouldReap() {        return ((flags & SPI_XFER_FLAG_NO_FREE) == 0);   }
 
     void printDebug(StringBuilder *);
-
 
     static uint32_t  total_transfers;
     static uint32_t  failed_transfers;

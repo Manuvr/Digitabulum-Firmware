@@ -109,7 +109,7 @@ class LSM9DS1_AG : public LSM9DSx_Common {
     int8_t readSensor();
 
     /* Overrides from the SPICallback interface */
-    virtual int8_t spi_op_callback(SPIBusOp*);
+    int8_t io_op_callback(BusOp*);
 
     /* Debug stuff... */
     virtual void dumpDevRegs(StringBuilder*);

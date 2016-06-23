@@ -397,7 +397,7 @@ int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t le
     if (profile) {
       op->profile(true);
     }
-    ((CPLDDriver*)cpld)->queue_spi_job(op);
+    ((CPLDDriver*)cpld)->queue_io_job(op);
   }
   return IMU_ERROR_NO_ERROR;
 }
@@ -456,7 +456,7 @@ int8_t LSM9DSx_Common::readRegister(uint8_t reg_index, uint8_t *buf, uint8_t len
   if (profile) {
     op->profile(true);
   }
-  ((CPLDDriver*)cpld)->queue_spi_job(op);
+  ((CPLDDriver*)cpld)->queue_io_job(op);
 
   return IMU_ERROR_NO_ERROR;
 }
@@ -505,7 +505,7 @@ bool LSM9DSx_Common::fire_preformed_bus_op(SPIBusOp* op) {
   if (reset_preformed_queue_item(op) ) {
     if (profile) profiler_read_begin = micros();
 
-    if (0 != ((CPLDDriver*)cpld)->queue_spi_job(op)) {
+    if (0 != ((CPLDDriver*)cpld)->queue_io_job(op)) {
       return false;
     }
   }
