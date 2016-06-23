@@ -1593,6 +1593,14 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
     case 'c':
       //if (_soft_spi) {
         switch (temp_byte) {
+          case 33:
+            // Try to read the identity register of the main PCB IMU.
+            softSend(0x80010100 | (CPLD_REG_IMU_DM_D_M << 24) | 0x8F);
+            break;
+          case 44:
+            // Try to read the identity register of the main PCB IMU.
+            softSend(0x80010100 | (CPLD_REG_IMU_DM_D_I << 24) | 0x8F);
+            break;
           case 55:
             // Try to read the identity register of the main PCB IMU.
             softSend(0x80010100 | (CPLD_REG_IMU_DM_P_M << 24) | 0x8F);

@@ -387,21 +387,27 @@ int8_t SPIBusOp::begin() {
 
   set_state(XferState::INITIATE);  // Indicate that we now have bus control.
 
-  if (opcode == BusOpcode::TX) {
+  if ((opcode == BusOpcode::TX) || (_param_len > 2)) {
+    if (0 == buf_len) {
+      // If this transfer is all that we are going to do...
+      set_state(XferState::IO_WAIT);
+    }
+    else {
+      // Otherwise, let the ISR feed the next DMA operation.
+      set_state(XferState::ADDR);
+    }
+    // If we don't care about the values returning from the bus, our task is easy.
+    // If we DO care about the return values, and the buffer will be
+    //   required to capture it all.
     HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) xfer_params, _param_len);
   }
   else {
+    set_state(XferState::IO_WAIT);
+    // If we do care, and our transfer length is half the array size, we won't
+    //   bother with DMA, as we can accomplish the task on a single ISR.
     HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, ((uint8_t*) xfer_params+2), 2);
   }
 
-  if (0 == buf_len) {
-    // If this transfer is all that we are going to do...
-    set_state(XferState::IO_WAIT);
-  }
-  else {
-    // Otherwise, let the ISR feed the next DMA operation.
-    set_state(XferState::ADDR);
-  }
   return 0;
 }
 #pragma GCC diagnostic pop
