@@ -347,6 +347,7 @@ CPLDDriver::~CPLDDriver() {
 * Setup GPIO pins and their bindings to on-chip peripherals, if required.
 */
 void CPLDDriver::gpioSetup() {
+  _er_clear_flag(CPLD_FLAG_SPI2_READY);
   __HAL_RCC_SPI2_CLK_ENABLE();
 
   GPIO_InitTypeDef GPIO_InitStruct;
@@ -575,8 +576,14 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   uint8_t cpol_mode = (cpol) ? SPI_POLARITY_HIGH : SPI_POLARITY_LOW;
   uint8_t cpha_mode = (cpha) ? SPI_PHASE_2EDGE : SPI_PHASE_1EDGE;
 
-  _er_clear_flag(CPLD_FLAG_SPI1_READY | CPLD_FLAG_SPI2_READY);
+  HAL_NVIC_DisableIRQ(SPI1_IRQn);
+
   __HAL_RCC_SPI1_CLK_ENABLE();
+  if (_er_flag(CPLD_FLAG_SPI1_READY)) {
+    HAL_SPI_DeInit(&hspi1);
+  }
+  _er_clear_flag(CPLD_FLAG_SPI1_READY | CPLD_FLAG_SPI2_READY);
+
 
   /* These Port A pins are associated with the SPI1 peripheral:
   *
@@ -737,10 +744,10 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
   else if (BusOpcode::TX == op->get_opcode()) {
     switch (op->getRegAddr()) {
       case CPLD_REG_CONFIG:
-        _process_conf_update(op->getTransferParam(3));
+        _process_conf_update(op->getTransferParam(1));
         break;
       case CPLD_REG_WAKEUP_IRQ:
-        cpld_wakeup_source = op->getTransferParam(3);
+        cpld_wakeup_source = op->getTransferParam(1);
         break;
       default:
         if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->getRegAddr());
@@ -1351,6 +1358,9 @@ int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
 * Code in here only exists for as long as it takes to debug something. Don't write against these.
 ****************************************************************************************************/
 
+uint8_t __hack_buffer[16];
+
+
 /**
 * Debug support method. This fxn is only present in debug builds.
 *
@@ -1383,7 +1393,8 @@ void CPLDDriver::printDebug(StringBuilder *output) {
     output->concatf("-- hspi1.State:        0x%08x\n", (unsigned long) hspi1.State);
     output->concatf("-- hspi1.ErrorCode:    0x%08x\n", (unsigned long) hspi1.ErrorCode);
     output->concatf("-- hspi1.TxXferCount:  0x%04x\n",     hspi1.TxXferCount);
-    output->concatf("-- hspi1.RxXferCount:  0x%04x\n--\n", hspi1.RxXferCount);
+    output->concatf("-- hspi1.RxXferCount:  0x%04x\n", hspi1.RxXferCount);
+    output->concatf("-- __hack_buffer       0x%08x\n--\n", __hack_buffer);
   }
 
   //if (getVerbosity() > 2) {
@@ -1589,39 +1600,51 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       softSend(0xA9, 0);
       break;
 
-
     case 'c':
-      //if (_soft_spi) {
+      {
+        SPIBusOp* op = NULL;
         switch (temp_byte) {
           case 33:
             // Try to read the identity register of the main PCB IMU.
-            softSend(0x80010100 | (CPLD_REG_IMU_DM_D_M << 24) | 0x8F);
+            op = issue_spi_op_obj();
+            op->setParams((CPLD_REG_IMU_DM_D_M | 0x80), 0x01, 0x01, 0x8F);
             break;
           case 44:
             // Try to read the identity register of the main PCB IMU.
-            softSend(0x80010100 | (CPLD_REG_IMU_DM_D_I << 24) | 0x8F);
+            op = issue_spi_op_obj();
+            op->setParams((CPLD_REG_IMU_DM_D_I | 0x80), 0x01, 0x01, 0x8F);
             break;
           case 55:
             // Try to read the identity register of the main PCB IMU.
-            softSend(0x80010100 | (CPLD_REG_IMU_DM_P_M << 24) | 0x8F);
+            op = issue_spi_op_obj();
+            op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, 0x01, 0x8F);
             break;
           case 66:
             // Try to read the identity register of the main PCB IMU.
-            softSend(0x80010100 | (CPLD_REG_IMU_DM_P_I << 24) | 0x8F);
+            op = issue_spi_op_obj();
+            op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, 0x01, 0x8F);
             break;
           case 77:
             // Try to read the identity register of all IMUs.
-            softSend(0x80011100 | (CPLD_REG_IMU_DM_P_I << 24) | 0x8F);
+            op = issue_spi_op_obj();
+            op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x11, 0x01, 0x8F);
             break;
           case 88:
             // Try to read the identity register of a port3 IMU..
-            softSend(0x80010100 | (CPLD_REG_IMU_D3_P_I << 24) | 0x8F);
+            op = issue_spi_op_obj();
+            op->setParams((CPLD_REG_IMU_D3_P_I | 0x80), 0x01, 0x01, 0x8F);
             break;
 
           default:
             break;
         }
-      //}
+        if (NULL != op) {
+          for (int z = 0; z < 16; z++) __hack_buffer[z] = 0;
+          op->set_opcode(BusOpcode::TX_WAIT_RX);
+          op->setBuffer(__hack_buffer, 16);
+          queue_io_job((BusOp*) op);
+        }
+      }
       break;
 
     default:

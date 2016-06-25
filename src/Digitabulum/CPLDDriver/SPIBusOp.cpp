@@ -397,15 +397,33 @@ int8_t SPIBusOp::begin() {
       set_state(XferState::ADDR);
     }
     // If we don't care about the values returning from the bus, our task is easy.
+    if (_param_len <= 2) {
+      HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) xfer_params, _param_len);
+    }
+    else {
     // If we DO care about the return values, and the buffer will be
     //   required to capture it all.
-    HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) xfer_params, _param_len);
+      buf[0] = xfer_params[0];
+      buf[1] = xfer_params[1];
+      buf[2] = xfer_params[2];
+      buf[3] = xfer_params[3];
+      HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) buf, ((uint8_t*) buf+8), _param_len + (xfer_params[2] * xfer_params[1]));
+    }
   }
   else {
     set_state(XferState::IO_WAIT);
     // If we do care, and our transfer length is half the array size, we won't
     //   bother with DMA, as we can accomplish the task on a single ISR.
-    HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, ((uint8_t*) xfer_params+2), 2);
+    if (_param_len <= 2) {
+      HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, ((uint8_t*) xfer_params+2), 2);
+    }
+    else {
+      buf[0] = xfer_params[0];
+      buf[1] = xfer_params[1];
+      buf[2] = xfer_params[2];
+      buf[3] = xfer_params[3];
+      HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) buf, ((uint8_t*) buf+8), _param_len + (xfer_params[2] * xfer_params[1]));
+    }
   }
 
   return 0;
@@ -666,9 +684,9 @@ void SPIBusOp::printDebug(StringBuilder *output) {
   }
 
   output->concatf("\n\t buf_len           %d\n", buf_len);
-  output->concatf("\t buf *(0x%08x) ", (uint32_t) buf);
 
   if (buf_len > 0) {
+    output->concatf("\t buf *(0x%08x) ", (uint32_t) buf);
     for (uint8_t i = 0; i < buf_len; i++) {
       output->concatf("0x%02x ", (uint8_t) *(buf + i));
     }
