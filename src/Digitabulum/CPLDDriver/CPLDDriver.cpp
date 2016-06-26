@@ -494,7 +494,7 @@ void CPLDDriver::init_ext_clk() {
   GPIO_InitStruct.Alternate  = GPIO_AF1_TIM1;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  _set_timer_base(0x8000);
+  _set_timer_base(0xFFF0);  // Make the clock real slow until we need it.
 
   TIM_ClockConfigTypeDef sClockSourceConfig;
   sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
@@ -587,12 +587,13 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
 
   HAL_NVIC_DisableIRQ(SPI1_IRQn);
 
-  __HAL_RCC_SPI1_CLK_ENABLE();
   if (_er_flag(CPLD_FLAG_SPI1_READY)) {
+    _er_clear_flag(CPLD_FLAG_SPI1_READY);
     HAL_SPI_DeInit(&hspi1);
   }
-  _er_clear_flag(CPLD_FLAG_SPI1_READY | CPLD_FLAG_SPI2_READY);
-
+  else {
+    __HAL_RCC_SPI1_CLK_ENABLE();
+  }
 
   /* These Port A pins are associated with the SPI1 peripheral:
   *
@@ -603,14 +604,14 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   * 6   SPI1_MISO
   * 7   SPI1_MOSI
   */
-  GPIO_InitStruct.Pin = GPIO_PIN_6|GPIO_PIN_5|GPIO_PIN_7;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
+  GPIO_InitStruct.Pin       = GPIO_PIN_6|GPIO_PIN_5|GPIO_PIN_7;
+  GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull      = GPIO_NOPULL;
+  GPIO_InitStruct.Speed     = GPIO_SPEED_HIGH;
   GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  GPIO_InitStruct.Pin = GPIO_PIN_4;
+  GPIO_InitStruct.Pin  = GPIO_PIN_4;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
@@ -629,8 +630,6 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   hspi1.Init.CRCLength      = SPI_CRC_LENGTH_DATASIZE;
   hspi1.Init.NSSPMode       = SPI_NSS_PULSE_DISABLED;
   _er_set_flag(CPLD_FLAG_SPI1_READY, (HAL_OK == HAL_SPI_Init(&hspi1)));
-  //SPI_I2S_ITConfig(SPI1, SPI_I2S_IT_ERR | I2S_IT_UDR| SPI_IT_CRCERR | SPI_IT_MODF | SPI_I2S_IT_RXNE | SPI_I2S_IT_TXE, DISABLE);
-  //SPI_I2S_ITConfig(SPI1, SPI_I2S_IT_RXNE , ENABLE);  // Interrupt when byte is done moving.
 
   HAL_NVIC_EnableIRQ(SPI1_IRQn);
 
@@ -687,6 +686,7 @@ void CPLDDriver::_process_conf_update(uint8_t nu) {
   if (diff & CPLD_CONF_BIT_GPIO_1) {
   }
   if (diff & CPLD_CONF_BIT_DEN_AG_0) {
+    _er_set_flag(CPLD_CONF_BIT_DEN_AG_0, (nu & CPLD_CONF_BIT_DEN_AG_0));
   }
   cpld_conf_value = nu;
 }
@@ -1268,15 +1268,7 @@ int8_t CPLDDriver::bootComplete() {
   init_ext_clk();
   SPIBusOp::buildDMAMembers();
 
-  //init_spi(1, 0);  // CPOL=1, CPHA=0, HW-driven
-
-  /* Configure the IRQ_WAKEUP pin. */
-  //EXTI_InitTypeDef   EXTI_InitStructure;
-  //EXTI_InitStructure.EXTI_LineCmd = ENABLE;
-  //EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt;
-  //EXTI_InitStructure.EXTI_Line = EXTI_Line5;
-  //EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Rising;
-  //EXTI_Init(&EXTI_InitStructure);
+  init_spi(1, 0);  // CPOL=1, CPHA=0, HW-driven
 
   // An SPI transfer might hang (very unlikely). This will un-hang it.
   event_spi_timeout.alterSchedule(bus_timeout_millis, -1, false, callback_spi_timeout);
@@ -1397,6 +1389,9 @@ void CPLDDriver::printDebug(StringBuilder *output) {
     output->concatf("-- Base GetState       0x%02x\n", HAL_TIM_Base_GetState(&htim1));
     output->concatf("-- PWM GetState        0x%02x\n", HAL_TIM_PWM_GetState(&htim1));
   }
+  output->concatf("-- DEN_AG Main         %s\n", (_er_flag(CPLD_FLAG_DEN_AG_STATE) ? "on":"off"));
+  output->concatf("-- Bus power conserve  %s\n", ((cpld_conf_value & CPLD_CONF_BIT_PWR_CONSRV) ? "on":"off"));
+
   output->concatf("--\n-- CPLD_GPIO (0/1)     %s/%s\n",       (readPin(75) ? "hi":"lo"), (readPin(78) ? "hi":"lo"));
   if (getVerbosity() > 6) output->concatf("-- volatile *cpld      0x%08x\n--\n", cpld);
 
@@ -1573,61 +1568,84 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
+    case '^':
+      local_log.concatf("WAKEUP ISR bound to IRQ signal %d.\n", temp_byte);
+      writeRegister(CPLD_REG_WAKEUP_IRQ, temp_byte);
+      break;
+    case 'E':
+    case 'e':
+      local_log.concatf("%s IRQ 73.\n", (*(str) == '_' ? "Clearing" : "Setting"));
+      setCPLDConfig(CPLD_CONF_BIT_IRQ_73, (*(str) == 'E'));
+      break;
+    case 'A':
+    case 'a':
+      local_log.concatf("%sabling IRQ scanning.\n", (*(str) == 'A' ? "En" : "Dis"));
+      setCPLDConfig(CPLD_CONF_BIT_IRQ_SCAN, (*(str) == 'A'));
+      break;
+    case 'W':
+    case 'w':
+      local_log.concatf("%sabling constant IRQ streaming.\n", (*(str) == 'W' ? "En" : "Dis"));
+      setCPLDConfig(CPLD_CONF_BIT_IRQ_STREAM, (*(str) == 'W'));
+      break;
+
+    case ':':
+    case ';':
+      local_log.concatf("%sabling bus power conservation.\n", (*(str) == ':' ? "En" : "Dis"));
+      setCPLDConfig(CPLD_CONF_BIT_PWR_CONSRV, (*(str) == ':'));
+      break;
+
     case '-':
     case '_':
       local_log.concatf("%s CPLD_DEN_AG_0.\n", (*(str) == '_' ? "Clearing" : "Setting"));
       setCPLDConfig(CPLD_CONF_BIT_DEN_AG_0, (*(str) == '-'));
-      Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
       break;
 
     case '[':
     case '{':
       local_log.concatf("%s CPLD_GPIO_0.\n", (*(str) == '[' ? "Clearing" : "Setting"));
       setCPLDConfig(CPLD_CONF_BIT_GPIO_0, (*(str) == '{'));
-      Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
       break;
 
     case ']':
     case '}':
       local_log.concatf("%s CPLD_GPIO_1.\n", (*(str) == ']' ? "Clearing" : "Setting"));
       setCPLDConfig(CPLD_CONF_BIT_GPIO_1, (*(str) == '}'));
-      Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
       break;
 
-    case 'R':
-      if (temp_byte) {
-        local_log.concat("CPLD reset pin driven high.\n");
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);  // Drive the reset pin high...
-      }
-      else {
-        local_log.concat("CPLD reset pin driven low.\n");
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);  // Drive the reset pin low...
-      }
-      break;
+    //case 'R':
+    //  if (temp_byte) {
+    //    local_log.concat("CPLD reset pin driven high.\n");
+    //    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);  // Drive the reset pin high...
+    //  }
+    //  else {
+    //    local_log.concat("CPLD reset pin driven low.\n");
+    //    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);  // Drive the reset pin low...
+    //  }
+    //  break;
 
     case 'r':
       reset();
       break;
 
-    case 'Z':
-      local_log.concatf("softSend(0x28, %d)\n", temp_byte);
-      softSend(0x28, temp_byte);
-      break;
+    //case 'Z':
+    //  local_log.concatf("softSend(0x28, %d)\n", temp_byte);
+    //  softSend(0x28, temp_byte);
+    //  break;
 
-    case 'X':
-      local_log.concatf("softSend(0x29, %d)\n", temp_byte);
-      softSend(0x29, temp_byte);
-      break;
+    //case 'X':
+    //  local_log.concatf("softSend(0x29, %d)\n", temp_byte);
+    //  softSend(0x29, temp_byte);
+    //  break;
 
-    case 'z':
-      local_log.concat("Reading version register.\n");
-      softSend(0xA8, 0);
-      break;
+    //case 'z':
+    //  local_log.concat("Reading version register.\n");
+    //  softSend(0xA8, 0);
+    //  break;
 
-    case 'x':
-      local_log.concat("Reading status register.\n");
-      softSend(0xA9, 0);
-      break;
+    //case 'x':
+    //  local_log.concat("Reading status register.\n");
+    //  softSend(0xA9, 0);
+    //  break;
 
     case 'c':    // Individual IMU access tests...
       if (temp_byte < 0x22) {

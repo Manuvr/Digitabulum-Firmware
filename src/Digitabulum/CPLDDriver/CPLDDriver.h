@@ -333,9 +333,9 @@ class IIU;
 #define CPLD_FLAG_SVC_IRQS     0x04    // Should the CPLD respond to IRQ signals?
 #define CPLD_FLAG_QUEUE_IDLE   0x08    // Is the SPI queue idle?
 #define CPLD_FLAG_QUEUE_GUARD  0x10    // Prevent bus queue floods?
-#define CPLD_FLAG_RESERVED     0x20    //
-#define CPLD_FLAG_SPI1_READY   0x40    // Is SPI1 initialized?
-#define CPLD_FLAG_SPI2_READY   0x80    // Is SPI2 initialized?
+#define CPLD_FLAG_SPI1_READY   0x20    // Is SPI1 initialized?
+#define CPLD_FLAG_SPI2_READY   0x40    // Is SPI2 initialized?
+#define CPLD_FLAG_DEN_AG_STATE 0x80    // DEN_AG state.
 
 
 /* Codes that are specific to Digitabulum's CPLD */
