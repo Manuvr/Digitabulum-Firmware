@@ -387,14 +387,12 @@ int8_t SPIBusOp::begin() {
 
   set_state(XferState::INITIATE);  // Indicate that we now have bus control.
 
-  if (opcode == BusOpcode::TX) {
+  if ((opcode == BusOpcode::TX) && (2 < _param_len)) {
     HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) xfer_params, _param_len);
   }
-  else if (2 == _param_len) {
-    HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*)(xfer_params + 2), 2);
-  }
   else {
-
+    // We can afford to read two bytes into the same space as our xfer_params...
+    HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*)(xfer_params + 2), 2);
   }
 
   set_state((0 == buf_len) ? XferState::IO_WAIT : XferState::ADDR);
