@@ -49,23 +49,23 @@ extern "C" {
   }
 
   void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
-    ((CPLDDriver*)cpld)->advance_work_queue();
-    //if (NULL != cpld->current_queue_item) {
-    //  cpld->current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
-    //}
+    if (NULL != CPLDDriver::current_queue_item) {
+      CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
+    }
   }
 
   void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
-    ((CPLDDriver*)cpld)->advance_work_queue();
-    //if (NULL != cpld->current_queue_item) {
-    //  cpld->current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
-    //}
+    //((CPLDDriver*)cpld)->advance_work_queue();
+    if (NULL != CPLDDriver::current_queue_item) {
+      CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
+    }
   }
 
   /*
   *
   */
   void SPI2_IRQHandler() {
+    HAL_NVIC_DisableIRQ(SPI2_IRQn);
     Kernel::log("SPI2_IRQHandler\n");
   }
 }
@@ -180,8 +180,8 @@ void cpld_wakeup_isr(){
 * Static members and initializers should be located here. Initializers first, functions second.
 ****************************************************************************************************/
 
-SPIBusOp CPLDDriver::preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];
-
+SPIBusOp  CPLDDriver::preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];
+SPIBusOp* CPLDDriver::current_queue_item = NULL;
 
 const unsigned char MSG_ARGS_U8_FLOAT[] = {
   UINT8_FM, FLOAT_FM, 0
@@ -918,6 +918,7 @@ int8_t CPLDDriver::advance_work_queue() {
 
        /* Cases below ought to be handled by ISR flow... */
        case XferState::ADDR:
+         current_queue_item->advance_operation(0, 0);
        case XferState::STOP:
          if (getVerbosity() > 5) local_log.concatf("State might be corrupted if we tried to advance_queue(). \n");
          break;
@@ -1600,50 +1601,18 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       softSend(0xA9, 0);
       break;
 
-    case 'c':
-      {
+    case 'c':    // Individual IMU access tests...
+      if (temp_byte < 0x22) {
         SPIBusOp* op = NULL;
-        switch (temp_byte) {
-          case 33:
-            // Try to read the identity register of the main PCB IMU.
-            op = issue_spi_op_obj();
-            op->setParams((CPLD_REG_IMU_DM_D_M | 0x80), 0x01, 0x01, 0x8F);
-            break;
-          case 44:
-            // Try to read the identity register of the main PCB IMU.
-            op = issue_spi_op_obj();
-            op->setParams((CPLD_REG_IMU_DM_D_I | 0x80), 0x01, 0x01, 0x8F);
-            break;
-          case 55:
-            // Try to read the identity register of the main PCB IMU.
-            op = issue_spi_op_obj();
-            op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, 0x01, 0x8F);
-            break;
-          case 66:
-            // Try to read the identity register of the main PCB IMU.
-            op = issue_spi_op_obj();
-            op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, 0x01, 0x8F);
-            break;
-          case 77:
-            // Try to read the identity register of all IMUs.
-            op = issue_spi_op_obj();
-            op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x11, 0x01, 0x8F);
-            break;
-          case 88:
-            // Try to read the identity register of a port3 IMU..
-            op = issue_spi_op_obj();
-            op->setParams((CPLD_REG_IMU_D3_P_I | 0x80), 0x01, 0x01, 0x8F);
-            break;
-
-          default:
-            break;
-        }
-        if (NULL != op) {
-          for (int z = 0; z < 16; z++) __hack_buffer[z] = 0;
-          op->set_opcode(BusOpcode::TX_WAIT_RX);
-          op->setBuffer(__hack_buffer, 16);
-          queue_io_job((BusOp*) op);
-        }
+        for (int z = 0; z < 16; z++) __hack_buffer[z] = 0;
+        op = issue_spi_op_obj();
+        op->set_opcode(BusOpcode::TX_WAIT_RX);
+        op->setParams((temp_byte | 0x80), 0x01, 0x01, 0x8F);
+        op->setBuffer(__hack_buffer, 16);
+        queue_io_job((BusOp*) op);
+      }
+      else {
+        local_log.concat("IMU out of bounds.\n");
       }
       break;
 

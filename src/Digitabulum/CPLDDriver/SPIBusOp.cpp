@@ -387,45 +387,17 @@ int8_t SPIBusOp::begin() {
 
   set_state(XferState::INITIATE);  // Indicate that we now have bus control.
 
-  if ((opcode == BusOpcode::TX) || (_param_len > 2)) {
-    if (0 == buf_len) {
-      // If this transfer is all that we are going to do...
-      set_state(XferState::IO_WAIT);
-    }
-    else {
-      // Otherwise, let the ISR feed the next DMA operation.
-      set_state(XferState::ADDR);
-    }
-    // If we don't care about the values returning from the bus, our task is easy.
-    if (_param_len <= 2) {
-      HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) xfer_params, _param_len);
-    }
-    else {
-    // If we DO care about the return values, and the buffer will be
-    //   required to capture it all.
-      buf[0] = xfer_params[0];
-      buf[1] = xfer_params[1];
-      buf[2] = xfer_params[2];
-      buf[3] = xfer_params[3];
-      HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) buf, ((uint8_t*) buf+8), _param_len + (xfer_params[2] * xfer_params[1]));
-    }
+  if (opcode == BusOpcode::TX) {
+    HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) xfer_params, _param_len);
+  }
+  else if (2 == _param_len) {
+    HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*)(xfer_params + 2), 2);
   }
   else {
-    set_state(XferState::IO_WAIT);
-    // If we do care, and our transfer length is half the array size, we won't
-    //   bother with DMA, as we can accomplish the task on a single ISR.
-    if (_param_len <= 2) {
-      HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, ((uint8_t*) xfer_params+2), 2);
-    }
-    else {
-      buf[0] = xfer_params[0];
-      buf[1] = xfer_params[1];
-      buf[2] = xfer_params[2];
-      buf[3] = xfer_params[3];
-      HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) buf, ((uint8_t*) buf+8), _param_len + (xfer_params[2] * xfer_params[1]));
-    }
+
   }
 
+  set_state((0 == buf_len) ? XferState::IO_WAIT : XferState::ADDR);
   return 0;
 }
 #pragma GCC diagnostic pop
@@ -441,7 +413,7 @@ int8_t SPIBusOp::begin() {
 * @return 0 on success. Non-zero on failure.
 */
 int8_t SPIBusOp::markComplete() {
-  if (has_bus_control() || (((CPLDDriver*) cpld)->current_queue_item == this) ) {
+  if (has_bus_control() || (CPLDDriver::current_queue_item == this) ) {
     // If this job has bus control, we need to release the bus and tidy up IRQs.
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
     if (buf_len > 1) {
@@ -489,14 +461,13 @@ int8_t SPIBusOp::abort(XferFault cause) {
 int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
   int8_t return_value = 0;
 
-  debug_log.concatf("advance_operation(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
+  debug_log.concatf("advance_op(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
   Kernel::log(&debug_log);
 
   /* These are our transfer-size-invariant cases. */
   switch (xfer_state) {
     case XferState::COMPLETE:
-      //if (profile()) transition_time_COMPLETE     = micros();
-      abort(XferFault::HUNG_IRQ);
+      //abort(XferFault::HUNG_IRQ);
       return 0;
 
     case XferState::IO_WAIT:
@@ -508,6 +479,16 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
 
     case XferState::QUEUED:
     case XferState::ADDR:
+      if (buf_len > 0) {
+        set_state(XferState::IO_WAIT);
+        if (opcode == BusOpcode::TX) {
+          HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) buf, buf_len);
+        }
+        else {
+          HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) buf, buf, buf_len);
+        }
+      }
+      return 0;
     case XferState::STOP:
     case XferState::UNDEF:
 

@@ -5,3 +5,5 @@ compiler
 build/
 lib/ManuvrOS/
 lib/telehash-c/
+digitabulum.map
+*.out

@@ -424,8 +424,6 @@ class IIU;
 */
 class CPLDDriver : public EventReceiver, public BusOpCallback {
   public:
-    SPIBusOp* current_queue_item = NULL;
-
     CPLDDriver();
     ~CPLDDriver();       // Should never be called. Here for the sake of completeness.
 
@@ -456,7 +454,8 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
     uint32_t read_imu_irq_pins();     // TODO: Can this be optimized down at all?
 
-    // These are interrupt service routines...
+    // These are interrupt service routines and their subjects.
+    static SPIBusOp* current_queue_item;
     volatile static void irqService_vect_0(void);
 
 
