@@ -99,7 +99,15 @@ bool _soft_spi = false;
 volatile static uint32_t _temp_spi_r = 0;
 volatile static uint32_t _temp_spi_w = 0;
 volatile static int _spi1_clks = 0;
+volatile static int _spi2_clks = 0;
 
+void _hackish_spi2_cs_isr() {
+  Kernel::log("_hackish_spi2_clk_isr\n");
+}
+void _hackish_spi2_clk_isr() {
+  _spi2_clks++;
+  Kernel::log("_hackish_spi2_clk_isr\n");
+}
 
 /****************************************************************************************************
  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄       ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄
@@ -373,7 +381,7 @@ void CPLDDriver::gpioSetup() {
   * -----------------------------------------------
   * 13    0      IRQ_WAKEUP
   */
-  setPinFxn(45, CHANGE, cpld_wakeup_isr);
+  setPinFxn(45, FALLING, cpld_wakeup_isr);
 
   /* These Port E pins are inputs:
   *
@@ -406,55 +414,54 @@ void CPLDDriver::gpioSetup() {
   * 13  SPI2_CLK
   * 15  SPI2_MOSI
   */
-  GPIO_InitStruct.Pin       = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_15;
-  GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull      = GPIO_NOPULL;
-  GPIO_InitStruct.Speed     = GPIO_SPEED_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF5_SPI2;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  //GPIO_InitStruct.Pin       = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_15;
+  //GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
+  //GPIO_InitStruct.Pull      = GPIO_NOPULL;
+  //GPIO_InitStruct.Speed     = GPIO_SPEED_HIGH;
+  //GPIO_InitStruct.Alternate = GPIO_AF5_SPI2;
+  //HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  setPinFxn(28, CHANGE, _hackish_spi2_cs_isr);
+  setPinFxn(29, FALLING, _hackish_spi2_clk_isr);
 
-  hspi2.Instance            = SPI2;
-  hspi2.Init.Mode           = SPI_MODE_SLAVE;
-  hspi2.Init.Direction      = SPI_DIRECTION_2LINES_RXONLY;
-  hspi2.Init.NSS            = SPI_NSS_HARD_INPUT;
-  hspi2.Init.DataSize       = SPI_DATASIZE_8BIT;
-  hspi2.Init.CLKPolarity    = SPI_POLARITY_HIGH;
-  hspi2.Init.CLKPhase       = SPI_PHASE_1EDGE;
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
-  hspi2.Init.FirstBit       = SPI_FIRSTBIT_MSB;
-  hspi2.Init.TIMode         = SPI_TIMODE_DISABLED;
-  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
-  hspi2.Init.CRCPolynomial  = 7;
-  hspi2.Init.CRCLength      = SPI_CRC_LENGTH_DATASIZE;
-  hspi2.Init.NSSPMode       = SPI_NSS_PULSE_DISABLED;
-  _er_set_flag(CPLD_FLAG_SPI2_READY, (HAL_OK == HAL_SPI_Init(&hspi2)));
+  //hspi2.Instance            = SPI2;
+  //hspi2.Init.Mode           = SPI_MODE_SLAVE;
+  //hspi2.Init.Direction      = SPI_DIRECTION_2LINES_RXONLY;
+  //hspi2.Init.NSS            = SPI_NSS_HARD_INPUT;
+  //hspi2.Init.DataSize       = SPI_DATASIZE_8BIT;
+  //hspi2.Init.CLKPolarity    = SPI_POLARITY_HIGH;
+  //hspi2.Init.CLKPhase       = SPI_PHASE_1EDGE;
+  //hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  //hspi2.Init.FirstBit       = SPI_FIRSTBIT_MSB;
+  //hspi2.Init.TIMode         = SPI_TIMODE_DISABLED;
+  //hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
+  //hspi2.Init.CRCPolynomial  = 7;
+  //hspi2.Init.CRCLength      = SPI_CRC_LENGTH_DATASIZE;
+  //hspi2.Init.NSSPMode       = SPI_NSS_PULSE_DISABLED;
+  //_er_set_flag(CPLD_FLAG_SPI2_READY, (HAL_OK == HAL_SPI_Init(&hspi2)));
 
   // We handle SPI2 in this class. Setup the DMA members.
-  //HAL_DMA_DeInit(&_dma_handle_spi2);
-
-  _dma_handle_spi2.Instance                 = DMA1_Stream3;
-  _dma_handle_spi2.Init.Channel             = DMA_CHANNEL_0;
-  _dma_handle_spi2.Init.Direction           = DMA_PERIPH_TO_MEMORY;   // Receive
-  _dma_handle_spi2.Init.PeriphInc           = DMA_PINC_DISABLE;
-  _dma_handle_spi2.Init.MemInc              = DMA_MINC_ENABLE;
-  _dma_handle_spi2.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-  _dma_handle_spi2.Init.MemDataAlignment    = DMA_MDATAALIGN_WORD;
-  _dma_handle_spi2.Init.Mode                = DMA_NORMAL;
-  _dma_handle_spi2.Init.Priority            = DMA_PRIORITY_LOW;
-  _dma_handle_spi2.Init.FIFOMode            = DMA_FIFOMODE_ENABLE;  // Required for differnt access-widths.
-  _dma_handle_spi2.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
-  _dma_handle_spi2.Init.MemBurst            = DMA_MBURST_SINGLE;
-  _dma_handle_spi2.Init.PeriphBurst         = DMA_PBURST_SINGLE;
+  //_dma_handle_spi2.Instance                 = DMA1_Stream3;
+  //_dma_handle_spi2.Init.Channel             = DMA_CHANNEL_0;
+  //_dma_handle_spi2.Init.Direction           = DMA_PERIPH_TO_MEMORY;   // Receive
+  //_dma_handle_spi2.Init.PeriphInc           = DMA_PINC_DISABLE;
+  //_dma_handle_spi2.Init.MemInc              = DMA_MINC_ENABLE;
+  //_dma_handle_spi2.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+  //_dma_handle_spi2.Init.MemDataAlignment    = DMA_MDATAALIGN_WORD;
+  //_dma_handle_spi2.Init.Mode                = DMA_NORMAL;
+  //_dma_handle_spi2.Init.Priority            = DMA_PRIORITY_LOW;
+  //_dma_handle_spi2.Init.FIFOMode            = DMA_FIFOMODE_ENABLE;  // Required for differnt access-widths.
+  //_dma_handle_spi2.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
+  //_dma_handle_spi2.Init.MemBurst            = DMA_MBURST_SINGLE;
+  //_dma_handle_spi2.Init.PeriphBurst         = DMA_PBURST_SINGLE;
 
   __HAL_DMA_CLEAR_FLAG(&_dma_handle_spi2, DMA_FLAG_TCIF0_4 | DMA_FLAG_HTIF0_4 | DMA_FLAG_TEIF0_4 | DMA_FLAG_DMEIF0_4 | DMA_FLAG_FEIF0_4);
-  HAL_DMA_Init(&_dma_handle_spi2);
 
   /* Enable DMA Stream Transfer Complete interrupt */
-  __HAL_DMA_ENABLE_IT(&_dma_handle_spi2, DMA_IT_TC);
-  HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
-  HAL_NVIC_EnableIRQ(SPI2_IRQn);
+  //__HAL_DMA_ENABLE_IT(&_dma_handle_spi2, DMA_IT_TC);
+  //HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
+  //HAL_NVIC_EnableIRQ(SPI2_IRQn);
 
-  HAL_DMA_Start_IT(&_dma_handle_spi2, (uint32_t) hspi2.pTxBuffPtr, (uint32_t) _irq_data_0, 10);
+  //HAL_DMA_Start_IT(&_dma_handle_spi2, (uint32_t) hspi2.pTxBuffPtr, (uint32_t) _irq_data_0, 10);
 }
 
 
@@ -733,13 +740,17 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
   if (BusOpcode::RX == op->get_opcode()) {
     switch (0x7F & op->getRegAddr()) {
       case CPLD_REG_VERSION:
-        cpld_version = op->getTransferParam(3);
-        if (getVerbosity() > 3) local_log.concatf("CPLD r%d.\n", cpld_version);
-        if (0 < cpld_version) {
-          Kernel::raiseEvent(DIGITABULUM_MSG_CPLD_RESET_COMPLETE, NULL);
-        }
-        else {
-          if (getVerbosity() > 1) local_log.concatf("CPLD returned a bad version code: 0x%02x\n", cpld_version);
+        {
+          uint8_t _version = op->getTransferParam(3);
+          if (getVerbosity() > 3) local_log.concatf("CPLD r%d.\n", _version);
+          if (0 < _version) {
+            if (_version != cpld_version) {
+              Kernel::raiseEvent(DIGITABULUM_MSG_CPLD_RESET_COMPLETE, NULL);
+            }
+          }
+          else {
+            if (getVerbosity() > 1) local_log.concatf("CPLD returned a bad version code: 0x%02x\n", cpld_version);
+          }
         }
         break;
       case CPLD_REG_STATUS:
@@ -756,7 +767,7 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
         _process_conf_update(op->getTransferParam(1));
         break;
       case CPLD_REG_WAKEUP_IRQ:
-        cpld_wakeup_source = op->getTransferParam(1);
+        cpld_wakeup_source = (op->getTransferParam(1) & 0x7F);
         break;
       default:
         if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->getRegAddr());
@@ -1382,18 +1393,18 @@ void CPLDDriver::printDebug(StringBuilder *output) {
   if (NULL == output) return;
 
   EventReceiver::printDebug(output);
-  //output->concatf("0x%08x OSC IRQs thus far.\n", cpld_osc_irqs);
+  //if (getVerbosity() > 6) output->concatf("-- volatile *cpld      0x%08x\n--\n", cpld);
   output->concatf("-- Conf                0x%02x\n",      cpld_conf_value);
-  output->concatf("-- Osc (Int/Ext)       %s/%s\n",       (_er_flag(CPLD_FLAG_INT_OSC) ? "on":"off"), (_er_flag(CPLD_FLAG_EXT_OSC) ? "on":"off"));
-  if (_er_flag(CPLD_FLAG_EXT_OSC)) {
-    output->concatf("-- Base GetState       0x%02x\n", HAL_TIM_Base_GetState(&htim1));
-    output->concatf("-- PWM GetState        0x%02x\n", HAL_TIM_PWM_GetState(&htim1));
-  }
+  output->concatf("-- Osc (Int/Ext)       %s / %s\n",       (_er_flag(CPLD_FLAG_INT_OSC) ? "on":"off"), (_er_flag(CPLD_FLAG_EXT_OSC) ? "on":"off"));
+  //if (_er_flag(CPLD_FLAG_EXT_OSC)) {
+  //  output->concatf("-- Base GetState       0x%02x\n", HAL_TIM_Base_GetState(&htim1));
+  //  output->concatf("-- PWM GetState        0x%02x\n", HAL_TIM_PWM_GetState(&htim1));
+  //}
   output->concatf("-- DEN_AG Main         %s\n", (_er_flag(CPLD_FLAG_DEN_AG_STATE) ? "on":"off"));
   output->concatf("-- Bus power conserve  %s\n", ((cpld_conf_value & CPLD_CONF_BIT_PWR_CONSRV) ? "on":"off"));
+  output->concatf("-- WAKEUP Signal       %d\n", cpld_wakeup_source);
 
-  output->concatf("--\n-- CPLD_GPIO (0/1)     %s/%s\n",       (readPin(75) ? "hi":"lo"), (readPin(78) ? "hi":"lo"));
-  if (getVerbosity() > 6) output->concatf("-- volatile *cpld      0x%08x\n--\n", cpld);
+  output->concatf("--\n-- CPLD_GPIO (0/1)     %s / %s\n--\n",       (readPin(75) ? "hi":"lo"), (readPin(78) ? "hi":"lo"));
 
   output->concatf("-- SPI1 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI1_READY)?"on":"OFF"));
   if (_soft_spi) {
@@ -1568,9 +1579,14 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
+    case '!':
+      local_log.concat("Running debug setup...\n");
+      setCPLDConfig(CPLD_CONF_BIT_IRQ_STREAM | CPLD_CONF_BIT_PWR_CONSRV | CPLD_CONF_BIT_DEN_AG_0, true);
+      break;
+
     case '^':
       local_log.concatf("WAKEUP ISR bound to IRQ signal %d.\n", temp_byte);
-      writeRegister(CPLD_REG_WAKEUP_IRQ, temp_byte);
+      setWakeupSignal(temp_byte);
       break;
     case 'E':
     case 'e':
@@ -1647,14 +1663,15 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
     //  softSend(0xA9, 0);
     //  break;
 
+    case 'C':    // Individual IMU access tests...
     case 'c':    // Individual IMU access tests...
       if (temp_byte < 0x22) {
         SPIBusOp* op = NULL;
         for (int z = 0; z < 16; z++) __hack_buffer[z] = 0;
         op = issue_spi_op_obj();
-        op->set_opcode(BusOpcode::TX_WAIT_RX);
+        op->set_opcode(BusOpcode::RX);
         op->setParams((temp_byte | 0x80), 0x01, 0x01, 0x8F);
-        op->setBuffer(__hack_buffer, 16);
+        op->setBuffer(__hack_buffer, (*(str) == 'C' ? 1 : 4));
         queue_io_job((BusOp*) op);
       }
       else {

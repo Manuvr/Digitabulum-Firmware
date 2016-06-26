@@ -446,6 +446,9 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     SPIBusOp* issue_spi_op_obj();
 
     int setCPLDClkFreq(int);
+    inline int8_t setWakeupSignal(uint8_t _val) {
+      return writeRegister(CPLD_REG_WAKEUP_IRQ, _val | 0x80);
+    };
 
     void reset(void);                 // Causes the CPLD to be reset.
     uint8_t getCPLDVersion();         // Read the version code in the CPLD.

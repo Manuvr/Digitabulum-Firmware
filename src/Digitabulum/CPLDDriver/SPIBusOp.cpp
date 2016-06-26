@@ -387,7 +387,7 @@ int8_t SPIBusOp::begin() {
 
   set_state(XferState::INITIATE);  // Indicate that we now have bus control.
 
-  if ((opcode == BusOpcode::TX) && (2 < _param_len)) {
+  if ((opcode == BusOpcode::TX) || (2 < _param_len)) {
     HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) xfer_params, _param_len);
   }
   else {
