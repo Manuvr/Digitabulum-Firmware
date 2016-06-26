@@ -462,6 +462,21 @@ void CPLDDriver::gpioSetup() {
 * Init the timer to provide the CPLD with an external clock. This clock is the
 *   most-flexible, and we use it by default.
 */
+bool CPLDDriver::_set_timer_base(uint16_t _period) {
+  htim1.Instance               = TIM1;
+  htim1.Init.Prescaler         = 0;
+  htim1.Init.CounterMode       = TIM_COUNTERMODE_UP;
+  htim1.Init.Period            = _period;
+  htim1.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;  // TODO: Move this to 8 to reduce power?
+  return (HAL_OK == HAL_TIM_Base_Init(&htim1));
+}
+
+
+/**
+* Init the timer to provide the CPLD with an external clock. This clock is the
+*   most-flexible, and we use it by default.
+*/
 void CPLDDriver::init_ext_clk() {
   __TIM1_CLK_ENABLE();
   GPIO_InitTypeDef GPIO_InitStruct;
@@ -479,13 +494,7 @@ void CPLDDriver::init_ext_clk() {
   GPIO_InitStruct.Alternate  = GPIO_AF1_TIM1;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  htim1.Instance               = TIM1;
-  htim1.Init.Prescaler         = 0;
-  htim1.Init.CounterMode       = TIM_COUNTERMODE_UP;
-  htim1.Init.Period            = 0x8000;
-  htim1.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
-  htim1.Init.RepetitionCounter = 0;
-  HAL_TIM_Base_Init(&htim1);
+  _set_timer_base(0x8000);
 
   TIM_ClockConfigTypeDef sClockSourceConfig;
   sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
@@ -1094,6 +1103,16 @@ int8_t CPLDDriver::writeRegister(uint8_t reg_addr, uint8_t val) {
 }
 
 /**
+* Change the frequency of the timer-generated external CPLD clock.
+*
+* @param  _freq  The desired frequency, in Hz.
+* @return 0 on success. Nonzero on failure.
+*/
+int CPLDDriver::setCPLDClkFreq(int _period) {
+  return (_set_timer_base((uint16_t) _period) ? 1 : 0);
+}
+
+/**
 * Pass 'true' to enable the CPLD osciallator. False to disable it.
 * This oscillator being enabled is a precondition for various other features
 *   in the CPLD, so we keep track of the state in this class.
@@ -1543,6 +1562,15 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
     case '+':
       local_log.concatf("Advanced CPLD SPI work queue.\n");
       Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
+      break;
+
+    case '%':
+      if (setCPLDClkFreq(temp_byte << 8)) {
+        local_log.concatf("Set ext clock period to %d.\n", temp_byte << 8);
+      }
+      else {
+        local_log.concat("Failed to set ext clock period.\n");
+      }
       break;
 
     case '-':

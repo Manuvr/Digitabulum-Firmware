@@ -483,7 +483,7 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
           HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) buf, buf_len);
         }
         else {
-          HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) buf, buf, buf_len);
+          HAL_SPI_Receive_IT(&hspi1, (uint8_t*) buf, buf_len);
         }
       }
       return 0;
