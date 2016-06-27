@@ -102,7 +102,7 @@ volatile static int _spi1_clks = 0;
 volatile static int _spi2_clks = 0;
 
 void _hackish_spi2_cs_isr() {
-  Kernel::log("_hackish_spi2_clk_isr\n");
+  Kernel::log("_hackish_spi2_cs_isr\n");
 }
 void _hackish_spi2_clk_isr() {
   _spi2_clks++;
@@ -381,7 +381,7 @@ void CPLDDriver::gpioSetup() {
   * -----------------------------------------------
   * 13    0      IRQ_WAKEUP
   */
-  setPinFxn(45, FALLING, cpld_wakeup_isr);
+  //setPinFxn(45, FALLING, cpld_wakeup_isr);
 
   /* These Port E pins are inputs:
   *
@@ -414,54 +414,52 @@ void CPLDDriver::gpioSetup() {
   * 13  SPI2_CLK
   * 15  SPI2_MOSI
   */
-  //GPIO_InitStruct.Pin       = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_15;
-  //GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
-  //GPIO_InitStruct.Pull      = GPIO_NOPULL;
-  //GPIO_InitStruct.Speed     = GPIO_SPEED_HIGH;
-  //GPIO_InitStruct.Alternate = GPIO_AF5_SPI2;
-  //HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-  setPinFxn(28, CHANGE, _hackish_spi2_cs_isr);
-  setPinFxn(29, FALLING, _hackish_spi2_clk_isr);
+  GPIO_InitStruct.Pin       = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_15;
+  GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull      = GPIO_NOPULL;
+  GPIO_InitStruct.Speed     = GPIO_SPEED_HIGH;
+  GPIO_InitStruct.Alternate = GPIO_AF5_SPI2;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  //hspi2.Instance            = SPI2;
-  //hspi2.Init.Mode           = SPI_MODE_SLAVE;
-  //hspi2.Init.Direction      = SPI_DIRECTION_2LINES_RXONLY;
-  //hspi2.Init.NSS            = SPI_NSS_HARD_INPUT;
-  //hspi2.Init.DataSize       = SPI_DATASIZE_8BIT;
-  //hspi2.Init.CLKPolarity    = SPI_POLARITY_HIGH;
-  //hspi2.Init.CLKPhase       = SPI_PHASE_1EDGE;
-  //hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
-  //hspi2.Init.FirstBit       = SPI_FIRSTBIT_MSB;
-  //hspi2.Init.TIMode         = SPI_TIMODE_DISABLED;
-  //hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
-  //hspi2.Init.CRCPolynomial  = 7;
-  //hspi2.Init.CRCLength      = SPI_CRC_LENGTH_DATASIZE;
-  //hspi2.Init.NSSPMode       = SPI_NSS_PULSE_DISABLED;
-  //_er_set_flag(CPLD_FLAG_SPI2_READY, (HAL_OK == HAL_SPI_Init(&hspi2)));
+  hspi2.Instance            = SPI2;
+  hspi2.Init.Mode           = SPI_MODE_SLAVE;
+  hspi2.Init.Direction      = SPI_DIRECTION_2LINES_RXONLY;
+  hspi2.Init.NSS            = SPI_NSS_HARD_INPUT;
+  hspi2.Init.DataSize       = SPI_DATASIZE_8BIT;
+  hspi2.Init.CLKPolarity    = SPI_POLARITY_HIGH;
+  hspi2.Init.CLKPhase       = SPI_PHASE_1EDGE;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi2.Init.FirstBit       = SPI_FIRSTBIT_MSB;
+  hspi2.Init.TIMode         = SPI_TIMODE_DISABLED;
+  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
+  hspi2.Init.CRCPolynomial  = 7;
+  hspi2.Init.CRCLength      = SPI_CRC_LENGTH_DATASIZE;
+  hspi2.Init.NSSPMode       = SPI_NSS_PULSE_DISABLED;
+  _er_set_flag(CPLD_FLAG_SPI2_READY, (HAL_OK == HAL_SPI_Init(&hspi2)));
 
   // We handle SPI2 in this class. Setup the DMA members.
-  //_dma_handle_spi2.Instance                 = DMA1_Stream3;
-  //_dma_handle_spi2.Init.Channel             = DMA_CHANNEL_0;
-  //_dma_handle_spi2.Init.Direction           = DMA_PERIPH_TO_MEMORY;   // Receive
-  //_dma_handle_spi2.Init.PeriphInc           = DMA_PINC_DISABLE;
-  //_dma_handle_spi2.Init.MemInc              = DMA_MINC_ENABLE;
-  //_dma_handle_spi2.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-  //_dma_handle_spi2.Init.MemDataAlignment    = DMA_MDATAALIGN_WORD;
-  //_dma_handle_spi2.Init.Mode                = DMA_NORMAL;
-  //_dma_handle_spi2.Init.Priority            = DMA_PRIORITY_LOW;
-  //_dma_handle_spi2.Init.FIFOMode            = DMA_FIFOMODE_ENABLE;  // Required for differnt access-widths.
-  //_dma_handle_spi2.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
-  //_dma_handle_spi2.Init.MemBurst            = DMA_MBURST_SINGLE;
-  //_dma_handle_spi2.Init.PeriphBurst         = DMA_PBURST_SINGLE;
+  _dma_handle_spi2.Instance                 = DMA1_Stream3;
+  _dma_handle_spi2.Init.Channel             = DMA_CHANNEL_0;
+  _dma_handle_spi2.Init.Direction           = DMA_PERIPH_TO_MEMORY;   // Receive
+  _dma_handle_spi2.Init.PeriphInc           = DMA_PINC_DISABLE;
+  _dma_handle_spi2.Init.MemInc              = DMA_MINC_ENABLE;
+  _dma_handle_spi2.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+  _dma_handle_spi2.Init.MemDataAlignment    = DMA_MDATAALIGN_WORD;
+  _dma_handle_spi2.Init.Mode                = DMA_NORMAL;
+  _dma_handle_spi2.Init.Priority            = DMA_PRIORITY_LOW;
+  _dma_handle_spi2.Init.FIFOMode            = DMA_FIFOMODE_ENABLE;  // Required for differnt access-widths.
+  _dma_handle_spi2.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
+  _dma_handle_spi2.Init.MemBurst            = DMA_MBURST_SINGLE;
+  _dma_handle_spi2.Init.PeriphBurst         = DMA_PBURST_SINGLE;
 
   __HAL_DMA_CLEAR_FLAG(&_dma_handle_spi2, DMA_FLAG_TCIF0_4 | DMA_FLAG_HTIF0_4 | DMA_FLAG_TEIF0_4 | DMA_FLAG_DMEIF0_4 | DMA_FLAG_FEIF0_4);
 
   /* Enable DMA Stream Transfer Complete interrupt */
-  //__HAL_DMA_ENABLE_IT(&_dma_handle_spi2, DMA_IT_TC);
-  //HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
-  //HAL_NVIC_EnableIRQ(SPI2_IRQn);
+  __HAL_DMA_ENABLE_IT(&_dma_handle_spi2, DMA_IT_TC);
+  HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
+  HAL_NVIC_EnableIRQ(SPI2_IRQn);
 
-  //HAL_DMA_Start_IT(&_dma_handle_spi2, (uint32_t) hspi2.pTxBuffPtr, (uint32_t) _irq_data_0, 10);
+  HAL_DMA_Start_IT(&_dma_handle_spi2, (uint32_t) hspi2.pTxBuffPtr, (uint32_t) _irq_data_0, 10);
 }
 
 
