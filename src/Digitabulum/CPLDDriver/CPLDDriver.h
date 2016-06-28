@@ -469,11 +469,6 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
 
 
   private:
-    uint8_t   _irq_data_0[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};  // IRQ data is double-buffered
-    uint8_t   _irq_data_1[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};  //   in these arrays.
-    uint8_t*  _irq_data       = _irq_data_0;                     // Used for paging the above buffers.
-
-    ManuvrRunnable _irq_data_arrival;
     ManuvrRunnable event_spi_queue_ready;
     ManuvrRunnable event_spi_callback_ready;
     ManuvrRunnable event_spi_timeout;

@@ -32,6 +32,13 @@ extern "C" {
   SPI_HandleTypeDef hspi2;
   DMA_HandleTypeDef _dma_handle_spi2;
 
+  volatile static uint8_t  _irq_data_0[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};  // IRQ data is double-buffered
+  volatile static uint8_t  _irq_data_1[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};  //   in these arrays.
+  volatile static uint8_t* _irq_data = _irq_data_0;
+
+  ManuvrRunnable _irq_data_arrival;
+
+
   /*
   *
   */
@@ -44,29 +51,57 @@ extern "C" {
   *
   */
   void SPI1_IRQHandler() {
-    //HAL_NVIC_DisableIRQ(SPI1_IRQn);
     HAL_SPI_IRQHandler(&hspi1);
-  }
-
-  void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
-    if (NULL != CPLDDriver::current_queue_item) {
-      CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
-    }
-  }
-
-  void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
-    //((CPLDDriver*)cpld)->advance_work_queue();
-    if (NULL != CPLDDriver::current_queue_item) {
-      CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
-    }
   }
 
   /*
   *
   */
   void SPI2_IRQHandler() {
-    HAL_NVIC_DisableIRQ(SPI2_IRQn);
-    Kernel::log("SPI2_IRQHandler\n");
+    HAL_SPI_IRQHandler(&hspi2);
+  }
+
+
+  void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
+    if (hspi == &hspi1) {
+      if (NULL != CPLDDriver::current_queue_item) {
+        CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
+      }
+    }
+  }
+
+
+  void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
+    if (hspi == &hspi1) {
+      if (NULL != CPLDDriver::current_queue_item) {
+        CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
+      }
+    }
+  }
+
+
+  void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi){
+    if (hspi == &hspi1) {
+      if (NULL != CPLDDriver::current_queue_item) {
+        CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
+      }
+    }
+    else {
+      _irq_data = (_irq_data == _irq_data_0) ? _irq_data_1 : _irq_data_0;
+      Kernel::isrRaiseEvent(&_irq_data_arrival);
+    }
+  }
+
+
+  void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi){
+    if (hspi == &hspi1) {
+      if (NULL != CPLDDriver::current_queue_item) {
+        CPLDDriver::current_queue_item->abort(XferFault::BUS_FAULT);
+      }
+    }
+    else {
+      Kernel::log("SPI2 Error\n");
+    }
   }
 }
 
@@ -381,7 +416,7 @@ void CPLDDriver::gpioSetup() {
   * -----------------------------------------------
   * 13    0      IRQ_WAKEUP
   */
-  //setPinFxn(45, FALLING, cpld_wakeup_isr);
+  setPinFxn(45, FALLING, cpld_wakeup_isr);
 
   /* These Port E pins are inputs:
   *
@@ -438,28 +473,28 @@ void CPLDDriver::gpioSetup() {
   _er_set_flag(CPLD_FLAG_SPI2_READY, (HAL_OK == HAL_SPI_Init(&hspi2)));
 
   // We handle SPI2 in this class. Setup the DMA members.
-  _dma_handle_spi2.Instance                 = DMA1_Stream3;
-  _dma_handle_spi2.Init.Channel             = DMA_CHANNEL_0;
-  _dma_handle_spi2.Init.Direction           = DMA_PERIPH_TO_MEMORY;   // Receive
-  _dma_handle_spi2.Init.PeriphInc           = DMA_PINC_DISABLE;
-  _dma_handle_spi2.Init.MemInc              = DMA_MINC_ENABLE;
-  _dma_handle_spi2.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-  _dma_handle_spi2.Init.MemDataAlignment    = DMA_MDATAALIGN_WORD;
-  _dma_handle_spi2.Init.Mode                = DMA_NORMAL;
-  _dma_handle_spi2.Init.Priority            = DMA_PRIORITY_LOW;
-  _dma_handle_spi2.Init.FIFOMode            = DMA_FIFOMODE_ENABLE;  // Required for differnt access-widths.
-  _dma_handle_spi2.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
-  _dma_handle_spi2.Init.MemBurst            = DMA_MBURST_SINGLE;
-  _dma_handle_spi2.Init.PeriphBurst         = DMA_PBURST_SINGLE;
+  //_dma_handle_spi2.Instance                 = DMA1_Stream3;
+  //_dma_handle_spi2.Init.Channel             = DMA_CHANNEL_0;
+  //_dma_handle_spi2.Init.Direction           = DMA_PERIPH_TO_MEMORY;   // Receive
+  //_dma_handle_spi2.Init.PeriphInc           = DMA_PINC_DISABLE;
+  //_dma_handle_spi2.Init.MemInc              = DMA_MINC_ENABLE;
+  //_dma_handle_spi2.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+  //_dma_handle_spi2.Init.MemDataAlignment    = DMA_MDATAALIGN_WORD;
+  //_dma_handle_spi2.Init.Mode                = DMA_NORMAL;
+  //_dma_handle_spi2.Init.Priority            = DMA_PRIORITY_LOW;
+  //_dma_handle_spi2.Init.FIFOMode            = DMA_FIFOMODE_ENABLE;  // Required for differnt access-widths.
+  //_dma_handle_spi2.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
+  //_dma_handle_spi2.Init.MemBurst            = DMA_MBURST_SINGLE;
+  //_dma_handle_spi2.Init.PeriphBurst         = DMA_PBURST_SINGLE;
 
-  __HAL_DMA_CLEAR_FLAG(&_dma_handle_spi2, DMA_FLAG_TCIF0_4 | DMA_FLAG_HTIF0_4 | DMA_FLAG_TEIF0_4 | DMA_FLAG_DMEIF0_4 | DMA_FLAG_FEIF0_4);
+  //__HAL_DMA_CLEAR_FLAG(&_dma_handle_spi2, DMA_FLAG_TCIF0_4 | DMA_FLAG_HTIF0_4 | DMA_FLAG_TEIF0_4 | DMA_FLAG_DMEIF0_4 | DMA_FLAG_FEIF0_4);
 
   /* Enable DMA Stream Transfer Complete interrupt */
-  __HAL_DMA_ENABLE_IT(&_dma_handle_spi2, DMA_IT_TC);
-  HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
+  //__HAL_DMA_ENABLE_IT(&_dma_handle_spi2, DMA_IT_TC);
+  //HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
   HAL_NVIC_EnableIRQ(SPI2_IRQn);
-
-  HAL_DMA_Start_IT(&_dma_handle_spi2, (uint32_t) hspi2.pTxBuffPtr, (uint32_t) _irq_data_0, 10);
+  HAL_SPI_Receive_IT(&hspi2, (uint8_t*) _irq_data, 10);
+  //HAL_DMA_Start_IT(&_dma_handle_spi2, (uint32_t) hspi2.pTxBuffPtr, (uint32_t) _irq_data_0, 10);
 }
 
 
@@ -1336,6 +1371,7 @@ int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
 
     /* Things that only this class is likely to care about. */
     case DIGITABULUM_MSG_IMU_IRQ_RAISED:
+      HAL_SPI_Receive_IT(&hspi2, (uint8_t*) _irq_data, 10);
       return_value = 1;
       break;
     case DIGITABULUM_MSG_SPI_QUEUE_READY:
@@ -1639,6 +1675,10 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'r':
       reset();
+      break;
+
+    case 'j':
+      HAL_SPI_Receive_IT(&hspi2, (uint8_t*) _irq_data, 10);
       break;
 
     //case 'Z':
