@@ -459,8 +459,8 @@ int8_t SPIBusOp::abort(XferFault cause) {
 int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
   int8_t return_value = 0;
 
-  debug_log.concatf("advance_op(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
-  Kernel::log(&debug_log);
+  //debug_log.concatf("advance_op(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
+  //Kernel::log(&debug_log);
 
   /* These are our transfer-size-invariant cases. */
   switch (xfer_state) {
@@ -666,7 +666,8 @@ void SPIBusOp::printDebug(StringBuilder *output) {
 
   if (buf_len > 0) {
     output->concatf("\t buf *(0x%08x) ", (uint32_t) buf);
-    for (uint8_t i = 0; i < buf_len; i++) {
+    //for (uint8_t i = 0; i < buf_len; i++) {
+    for (uint8_t i = 0; i < 16; i++) {
       output->concatf("0x%02x ", (uint8_t) *(buf + i));
     }
   }

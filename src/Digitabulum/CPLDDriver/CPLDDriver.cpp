@@ -136,13 +136,6 @@ volatile static uint32_t _temp_spi_w = 0;
 volatile static int _spi1_clks = 0;
 volatile static int _spi2_clks = 0;
 
-void _hackish_spi2_cs_isr() {
-  Kernel::log("_hackish_spi2_cs_isr\n");
-}
-void _hackish_spi2_clk_isr() {
-  _spi2_clks++;
-  Kernel::log("_hackish_spi2_clk_isr\n");
-}
 
 /****************************************************************************************************
  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄       ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄
@@ -440,61 +433,6 @@ void CPLDDriver::gpioSetup() {
   GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
-
-  /* These Port B pins are associated with the SPI2 peripheral:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 12  SPI2_CS
-  * 13  SPI2_CLK
-  * 15  SPI2_MOSI
-  */
-  GPIO_InitStruct.Pin       = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_15;
-  GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull      = GPIO_NOPULL;
-  GPIO_InitStruct.Speed     = GPIO_SPEED_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF5_SPI2;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  hspi2.Instance            = SPI2;
-  hspi2.Init.Mode           = SPI_MODE_SLAVE;
-  hspi2.Init.Direction      = SPI_DIRECTION_2LINES_RXONLY;
-  hspi2.Init.NSS            = SPI_NSS_HARD_INPUT;
-  hspi2.Init.DataSize       = SPI_DATASIZE_8BIT;
-  hspi2.Init.CLKPolarity    = SPI_POLARITY_HIGH;
-  hspi2.Init.CLKPhase       = SPI_PHASE_1EDGE;
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
-  hspi2.Init.FirstBit       = SPI_FIRSTBIT_MSB;
-  hspi2.Init.TIMode         = SPI_TIMODE_DISABLED;
-  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
-  hspi2.Init.CRCPolynomial  = 7;
-  hspi2.Init.CRCLength      = SPI_CRC_LENGTH_DATASIZE;
-  hspi2.Init.NSSPMode       = SPI_NSS_PULSE_DISABLED;
-  _er_set_flag(CPLD_FLAG_SPI2_READY, (HAL_OK == HAL_SPI_Init(&hspi2)));
-
-  // We handle SPI2 in this class. Setup the DMA members.
-  //_dma_handle_spi2.Instance                 = DMA1_Stream3;
-  //_dma_handle_spi2.Init.Channel             = DMA_CHANNEL_0;
-  //_dma_handle_spi2.Init.Direction           = DMA_PERIPH_TO_MEMORY;   // Receive
-  //_dma_handle_spi2.Init.PeriphInc           = DMA_PINC_DISABLE;
-  //_dma_handle_spi2.Init.MemInc              = DMA_MINC_ENABLE;
-  //_dma_handle_spi2.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-  //_dma_handle_spi2.Init.MemDataAlignment    = DMA_MDATAALIGN_WORD;
-  //_dma_handle_spi2.Init.Mode                = DMA_NORMAL;
-  //_dma_handle_spi2.Init.Priority            = DMA_PRIORITY_LOW;
-  //_dma_handle_spi2.Init.FIFOMode            = DMA_FIFOMODE_ENABLE;  // Required for differnt access-widths.
-  //_dma_handle_spi2.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
-  //_dma_handle_spi2.Init.MemBurst            = DMA_MBURST_SINGLE;
-  //_dma_handle_spi2.Init.PeriphBurst         = DMA_PBURST_SINGLE;
-
-  //__HAL_DMA_CLEAR_FLAG(&_dma_handle_spi2, DMA_FLAG_TCIF0_4 | DMA_FLAG_HTIF0_4 | DMA_FLAG_TEIF0_4 | DMA_FLAG_DMEIF0_4 | DMA_FLAG_FEIF0_4);
-
-  /* Enable DMA Stream Transfer Complete interrupt */
-  //__HAL_DMA_ENABLE_IT(&_dma_handle_spi2, DMA_IT_TC);
-  //HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
-  HAL_NVIC_EnableIRQ(SPI2_IRQn);
-  HAL_SPI_Receive_IT(&hspi2, (uint8_t*) _irq_data, 10);
-  //HAL_DMA_Start_IT(&_dma_handle_spi2, (uint32_t) hspi2.pTxBuffPtr, (uint32_t) _irq_data_0, 10);
 }
 
 
@@ -674,6 +612,85 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   HAL_NVIC_EnableIRQ(SPI1_IRQn);
 
   _soft_spi = false;
+}
+
+
+/**
+* Init of SPI peripheral 1. This is broken out because we might be bringing it
+*   up and down in a single runtime for debug reasons.
+*
+* @param  cpol  Clock polartiy
+* @param  cpha  Clock phase
+*/
+void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
+  GPIO_InitTypeDef GPIO_InitStruct;
+  uint8_t cpol_mode = (cpol) ? SPI_POLARITY_HIGH : SPI_POLARITY_LOW;
+  uint8_t cpha_mode = (cpha) ? SPI_PHASE_2EDGE : SPI_PHASE_1EDGE;
+
+  HAL_NVIC_DisableIRQ(SPI2_IRQn);
+
+  if (_er_flag(CPLD_FLAG_SPI2_READY)) {
+    _er_clear_flag(CPLD_FLAG_SPI2_READY);
+    HAL_SPI_DeInit(&hspi2);
+  }
+  else {
+    __HAL_RCC_SPI2_CLK_ENABLE();
+  }
+
+  /* These Port B pins are associated with the SPI2 peripheral:
+  *
+  * #  Default   Purpose
+  * -----------------------------------------------
+  * 12  SPI2_CS
+  * 13  SPI2_CLK
+  * 15  SPI2_MOSI
+  */
+  GPIO_InitStruct.Pin       = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_15;
+  GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull      = GPIO_NOPULL;
+  GPIO_InitStruct.Speed     = GPIO_SPEED_HIGH;
+  GPIO_InitStruct.Alternate = GPIO_AF5_SPI2;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  hspi2.Instance            = SPI2;
+  hspi2.Init.Mode           = SPI_MODE_SLAVE;
+  hspi2.Init.Direction      = SPI_DIRECTION_2LINES_RXONLY;
+  hspi2.Init.NSS            = SPI_NSS_HARD_INPUT;
+  hspi2.Init.DataSize       = SPI_DATASIZE_8BIT;
+  hspi2.Init.CLKPolarity    = cpol_mode;
+  hspi2.Init.CLKPhase       = cpha_mode;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi2.Init.FirstBit       = SPI_FIRSTBIT_MSB;
+  hspi2.Init.TIMode         = SPI_TIMODE_DISABLED;
+  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
+  hspi2.Init.CRCPolynomial  = 7;
+  hspi2.Init.CRCLength      = SPI_CRC_LENGTH_DATASIZE;
+  hspi2.Init.NSSPMode       = SPI_NSS_PULSE_DISABLED;
+  _er_set_flag(CPLD_FLAG_SPI2_READY, (HAL_OK == HAL_SPI_Init(&hspi2)));
+
+  // We handle SPI2 in this class. Setup the DMA members.
+  //_dma_handle_spi2.Instance                 = DMA1_Stream3;
+  //_dma_handle_spi2.Init.Channel             = DMA_CHANNEL_0;
+  //_dma_handle_spi2.Init.Direction           = DMA_PERIPH_TO_MEMORY;   // Receive
+  //_dma_handle_spi2.Init.PeriphInc           = DMA_PINC_DISABLE;
+  //_dma_handle_spi2.Init.MemInc              = DMA_MINC_ENABLE;
+  //_dma_handle_spi2.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+  //_dma_handle_spi2.Init.MemDataAlignment    = DMA_MDATAALIGN_WORD;
+  //_dma_handle_spi2.Init.Mode                = DMA_NORMAL;
+  //_dma_handle_spi2.Init.Priority            = DMA_PRIORITY_LOW;
+  //_dma_handle_spi2.Init.FIFOMode            = DMA_FIFOMODE_ENABLE;  // Required for differnt access-widths.
+  //_dma_handle_spi2.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
+  //_dma_handle_spi2.Init.MemBurst            = DMA_MBURST_SINGLE;
+  //_dma_handle_spi2.Init.PeriphBurst         = DMA_PBURST_SINGLE;
+
+  //__HAL_DMA_CLEAR_FLAG(&_dma_handle_spi2, DMA_FLAG_TCIF0_4 | DMA_FLAG_HTIF0_4 | DMA_FLAG_TEIF0_4 | DMA_FLAG_DMEIF0_4 | DMA_FLAG_FEIF0_4);
+
+  /* Enable DMA Stream Transfer Complete interrupt */
+  //__HAL_DMA_ENABLE_IT(&_dma_handle_spi2, DMA_IT_TC);
+  //HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
+  HAL_NVIC_EnableIRQ(SPI2_IRQn);
+  HAL_SPI_Receive_IT(&hspi2, (uint8_t*) _irq_data, 10);
+  //HAL_DMA_Start_IT(&_dma_handle_spi2, (uint32_t) hspi2.pTxBuffPtr, (uint32_t) _irq_data_0, 10);
 }
 
 
@@ -881,12 +898,8 @@ int8_t CPLDDriver::service_callback_queue() {
 
   while ((NULL != temp_op) && (return_value < spi_cb_per_event)) {
   //if (NULL != temp_op) {
+    if (getVerbosity() > 6) temp_op->printDebug(&local_log);
     if (NULL != temp_op->callback) {
-      if (getVerbosity() > 6) {
-        local_log.concatf("Servicing the SPI callback to address 0x%08x.\n", (uint32_t) temp_op->callback);
-        Kernel::log(&local_log);
-      }
-
       int8_t cb_code = temp_op->callback->io_op_callback(temp_op);
       switch (cb_code) {
         case SPI_CALLBACK_RECYCLE:
@@ -929,11 +942,6 @@ int8_t CPLDDriver::advance_work_queue() {
 
   timeout_punch = false;
   if (current_queue_item != NULL) {
-    if (getVerbosity() > 6) {
-      local_log.concat("advance_work_queue() is about to operate on....\n");
-      current_queue_item->printDebug(&local_log);
-    }
-
     switch (current_queue_item->get_state()) {
        case XferState::IO_WAIT:
          if (current_queue_item->hasFault()) {
@@ -1312,7 +1320,8 @@ int8_t CPLDDriver::bootComplete() {
   init_ext_clk();
   SPIBusOp::buildDMAMembers();
 
-  init_spi(1, 0);  // CPOL=1, CPHA=0, HW-driven
+  init_spi(1, 0);   // CPOL=1, CPHA=0, HW-driven
+  init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
 
   // An SPI transfer might hang (very unlikely). This will un-hang it.
   event_spi_timeout.alterSchedule(bus_timeout_millis, -1, false, callback_spi_timeout);
@@ -1486,7 +1495,13 @@ void CPLDDriver::printDebug(StringBuilder *output) {
     }
   }
   output->concatf("\n-- SPI2 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI2_READY)?"on":"OFF"));
-  output->concatf("-- IRQ service:        %sabled",   (_er_flag(CPLD_FLAG_SVC_IRQS)?"en":"dis"));
+    output->concatf("-- hspi2.State:        0x%08x\n", (unsigned long) hspi2.State);
+    output->concatf("-- hspi2.ErrorCode:    0x%08x\n", (unsigned long) hspi2.ErrorCode);
+    output->concatf("-- hspi2.TxXferCount:  0x%04x\n", hspi2.TxXferCount);
+    output->concatf("-- hspi2.RxXferCount:  0x%04x\n", hspi2.RxXferCount);
+    output->concatf("-- __hack_buffer       0x%08x\n--\n", __hack_buffer);
+  output->concatf("-- IRQ buffer:         %d\n", _irq_data == _irq_data_0 ? 0 : 1);
+  output->concatf("-- IRQ service:        %sabled", (_er_flag(CPLD_FLAG_SVC_IRQS)?"en":"dis"));
   output->concat("\n--    _irq_data_0:     ");
   for (int i = 0; i < 10; i++) { output->concatf("%02x", _irq_data_0[i]); }
   output->concat("\n--    _irq_data_1:     ");
@@ -1523,6 +1538,11 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
           break;
       }
       local_log.concat("Re-initialized SPI1.\n");
+      break;
+
+    case 'x':     // SPI1 initialization...
+      init_spi2(1, 0);  // COL=1, CPHA=0, HW-driven
+      local_log.concat("Re-initialized SPI2.\n");
       break;
 
     case '*':

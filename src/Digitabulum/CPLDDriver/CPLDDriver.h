@@ -515,6 +515,7 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     bool _set_timer_base(uint16_t);
     void init_ext_clk();
     void init_spi(uint8_t cpol, uint8_t cpha);  // Pass 0 for CPHA 0.
+    void init_spi2(uint8_t cpol, uint8_t cpha);  // Pass 0 for CPHA 0.
     void init_spi_soft();
 
 
