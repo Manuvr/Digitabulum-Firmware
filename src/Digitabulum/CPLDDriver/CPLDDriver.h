@@ -473,6 +473,8 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     ManuvrRunnable event_spi_callback_ready;
     ManuvrRunnable event_spi_timeout;
 
+    ManuvrRunnable _periodic_debug;
+
     uint32_t  bus_timeout_millis = 5;
 
     uint8_t   cpld_version       = 0; // CPLD Register. If zero, than the CPLD has not been initialized.

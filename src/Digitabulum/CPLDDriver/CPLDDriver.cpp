@@ -38,6 +38,8 @@ extern "C" {
 
   ManuvrRunnable _irq_data_arrival;
 
+  uint8_t __hack_buffer[16];
+
 
   /*
   *
@@ -107,6 +109,7 @@ extern "C" {
 
 volatile bool timeout_punch = false;
 
+uint8_t active_imu_position = 0;
 
 void callback_spi_timeout() {
   if (timeout_punch) {
@@ -567,7 +570,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
 
   if (_er_flag(CPLD_FLAG_SPI1_READY)) {
     _er_clear_flag(CPLD_FLAG_SPI1_READY);
-    HAL_SPI_DeInit(&hspi1);
+    __HAL_SPI_DISABLE(&hspi1);
   }
   else {
     __HAL_RCC_SPI1_CLK_ENABLE();
@@ -631,7 +634,7 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
 
   if (_er_flag(CPLD_FLAG_SPI2_READY)) {
     _er_clear_flag(CPLD_FLAG_SPI2_READY);
-    HAL_SPI_DeInit(&hspi2);
+    __HAL_SPI_DISABLE(&hspi2);
   }
   else {
     __HAL_RCC_SPI2_CLK_ENABLE();
@@ -1316,6 +1319,25 @@ const char* CPLDDriver::getReceiverName() {  return "CPLD";  }
 int8_t CPLDDriver::bootComplete() {
   EventReceiver::bootComplete();
 
+  _irq_data_arrival.repurpose(DIGITABULUM_MSG_IMU_IRQ_RAISED);
+  _irq_data_arrival.isManaged(true);
+  _irq_data_arrival.specific_target = (EventReceiver*) this;
+  _irq_data_arrival.originator      = (EventReceiver*) this;
+  _irq_data_arrival.priority        = 2;
+
+  _periodic_debug.repurpose(0x5050);
+  _periodic_debug.isManaged(true);
+  _periodic_debug.specific_target = (EventReceiver*) this;
+  _periodic_debug.originator      = (EventReceiver*) this;
+  _periodic_debug.priority        = 1;
+  _periodic_debug.alterSchedulePeriod(100);
+  _periodic_debug.alterScheduleRecurrence(-1);
+  _periodic_debug.autoClear(false);
+  _periodic_debug.enableSchedule(false);
+
+  //__kernel->addSchedule(&event_spi_timeout);
+  __kernel->addSchedule(&_periodic_debug);
+
   gpioSetup();
   init_ext_clk();
   SPIBusOp::buildDMAMembers();
@@ -1378,6 +1400,16 @@ int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
     case MANUVR_MSG_SYS_BOOTLOADER:
       break;
 
+    case 0x5050:
+      {
+        SPIBusOp* op = issue_spi_op_obj();
+        op->set_opcode(BusOpcode::RX);
+        op->setParams((active_imu_position | 0x80), 0x01, 0x01, 0x8F);
+        op->setBuffer(__hack_buffer, 4);
+        queue_io_job((BusOp*) op);
+      }
+      break;
+
     /* Things that only this class is likely to care about. */
     case DIGITABULUM_MSG_IMU_IRQ_RAISED:
       HAL_SPI_Receive_IT(&hspi2, (uint8_t*) _irq_data, 10);
@@ -1424,7 +1456,6 @@ int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
 * Code in here only exists for as long as it takes to debug something. Don't write against these.
 ****************************************************************************************************/
 
-uint8_t __hack_buffer[16];
 
 
 /**
@@ -1530,19 +1561,18 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
 
     case 's':     // SPI1 initialization...
       switch (temp_byte) {
+        case 1:
+          init_spi(1, 0);  // COL=1, CPHA=0, HW-driven
+          local_log.concat("Re-initialized SPI1.\n");
+          break;
+        case 2:
+          init_spi2(1, 0);  // COL=1, CPHA=0, HW-driven
+          local_log.concat("Re-initialized SPI2.\n");
+          break;
         case 4:
           init_spi_soft(); // Direct GPIO manipulation.
           break;
-        default:
-          init_spi(1, 0);  // COL=1, CPHA=0, HW-driven
-          break;
       }
-      local_log.concat("Re-initialized SPI1.\n");
-      break;
-
-    case 'x':     // SPI1 initialization...
-      init_spi2(1, 0);  // COL=1, CPHA=0, HW-driven
-      local_log.concat("Re-initialized SPI2.\n");
       break;
 
     case '*':
@@ -1721,12 +1751,25 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
     //  softSend(0xA9, 0);
     //  break;
 
+    case 'Z':
+    case 'z':
+      if (temp_byte) {
+        _periodic_debug.alterSchedulePeriod(temp_byte * 10);
+      }
+      _periodic_debug.enableSchedule(*(str) == 'Z');
+      local_log.concatf("%s periodic reader.\n", (*(str) == 'z' ? "Stopping" : "Starting"));
+      break;
+
+    case 'x':
+      local_log.concatf("SPI2 data register: 0x%02x\n", hspi2.Instance->DR);
+      break;
+
     case 'C':    // Individual IMU access tests...
     case 'c':    // Individual IMU access tests...
       if (temp_byte < 0x22) {
-        SPIBusOp* op = NULL;
+        active_imu_position = temp_byte;
         for (int z = 0; z < 16; z++) __hack_buffer[z] = 0;
-        op = issue_spi_op_obj();
+        SPIBusOp* op = issue_spi_op_obj();
         op->set_opcode(BusOpcode::RX);
         op->setParams((temp_byte | 0x80), 0x01, 0x01, 0x8F);
         op->setBuffer(__hack_buffer, (*(str) == 'C' ? 1 : 4));
