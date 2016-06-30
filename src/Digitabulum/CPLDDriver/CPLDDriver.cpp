@@ -1780,6 +1780,20 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
+    case 'n':    // Many bytes for a given access...
+      if (temp_byte < 0x10) {
+        for (int z = 0; z < 16; z++) __hack_buffer[z] = 0;
+        SPIBusOp* op = issue_spi_op_obj();
+        op->set_opcode(BusOpcode::RX);
+        op->setParams((active_imu_position | 0x80), temp_byte, 0x01, 0x8F);
+        op->setBuffer(__hack_buffer, temp_byte);
+        queue_io_job((BusOp*) op);
+      }
+      else {
+        local_log.concat("Length out of bounds.\n");
+      }
+      break;
+
     default:
       EventReceiver::procDirectDebugInstruction(input);
       break;
