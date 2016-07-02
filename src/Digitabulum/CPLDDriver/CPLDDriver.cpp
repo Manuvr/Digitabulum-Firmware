@@ -60,8 +60,65 @@ extern "C" {
   *
   */
   void SPI2_IRQHandler() {
-    HAL_SPI_IRQHandler(&hspi2);
+    //HAL_SPI_IRQHandler(&hspi2);
+    StringBuilder _log("SPI2_IRQHandler():  ");
+    if((__HAL_SPI_GET_FLAG(&hspi2, SPI_FLAG_OVR) == RESET) &&
+     (__HAL_SPI_GET_FLAG(&hspi2, SPI_FLAG_RXNE) != RESET) && (__HAL_SPI_GET_IT_SOURCE(&hspi2, SPI_IT_RXNE) != RESET))
+    {
+      *(hspi2.pRxBuffPtr++) = (*(__IO uint8_t *)hspi2.Instance->DR);
+
+      if(--hspi2.RxXferCount == 0) {
+        __HAL_SPI_DISABLE_IT(&hspi2, (SPI_IT_RXNE | SPI_IT_ERR));
+        __HAL_SPI_DISABLE(&hspi2);
+        hspi2.State = HAL_SPI_STATE_READY;
+        if(hspi2.ErrorCode == HAL_SPI_ERROR_NONE) {
+          HAL_SPI_RxCpltCallback(&hspi2);
+        }
+        else {
+          HAL_SPI_ErrorCallback(&hspi2);
+        }
+      }
+      return;
+    }
+
+  /* SPI in ERROR Treatment ---------------------------------------------------*/
+  if((hspi2.Instance->SR & (SPI_FLAG_MODF | SPI_FLAG_OVR | SPI_FLAG_FRE)) != RESET)
+  {
+    /* SPI Overrun error interrupt occurred -------------------------------------*/
+    if(__HAL_SPI_GET_FLAG(&hspi2, SPI_FLAG_OVR) != RESET)
+    {
+      if(hspi2.State != HAL_SPI_STATE_BUSY_TX)
+      {
+        hspi2.ErrorCode |= HAL_SPI_ERROR_OVR;
+        __HAL_SPI_CLEAR_OVRFLAG(&hspi2);
+      }
+      else
+      {
+        return;
+      }
+    }
+
+    /* SPI Mode Fault error interrupt occurred -------------------------------------*/
+    if(__HAL_SPI_GET_FLAG(&hspi2, SPI_FLAG_MODF) != RESET)
+    {
+      hspi2.ErrorCode |= HAL_SPI_ERROR_MODF;
+      __HAL_SPI_CLEAR_MODFFLAG(&hspi2);
+    }
+
+    /* SPI Frame error interrupt occurred ----------------------------------------*/
+    if(__HAL_SPI_GET_FLAG(&hspi2, SPI_FLAG_FRE) != RESET)
+    {
+      hspi2.ErrorCode |= HAL_SPI_ERROR_FRE;
+      __HAL_SPI_CLEAR_FREFLAG(&hspi2);
+    }
+
+    __HAL_SPI_DISABLE_IT(&hspi2, SPI_IT_RXNE | SPI_IT_TXE | SPI_IT_ERR);
+    hspi2.State = HAL_SPI_STATE_READY;
+    Kernel::log("SPI2 Error\n");
+
+    return;
   }
+}
 
 
   void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
@@ -100,9 +157,6 @@ extern "C" {
       if (NULL != CPLDDriver::current_queue_item) {
         CPLDDriver::current_queue_item->abort(XferFault::BUS_FAULT);
       }
-    }
-    else {
-      Kernel::log("SPI2 Error\n");
     }
   }
 }
@@ -659,7 +713,7 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
   hspi2.Init.Mode           = SPI_MODE_SLAVE;
   hspi2.Init.Direction      = SPI_DIRECTION_2LINES_RXONLY;
   hspi2.Init.NSS            = SPI_NSS_HARD_INPUT;
-  hspi2.Init.DataSize       = SPI_DATASIZE_8BIT;
+  hspi2.Init.DataSize       = SPI_DATASIZE_8BIT;  // TODO: Can be 16-bit.
   hspi2.Init.CLKPolarity    = cpol_mode;
   hspi2.Init.CLKPhase       = cpha_mode;
   hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
@@ -1343,7 +1397,7 @@ int8_t CPLDDriver::bootComplete() {
   SPIBusOp::buildDMAMembers();
 
   init_spi(1, 0);   // CPOL=1, CPHA=0, HW-driven
-  init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
+  init_spi2(0, 0);  // CPOL=0, CPHA=0, HW-driven
 
   // An SPI transfer might hang (very unlikely). This will un-hang it.
   event_spi_timeout.alterSchedule(bus_timeout_millis, -1, false, callback_spi_timeout);
@@ -1562,11 +1616,11 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
     case 's':     // SPI1 initialization...
       switch (temp_byte) {
         case 1:
-          init_spi(1, 0);  // COL=1, CPHA=0, HW-driven
+          init_spi(1, 0);  // CPOL=1, CPHA=0, HW-driven
           local_log.concat("Re-initialized SPI1.\n");
           break;
         case 2:
-          init_spi2(1, 0);  // COL=1, CPHA=0, HW-driven
+          init_spi2(0, 0);  // CPOL=0, CPHA=0, HW-driven
           local_log.concat("Re-initialized SPI2.\n");
           break;
         case 4:
@@ -1731,26 +1785,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       HAL_SPI_Receive_IT(&hspi2, (uint8_t*) _irq_data, 10);
       break;
 
-    //case 'Z':
-    //  local_log.concatf("softSend(0x28, %d)\n", temp_byte);
-    //  softSend(0x28, temp_byte);
-    //  break;
-
-    //case 'X':
-    //  local_log.concatf("softSend(0x29, %d)\n", temp_byte);
-    //  softSend(0x29, temp_byte);
-    //  break;
-
-    //case 'z':
-    //  local_log.concat("Reading version register.\n");
-    //  softSend(0xA8, 0);
-    //  break;
-
-    //case 'x':
-    //  local_log.concat("Reading status register.\n");
-    //  softSend(0xA9, 0);
-    //  break;
-
     case 'Z':
     case 'z':
       if (temp_byte) {
@@ -1772,7 +1806,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
         SPIBusOp* op = issue_spi_op_obj();
         op->set_opcode(BusOpcode::RX);
         op->setParams((temp_byte | 0x80), 0x01, 0x01, 0x8F);
-        op->setBuffer(__hack_buffer, (*(str) == 'C' ? 1 : 4));
+        op->setBuffer(__hack_buffer, (*(str) == 'C' ? 5 : 4));
         queue_io_job((BusOp*) op);
       }
       else {

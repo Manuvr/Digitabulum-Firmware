@@ -334,21 +334,21 @@ void SPIBusOp::wipe() {
 *
 * @return true if the bus is available. False otherwise.
 */
-bool SPIBusOp::wait_with_timeout() {
-  uint32_t to_mark = micros();
-  uint32_t timeout_val = (2 * spi_wait_timeout) + (buf_len * spi_wait_timeout);
-  uint32_t m_mark = micros();
-  while((hspi1.State & SPI_FLAG_BSY) && ((max(to_mark, m_mark) - min(to_mark, m_mark)) <= timeout_val) ) {
-    m_mark = micros();
-  } // wait until bus is not busy, JIC.
-  if (hspi1.State & SPI_FLAG_BSY) {
-    debug_log.concatf("SPI Bus timeout after %uuS.\n", timeout_val);
-    return false;
-  }
-  else {
-    return true;
-  }
-}
+//bool SPIBusOp::wait_with_timeout() {
+//  uint32_t to_mark = micros();
+//  uint32_t timeout_val = (2 * spi_wait_timeout) + (buf_len * spi_wait_timeout);
+//  uint32_t m_mark = micros();
+//  while((hspi1.State & SPI_FLAG_BSY) && ((max(to_mark, m_mark) - min(to_mark, m_mark)) <= timeout_val) ) {
+//    m_mark = micros();
+//  } // wait until bus is not busy, JIC.
+//  if (hspi1.State & SPI_FLAG_BSY) {
+//    debug_log.concatf("SPI Bus timeout after %uuS.\n", timeout_val);
+//    return false;
+//  }
+//  else {
+//    return true;
+//  }
+//}
 
 
 /****************************************************************************************************
@@ -379,7 +379,7 @@ int8_t SPIBusOp::begin() {
     return -1;
   }
 
-  if (!wait_with_timeout()) {
+  if (hspi1.State & SPI_FLAG_BSY) {
     Kernel::log("SPI op aborted before taking bus control.\n");
     abort(XferFault::BUS_BUSY);
     return -1;
