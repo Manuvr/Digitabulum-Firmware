@@ -32,13 +32,17 @@ extern "C" {
   SPI_HandleTypeDef hspi2;
   DMA_HandleTypeDef _dma_handle_spi2;
 
-  volatile static uint8_t  _irq_data_0[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};  // IRQ data is double-buffered
-  volatile static uint8_t  _irq_data_1[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};  //   in these arrays.
-  volatile static uint8_t* _irq_data = _irq_data_0;
+  // IRQ data is double-buffered in a ring.
+  volatile static uint8_t  _irq_data[20] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  volatile static uint8_t* _irq_data_0   = &(_irq_data[0]);
+  volatile static uint8_t* _irq_data_1   = &(_irq_data[10]);
+  volatile static uint8_t* _irq_data_ptr = _irq_data_0;  // Used for block-wise access.
+  volatile static uint8_t  _irq_data_idx = 0;
 
   ManuvrRunnable _irq_data_arrival;
 
-  uint8_t __hack_buffer[16];
+  uint8_t __hack_buffer[34];
 
 
   /*
@@ -60,65 +64,35 @@ extern "C" {
   *
   */
   void SPI2_IRQHandler() {
-    //HAL_SPI_IRQHandler(&hspi2);
-    StringBuilder _log("SPI2_IRQHandler():  ");
-    if((__HAL_SPI_GET_FLAG(&hspi2, SPI_FLAG_OVR) == RESET) &&
-     (__HAL_SPI_GET_FLAG(&hspi2, SPI_FLAG_RXNE) != RESET) && (__HAL_SPI_GET_IT_SOURCE(&hspi2, SPI_IT_RXNE) != RESET))
-    {
-      *(hspi2.pRxBuffPtr++) = (*(__IO uint8_t *)hspi2.Instance->DR);
+    uint16_t sr = SPI2->SR;
+    if (sr & SPI_SR_RXNE) {
+      uint8_t _idx_w = _irq_data_idx++ % 20;
 
-      if(--hspi2.RxXferCount == 0) {
-        __HAL_SPI_DISABLE_IT(&hspi2, (SPI_IT_RXNE | SPI_IT_ERR));
-        __HAL_SPI_DISABLE(&hspi2);
-        hspi2.State = HAL_SPI_STATE_READY;
-        if(hspi2.ErrorCode == HAL_SPI_ERROR_NONE) {
-          HAL_SPI_RxCpltCallback(&hspi2);
-        }
-        else {
-          HAL_SPI_ErrorCallback(&hspi2);
-        }
+      switch (sr & SPI_SR_FRLVL) {
+        case 0x0600:
+          _irq_data[_idx_w] = *((uint8_t*)&SPI2->DR);
+          _idx_w = _irq_data_idx++ % 20;
+        case 0x0300:
+          _irq_data[_idx_w] = *((uint8_t*)&SPI2->DR);
+          _idx_w = _irq_data_idx++ % 20;
       }
-      return;
-    }
+      _irq_data[_idx_w] = (*(uint8_t*)&SPI2->DR);
 
-  /* SPI in ERROR Treatment ---------------------------------------------------*/
-  if((hspi2.Instance->SR & (SPI_FLAG_MODF | SPI_FLAG_OVR | SPI_FLAG_FRE)) != RESET)
-  {
-    /* SPI Overrun error interrupt occurred -------------------------------------*/
-    if(__HAL_SPI_GET_FLAG(&hspi2, SPI_FLAG_OVR) != RESET)
-    {
-      if(hspi2.State != HAL_SPI_STATE_BUSY_TX)
-      {
-        hspi2.ErrorCode |= HAL_SPI_ERROR_OVR;
-        __HAL_SPI_CLEAR_OVRFLAG(&hspi2);
-      }
-      else
-      {
-        return;
+      if(10 == _idx_w) {
+        _irq_data_ptr = (_irq_data_ptr == _irq_data_0) ? _irq_data_1 : _irq_data_0;
+        Kernel::isrRaiseEvent(&_irq_data_arrival);
       }
     }
 
-    /* SPI Mode Fault error interrupt occurred -------------------------------------*/
-    if(__HAL_SPI_GET_FLAG(&hspi2, SPI_FLAG_MODF) != RESET)
-    {
-      hspi2.ErrorCode |= HAL_SPI_ERROR_MODF;
-      __HAL_SPI_CLEAR_MODFFLAG(&hspi2);
+    /* SPI in ERROR Treatment ---------------------------------------------------*/
+    if (sr & (SPI_SR_MODF | SPI_SR_FRE | SPI_SR_OVR | SPI_SR_UDR)) {
+      uint8_t  dr = SPI2->DR;
+      Kernel::log("SPI2 Error\n");
+      // Banish the IRQs.
+      SPI2->CR2 &= ~(SPI_IT_RXNE | SPI_IT_ERR);
+      SPI2->CR1 &= (~SPI_CR1_SPE);
     }
-
-    /* SPI Frame error interrupt occurred ----------------------------------------*/
-    if(__HAL_SPI_GET_FLAG(&hspi2, SPI_FLAG_FRE) != RESET)
-    {
-      hspi2.ErrorCode |= HAL_SPI_ERROR_FRE;
-      __HAL_SPI_CLEAR_FREFLAG(&hspi2);
-    }
-
-    __HAL_SPI_DISABLE_IT(&hspi2, SPI_IT_RXNE | SPI_IT_TXE | SPI_IT_ERR);
-    hspi2.State = HAL_SPI_STATE_READY;
-    Kernel::log("SPI2 Error\n");
-
-    return;
   }
-}
 
 
   void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
@@ -144,10 +118,6 @@ extern "C" {
       if (NULL != CPLDDriver::current_queue_item) {
         CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
       }
-    }
-    else {
-      _irq_data = (_irq_data == _irq_data_0) ? _irq_data_1 : _irq_data_0;
-      Kernel::isrRaiseEvent(&_irq_data_arrival);
     }
   }
 
@@ -688,7 +658,6 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
 
   if (_er_flag(CPLD_FLAG_SPI2_READY)) {
     _er_clear_flag(CPLD_FLAG_SPI2_READY);
-    __HAL_SPI_DISABLE(&hspi2);
   }
   else {
     __HAL_RCC_SPI2_CLK_ENABLE();
@@ -713,7 +682,7 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
   hspi2.Init.Mode           = SPI_MODE_SLAVE;
   hspi2.Init.Direction      = SPI_DIRECTION_2LINES_RXONLY;
   hspi2.Init.NSS            = SPI_NSS_HARD_INPUT;
-  hspi2.Init.DataSize       = SPI_DATASIZE_8BIT;  // TODO: Can be 16-bit.
+  hspi2.Init.DataSize       = SPI_DATASIZE_8BIT;
   hspi2.Init.CLKPolarity    = cpol_mode;
   hspi2.Init.CLKPhase       = cpha_mode;
   hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
@@ -745,9 +714,9 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
   /* Enable DMA Stream Transfer Complete interrupt */
   //__HAL_DMA_ENABLE_IT(&_dma_handle_spi2, DMA_IT_TC);
   //HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
+  SPI2->CR2 |= (SPI_IT_RXNE | SPI_IT_ERR);
+  SPI2->CR1 |= SPI_CR1_SPE;
   HAL_NVIC_EnableIRQ(SPI2_IRQn);
-  HAL_SPI_Receive_IT(&hspi2, (uint8_t*) _irq_data, 10);
-  //HAL_DMA_Start_IT(&_dma_handle_spi2, (uint32_t) hspi2.pTxBuffPtr, (uint32_t) _irq_data_0, 10);
 }
 
 
@@ -767,6 +736,10 @@ void CPLDDriver::reset() {
   cpld_status_value  = 0x00;
 
   bus_timeout_millis = 5;
+
+  for (int z = 0; z < 20; z++) _irq_data[z] = 0;
+  _irq_data_ptr = _irq_data_0;  // Used for block-wise access.
+  _irq_data_idx = 0;
 
   purge_queued_work();          // Purge the SPI queue...
   purge_stalled_job();
@@ -1397,7 +1370,7 @@ int8_t CPLDDriver::bootComplete() {
   SPIBusOp::buildDMAMembers();
 
   init_spi(1, 0);   // CPOL=1, CPHA=0, HW-driven
-  init_spi2(0, 0);  // CPOL=0, CPHA=0, HW-driven
+  init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
 
   // An SPI transfer might hang (very unlikely). This will un-hang it.
   event_spi_timeout.alterSchedule(bus_timeout_millis, -1, false, callback_spi_timeout);
@@ -1459,14 +1432,13 @@ int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
         SPIBusOp* op = issue_spi_op_obj();
         op->set_opcode(BusOpcode::RX);
         op->setParams((active_imu_position | 0x80), 0x01, 0x01, 0x8F);
-        op->setBuffer(__hack_buffer, 4);
+        op->setBuffer(__hack_buffer, 1);
         queue_io_job((BusOp*) op);
       }
       break;
 
     /* Things that only this class is likely to care about. */
     case DIGITABULUM_MSG_IMU_IRQ_RAISED:
-      HAL_SPI_Receive_IT(&hspi2, (uint8_t*) _irq_data, 10);
       return_value = 1;
       break;
     case DIGITABULUM_MSG_SPI_QUEUE_READY:
@@ -1580,12 +1552,8 @@ void CPLDDriver::printDebug(StringBuilder *output) {
     }
   }
   output->concatf("\n-- SPI2 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI2_READY)?"on":"OFF"));
-    output->concatf("-- hspi2.State:        0x%08x\n", (unsigned long) hspi2.State);
-    output->concatf("-- hspi2.ErrorCode:    0x%08x\n", (unsigned long) hspi2.ErrorCode);
-    output->concatf("-- hspi2.TxXferCount:  0x%04x\n", hspi2.TxXferCount);
-    output->concatf("-- hspi2.RxXferCount:  0x%04x\n", hspi2.RxXferCount);
-    output->concatf("-- __hack_buffer       0x%08x\n--\n", __hack_buffer);
-  output->concatf("-- IRQ buffer:         %d\n", _irq_data == _irq_data_0 ? 0 : 1);
+    output->concatf("-- Buffer index:       %d\n", _irq_data_idx);
+  output->concatf("-- IRQ buffer:         %d\n", _irq_data_ptr == _irq_data_0 ? 0 : 1);
   output->concatf("-- IRQ service:        %sabled", (_er_flag(CPLD_FLAG_SVC_IRQS)?"en":"dis"));
   output->concat("\n--    _irq_data_0:     ");
   for (int i = 0; i < 10; i++) { output->concatf("%02x", _irq_data_0[i]); }
@@ -1620,8 +1588,12 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
           local_log.concat("Re-initialized SPI1.\n");
           break;
         case 2:
+          init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
+          local_log.concat("Re-initialized SPI2 into Mode-2.\n");
+          break;
+        case 3:
           init_spi2(0, 0);  // CPOL=0, CPHA=0, HW-driven
-          local_log.concat("Re-initialized SPI2.\n");
+          local_log.concat("Re-initialized SPI2 into Mode-0.\n");
           break;
         case 4:
           init_spi_soft(); // Direct GPIO manipulation.
@@ -1781,10 +1753,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       reset();
       break;
 
-    case 'j':
-      HAL_SPI_Receive_IT(&hspi2, (uint8_t*) _irq_data, 10);
-      break;
-
     case 'Z':
     case 'z':
       if (temp_byte) {
@@ -1795,18 +1763,18 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     case 'x':
-      local_log.concatf("SPI2 data register: 0x%02x\n", hspi2.Instance->DR);
+      local_log.concatf("SPI2 data register: 0x%02x\n", SPI2->DR);
       break;
 
     case 'C':    // Individual IMU access tests...
     case 'c':    // Individual IMU access tests...
       if (temp_byte < 0x22) {
         active_imu_position = temp_byte;
-        for (int z = 0; z < 16; z++) __hack_buffer[z] = 0;
+        for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
         SPIBusOp* op = issue_spi_op_obj();
         op->set_opcode(BusOpcode::RX);
         op->setParams((temp_byte | 0x80), 0x01, 0x01, 0x8F);
-        op->setBuffer(__hack_buffer, (*(str) == 'C' ? 5 : 4));
+        op->setBuffer(__hack_buffer, (*(str) == 'C' ? 5 : 1));
         queue_io_job((BusOp*) op);
       }
       else {
@@ -1814,12 +1782,26 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
-    case 'n':    // Many bytes for a given access...
-      if (temp_byte < 0x10) {
-        for (int z = 0; z < 16; z++) __hack_buffer[z] = 0;
+    case 'n':    // Many bytes for a given address...
+      if (temp_byte < 35) {
+        for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
         SPIBusOp* op = issue_spi_op_obj();
         op->set_opcode(BusOpcode::RX);
         op->setParams((active_imu_position | 0x80), temp_byte, 0x01, 0x8F);
+        op->setBuffer(__hack_buffer, temp_byte);
+        queue_io_job((BusOp*) op);
+      }
+      else {
+        local_log.concat("Length out of bounds.\n");
+      }
+      break;
+
+    case 'N':    // Single byte for a multiple access...
+      if (temp_byte < 35) {
+        for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
+        SPIBusOp* op = issue_spi_op_obj();
+        op->set_opcode(BusOpcode::RX);
+        op->setParams((active_imu_position | 0x80), 0x01, temp_byte, 0x8F);
         op->setBuffer(__hack_buffer, temp_byte);
         queue_io_job((BusOp*) op);
       }

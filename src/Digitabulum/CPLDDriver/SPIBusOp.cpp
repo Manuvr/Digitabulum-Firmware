@@ -379,7 +379,7 @@ int8_t SPIBusOp::begin() {
     return -1;
   }
 
-  if (hspi1.State & SPI_FLAG_BSY) {
+  if (SPI1->SR & SPI_FLAG_BSY) {
     Kernel::log("SPI op aborted before taking bus control.\n");
     abort(XferFault::BUS_BUSY);
     return -1;
@@ -388,7 +388,8 @@ int8_t SPIBusOp::begin() {
   set_state(XferState::INITIATE);  // Indicate that we now have bus control.
 
   if ((opcode == BusOpcode::TX) || (2 < _param_len)) {
-    HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) xfer_params, _param_len);
+    //__HAL_SPI_ENABLE_IT(&hspi1, (SPI_IT_TXE));
+    HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*) &STATIC_SINK, _param_len);
   }
   else {
     // We can afford to read two bytes into the same space as our xfer_params...
@@ -479,6 +480,9 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
     case XferState::ADDR:
       if (buf_len > 0) {
         set_state(XferState::IO_WAIT);
+        // We have 4 bytes to throw away from the params transfer.
+        uint16_t tmpreg = hspi1.Instance->DR;
+        tmpreg = hspi1.Instance->DR;
         if (opcode == BusOpcode::TX) {
           HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) buf, buf_len);
         }
@@ -667,7 +671,7 @@ void SPIBusOp::printDebug(StringBuilder *output) {
   if (buf_len > 0) {
     output->concatf("\t buf *(0x%08x) ", (uint32_t) buf);
     //for (uint8_t i = 0; i < buf_len; i++) {
-    for (uint8_t i = 0; i < 16; i++) {
+    for (uint8_t i = 0; i < buf_len; i++) {
       output->concatf("0x%02x ", (uint8_t) *(buf + i));
     }
   }
