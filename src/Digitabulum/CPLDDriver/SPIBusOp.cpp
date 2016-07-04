@@ -256,49 +256,49 @@ void SPIBusOp::setParams(uint8_t _reg_addr, uint8_t _val) {
 * @return 0 on success, or non-zero on failure.
 */
 int8_t SPIBusOp::init_dma() {
-  if (HAL_DMA_GetState(&_dma_w_handle) != HAL_DMA_STATE_RESET) __HAL_DMA_DISABLE(&_dma_w_handle);
-  if (HAL_DMA_GetState(&_dma_r_handle) != HAL_DMA_STATE_RESET) __HAL_DMA_DISABLE(&_dma_r_handle);
-
-  uint32_t _origin_buf = 0;
-  uint32_t _target_buf = 0;
-
-  if (opcode == BusOpcode::RX) {
-    _dma_r_handle.Init.MemInc = DMA_MINC_DISABLE;
-    _dma_w_handle.Init.MemInc = DMA_MINC_DISABLE;
-
-    //DMA_InitStructure_Read.DMA_Memory0BaseAddr    = (uint32_t) buf;
-
-    // We still need a transmit DMA operation to send the transfer parameters.
-    //DMA_InitStructure_Write.DMA_Memory0BaseAddr   = (uint32_t) &STATIC_ZERO;
-  }
-  else if (opcode == BusOpcode::TX) {
-    _dma_r_handle.Init.MemInc = DMA_MINC_DISABLE;
-    _dma_w_handle.Init.MemInc = DMA_MINC_ENABLE;
-
-    //DMA_InitStructure_Write.DMA_Memory0BaseAddr   = (uint32_t) buf;
-
-    // For now, we are reliant on the Rx DMA IRQ. Tx IRQ is never used. So when
-    // transmitting, we need to sink the read bytes until we do something smarter.
-    //DMA_InitStructure_Read.DMA_Memory0BaseAddr    = (uint32_t) &STATIC_ZERO;
-  }
-  else {
-    return -1;
-  }
-
-  while (HAL_DMA_GetState(&_dma_w_handle) != HAL_DMA_STATE_RESET) {}  // TODO: Might-could cut this.
-  HAL_DMA_Init(&_dma_w_handle);
-
-  while (HAL_DMA_GetState(&_dma_r_handle) != HAL_DMA_STATE_RESET) {}  // TODO: Might-could cut this.
-  HAL_DMA_Init(&_dma_r_handle);
-
-  if (opcode == BusOpcode::RX) {
-    HAL_DMA_Start_IT(&_dma_r_handle, (uint32_t) hspi1.pRxBuffPtr, (uint32_t) buf, (uint32_t) buf_len);
-    HAL_DMA_Start_IT(&_dma_w_handle, (uint32_t) buf, (uint32_t) hspi1.pTxBuffPtr, (uint32_t) buf_len);
-  }
-  else if (opcode == BusOpcode::TX) {
-    HAL_DMA_Start_IT(&_dma_w_handle, (uint32_t) buf, (uint32_t) hspi1.pTxBuffPtr, (uint32_t) buf_len);
-  }
-
+//  if (HAL_DMA_GetState(&_dma_w_handle) != HAL_DMA_STATE_RESET) __HAL_DMA_DISABLE(&_dma_w_handle);
+//  if (HAL_DMA_GetState(&_dma_r_handle) != HAL_DMA_STATE_RESET) __HAL_DMA_DISABLE(&_dma_r_handle);
+//
+//  uint32_t _origin_buf = 0;
+//  uint32_t _target_buf = 0;
+//
+//  if (opcode == BusOpcode::RX) {
+//    _dma_r_handle.Init.MemInc = DMA_MINC_DISABLE;
+//    _dma_w_handle.Init.MemInc = DMA_MINC_DISABLE;
+//
+//    //DMA_InitStructure_Read.DMA_Memory0BaseAddr    = (uint32_t) buf;
+//
+//    // We still need a transmit DMA operation to send the transfer parameters.
+//    //DMA_InitStructure_Write.DMA_Memory0BaseAddr   = (uint32_t) &STATIC_ZERO;
+//  }
+//  else if (opcode == BusOpcode::TX) {
+//    _dma_r_handle.Init.MemInc = DMA_MINC_DISABLE;
+//    _dma_w_handle.Init.MemInc = DMA_MINC_ENABLE;
+//
+//    //DMA_InitStructure_Write.DMA_Memory0BaseAddr   = (uint32_t) buf;
+//
+//    // For now, we are reliant on the Rx DMA IRQ. Tx IRQ is never used. So when
+//    // transmitting, we need to sink the read bytes until we do something smarter.
+//    //DMA_InitStructure_Read.DMA_Memory0BaseAddr    = (uint32_t) &STATIC_ZERO;
+//  }
+//  else {
+//    return -1;
+//  }
+//
+//  while (HAL_DMA_GetState(&_dma_w_handle) != HAL_DMA_STATE_RESET) {}  // TODO: Might-could cut this.
+//  HAL_DMA_Init(&_dma_w_handle);
+//
+//  while (HAL_DMA_GetState(&_dma_r_handle) != HAL_DMA_STATE_RESET) {}  // TODO: Might-could cut this.
+//  HAL_DMA_Init(&_dma_r_handle);
+//
+//  if (opcode == BusOpcode::RX) {
+//    HAL_DMA_Start_IT(&_dma_r_handle, (uint32_t) hspi1.pRxBuffPtr, (uint32_t) buf, (uint32_t) buf_len);
+//    HAL_DMA_Start_IT(&_dma_w_handle, (uint32_t) buf, (uint32_t) hspi1.pTxBuffPtr, (uint32_t) buf_len);
+//  }
+//  else if (opcode == BusOpcode::TX) {
+//    HAL_DMA_Start_IT(&_dma_w_handle, (uint32_t) buf, (uint32_t) hspi1.pTxBuffPtr, (uint32_t) buf_len);
+//  }
+//
   return 0;
 }
 
@@ -334,21 +334,21 @@ void SPIBusOp::wipe() {
 *
 * @return true if the bus is available. False otherwise.
 */
-bool SPIBusOp::wait_with_timeout() {
-  uint32_t to_mark = micros();
-  uint32_t timeout_val = (2 * spi_wait_timeout) + (buf_len * spi_wait_timeout);
-  uint32_t m_mark = micros();
-  while(__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_BSY) && ((max(to_mark, m_mark) - min(to_mark, m_mark)) <= timeout_val) ) {
-    m_mark = micros();
-  } // wait until bus is not busy, JIC.
-  if (__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_BSY)) {
-    debug_log.concatf("SPI Bus timeout after %uuS.\n", timeout_val);
-    return false;
-  }
-  else {
-    return true;
-  }
-}
+//bool SPIBusOp::wait_with_timeout() {
+//  uint32_t to_mark = micros();
+//  uint32_t timeout_val = (2 * spi_wait_timeout) + (buf_len * spi_wait_timeout);
+//  uint32_t m_mark = micros();
+//  while((hspi1.State & SPI_FLAG_BSY) && ((max(to_mark, m_mark) - min(to_mark, m_mark)) <= timeout_val) ) {
+//    m_mark = micros();
+//  } // wait until bus is not busy, JIC.
+//  if (hspi1.State & SPI_FLAG_BSY) {
+//    debug_log.concatf("SPI Bus timeout after %uuS.\n", timeout_val);
+//    return false;
+//  }
+//  else {
+//    return true;
+//  }
+//}
 
 
 /****************************************************************************************************
@@ -379,7 +379,7 @@ int8_t SPIBusOp::begin() {
     return -1;
   }
 
-  if (!wait_with_timeout()) {
+  if (SPI1->SR & SPI_FLAG_BSY) {
     Kernel::log("SPI op aborted before taking bus control.\n");
     abort(XferFault::BUS_BUSY);
     return -1;
@@ -387,27 +387,16 @@ int8_t SPIBusOp::begin() {
 
   set_state(XferState::INITIATE);  // Indicate that we now have bus control.
 
-  if ((opcode == BusOpcode::TX) || (_param_len > 2)) {
-    if (0 == buf_len) {
-      // If this transfer is all that we are going to do...
-      set_state(XferState::IO_WAIT);
-    }
-    else {
-      // Otherwise, let the ISR feed the next DMA operation.
-      set_state(XferState::ADDR);
-    }
-    // If we don't care about the values returning from the bus, our task is easy.
-    // If we DO care about the return values, and the buffer will be
-    //   required to capture it all.
-    HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) xfer_params, _param_len);
+  if ((opcode == BusOpcode::TX) || (2 < _param_len)) {
+    //__HAL_SPI_ENABLE_IT(&hspi1, (SPI_IT_TXE));
+    HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*) &STATIC_SINK, _param_len);
   }
   else {
-    set_state(XferState::IO_WAIT);
-    // If we do care, and our transfer length is half the array size, we won't
-    //   bother with DMA, as we can accomplish the task on a single ISR.
-    HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, ((uint8_t*) xfer_params+2), 2);
+    // We can afford to read two bytes into the same space as our xfer_params...
+    HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*)(xfer_params + 2), 2);
   }
 
+  set_state((0 == buf_len) ? XferState::IO_WAIT : XferState::ADDR);
   return 0;
 }
 #pragma GCC diagnostic pop
@@ -423,7 +412,7 @@ int8_t SPIBusOp::begin() {
 * @return 0 on success. Non-zero on failure.
 */
 int8_t SPIBusOp::markComplete() {
-  if (has_bus_control() || (((CPLDDriver*) cpld)->current_queue_item == this) ) {
+  if (has_bus_control() || (CPLDDriver::current_queue_item == this) ) {
     // If this job has bus control, we need to release the bus and tidy up IRQs.
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
     if (buf_len > 1) {
@@ -471,13 +460,12 @@ int8_t SPIBusOp::abort(XferFault cause) {
 int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
   int8_t return_value = 0;
 
-  debug_log.concatf("advance_operation(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
-  Kernel::log(&debug_log);
+  //debug_log.concatf("advance_op(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
+  //Kernel::log(&debug_log);
 
   /* These are our transfer-size-invariant cases. */
   switch (xfer_state) {
     case XferState::COMPLETE:
-      //if (profile()) transition_time_COMPLETE     = micros();
       abort(XferFault::HUNG_IRQ);
       return 0;
 
@@ -490,6 +478,19 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
 
     case XferState::QUEUED:
     case XferState::ADDR:
+      if (buf_len > 0) {
+        set_state(XferState::IO_WAIT);
+        // We have 4 bytes to throw away from the params transfer.
+        uint16_t tmpreg = hspi1.Instance->DR;
+        tmpreg = hspi1.Instance->DR;
+        if (opcode == BusOpcode::TX) {
+          HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) buf, buf_len);
+        }
+        else {
+          HAL_SPI_Receive_IT(&hspi1, (uint8_t*) buf, buf_len);
+        }
+      }
+      return 0;
     case XferState::STOP:
     case XferState::UNDEF:
 
@@ -666,9 +667,10 @@ void SPIBusOp::printDebug(StringBuilder *output) {
   }
 
   output->concatf("\n\t buf_len           %d\n", buf_len);
-  output->concatf("\t buf *(0x%08x) ", (uint32_t) buf);
 
   if (buf_len > 0) {
+    output->concatf("\t buf *(0x%08x) ", (uint32_t) buf);
+    //for (uint8_t i = 0; i < buf_len; i++) {
     for (uint8_t i = 0; i < buf_len; i++) {
       output->concatf("0x%02x ", (uint8_t) *(buf + i));
     }

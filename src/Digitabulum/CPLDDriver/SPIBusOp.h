@@ -149,7 +149,7 @@ class SPIBusOp : public BusOp {
 
     int8_t init_dma();
 
-    bool wait_with_timeout();
+    //bool wait_with_timeout();
 
 
     static void enableSPI_DMA(bool enable);

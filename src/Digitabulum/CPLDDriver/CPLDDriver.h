@@ -333,9 +333,9 @@ class IIU;
 #define CPLD_FLAG_SVC_IRQS     0x04    // Should the CPLD respond to IRQ signals?
 #define CPLD_FLAG_QUEUE_IDLE   0x08    // Is the SPI queue idle?
 #define CPLD_FLAG_QUEUE_GUARD  0x10    // Prevent bus queue floods?
-#define CPLD_FLAG_RESERVED     0x20    //
-#define CPLD_FLAG_SPI1_READY   0x40    // Is SPI1 initialized?
-#define CPLD_FLAG_SPI2_READY   0x80    // Is SPI2 initialized?
+#define CPLD_FLAG_SPI1_READY   0x20    // Is SPI1 initialized?
+#define CPLD_FLAG_SPI2_READY   0x40    // Is SPI2 initialized?
+#define CPLD_FLAG_DEN_AG_STATE 0x80    // DEN_AG state.
 
 
 /* Codes that are specific to Digitabulum's CPLD */
@@ -411,8 +411,8 @@ class IIU;
 /* Bitmask defs for the CONFIG register. */
 #define CPLD_CONF_BIT_INT_CLK    0x01
 #define CPLD_CONF_BIT_IRQ_SCAN   0x02  // Enable IRQ scanning
-#define CPLD_CONF_BIT_IRQ_73     0x04  // Set IRQ bit-73
-#define CPLD_CONF_BIT_RESERVED   0x08  //
+#define CPLD_CONF_BIT_IRQ_74     0x04  // Set IRQ bit-74
+#define CPLD_CONF_BIT_PWR_CONSRV 0x08  // Prevent bus driving on absent digits.
 #define CPLD_CONF_BIT_IRQ_STREAM 0x10  // Constantly stream IRQ data
 #define CPLD_CONF_BIT_GPIO_0     0x20  // Set GPIO_0 state
 #define CPLD_CONF_BIT_GPIO_1     0x40  // Set GPIO_1 state
@@ -424,8 +424,6 @@ class IIU;
 */
 class CPLDDriver : public EventReceiver, public BusOpCallback {
   public:
-    SPIBusOp* current_queue_item = NULL;
-
     CPLDDriver();
     ~CPLDDriver();       // Should never be called. Here for the sake of completeness.
 
@@ -447,6 +445,11 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     inline void step_queues(){  Kernel::isrRaiseEvent(&event_spi_queue_ready); }
     SPIBusOp* issue_spi_op_obj();
 
+    int setCPLDClkFreq(int);
+    inline int8_t setWakeupSignal(uint8_t _val) {
+      return writeRegister(CPLD_REG_WAKEUP_IRQ, _val | 0x80);
+    };
+
     void reset(void);                 // Causes the CPLD to be reset.
     uint8_t getCPLDVersion();         // Read the version code in the CPLD.
 
@@ -456,7 +459,8 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
     uint32_t read_imu_irq_pins();     // TODO: Can this be optimized down at all?
 
-    // These are interrupt service routines...
+    // These are interrupt service routines and their subjects.
+    static SPIBusOp* current_queue_item;
     volatile static void irqService_vect_0(void);
 
 
@@ -465,14 +469,11 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
 
 
   private:
-    uint8_t   _irq_data_0[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};  // IRQ data is double-buffered
-    uint8_t   _irq_data_1[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};  //   in these arrays.
-    uint8_t*  _irq_data       = _irq_data_0;                     // Used for paging the above buffers.
-
-    ManuvrRunnable _irq_data_arrival;
     ManuvrRunnable event_spi_queue_ready;
     ManuvrRunnable event_spi_callback_ready;
     ManuvrRunnable event_spi_timeout;
+
+    ManuvrRunnable _periodic_debug;
 
     uint32_t  bus_timeout_millis = 5;
 
@@ -512,9 +513,11 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
 
 
     /* Setup and init fxns. */
-    void gpioSetup(void);
+    void gpioSetup();
+    bool _set_timer_base(uint16_t);
     void init_ext_clk();
     void init_spi(uint8_t cpol, uint8_t cpha);  // Pass 0 for CPHA 0.
+    void init_spi2(uint8_t cpol, uint8_t cpha);  // Pass 0 for CPHA 0.
     void init_spi_soft();
 
 
