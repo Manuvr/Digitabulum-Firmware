@@ -411,7 +411,7 @@ class IIU;
 /* Bitmask defs for the CONFIG register. */
 #define CPLD_CONF_BIT_INT_CLK    0x01
 #define CPLD_CONF_BIT_IRQ_SCAN   0x02  // Enable IRQ scanning
-#define CPLD_CONF_BIT_IRQ_73     0x04  // Set IRQ bit-73
+#define CPLD_CONF_BIT_IRQ_74     0x04  // Set IRQ bit-74
 #define CPLD_CONF_BIT_PWR_CONSRV 0x08  // Prevent bus driving on absent digits.
 #define CPLD_CONF_BIT_IRQ_STREAM 0x10  // Constantly stream IRQ data
 #define CPLD_CONF_BIT_GPIO_0     0x20  // Set GPIO_0 state

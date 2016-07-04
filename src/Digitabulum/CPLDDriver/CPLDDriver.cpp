@@ -186,14 +186,14 @@ A quick note is in order. These functions are static class members that are call
 * ISR for CPLD GPIO.
 */
 void cpld_gpio_isr_0() {
-  Kernel::log("CPLD_GPIO_0\n");
+  Kernel::log((readPin(75) ? "CPLD_GPIO_0 HIGH\n":"CPLD_GPIO_0 LOw\n"));
 }
 
 /**
 * ISR for CPLD GPIO.
 */
 void cpld_gpio_isr_1() {
-  Kernel::log("CPLD_GPIO_1\n");
+  Kernel::log((readPin(78) ? "CPLD_GPIO_1 HIGH\n":"CPLD_GPIO_1 LOw\n"));
 }
 
 
@@ -1431,8 +1431,8 @@ int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
       {
         SPIBusOp* op = issue_spi_op_obj();
         op->set_opcode(BusOpcode::RX);
-        op->setParams((active_imu_position | 0x80), 0x01, 0x01, 0x8F);
-        op->setBuffer(__hack_buffer, 1);
+        op->setParams((active_imu_position | 0x80), 0x01, 0x02, 0x8F);
+        op->setBuffer(__hack_buffer, 2);
         queue_io_job((BusOp*) op);
       }
       break;
@@ -1700,8 +1700,8 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       break;
     case 'E':
     case 'e':
-      local_log.concatf("%s IRQ 73.\n", (*(str) == '_' ? "Clearing" : "Setting"));
-      setCPLDConfig(CPLD_CONF_BIT_IRQ_73, (*(str) == 'E'));
+      local_log.concatf("%s IRQ 74.\n", (*(str) == '_' ? "Clearing" : "Setting"));
+      setCPLDConfig(CPLD_CONF_BIT_IRQ_74, (*(str) == 'E'));
       break;
     case 'A':
     case 'a':
