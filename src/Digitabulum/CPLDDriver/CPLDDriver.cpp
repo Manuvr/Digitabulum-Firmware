@@ -157,11 +157,8 @@ void callback_spi_timeout() {
 * DUBUG
 ****************************************************************************************************/
 
-bool _soft_spi = false;
 volatile static uint32_t _temp_spi_r = 0;
 volatile static uint32_t _temp_spi_w = 0;
-volatile static int _spi1_clks = 0;
-volatile static int _spi2_clks = 0;
 
 
 /****************************************************************************************************
@@ -194,23 +191,6 @@ void cpld_gpio_isr_0() {
 */
 void cpld_gpio_isr_1() {
   Kernel::log((readPin(78) ? "CPLD_GPIO_1 HIGH\n":"CPLD_GPIO_1 LOw\n"));
-}
-
-
-/**
-* ISR called when the SPI1_CLK falls.
-* This is only used for software-driven SPI and will be removed after debug.
-*/
-void spi_clk_isr() {
-  _spi1_clks++;
-  _temp_spi_r = _temp_spi_r << 1;
-  _temp_spi_r += (readPin(7) ? 1:0);
-
-  HAL_GPIO_WritePin(
-    GPIOA,
-    GPIO_PIN_6,
-    ((_temp_spi_w >> (31 - (_spi1_clks % 32))) & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET
-  );
 }
 
 
@@ -306,42 +286,6 @@ const MessageTypeDef cpld_message_defs[] = {
   {  DIGITABULUM_MSG_SPI_QUEUE_READY      , 0x0000,               "SPI_Q_RDY"          , ManuvrMsg::MSG_ARGS_NONE }, //
   {  DIGITABULUM_MSG_SPI_CB_QUEUE_READY   , 0x0000,               "SPICB_RDY"          , ManuvrMsg::MSG_ARGS_NONE }, //
 };
-
-
-void CPLDDriver::transferSignal() {
-  _temp_spi_r = 0;
-  _spi1_clks = 0;
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
-}
-
-
-void CPLDDriver::softSend(uint8_t val_0, uint8_t val_1) {
-  if (_soft_spi) {
-    _temp_spi_w = (val_0 << 24) + (val_1 << 16);
-    HAL_GPIO_WritePin(
-      GPIOA,
-      GPIO_PIN_6,
-      ((_temp_spi_w & 0x80000000) ? GPIO_PIN_SET : GPIO_PIN_RESET)
-    );
-    transferSignal();
-
-    Kernel::log("\nI/O 16 bits...\n");
-  }
-}
-
-void CPLDDriver::softSend(uint32_t val_0) {
-  if (_soft_spi) {
-    _temp_spi_w = val_0;
-    HAL_GPIO_WritePin(
-      GPIOA,
-      GPIO_PIN_6,
-      ((_temp_spi_w & 0x80000000) ? GPIO_PIN_SET : GPIO_PIN_RESET)
-    );
-    transferSignal();
-
-    Kernel::log("\nI/O 32 bits...\n");
-  }
-}
 
 
 
@@ -445,8 +389,8 @@ void CPLDDriver::gpioSetup() {
   * 11    0      CPLD_GPIO_0
   * 14    0      CPLD_GPIO_1
   */
-  setPinFxn(75, CHANGE, cpld_gpio_isr_0);
-  setPinFxn(78, CHANGE, cpld_gpio_isr_1);
+  //setPinFxn(75, CHANGE, cpld_gpio_isr_0);
+  //setPinFxn(78, CHANGE, cpld_gpio_isr_1);
 
   /* These Port C pins are push-pull outputs:
   *
@@ -539,46 +483,6 @@ void CPLDDriver::init_ext_clk() {
 
 
 /**
-* Init of SPI peripheral 1 in software mode.
-* This will be struck when the CPLD is debugged.
-*/
-void CPLDDriver::init_spi_soft() {
-  GPIO_InitTypeDef GPIO_InitStruct;
-
-  _er_clear_flag(CPLD_FLAG_SPI1_READY | CPLD_FLAG_SPI2_READY);
-  __HAL_RCC_SPI1_CLK_DISABLE();
-  __HAL_RCC_SPI2_CLK_DISABLE();
-
-  /* These Port A pins are associated with the SPI1 peripheral:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 4   SPI1_CS
-  * 5   SPI1_CLK
-  * 6   SPI1_MISO
-  * 7   SPI1_MOSI
-  */
-  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_7;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  setPinFxn(5, FALLING, spi_clk_isr);
-
-  GPIO_InitStruct.Pin = GPIO_PIN_6;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET);
-
-  setPinFxn(4, RISING_PULL_UP, spi_bus_op_isr);
-  _soft_spi = true;
-}
-
-
-/**
 * Init of SPI peripheral 1. This is broken out because we might be bringing it
 *   up and down in a single runtime for debug reasons.
 *
@@ -637,8 +541,6 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   _er_set_flag(CPLD_FLAG_SPI1_READY, (HAL_OK == HAL_SPI_Init(&hspi1)));
 
   HAL_NVIC_EnableIRQ(SPI1_IRQn);
-
-  _soft_spi = false;
 }
 
 
@@ -733,7 +635,7 @@ void CPLDDriver::reset() {
   cpld_conf_value    = 0x00;     //   our register representations...
   cpld_version       = 0x00;
   cpld_wakeup_source = 0x00;
-  cpld_status_value  = 0x00;
+  forsaken_digits    = 0x00;
 
   bus_timeout_millis = 5;
 
@@ -817,42 +719,33 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
     return SPI_CALLBACK_ERROR;
   }
 
-  if (BusOpcode::RX == op->get_opcode()) {
-    switch (0x7F & op->getRegAddr()) {
-      case CPLD_REG_VERSION:
-        {
-          uint8_t _version = op->getTransferParam(3);
-          if (getVerbosity() > 3) local_log.concatf("CPLD r%d.\n", _version);
-          if (0 < _version) {
-            if (_version != cpld_version) {
-              Kernel::raiseEvent(DIGITABULUM_MSG_CPLD_RESET_COMPLETE, NULL);
-            }
-          }
-          else {
-            if (getVerbosity() > 1) local_log.concatf("CPLD returned a bad version code: 0x%02x\n", cpld_version);
+  switch (op->getRegAddr()) {
+    case CPLD_REG_VERSION:
+      {
+        uint8_t _version = op->getTransferParam(3);
+        if (getVerbosity() > 3) local_log.concatf("CPLD r%d.\n", _version);
+        if (0 < _version) {
+          if (_version != cpld_version) {
+            Kernel::raiseEvent(DIGITABULUM_MSG_CPLD_RESET_COMPLETE, NULL);
           }
         }
-        break;
-      case CPLD_REG_STATUS:
-        cpld_status_value = op->getTransferParam(3);
-        break;
-      default:
-        if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->getRegAddr());
-        break;
-    }
-  }
-  else if (BusOpcode::TX == op->get_opcode()) {
-    switch (op->getRegAddr()) {
-      case CPLD_REG_CONFIG:
-        _process_conf_update(op->getTransferParam(1));
-        break;
-      case CPLD_REG_WAKEUP_IRQ:
-        cpld_wakeup_source = (op->getTransferParam(1) & 0x7F);
-        break;
-      default:
-        if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->getRegAddr());
-        break;
-    }
+        else {
+          if (getVerbosity() > 1) local_log.concatf("CPLD returned a bad version code: 0x%02x\n", cpld_version);
+        }
+      }
+      break;
+    case CPLD_REG_CONFIG:
+      _process_conf_update(op->getTransferParam(1));
+      break;
+    case CPLD_REG_WAKEUP_IRQ:
+      cpld_wakeup_source = (op->getTransferParam(1) & 0x7F);
+      break;
+    case CPLD_REG_DIGIT_FORSAKE:
+      forsaken_digits = op->getTransferParam(1);
+      break;
+    default:
+      if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->getRegAddr());
+      break;
   }
 
   if (local_log.length() > 0) Kernel::log(&local_log);
@@ -991,7 +884,7 @@ int8_t CPLDDriver::advance_work_queue() {
        case XferState::INITIATE:
          switch (current_queue_item->begin()) {
            case 0:     // Nominal outcome. Transfer started with no problens...
-             transferSignal();
+             HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
              break;
            case -1:    // Bus appears to be in-use. State did not change.
              // Re-throw queue_ready event and try again later.
@@ -1164,7 +1057,7 @@ void CPLDDriver::purge_stalled_job() {
 int8_t CPLDDriver::readRegister(uint8_t reg_addr) {
   SPIBusOp* temp = issue_spi_op_obj();
   temp->set_opcode(BusOpcode::RX);
-  temp->setParams(reg_addr | 0x80, 0);  // Set the READ bit...
+  temp->setParams(reg_addr, 0);  // Set the READ bit...
   queue_io_job(temp);
   return 0;
 }
@@ -1507,21 +1400,11 @@ void CPLDDriver::printDebug(StringBuilder *output) {
   output->concatf("--\n-- CPLD_GPIO (0/1)     %s / %s\n--\n",       (readPin(75) ? "hi":"lo"), (readPin(78) ? "hi":"lo"));
 
   output->concatf("-- SPI1 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI1_READY)?"on":"OFF"));
-  if (_soft_spi) {
-    output->concatf("-- cs state            %s\n", (readPin(4) ? "hi":"lo"));
-    output->concatf("-- SPI1_MOSI           %s\n", (readPin(7) ? "hi":"lo"));
-    output->concatf("-- SPI1_CLK            %s\n", (readPin(5) ? "hi":"lo"));
-    output->concatf("-- _spi1_clks          %d\n", _spi1_clks);
-    output->concatf("-- _temp_spi_r         0x%08x\n", _temp_spi_r);
-    output->concatf("-- _temp_spi_r_h       0x%08x\n", _temp_spi_w);
-  }
-  else {
-    output->concatf("-- hspi1.State:        0x%08x\n", (unsigned long) hspi1.State);
-    output->concatf("-- hspi1.ErrorCode:    0x%08x\n", (unsigned long) hspi1.ErrorCode);
-    output->concatf("-- hspi1.TxXferCount:  0x%04x\n",     hspi1.TxXferCount);
-    output->concatf("-- hspi1.RxXferCount:  0x%04x\n", hspi1.RxXferCount);
-    output->concatf("-- __hack_buffer       0x%08x\n--\n", __hack_buffer);
-  }
+  output->concatf("-- hspi1.State:        0x%08x\n", (unsigned long) hspi1.State);
+  output->concatf("-- hspi1.ErrorCode:    0x%08x\n", (unsigned long) hspi1.ErrorCode);
+  output->concatf("-- hspi1.TxXferCount:  0x%04x\n",     hspi1.TxXferCount);
+  output->concatf("-- hspi1.RxXferCount:  0x%04x\n", hspi1.RxXferCount);
+  output->concatf("-- __hack_buffer       0x%08x\n--\n", __hack_buffer);
 
   //if (getVerbosity() > 2) {
   //  output->concatf("-- Guarding queue      %s\n",       (_er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no"));
@@ -1594,9 +1477,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
         case 3:
           init_spi2(0, 0);  // CPOL=0, CPHA=0, HW-driven
           local_log.concat("Re-initialized SPI2 into Mode-0.\n");
-          break;
-        case 4:
-          init_spi_soft(); // Direct GPIO manipulation.
           break;
       }
       break;
@@ -1689,11 +1569,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
-    case '!':
-      local_log.concat("Running debug setup...\n");
-      setCPLDConfig(CPLD_CONF_BIT_IRQ_STREAM | CPLD_CONF_BIT_PWR_CONSRV | CPLD_CONF_BIT_DEN_AG_0, true);
-      break;
-
     case '^':
       local_log.concatf("WAKEUP ISR bound to IRQ signal %d.\n", temp_byte);
       setWakeupSignal(temp_byte);
@@ -1737,17 +1612,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       local_log.concatf("%s CPLD_GPIO_1.\n", (*(str) == ']' ? "Clearing" : "Setting"));
       setCPLDConfig(CPLD_CONF_BIT_GPIO_1, (*(str) == '}'));
       break;
-
-    //case 'R':
-    //  if (temp_byte) {
-    //    local_log.concat("CPLD reset pin driven high.\n");
-    //    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);  // Drive the reset pin high...
-    //  }
-    //  else {
-    //    local_log.concat("CPLD reset pin driven low.\n");
-    //    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);  // Drive the reset pin low...
-    //  }
-    //  break;
 
     case 'r':
       reset();

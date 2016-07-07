@@ -338,7 +338,7 @@ class IIU;
 #define CPLD_FLAG_DEN_AG_STATE 0x80    // DEN_AG state.
 
 
-/* Codes that are specific to Digitabulum's CPLD */
+/* Codes that are specific to Digitabulum's CPLD and IMU apparatus. */
   #define DIGITABULUM_MSG_IMU_LEGEND           0x0600 // No args? Asking for this legend. One arg: Legend provided.
   #define DIGITABULUM_MSG_IMU_IRQ_RAISED       0x0602 // IRQ asserted by CPLD.
 
@@ -399,22 +399,18 @@ class IIU;
 #define CPLD_REG_RANK_I_M      0x26  // |
 #define CPLD_REG_RANK_D_M      0x27  // |
 
-#define CPLD_REG_VERSION       0x28  // | Holds CPLD revision number.
 #define CPLD_REG_CONFIG        0x28  // | CPLD operating parameters
-#define CPLD_REG_STATUS        0x29  // | Status
+#define CPLD_REG_VERSION       0xA8  // | Holds CPLD revision number.
 #define CPLD_REG_WAKEUP_IRQ    0x29  // | WAKEUP mapping
-#define CPLD_REG_CS_4          0x2C  // | RESERVED
-#define CPLD_REG_CS_5          0x2D  // | RESERVED
-#define CPLD_REG_CS_6          0x2E  // | RESERVED
-#define CPLD_REG_CS_7          0x2F  // | RESERVED
+#define CPLD_REG_DIGIT_FORSAKE 0x2A  // | Forsaken digit register.
 
 /* Bitmask defs for the CONFIG register. */
-#define CPLD_CONF_BIT_INT_CLK    0x01
+#define CPLD_CONF_BIT_INT_CLK    0x01  // Internal clock enable
 #define CPLD_CONF_BIT_IRQ_SCAN   0x02  // Enable IRQ scanning
 #define CPLD_CONF_BIT_IRQ_74     0x04  // Set IRQ bit-74
 #define CPLD_CONF_BIT_PWR_CONSRV 0x08  // Prevent bus driving on absent digits.
 #define CPLD_CONF_BIT_IRQ_STREAM 0x10  // Constantly stream IRQ data
-#define CPLD_CONF_BIT_GPIO_0     0x20  // Set GPIO_0 state
+#define CPLD_CONF_BIT_GPIO_0     0x20  // Set GPIO_0 source
 #define CPLD_CONF_BIT_GPIO_1     0x40  // Set GPIO_1 state
 #define CPLD_CONF_BIT_DEN_AG_0   0x80  // Set The MC IMU DEN_AG pin
 
@@ -457,11 +453,9 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
     /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
     /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
-    uint32_t read_imu_irq_pins();     // TODO: Can this be optimized down at all?
 
     // These are interrupt service routines and their subjects.
     static SPIBusOp* current_queue_item;
-    volatile static void irqService_vect_0(void);
 
 
   protected:
@@ -479,12 +473,12 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
 
     uint8_t   cpld_version       = 0; // CPLD Register. If zero, than the CPLD has not been initialized.
     uint8_t   cpld_conf_value    = 0; // CPLD register. Configuration.
-    uint8_t   cpld_status_value  = 0; // CPLD register. Status.
+    uint8_t   forsaken_digits    = 0; // CPLD register. Forsaken digits.
     uint8_t   cpld_wakeup_source = 0; // CPLD register. WAKEUP mapping.
     uint8_t   spi_cb_per_event   = 3; // Used to limit the number of callbacks processed per event.
 
     /* SPI and work queue related members */
-    int  cpld_max_bus_queue_depth     = 300;     // Debug
+    int  cpld_max_bus_queue_depth     = 50;     // Debug
 
     PriorityQueue<SPIBusOp*> work_queue;
     PriorityQueue<SPIBusOp*> callback_queue;
@@ -518,7 +512,6 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     void init_ext_clk();
     void init_spi(uint8_t cpol, uint8_t cpha);  // Pass 0 for CPHA 0.
     void init_spi2(uint8_t cpol, uint8_t cpha);  // Pass 0 for CPHA 0.
-    void init_spi_soft();
 
 
     /* Low-level CPLD register stuff */
@@ -541,10 +534,6 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     uint16_t readInternalStates(void);
 
     static SPIBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
-
-    static void transferSignal();
-    static void softSend(uint8_t, uint8_t);
-    static void softSend(uint32_t);
 };
 
 #endif
