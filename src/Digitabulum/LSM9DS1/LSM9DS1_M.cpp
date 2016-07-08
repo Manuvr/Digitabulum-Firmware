@@ -23,7 +23,6 @@ limitations under the License.
 #include "IIU.h"
 #include "../ManuLegend/ManuLegend.h"
 
-
 /****************************************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
 *     /       |           |   /   \  |           ||  |  /      |   /       |
@@ -189,10 +188,10 @@ LSM9DS1_M::LSM9DS1_M(uint8_t address, IIU* _integrator) : LSM9DSx_Common("GY ", 
   preformed_busop_irq_mag.shouldReap(false);
   preformed_busop_irq_mag.devRegisterAdvance(false);
   preformed_busop_irq_mag.set_opcode(BusOpcode::RX);
-  preformed_busop_irq_mag.callback = (SPIDeviceWithRegisters*) this;
+  preformed_busop_irq_mag.callback = (BusOpCallback*) this;
   preformed_busop_irq_mag.buf      = regPtr(LSM9DS1_M_INT_SRC);
   preformed_busop_irq_mag.buf_len  = 1;
-  preformed_busop_read_mag.setParams(
+  preformed_busop_irq_mag.setParams(
     bus_addr|0x80,
     preformed_busop_irq_mag.buf_len,
     1,
@@ -202,7 +201,7 @@ LSM9DS1_M::LSM9DS1_M(uint8_t address, IIU* _integrator) : LSM9DSx_Common("GY ", 
   preformed_busop_read_mag.shouldReap(false);
   preformed_busop_read_mag.devRegisterAdvance(true);
   preformed_busop_read_mag.set_opcode(BusOpcode::RX);
-  preformed_busop_read_mag.callback = (SPIDeviceWithRegisters*) this;
+  preformed_busop_read_mag.callback = (BusOpCallback*) this;
   preformed_busop_read_mag.buf      = regPtr(LSM9DS1_M_DATA_X);
   preformed_busop_read_mag.buf_len  = 6;
   preformed_busop_read_mag.setParams(

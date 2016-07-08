@@ -40,7 +40,6 @@ IMUs need to be aware of their own bus addresses so that bus access can be encap
 #define __LSM9DS1_COMMON_H
 
 #include <DataStructures/InertialMeasurement.h>
-#include "../CPLDDriver/SPIDeviceWithRegisters.h"
 #include "../CPLDDriver/SPIBusOp.h"
 
 class CPLDDriver;
@@ -127,7 +126,7 @@ enum class State {
 * This class is purely for abstraction, and is never instatntiated. It is only intended to hold
 *   functions and members common to a single device package.
 */
-class LSM9DSx_Common {
+class LSM9DSx_Common : public BusOpCallback {
   public:
     bool    profile       = false;
     bool    cancel_error  = false;
@@ -162,6 +161,7 @@ class LSM9DSx_Common {
 
     /* Overrides from the BusOpCallback interface */
     virtual int8_t io_op_callback(BusOp*) = 0;
+    int8_t queue_io_job(BusOp*);         // Implemented here.
 
     /* Functions called by the IIU */
     virtual int8_t readSensor(void) =0;      // Call to poll the sensor's registers and take any appropriate action.

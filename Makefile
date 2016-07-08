@@ -137,7 +137,6 @@ SRCS   += src/system_stm32f7xx.c
 
 CPP_SRCS   = src/main.cpp
 CPP_SRCS  += src/Digitabulum/CPLDDriver/CPLDDriver.cpp
-CPP_SRCS  += src/Digitabulum/CPLDDriver/SPIDeviceWithRegisters.cpp
 CPP_SRCS  += src/Digitabulum/CPLDDriver/SPIBusOp.cpp
 CPP_SRCS  += src/Digitabulum/LSM9DS1/IIU.cpp
 CPP_SRCS  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp

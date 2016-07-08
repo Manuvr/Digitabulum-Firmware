@@ -354,6 +354,17 @@ int8_t LSM9DSx_Common::bulk_refresh() {
 }
 
 
+/*
+* Ultimately, all bus access this class does passes to this function as its last-stop
+*   before becoming folded into the SPI bus queue.
+*/
+int8_t LSM9DSx_Common::queue_io_job(BusOp* _op) {
+  if (NULL == _op) return -1;   // This should never happen.
+  SPIBusOp* op = (SPIBusOp*) _op;
+  op->callback = (BusOpCallback*) this;         // Notify us of the results.
+  return ((CPLDDriver*)cpld)->queue_io_job(op);     // Pass it to the CPLD for bus access.
+}
+
 
 int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t nu_val) {
   if (regExists(reg_index) && regWritable(reg_index)) {
@@ -392,7 +403,7 @@ int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t le
     op->set_opcode(BusOpcode::TX);
     op->buf             = buf;
     op->buf_len         = len;
-    op->callback        = (CPLDDriver*) cpld;
+    op->callback        = (BusOpCallback*) this;
     op->setParams(bus_addr, len, 1, first_byte);
 
     if (profile) {
@@ -439,7 +450,7 @@ int8_t LSM9DSx_Common::readRegister(uint8_t reg_index, uint8_t *buf, uint8_t len
   op->set_opcode(BusOpcode::RX);
   op->buf             = buf;
   op->buf_len         = len;
-  op->callback        = (CPLDDriver*) cpld;
+  op->callback        = (BusOpCallback*) this;
   op->setParams(bus_addr|0x80, len, 1, first_byte);
 
   if (profile) {

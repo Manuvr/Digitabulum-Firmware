@@ -23,7 +23,6 @@ limitations under the License.
 #include "IIU.h"
 #include "../ManuLegend/ManuLegend.h"
 
-
 /****************************************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
 *     /       |           |   /   \  |           ||  |  /      |   /       |
@@ -366,7 +365,7 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
   preformed_busop_read_acc.shouldReap(false);
   preformed_busop_read_acc.devRegisterAdvance(true);
   preformed_busop_read_acc.set_opcode(BusOpcode::RX);
-  preformed_busop_read_acc.callback = (SPIDeviceWithRegisters*) this;
+  preformed_busop_read_acc.callback = (BusOpCallback*) this;
   preformed_busop_read_acc.buf      = regPtr(LSM9DS1_A_DATA_X);
   preformed_busop_read_acc.buf_len  = 6;
   preformed_busop_read_acc.setParams(
@@ -379,7 +378,7 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
   preformed_busop_read_gyr.shouldReap(false);
   preformed_busop_read_gyr.devRegisterAdvance(true);
   preformed_busop_read_gyr.set_opcode(BusOpcode::RX);
-  preformed_busop_read_gyr.callback = (SPIDeviceWithRegisters*) this;
+  preformed_busop_read_gyr.callback = (BusOpCallback*) this;
   preformed_busop_read_gyr.buf      = regPtr(LSM9DS1_G_DATA_X);
   preformed_busop_read_gyr.buf_len  = 6;
   preformed_busop_read_gyr.setParams(
@@ -393,7 +392,7 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
   preformed_busop_irq_0.shouldReap(false);
   preformed_busop_irq_0.devRegisterAdvance(true);
   preformed_busop_irq_0.set_opcode(BusOpcode::RX);
-  preformed_busop_irq_0.callback = (SPIDeviceWithRegisters*) this;
+  preformed_busop_irq_0.callback = (BusOpCallback*) this;
   preformed_busop_irq_0.buf      = regPtr(LSM9DS1_G_INT_GEN_SRC);
   preformed_busop_irq_0.buf_len  = 22;
   preformed_busop_irq_0.setParams(
@@ -406,7 +405,7 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
   preformed_busop_irq_1.shouldReap(false);
   preformed_busop_irq_1.devRegisterAdvance(true);
   preformed_busop_irq_1.set_opcode(BusOpcode::RX);
-  preformed_busop_irq_1.callback = (SPIDeviceWithRegisters*) this;
+  preformed_busop_irq_1.callback = (BusOpCallback*) this;
   preformed_busop_irq_1.buf      = regPtr(LSM9DS1_A_INT_GEN_SRC);
   preformed_busop_irq_1.buf_len  = 3;
   preformed_busop_irq_1.setParams(
@@ -419,7 +418,7 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
   full_register_refresh.shouldReap(false);
   full_register_refresh.devRegisterAdvance(true);
   full_register_refresh.set_opcode(BusOpcode::RX);
-  full_register_refresh.callback = (SPIDeviceWithRegisters*) this;
+  full_register_refresh.callback = (BusOpCallback*) this;
   full_register_refresh.buf      = regPtr(LSM9DS1_AG_FIFO_CTRL);
   full_register_refresh.buf_len  = 18;
   full_register_refresh.setParams(

@@ -311,7 +311,6 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 
 #include "SPIBusOp.h"
 #include <Kernel.h>
-#include "SPIDeviceWithRegisters.h"
 
 #include <stm32f7xx_hal_gpio.h>
 #include <stm32f7xx_hal_spi.h>
