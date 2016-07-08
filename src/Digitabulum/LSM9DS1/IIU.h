@@ -18,6 +18,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
+IIU == "Intertial Integration Unit"
+
 An IIU is a non-abstract class that tracks measurements from an IMU and
   maintains positional data (by integrating the readings from the IMU).
 
@@ -37,6 +39,7 @@ An IIU can be fed any number of these data:
 
 Data from magnetometers and GPS devices is used to establish error-rates
   and divergence data (and optionally correction).
+
 
 
 */
@@ -77,7 +80,64 @@ class LSM9DSx_Common;   // Forward declaration of the LSM9DSx_Common class.
 //  ALTITUDE,     // Altitude.
 //};
 
-
+typedef struct {
+  uint8_t* AG_ACT_THS;
+  uint8_t* AG_ACT_DUR;
+  uint8_t* A_INT_GEN_CFG;
+  uint8_t* A_INT_GEN_THS_X;     // 8-bit threshold registers
+  uint8_t* A_INT_GEN_THS_Y;     // 8-bit threshold registers
+  uint8_t* A_INT_GEN_THS_Z;     // 8-bit threshold registers
+  uint8_t* A_INT_GEN_DURATION;
+  uint8_t* G_REFERENCE;
+  uint8_t* AG_INT1_CTRL;
+  uint8_t* AG_INT2_CTRL;
+  uint8_t* AG_WHO_AM_I;
+  uint8_t* G_CTRL_REG1;
+  uint8_t* G_CTRL_REG2;
+  uint8_t* G_CTRL_REG3;
+  uint8_t* G_ORIENT_CFG;
+  uint8_t* G_INT_GEN_SRC;
+  uint8_t* AG_DATA_TEMP;        // 16-bit temperature register (11-bit)
+  uint8_t* AG_STATUS_REG;
+  uint8_t* G_DATA_X;            // 16-bit gyro data registers
+  uint8_t* G_DATA_Y;            // 16-bit gyro data registers
+  uint8_t* G_DATA_Z;            // 16-bit gyro data registers
+  uint8_t* AG_CTRL_REG4;
+  uint8_t* A_CTRL_REG5;
+  uint8_t* A_CTRL_REG6;
+  uint8_t* A_CTRL_REG7;
+  uint8_t* AG_CTRL_REG8;
+  uint8_t* AG_CTRL_REG9;
+  uint8_t* AG_CTRL_REG10;
+  uint8_t* A_INT_GEN_SRC;
+  uint8_t* AG_STATUS_REG_ALT;
+  uint8_t* A_DATA_X;            // 16-bit accelerometer data registers
+  uint8_t* A_DATA_Y;            // 16-bit accelerometer data registers
+  uint8_t* A_DATA_Z;            // 16-bit accelerometer data registers
+  uint8_t* AG_FIFO_CTRL;
+  uint8_t* AG_FIFO_SRC;
+  uint8_t* G_INT_GEN_CFG;
+  uint8_t* G_INT_GEN_THS_X;     // 16-bit threshold registers
+  uint8_t* G_INT_GEN_THS_Y;     // 16-bit threshold registers
+  uint8_t* G_INT_GEN_THS_Z;     // 16-bit threshold registers
+  uint8_t* G_INT_GEN_DURATION;
+  uint8_t* M_OFFSET_X;          // 16-bit offset registers
+  uint8_t* M_OFFSET_Y;          // 16-bit offset registers
+  uint8_t* M_OFFSET_Z;          // 16-bit offset registers
+  uint8_t* M_WHO_AM_I;
+  uint8_t* M_CTRL_REG1;
+  uint8_t* M_CTRL_REG2;
+  uint8_t* M_CTRL_REG3;
+  uint8_t* M_CTRL_REG4;
+  uint8_t* M_CTRL_REG5;
+  uint8_t* M_STATUS_REG;
+  uint8_t* M_DATA_X;            // 16-bit data registers
+  uint8_t* M_DATA_Y;            // 16-bit data registers
+  uint8_t* M_DATA_Z;            // 16-bit data registers
+  uint8_t* M_INT_CFG;
+  uint8_t* M_INT_SRC;
+  uint8_t* M_INT_TSH;           // 16-bit threshold register
+} IMURegisterPointers;
 
 
 /*
@@ -202,6 +262,8 @@ class IIU {
       void* sample_count_temp
     );
 
+    void assign_register_pointers(IMURegisterPointers* _reg);
+
     uint8_t MadgwickQuaternionUpdate();
 
     void dumpPointers(StringBuilder*);
@@ -323,6 +385,7 @@ class IIU {
 
 
   private:
+    IMURegisterPointers _reg_ptrs;
     float delta_t      = 0.0f;
 
     //float GyroMeasError;
