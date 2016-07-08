@@ -80,6 +80,12 @@ class LSM9DSx_Common;   // Forward declaration of the LSM9DSx_Common class.
 //  ALTITUDE,     // Altitude.
 //};
 
+
+/*
+* This is a big mess of pointers to our representations of the registers for a
+*   complete sensor. We do things like this because we need this space allocated
+*   contiguously.
+*/
 typedef struct {
   uint8_t* AG_ACT_THS;
   uint8_t* AG_ACT_DUR;
@@ -185,6 +191,8 @@ typedef struct {
 
 
 #define IIU_STANDARD_GRAVITY           9.80665f // This is Earth's gravity at sea-level, in m/s^2
+#define IIU_DEG_TO_RAD_SCALAR   (3.14159f / 180.0f)
+
 
 /**
 * This is the Inertial Integration Unit class. It has the following responsibilities:
@@ -267,10 +275,11 @@ class IIU {
     uint8_t MadgwickQuaternionUpdate();
 
     void dumpPointers(StringBuilder*);
+    void dumpRegisterPointers(StringBuilder*);
 
-    inline bool isDirty() {   return (dirty_acc||dirty_gyr||dirty_mag);    }   // Has the sensor been updated?
-    inline bool isQuatDirty() {   return (dirty_acc & dirty_gyr);          }   // Has the sensor been updated?
-    inline bool has_quats_left() {       return (quat_queue.size() > 0);   }
+    inline bool isDirty() {         return (dirty_acc||dirty_gyr||dirty_mag); }
+    inline bool isQuatDirty() {     return (dirty_acc & dirty_gyr);           }
+    inline bool has_quats_left() {  return (quat_queue.size() > 0);           }
 
 
     /*

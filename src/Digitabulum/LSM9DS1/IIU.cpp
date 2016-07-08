@@ -615,6 +615,10 @@ void IIU::dumpPointers(StringBuilder* output) {
 }
 
 
+void IIU::dumpRegisterPointers(StringBuilder* output) {
+}
+
+
 
 const char* IIU::getSourceTypeString(uint8_t t) {
   switch (t) {
@@ -627,8 +631,6 @@ const char* IIU::getSourceTypeString(uint8_t t) {
   }
 }
 
-
-#define IIU_DEG_TO_RAD_SCALAR   (3.14159f / 180.0f)
 
 /**
 * Taken from

@@ -19,9 +19,10 @@ limitations under the License.
 
 
 
+================================================================================
 
 
-Digitabulum refactor log:
+Digitabulum refactor log: (Notes from r0, preserved until not-needed)
 =============================================================================================
 The register mechanism found new life in the i2c code, but we need to bring some of those
   advancements back into the hw driver classes. I don't think that direct re-use will be
@@ -57,6 +58,22 @@ class CPLDDriver;
 
 
 /*
+* These are possible error states for the IMU state-machine.
+*/
+#define IMU_ERROR_NO_ERROR                  0
+#define IMU_ERROR_WRONG_IDENTITY            1
+#define IMU_ERROR_INVALID_PARAM_ID          2
+#define IMU_ERROR_NOT_CALIBRATED            3
+#define IMU_ERROR_NOT_WRITABLE              4
+#define IMU_ERROR_DATA_EXHAUSTED            5
+#define IMU_ERROR_NOT_INITIALIZED           6
+#define IMU_ERROR_BUS_INSERTION_FAILED      7
+#define IMU_ERROR_BUS_OPERATION_FAILED_R    8
+#define IMU_ERROR_BUS_OPERATION_FAILED_W    9
+#define IMU_ERROR_REGISTER_UNDEFINED       10
+
+
+/*
 * In addition to the natural ADC error, the sensor accuracy worsens at these rates for
 * every degree C deviant of 25C...
 */
@@ -84,22 +101,6 @@ typedef struct {
 class LSM9DSx_Common;   // Forward declaration
 class IIU;              // Forward declaration of the IIU class.
 
-/*
-* These are possible error states for the IMU state-machine.
-*/
-#define IMU_ERROR_NO_ERROR                  0
-#define IMU_ERROR_WRONG_IDENTITY            1
-#define IMU_ERROR_INVALID_PARAM_ID          2
-#define IMU_ERROR_NOT_CALIBRATED            3
-#define IMU_ERROR_NOT_WRITABLE              4
-#define IMU_ERROR_DATA_EXHAUSTED            5
-#define IMU_ERROR_NOT_INITIALIZED           6
-#define IMU_ERROR_BUS_INSERTION_FAILED      7
-#define IMU_ERROR_BUS_OPERATION_FAILED_R    8
-#define IMU_ERROR_BUS_OPERATION_FAILED_W    9
-#define IMU_ERROR_REGISTER_UNDEFINED       10
-
-
 
 /*
 * These are the sensor states.
@@ -126,7 +127,7 @@ enum class State {
 * This class is purely for abstraction, and is never instatntiated. It is only intended to hold
 *   functions and members common to a single device package.
 */
-class LSM9DSx_Common : public SPIDeviceWithRegisters {
+class LSM9DSx_Common {
   public:
     bool    profile       = false;
     bool    cancel_error  = false;
@@ -182,11 +183,12 @@ class LSM9DSx_Common : public SPIDeviceWithRegisters {
     const char* imu_type;
     IIU*      integrator       = NULL;  //
     uint32_t  sample_count     = 0;     // How many samples have we read since init?
-    uint8_t   pending_samples  = 0;     // How many samples are we expecting to arrive?
 
     State     imu_state        = State::STAGE_0;
     State     desired_state    = State::STAGE_0;
 
+    uint8_t*  pending_samples  = 0;     // How many samples are we expecting to arrive?
+    uint8_t   bus_addr         = 0;     // What is our address on the bus?
     uint8_t   idx_identity     = 0;
     uint8_t   idx_io_test_0    = 0;
     uint8_t   idx_io_test_1    = 0;
@@ -214,18 +216,22 @@ class LSM9DSx_Common : public SPIDeviceWithRegisters {
     bool hardware_writable = false;
 
 
-    LSM9DSx_Common(const char* t_str, uint8_t bus_address, IIU* _integrator, uint8_t r_count);
+    LSM9DSx_Common(const char* t_str, uint8_t bus_address, IIU* _integrator);
 
     /* These are higher-level fxns that are used as "macros" for specific patterns of */
     /*   register access. Common large-scale operations should go here.               */
-    int8_t writeDirtyRegisters(void);   // Automatically writes all registers marked as dirty.
     void   reset(uint8_t reg_idx);   // Reset our state without causing a re-init.
 
+    int8_t writeRegister(uint8_t base_index, uint8_t nu_val);
     int8_t writeRegister(uint8_t base_index, uint8_t *buf, uint8_t len);
     int8_t writeRegister(uint8_t base_index, uint8_t *buf, uint8_t len, bool advance_regs);
     int8_t readRegister(uint8_t base_index, uint8_t *buf, uint8_t len);  // Overrides above fxn with advance_regs = false
     int8_t readRegister(uint8_t base_index, uint8_t *buf, uint8_t len, bool advance_regs);
     int8_t readRegister(uint8_t index);
+    unsigned int regValue(uint8_t idx);
+    bool regWritable(uint8_t idx);
+    bool regExists(uint8_t idx);
+    uint8_t* regPtr(uint8_t idx);
     /* This is the end of the low-level functions.                                    */
 
     /**

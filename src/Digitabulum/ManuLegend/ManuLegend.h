@@ -312,21 +312,23 @@ class LegendManager : public EventReceiver, public BusOpCallback {
 
 
   private:
-    /* This is the dataset that we export. */
-    uint8_t __dataset[LEGEND_MGR_MAX_DATASET_SIZE];
+    IIU iius[LEGEND_DATASET_IIU_COUNT];  // This is the chirality-invarient list of IIUs.
 
     /* These are giant strips of DMA-capable memory that are used for raw frame
          reads from the sensor package. Twice what we need for double-buffering. */
-    Vector3<int16_t> __frame_buf_i[2 * 17];  // Inertial data
-    Vector3<int16_t> __frame_buf_m[2 * 17];  // Mag data
+    Vector3<int16_t> __frame_buf_a[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
+    Vector3<int16_t> __frame_buf_g[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
+    Vector3<int16_t> __frame_buf_m[2 * LEGEND_DATASET_IIU_COUNT];  // Mag data
 
     /* More large stretches of DMA memory. These are for IIU register definitions.
          Registers laid out this way cannot be accessed as more than single bytes
          by their respective IIU classes because the memory is not contiguous. */
     uint8_t __fifo_levels[LEGEND_DATASET_IIU_COUNT];  // The FIFO levels.
 
+
     ManuLegend* operating_legend = NULL;
-    IIU iius[17];                        // This is the chirality-invarient list of IIUs.
+    /* This is the dataset that we export. */
+    uint8_t __dataset[LEGEND_MGR_MAX_DATASET_SIZE];
 
     InertialMeasurement __prealloc[PREALLOCATED_IIU_MEASUREMENTS];
 
@@ -354,8 +356,12 @@ class LegendManager : public EventReceiver, public BusOpCallback {
 
 
     static LegendManager *INSTANCE;
-    static SPIBusOp _preformed_read_ag;
+
+    // These are preformed bus operations that address multiple IMUs...
+    static SPIBusOp _preformed_read_a;
+    static SPIBusOp _preformed_read_g;
     static SPIBusOp _preformed_read_m;
+    static SPIBusOp _preformed_fifo_read;
 
     // Prealloc starvation counters...
     static uint32_t prealloc_starves;
