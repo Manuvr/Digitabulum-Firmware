@@ -46,7 +46,8 @@ It is NOT responsible for having a concept of chirality. Digit identifiers used
   1-5 following anatomical convention. Chirality is discussed there.
 
 The metacarpals position is alternately known as "Digit 0", since it is
-  addressed as if it were the first-of-six digits.
+  addressed as if it were the first-of-six digits. Digit 0 lacks an intermediate
+  sensor position. This must be considered when doing ranked-access.
 
 The CPLD is bus master on both SPI1 and SPI2.
 
@@ -57,7 +58,8 @@ This class is the first class to become aware of IRQs from the sensor package.
 Potential sources of interrupt...
   * Four IRQ signals for each IMU in a fully-populated glove (68 total signals)
   * IRQs related to the loss or detection of a digit (6 signals)
-  * Any of the 4 user-assignable IRQs
+  * IRQ 74 is assigned to a CONFIG register bit for manual re-send.
+  * IRQ 75 is assigned to a pin on the expansion port. It is active-low.
 
 We have up-to 68 IMU IRQs to manage (4 IRQs per-sensor, with 17 sensors). Since
   we don't want to send 68 wires back to the CPU, we serialize them and send an
@@ -82,7 +84,7 @@ At the time of writing, the CPLD can be driven either by its own internal
   clock is adjustable within the range of DC to 20MHz. The clock is divided once
   internally to arrive at the 10MHz maximum imposed by the sensors.
 
-The internal oscilator is the default source to ensure proper startup and reset
+The external oscilator is the default source to ensure proper startup and reset
   behavior. When switching to the external clock source, the CPU should first
   enable the timer output, and only after it is running, send the command to the
   CPLD to switch to it. The inverse order should be followed when moving from
@@ -122,9 +124,8 @@ These are the hardware pin assignments and descriptions for the CPLD:
 CPLD register access procedure:
 ================================================================================
 Despite being the bus slave, the CPU is responsible for initiating the transfer
-  by pulling the SPI1_CS line low. The CPU must hold the pin low for at least
-  one complete CPLD clock cycle. After that, the CPU should release the pin and
-  wait for the SPI1_CS line to rise. This indicates transfer completion.
+  by pulling the SPI2_MISO line low. The CPU must hold the pin low for at least
+  one complete CPLD clock cycle.
 
 The CPLD registers were constructed in the same fasion as those of the IMUs. The
   most-significant bit is the R/~W bit.
@@ -134,14 +135,16 @@ CPLD internal register access procedure:
 --------------------------------------------------------------------------------
   Register | R/~W  | Internal | Width | Description
   =========|=======|==========|=======|==================================
-  0x28     | R     | (CS_0)   |  8    | VERSION
-  0x29     | R/W   | (CS_1)   |  8    | CONFIG
-  0x2A     | R     | (CS_2)   |  8    | STATUS
-  0x2B     | R     | (CS_3)   |  8    | DIGIT_PRESENT
-  0x2C     | R     | (CS_4)   |  8    | Reserved
-  0x2D     | R     | (CS_5)   |  8    | Reserved
-  0x2E     | R     | (CS_6)   |  8    | Reserved
-  0x2F     | R     | (CS_7)   |  8    | Reserved
+  0xA8     | R     | (CS_0)   |  8    | VERSION
+  0x28     | W     | (CS_0)   |  8    | CONFIG
+  0x29     | R     | (CS_1)   |  8    | WAKEUP_SOURCE
+  0x2A     | R     | (CS_2)   |  5    | FORSAKEN_DIGITS
+
+The address of the desired internal register should prefix the desired value (in
+  the case of a write), or (if reading) will be followed by the present value
+  stored in that register.
+All CPLD registers should be accessed byte-wise. All traffic to an internal
+  register therefore occupies two bytes on the SPI1 bus.
 
   /--------------< 1 byte >----\
   | Register  |     DATA       |
@@ -150,36 +153,48 @@ CPLD internal register access procedure:
 VERSION register is read-only, and stores an 8-bit integer reflecting the
   version of the currently-burned CPLD.
 
-CONFIG register
-  Bit | Function
-  ----|------------
-  0   | IRQ_RATE_0  // These two bits set the IRQ scan prescaler.
-  1   | IRQ_RATE_1     0: Scan off   1: 1x      2: 2x      3: 4x
-  2   | Reserved
-  3   | Reserved
-  4   | Reserved
-  5   | Reserved
-  6   | OSC_SEL     // 0: Internal oscillator (default)   1: External clock
-  7   | IRQ_XFER    // Set when an IRQ transfer is in-progress. Set to initiate.
+
+CONFIG register is write-only, and all bits default to zero.
+Bit | Function
+----|-----------------
+0   | OSC_SEL             // 0: External (default)       1: Internal
+1   | IRQ_SCAN_DISABLE    // 0: Scan on (default)        1: Scan disabled
+2   | IRQ_74              // IRQ signal level
+3   | DIGIT_POWER_SAVE    // 0: Drive all signals        1: Selective drive
+4   | IRQ_CONSTANT_SEND   // 0: IRQ send on diff         1: Constant send
+5   | GPIO_0_SOURCE       // 0: SPI1_CS                  1: DEVS_REMAIN
+6   | GPIO_1_STATE        // State of the GPIO_1 pin
+7   | DEN_AG_MC           // State of the DEN_AG pin on the metacarpals IMU.
 
 
-DIGIT_PRESENT register (read-only)
-  Bit | Function
-  ----|------------
-  0   | Metacarpals
-  1   | Digit 1
-  2   | Digit 2
-  3   | Digit 3
-  4   | Digit 4
-  5   | Digit 5
-  6   | 0
-  7   | 0
+FORSAKEN_DIGITS register is write-only, and all bits default to 0. Setting a bit
+  to 1 will cause the IRQ aggregator to cease collecting IRQ data from that
+  digit. If there were any bits set for that digit, they will revert to 0.
+  Combined with the DIGIT_POWER_SAVE bit in the CONFIG register, the SPI signals
+  will also be disabled.
+Bit | Function
+----|------------
+0   | Digit 1
+1   | Digit 2
+2   | Digit 3
+3   | Digit 4
+4   | Digit 5
 
-The address of the desired internal register should prefix the desired value (in
-  the case of a write), or (if reading) will be followed by the present value
-  stored in that register.
-All CPLD registers should be accessed byte-wise. All traffic to an internal
-  register therefore occupies two bytes on the SPI1 bus.
+
+WAKEUP_SOURCE register is write-only, and all bits default to zero. By writing a
+  number to this register, that IRQ signal will directly drive the CPUs WAKEUP
+  interrupt. The register will only be observed if the seventh bit is 1.
+Bit | Function
+----|--------------------
+0   | Signal address 0
+1   | Signal address 1
+2   | Signal address 2
+3   | Signal address 3
+4   | Signal address 4
+5   | Signal address 5
+6   | Signal address 6
+7   | Wakeup IRQ enabled.
+
 
 
 
@@ -405,13 +420,14 @@ class IIU;
 
 /* Bitmask defs for the CONFIG register. */
 #define CPLD_CONF_BIT_INT_CLK    0x01  // Internal clock enable
-#define CPLD_CONF_BIT_IRQ_SCAN   0x02  // Enable IRQ scanning
+#define CPLD_CONF_BIT_IRQ_SCAN   0x02  // Disable IRQ scanning
 #define CPLD_CONF_BIT_IRQ_74     0x04  // Set IRQ bit-74
 #define CPLD_CONF_BIT_PWR_CONSRV 0x08  // Prevent bus driving on absent digits.
 #define CPLD_CONF_BIT_IRQ_STREAM 0x10  // Constantly stream IRQ data
 #define CPLD_CONF_BIT_GPIO_0     0x20  // Set GPIO_0 source
 #define CPLD_CONF_BIT_GPIO_1     0x40  // Set GPIO_1 state
 #define CPLD_CONF_BIT_DEN_AG_0   0x80  // Set The MC IMU DEN_AG pin
+
 
 
 /*
@@ -440,20 +456,14 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     inline void step_queues(){  Kernel::isrRaiseEvent(&event_spi_queue_ready); }
     SPIBusOp* issue_spi_op_obj();
 
-    int setCPLDClkFreq(int);
+    /* Power vs performance */
+    void     reset();                  // Causes the CPLD to be reset.
+    uint8_t  getCPLDVersion();         // Read the version code in the CPLD.
+    int      setCPLDClkFreq(int);      // Set the CPLD external clock frequency.
     inline int8_t setWakeupSignal(uint8_t _val) {
       return writeRegister(CPLD_REG_WAKEUP_IRQ, _val | 0x80);
     };
 
-    void reset(void);                 // Causes the CPLD to be reset.
-    uint8_t getCPLDVersion();         // Read the version code in the CPLD.
-
-    /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
-    /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
-    /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
-    /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
-
-    // These are interrupt service routines and their subjects.
     static SPIBusOp* current_queue_item;
 
 
@@ -465,26 +475,24 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     ManuvrRunnable event_spi_queue_ready;
     ManuvrRunnable event_spi_callback_ready;
     ManuvrRunnable event_spi_timeout;
-
     ManuvrRunnable _periodic_debug;
 
-    uint32_t  bus_timeout_millis = 5;
-
-    uint8_t   cpld_version       = 0; // CPLD Register. If zero, than the CPLD has not been initialized.
-    uint8_t   cpld_conf_value    = 0; // CPLD register. Configuration.
-    uint8_t   forsaken_digits    = 0; // CPLD register. Forsaken digits.
-    uint8_t   cpld_wakeup_source = 0; // CPLD register. WAKEUP mapping.
-    uint8_t   spi_cb_per_event   = 3; // Used to limit the number of callbacks processed per event.
+    /* Register representations. */
+    uint8_t   cpld_version       = 0;         // If zero, than the CPLD has not been initialized.
+    uint8_t   cpld_conf_value    = 0;         // Configuration.
+    uint8_t   forsaken_digits    = 0;         // Forsaken digits.
+    uint8_t   cpld_wakeup_source = 0;         // WAKEUP mapping.
 
     /* SPI and work queue related members */
-    int  cpld_max_bus_queue_depth     = 50;     // Debug
-
     PriorityQueue<SPIBusOp*> work_queue;
     PriorityQueue<SPIBusOp*> callback_queue;
     PriorityQueue<SPIBusOp*> preallocated;
-
+    uint32_t bus_timeout_millis   = 5;        // How long to spend in IO_WAIT?
     uint32_t preallocation_misses = 0;        // How many times have we starved the preallocation queue?
     uint32_t specificity_burden   = 0;        // How many queue items have new deleted?
+    uint16_t max_queue_depth      = 50;       // Debug
+    uint8_t  spi_cb_per_event     = 3;        // Limit the number of callbacks processed per event.
+
 
     /* Inlines for deriving address and IRQ bit offsets from index. */
     // Address of the inertial half of the LSM9DS1.
@@ -530,7 +538,7 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
     /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
 
-    uint16_t readInternalStates(void);
+    uint16_t readInternalStates();
 
     static SPIBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
 };

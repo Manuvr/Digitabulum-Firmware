@@ -840,7 +840,7 @@ int8_t CPLDDriver::queue_io_job(BusOp* _op) {
       if (bus_timeout_millis) event_spi_timeout.delaySchedule(bus_timeout_millis);  // Punch the timeout schedule.
     }
     else {    // If there is something already in progress, queue up.
-      if (_er_flag(CPLD_FLAG_QUEUE_GUARD) && (cpld_max_bus_queue_depth <= work_queue.size())) {
+      if (_er_flag(CPLD_FLAG_QUEUE_GUARD) && (max_queue_depth <= work_queue.size())) {
         if (getVerbosity() > 3) Kernel::log("CPLDDriver::queue_io_job(): \t Bus queue at max size. Dropping transaction.\n");
         op->abort(XferFault::QUEUE_FLUSH);
         callback_queue.insertIfAbsent(op);
