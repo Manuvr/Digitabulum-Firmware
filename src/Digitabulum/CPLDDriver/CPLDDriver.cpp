@@ -669,7 +669,6 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
   DMA1_Stream3->M0AR  = (uint32_t)_irq_data_1;
   DMA1_Stream3->M1AR  = (uint32_t)_irq_data_0;
   DMA1_Stream3->CR  |= (uint32_t) (DMA_SxCR_DBM | DMA_SxCR_CT);
-  //DMA1_Stream3->CR  &= (uint32_t) ~(DMA_SxCR_CT);  // Even byte count, always.
   DMA1_Stream3->CR  |= (uint32_t) (DMA_IT_TC | DMA_IT_TE | DMA_IT_DME);
   DMA1_Stream3->FCR |= (uint32_t) DMA_IT_FE;
   __HAL_DMA_ENABLE(&_dma_handle_spi2);
@@ -779,7 +778,7 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
       {
         uint8_t _version = op->getTransferParam(3);
         if (getVerbosity() > 3) local_log.concatf("CPLD r%d.\n", _version);
-        if (0 < _version) {
+        if ((0 != _version) && (0xFF != _version)) {
           if (_version != cpld_version) {
             Kernel::raiseEvent(DIGITABULUM_MSG_CPLD_RESET_COMPLETE, NULL);
           }
@@ -793,7 +792,7 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
       _process_conf_update(op->getTransferParam(1));
       break;
     case CPLD_REG_WAKEUP_IRQ:
-      cpld_wakeup_source = (op->getTransferParam(1) & 0x7F);
+      cpld_wakeup_source = op->getTransferParam(1);
       break;
     case CPLD_REG_DIGIT_FORSAKE:
       forsaken_digits = op->getTransferParam(1);
@@ -1399,7 +1398,7 @@ int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
       break;
     case DIGITABULUM_MSG_CPLD_RESET_CALLBACK:
       HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);
-      if (getVerbosity() > 4) local_log.concat("CPLD reset.\n");
+      //if (getVerbosity() > 4) local_log.concat("CPLD reset.\n");
       return_value = 1;
       //getCPLDVersion();
       break;
@@ -1450,14 +1449,16 @@ void CPLDDriver::printDebug(StringBuilder *output) {
   //}
   output->concatf("-- DEN_AG Main         %s\n", (_er_flag(CPLD_FLAG_DEN_AG_STATE) ? "on":"off"));
   output->concatf("-- Bus power conserve  %s\n", ((cpld_conf_value & CPLD_CONF_BIT_PWR_CONSRV) ? "on":"off"));
-  output->concatf("-- WAKEUP Signal       %d\n", cpld_wakeup_source);
+  if (cpld_wakeup_source & 0x80) {
+    output->concatf("-- WAKEUP Signal       %d\n", (cpld_wakeup_source & 0x7F));
+  }
 
   output->concatf("--\n-- CPLD_GPIO (0/1)     %s / %s\n--\n",       (readPin(75) ? "hi":"lo"), (readPin(78) ? "hi":"lo"));
 
   output->concatf("-- SPI1 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI1_READY)?"on":"OFF"));
   output->concatf("-- hspi1.State:        0x%08x\n", (unsigned long) hspi1.State);
   output->concatf("-- hspi1.ErrorCode:    0x%08x\n", (unsigned long) hspi1.ErrorCode);
-  output->concatf("-- hspi1.TxXferCount:  0x%04x\n",     hspi1.TxXferCount);
+  output->concatf("-- hspi1.TxXferCount:  0x%04x\n", hspi1.TxXferCount);
   output->concatf("-- hspi1.RxXferCount:  0x%04x\n", hspi1.RxXferCount);
   output->concatf("-- __hack_buffer       0x%08x\n--\n", __hack_buffer);
 
@@ -1496,6 +1497,8 @@ void CPLDDriver::printDebug(StringBuilder *output) {
   for (int i = 0; i < 10; i++) { output->concatf("%02x", _irq_data_0[i]); }
   output->concat("\n--    _irq_data_1:     ");
   for (int i = 0; i < 10; i++) { output->concatf("%02x", _irq_data_1[i]); }
+  output->concat("\n--    _irq_diff:       ");
+  for (int i = 0; i < 10; i++) { output->concatf("%02x", _irq_diff[i]); }
   output->concat("\n\n");
 }
 
@@ -1527,10 +1530,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
         case 2:
           init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
           local_log.concat("Re-initialized SPI2 into Mode-2.\n");
-          break;
-        case 3:
-          init_spi2(0, 0);  // CPOL=0, CPHA=0, HW-driven
-          local_log.concat("Re-initialized SPI2 into Mode-0.\n");
           break;
       }
       break;
