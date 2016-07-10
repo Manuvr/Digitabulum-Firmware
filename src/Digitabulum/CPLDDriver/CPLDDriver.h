@@ -493,7 +493,6 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     uint16_t max_queue_depth      = 50;       // Debug
     uint8_t  spi_cb_per_event     = 3;        // Limit the number of callbacks processed per event.
 
-
     /* Inlines for deriving address and IRQ bit offsets from index. */
     // Address of the inertial half of the LSM9DS1.
     inline uint8_t _intertial_addr(int idx) {   return ((idx % 17) + 0x00);   };
@@ -512,14 +511,12 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     int8_t service_callback_queue();
     void reclaim_queue_item(SPIBusOp*);
 
-
     /* Setup and init fxns. */
     void gpioSetup();
     bool _set_timer_base(uint16_t);
     void init_ext_clk();
     void init_spi(uint8_t cpol, uint8_t cpha);  // Pass 0 for CPHA 0.
     void init_spi2(uint8_t cpol, uint8_t cpha);  // Pass 0 for CPHA 0.
-
 
     /* Low-level CPLD register stuff */
     void externalOscillator(bool on);    // Enable or disable the CPLD external oscillator.

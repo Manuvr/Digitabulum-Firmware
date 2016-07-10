@@ -117,7 +117,6 @@ class SPIBusOp : public BusOp {
     */
     inline bool devRegisterAdvance() {  return (flags & SPI_XFER_FLAG_DEVICE_REG_INC);  }
 
-
     /**
     * @return The address of the internal register this operation addresses.
     */
@@ -134,11 +133,10 @@ class SPIBusOp : public BusOp {
 
     void printDebug(StringBuilder *);
 
+
     static uint32_t  total_transfers;
     static uint32_t  failed_transfers;
     static uint16_t  spi_wait_timeout;   // In microseconds. Per-byte.
-    //static uint32_t  spi_cs_delay;       // In microseconds.
-
     static void buildDMAMembers();
 
 
@@ -148,8 +146,6 @@ class SPIBusOp : public BusOp {
     uint8_t  flags       = 0;  // No flags set.
 
     int8_t init_dma();
-
-    //bool wait_with_timeout();
 
 
     static void enableSPI_DMA(bool enable);

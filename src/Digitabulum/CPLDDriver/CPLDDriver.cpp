@@ -140,10 +140,9 @@ extern "C" {
           _spi2_dma.State = HAL_DMA_STATE_READY_MEM1;
         }
 
-        for (int x = 0; x < 10; x++) {
-          // TODO: Unroll once things calm down.
-          *(_irq_diff + x) = *(previous_buf + x) ^ *(completed_buf + x);
-        }
+        *(uint32_t*)(_irq_diff + 0) = *(uint32_t*)(previous_buf + 0) ^ *(uint32_t*)(completed_buf + 0);
+        *(uint32_t*)(_irq_diff + 4) = *(uint32_t*)(previous_buf + 4) ^ *(uint32_t*)(completed_buf + 4);
+        *(uint16_t*)(_irq_diff + 8) = *(uint16_t*)(previous_buf + 8) ^ *(uint16_t*)(completed_buf + 8);
       }
       else {
         ///* Change the DMA state */
