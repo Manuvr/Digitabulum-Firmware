@@ -533,12 +533,6 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     IIU* fetch_iiu_by_bus_addr(uint8_t);
     int8_t fetch_iiu_index_by_bus_addr(uint8_t);
 
-    /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
-    /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
-    /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
-    /***EVERYTHING BELOW THIS LINE MUST JUSTIFY ITS EXISTANCE OR DIAF ****/
-
-    uint16_t readInternalStates();
 
     static SPIBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
 };

@@ -31,9 +31,9 @@ limitations under the License.
 * Replicated definition from stm32f7xx_hal_dma.c
 */
 typedef struct {
-  __IO uint32_t ISR;   /*!< DMA interrupt status register */
+  __IO uint32_t ISR;       /*!< DMA interrupt status register */
   __IO uint32_t Reserved0;
-  __IO uint32_t IFCR;  /*!< DMA interrupt flag clear register */
+  __IO uint32_t IFCR;      /*!< DMA interrupt flag clear register */
 } DMA_Base_Registers;
 
 
@@ -46,6 +46,11 @@ typedef struct {
 * Interrupt service routine support functions. Everything in this block
 *   executes under an ISR. Keep it brief...
 *******************************************************************************/
+/* Access to CPLD driver from other classes. */
+volatile CPLDDriver* cpld = NULL;
+
+/* Used to minimize software burden incurred by timeout support. */
+volatile bool timeout_punch = false;
 
 /* IRQs are double-buffered in the first 20 bytes. The remaining 10 are diff. */
 volatile static uint8_t  _irq_data[30] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -58,64 +63,64 @@ volatile static uint8_t* _irq_data_ptr = _irq_data_0;  // Used for block-wise ac
 
 ManuvrRunnable _irq_data_arrival;
 
+// These are debug. Cut them.
 uint8_t __hack_buffer[34];
+uint8_t active_imu_position = 0;
+
 
 extern "C" {
-  volatile CPLDDriver* cpld = NULL;
-
   TIM_HandleTypeDef htim1;
   SPI_HandleTypeDef hspi1;
   SPI_HandleTypeDef hspi2;
-  DMA_HandleTypeDef _dma_handle_spi2;
+  DMA_HandleTypeDef _spi2_dma;
 
-  /*
-  * This DMA stream is responsible for..
+  /**
+  * DMA ISR. This DMA stream is responsible for..
   * 1) signaling the software that the IRQ aggregator have delivered us a new
   *      set of signals.
-  * 2) Maintaining the buffer index so that software
+  * 2) Maintaining the buffer index so that software reads the correct buffer.
   */
   void DMA1_Stream3_IRQHandler() {
-    DMA_Base_Registers* regs = (DMA_Base_Registers *)_dma_handle_spi2.StreamBaseAddress;
-    int streamIndex = _dma_handle_spi2.StreamIndex;
+    DMA_Base_Registers* regs = (DMA_Base_Registers*)_spi2_dma.StreamBaseAddress;
+    int streamIndex = _spi2_dma.StreamIndex;
 
-    /* Transfer Error Interrupt management ***************************************/
+    /* Transfer Error Interrupt management */
     if ((regs->ISR & (DMA_FLAG_TEIF0_4 << streamIndex)) != RESET) {
-      if(__HAL_DMA_GET_IT_SOURCE(&_dma_handle_spi2, DMA_IT_TE) != RESET) {
+      if(__HAL_DMA_GET_IT_SOURCE(&_spi2_dma, DMA_IT_TE) != RESET) {
         /* Disable the transfer error interrupt */
-        __HAL_DMA_DISABLE_IT(&_dma_handle_spi2, DMA_IT_TE);
+        __HAL_DMA_DISABLE_IT(&_spi2_dma, DMA_IT_TE);
         /* Clear the transfer error flag */
         regs->IFCR = DMA_FLAG_TEIF0_4 << streamIndex;
         /* Update error code */
-        _dma_handle_spi2.ErrorCode |= HAL_DMA_ERROR_TE;
+        _spi2_dma.ErrorCode |= HAL_DMA_ERROR_TE;
         /* Change the DMA state */
-        _dma_handle_spi2.State = HAL_DMA_STATE_ERROR;
+        _spi2_dma.State = HAL_DMA_STATE_ERROR;
         Kernel::log("DMA1_Stream3 Error (Transfer)\n");
       }
     }
-    /* FIFO Error Interrupt management ******************************************/
+    /* FIFO Error Interrupt management */
     if ((regs->ISR & (DMA_FLAG_FEIF0_4 << streamIndex)) != RESET) {
-      if(__HAL_DMA_GET_IT_SOURCE(&_dma_handle_spi2, DMA_IT_FE) != RESET) {
+      if(__HAL_DMA_GET_IT_SOURCE(&_spi2_dma, DMA_IT_FE) != RESET) {
         /* Disable the FIFO Error interrupt */
-        __HAL_DMA_DISABLE_IT(&_dma_handle_spi2, DMA_IT_FE);
+        __HAL_DMA_DISABLE_IT(&_spi2_dma, DMA_IT_FE);
         /* Clear the FIFO error flag */
         regs->IFCR = DMA_FLAG_FEIF0_4 << streamIndex;
         /* Update error code */
-        _dma_handle_spi2.ErrorCode |= HAL_DMA_ERROR_FE;
+        _spi2_dma.ErrorCode |= HAL_DMA_ERROR_FE;
         /* Change the DMA state */
-        _dma_handle_spi2.State = HAL_DMA_STATE_ERROR;
+        _spi2_dma.State = HAL_DMA_STATE_ERROR;
         Kernel::log("DMA1_Stream3 Error (FIFO)\n");
       }
     }
-
-    /* Transfer Complete Interrupt management ***********************************/
+    /* Transfer Complete Interrupt management */
     if ((regs->ISR & (DMA_FLAG_TCIF0_4 << streamIndex)) != RESET) {
-      if(__HAL_DMA_GET_IT_SOURCE(&_dma_handle_spi2, DMA_IT_TC) != RESET) {
+      if(__HAL_DMA_GET_IT_SOURCE(&_spi2_dma, DMA_IT_TC) != RESET) {
         /* Clear the transfer complete flag */
         regs->IFCR = DMA_FLAG_TCIF0_4 << streamIndex;
       }
 
       /* Update error code */
-      _dma_handle_spi2.ErrorCode |= HAL_DMA_ERROR_NONE;
+      _spi2_dma.ErrorCode |= HAL_DMA_ERROR_NONE;
 
       if((DMA1_Stream3->CR & (uint32_t)(DMA_SxCR_DBM)) != 0) {
         uint8_t* completed_buf;
@@ -125,14 +130,14 @@ extern "C" {
           completed_buf = (uint8_t*) _irq_data_0;
           previous_buf  = (uint8_t*) _irq_data_1;
           //Kernel::log("DMA1_Stream3 Circular Bank 0\n");
-          _dma_handle_spi2.State = HAL_DMA_STATE_READY_MEM0;
+          _spi2_dma.State = HAL_DMA_STATE_READY_MEM0;
         }
         else {
           _irq_data_ptr = (uint8_t*) _irq_data_0;  // The consumer of this buffer should start here.
           completed_buf = (uint8_t*) _irq_data_1;
           previous_buf  = (uint8_t*) _irq_data_0;
           //Kernel::log("DMA1_Stream3 Circular Bank 1\n");
-          _dma_handle_spi2.State = HAL_DMA_STATE_READY_MEM1;
+          _spi2_dma.State = HAL_DMA_STATE_READY_MEM1;
         }
 
         for (int x = 0; x < 10; x++) {
@@ -142,8 +147,8 @@ extern "C" {
       }
       else {
         ///* Change the DMA state */
-        //_dma_handle_spi2.State = HAL_DMA_STATE_READY_MEM0;
-        //__HAL_DMA_DISABLE(&_dma_handle_spi2);
+        //_spi2_dma.State = HAL_DMA_STATE_READY_MEM0;
+        //__HAL_DMA_DISABLE(&_spi2_dma);
         //if (_irq_data_ptr == _irq_data_0) {
         //  _irq_data_ptr = _irq_data_1;  // The consumer of this buffer should start here.
         //  DMA1_Stream3->M0AR  = (uint32_t)_irq_data_0;
@@ -159,14 +164,15 @@ extern "C" {
         //DMA1_Stream3->NDTR  = 10;
         //DMA1_Stream3->CR  |= DMA_IT_TC | DMA_IT_TE | DMA_IT_DME;
         //DMA1_Stream3->FCR |= DMA_IT_FE;
-        //__HAL_DMA_ENABLE(&_dma_handle_spi2);
+        //__HAL_DMA_ENABLE(&_spi2_dma);
       }
       Kernel::isrRaiseEvent(&_irq_data_arrival);
     }
   }
 
   /*
-  *
+  * SPI1 ISR.
+  * TODO: Take full responsibility for this ISR. Do not rely on HAL driver.
   */
   void SPI1_IRQHandler() {
     HAL_SPI_IRQHandler(&hspi1);
@@ -209,10 +215,9 @@ extern "C" {
   }
 }
 
-volatile bool timeout_punch = false;
-
-uint8_t active_imu_position = 0;
-
+/**
+* Used to abort a hung transfer.
+*/
 void callback_spi_timeout() {
   if (timeout_punch) {
     if (((CPLDDriver*) cpld)->current_queue_item != NULL) {
@@ -230,8 +235,6 @@ void callback_spi_timeout() {
   }
 }
 
-
-
 /**
 * ISR for CPLD GPIO.
 */
@@ -246,7 +249,6 @@ void cpld_gpio_isr_1() {
   Kernel::log((readPin(78) ? "CPLD_GPIO_1 HIGH\n":"CPLD_GPIO_1 LOw\n"));
 }
 
-
 /**
 * ISR called by the selectable IRQ source.
 */
@@ -256,7 +258,7 @@ void cpld_wakeup_isr(){
 
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
 *     /       |           |   /   \  |           ||  |  /      |   /       |
 *    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
@@ -264,8 +266,8 @@ void cpld_wakeup_isr(){
 * .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
 * |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
 *
-* Static members and initializers should be located here. Initializers first, functions second.
-****************************************************************************************************/
+* Static members and initializers should be located here.
+*******************************************************************************/
 
 SPIBusOp  CPLDDriver::preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];
 SPIBusOp* CPLDDriver::current_queue_item = NULL;
@@ -373,24 +375,26 @@ CPLDDriver::CPLDDriver() {
   }
 
   current_queue_item = NULL;
+  _er_set_flag(CPLD_FLAG_QUEUE_IDLE);
 }
 
-
-
 /**
-* Destructor. Should probably never be called.
+* Destructor. Should never be called.
+* We don't bother tearing down any of the HAL-constructed interfaces. Since we
+*   will never destroy this object, any code here will only take up flash space
+*   needlessly. But we keep it here in commentary in case it is needed later.
 */
 CPLDDriver::~CPLDDriver() {
-  HAL_GPIO_DeInit(GPIOA, GPIO_PIN_4|GPIO_PIN_6|GPIO_PIN_5|GPIO_PIN_7);
-  HAL_GPIO_DeInit(GPIOB, GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15);
+  //HAL_GPIO_DeInit(GPIOA, GPIO_PIN_4|GPIO_PIN_6|GPIO_PIN_5|GPIO_PIN_7);
+  //HAL_GPIO_DeInit(GPIOB, GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15);
 
-  __TIM1_CLK_DISABLE();
-  HAL_GPIO_DeInit(GPIOA, GPIO_PIN_8);
+  //__TIM1_CLK_DISABLE();
+  //HAL_GPIO_DeInit(GPIOA, GPIO_PIN_8);
 
-  HAL_SPI_DeInit(&hspi1);
-  HAL_SPI_DeInit(&hspi2);
-  __HAL_RCC_SPI1_CLK_DISABLE();
-  __HAL_RCC_SPI2_CLK_DISABLE();
+  //HAL_SPI_DeInit(&hspi1);
+  //HAL_SPI_DeInit(&hspi2);
+  //__HAL_RCC_SPI1_CLK_DISABLE();
+  //__HAL_RCC_SPI2_CLK_DISABLE();
 }
 
 
@@ -398,9 +402,6 @@ CPLDDriver::~CPLDDriver() {
 * Setup GPIO pins and their bindings to on-chip peripherals, if required.
 */
 void CPLDDriver::gpioSetup() {
-  _er_clear_flag(CPLD_FLAG_SPI2_READY);
-  __HAL_RCC_SPI2_CLK_ENABLE();
-
   GPIO_InitTypeDef GPIO_InitStruct;
 
   /* These Port B pins are push-pull outputs:
@@ -525,7 +526,6 @@ void CPLDDriver::init_ext_clk() {
   HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1);
 }
 
-
 /**
 * Init of SPI peripheral 1. This is broken out because we might be bringing it
 *   up and down in a single runtime for debug reasons.
@@ -645,25 +645,25 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
   SPI2->CR1 |= SPI_CR1_SPE;
 
   // We handle SPI2 in this class. Setup the DMA members.
-  _dma_handle_spi2.Instance                 = DMA1_Stream3;
-  _dma_handle_spi2.Init.Channel             = DMA_CHANNEL_0;
-  _dma_handle_spi2.Init.Direction           = DMA_PERIPH_TO_MEMORY;   // Receive
-  _dma_handle_spi2.Init.PeriphInc           = DMA_PINC_DISABLE;
-  _dma_handle_spi2.Init.MemInc              = DMA_MINC_ENABLE;
-  _dma_handle_spi2.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-  _dma_handle_spi2.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
-  _dma_handle_spi2.Init.Mode                = DMA_CIRCULAR;
-  _dma_handle_spi2.Init.Priority            = DMA_PRIORITY_LOW;
-  _dma_handle_spi2.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;  // Required for differnt access-widths.
-  _dma_handle_spi2.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
-  _dma_handle_spi2.Init.MemBurst            = DMA_MBURST_SINGLE;
-  _dma_handle_spi2.Init.PeriphBurst         = DMA_PBURST_SINGLE;
-  HAL_DMA_Init(&_dma_handle_spi2);
+  _spi2_dma.Instance                 = DMA1_Stream3;
+  _spi2_dma.Init.Channel             = DMA_CHANNEL_0;
+  _spi2_dma.Init.Direction           = DMA_PERIPH_TO_MEMORY;   // Receive
+  _spi2_dma.Init.PeriphInc           = DMA_PINC_DISABLE;
+  _spi2_dma.Init.MemInc              = DMA_MINC_ENABLE;
+  _spi2_dma.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+  _spi2_dma.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
+  _spi2_dma.Init.Mode                = DMA_CIRCULAR;
+  _spi2_dma.Init.Priority            = DMA_PRIORITY_LOW;
+  _spi2_dma.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;  // Required for differnt access-widths.
+  _spi2_dma.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
+  _spi2_dma.Init.MemBurst            = DMA_MBURST_SINGLE;
+  _spi2_dma.Init.PeriphBurst         = DMA_PBURST_SINGLE;
+  HAL_DMA_Init(&_spi2_dma);
   HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
 
   /* Configure DMA for the IRQ aggregator. */
-  _dma_handle_spi2.State = HAL_DMA_STATE_BUSY;
-  __HAL_DMA_DISABLE(&_dma_handle_spi2);
+  _spi2_dma.State = HAL_DMA_STATE_BUSY;
+  __HAL_DMA_DISABLE(&_spi2_dma);
   DMA1_Stream3->NDTR  = 10;
   DMA1_Stream3->PAR   = (uint32_t)&SPI2->DR;
   DMA1_Stream3->M0AR  = (uint32_t)_irq_data_1;
@@ -671,9 +671,9 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
   DMA1_Stream3->CR  |= (uint32_t) (DMA_SxCR_DBM | DMA_SxCR_CT);
   DMA1_Stream3->CR  |= (uint32_t) (DMA_IT_TC | DMA_IT_TE | DMA_IT_DME);
   DMA1_Stream3->FCR |= (uint32_t) DMA_IT_FE;
-  __HAL_DMA_ENABLE(&_dma_handle_spi2);
+  __HAL_DMA_ENABLE(&_spi2_dma);
 
-  SPI2->CR2 |= SPI_CR2_RXDMAEN;
+  SPI2->CR2 |= SPI_CR2_RXDMAEN;   // Let'ir rip. Should now manage itself.
 }
 
 
@@ -685,16 +685,14 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
 */
 void CPLDDriver::reset() {
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);  // Drive the reset pin low...
-  externalOscillator(true);    // Turn on the oscillators...
-
-  cpld_conf_value    = 0x00;     //   our register representations...
-  cpld_version       = 0x00;
+  externalOscillator(true);    // Turn on the default oscillator...
+  cpld_conf_value    = 0x00;   // Set our register representations to their
+  cpld_version       = 0x00;   //   default values.
   cpld_wakeup_source = 0x00;
   forsaken_digits    = 0x00;
+  bus_timeout_millis = 5;   // TODO: Dynamically relate this to clock frequency.
 
-  bus_timeout_millis = 5;
-
-  for (int z = 0; z < 30; z++) _irq_data[z] = 0;
+  for (int z = 0; z < 30; z++) _irq_data[z] = 0;   // Wipe the IRQ data.
   _irq_data_ptr = _irq_data_0;  // Used for block-wise access.
 
   purge_queued_work();          // Purge the SPI queue...
@@ -736,30 +734,22 @@ void CPLDDriver::_process_conf_update(uint8_t nu) {
 
 
 
-/****************************************************************************************************
-*  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄    Members related to the work queue and SPI bus I/O
-* ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
+/*******************************************************************************
+*  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄   Members related to the work queue
+* ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌  and SPI bus I/O
 * ▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌ ▀▀▀▀█░█▀▀▀▀
-* ▐░▌          ▐░▌       ▐░▌     ▐░▌
-* ▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌     ▐░▌
-* ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌     ▐░▌
+* ▐░▌          ▐░▌       ▐░▌     ▐░▌       SPI transactions have two phases:
+* ▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌     ▐░▌       1) ADDR (Addressing) Max of 4 bytes.
+* ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌     ▐░▌       2) IO_WAIT (Transfer)
 *  ▀▀▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀      ▐░▌
-*           ▐░▌▐░▌               ▐░▌
-*  ▄▄▄▄▄▄▄▄▄█░▌▐░▌           ▄▄▄▄█░█▄▄▄▄
-* ▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌
-*  ▀▀▀▀▀▀▀▀▀▀▀  ▀            ▀▀▀▀▀▀▀▀▀▀▀
-*
-* SPI transactions happen in two DMA phases:
-* * Addressing phase (hereafter referred to as Aphase):
-*     Take control of the bus and do either a 1 or 2 byte write, depending on if the address
-*     will fit into a 8-bit space. Reason: registers that reside in the CPLD only need a single
-*     byte of address, whereas the IMUs are subaddressed within themselves, mandating an extra byte.
-* * Transfer phase (hereafter refrered to as TPhase):
-*     Move all the bytes required by the operation and close the bus.
-****************************************************************************************************/
+*           ▐░▌▐░▌               ▐░▌       CPLD-resident registers don't have a
+*  ▄▄▄▄▄▄▄▄▄█░▌▐░▌           ▄▄▄▄█░█▄▄▄▄     transfer phase, as there is never
+* ▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌    more than 4-bytes-worth of clock
+*  ▀▀▀▀▀▀▀▀▀▀▀  ▀            ▀▀▀▀▀▀▀▀▀▀▀     required to complete a transaction.
+*******************************************************************************/
 
 /**
-* When a bus operation completes, it is passed back to the class that created it.
+* When a bus operation completes, it is passed back to its issuing class.
 *
 * @param  _op  The bus operation that was completed.
 * @return SPI_CALLBACK_NOMINAL on success, or appropriate error code.
@@ -909,8 +899,8 @@ int8_t CPLDDriver::service_callback_queue() {
 
 
 /**
-* Calling this function will advance the work queue after performing cleanup operations
-*   on the present or pending operation.
+* Calling this function will advance the work queue after performing cleanup
+*   operations on the present or pending operation.
 *
 * @return the number of bus operations proc'd.
 */
@@ -1099,9 +1089,9 @@ void CPLDDriver::purge_stalled_job() {
 
 
 
-/****************************************************************************************************
-* CPLD register manipulation and integral hardware functions.                                       *
-****************************************************************************************************/
+/*******************************************************************************
+* CPLD register manipulation and integral hardware functions.                  *
+*******************************************************************************/
 /**
 * Read an arbitrary CPLD register.
 *
@@ -1202,9 +1192,9 @@ uint8_t CPLDDriver::getCPLDVersion() {
 
 
 
-/****************************************************************************************************
-* This is where IMU-related functions live.                                                         *
-****************************************************************************************************/
+/*******************************************************************************
+* This is where IMU-related functions live.                                    *
+*******************************************************************************/
 /**
 * Given an address, find the associated IIU.
 *
