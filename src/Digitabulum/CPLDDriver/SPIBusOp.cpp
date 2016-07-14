@@ -30,16 +30,24 @@ limitations under the License.
 
 extern volatile CPLDDriver* cpld;
 extern SPI_HandleTypeDef hspi1;
+extern DMA_HandleTypeDef _dma_r;
+extern DMA_HandleTypeDef _dma_w;
+
+/*
+* The HAL library does not break this out, and it doesn't support double-buffer.
+* Replicated definition from stm32f7xx_hal_dma.c
+*/
+typedef struct {
+  __IO uint32_t ISR;       /*!< DMA interrupt status register */
+  __IO uint32_t Reserved0;
+  __IO uint32_t IFCR;      /*!< DMA interrupt flag clear register */
+} DMA_Base_Registers;
 
 
-/****************************************************************************************************
-* Out-of-class                                                                                      *
-****************************************************************************************************/
+/*******************************************************************************
+* Out-of-class                                                                 +
+*******************************************************************************/
 StringBuilder debug_log;   // TODO: Relocate this to a static member.
-
-/* These are the basic DMA init parameters that will be needed by the SPI classes. */
-DMA_HandleTypeDef _dma_r_handle;
-DMA_HandleTypeDef _dma_w_handle;
 
 /*
 * Notated like a const, but should NOT be a const, because we use this as a DMA read sink as well
@@ -49,29 +57,84 @@ uint32_t STATIC_ZERO = 0;
 uint32_t STATIC_SINK = 0;
 
 
-/*
+/*******************************************************************************
+* .-. .----..----.    .-.     .--.  .-. .-..----.
+* | |{ {__  | {}  }   | |    / {} \ |  `| || {}  \
+* | |.-._} }| .-. \   | `--./  /\  \| |\  ||     /
+* `-'`----' `-' `-'   `----'`-'  `-'`-' `-'`----'
 *
+* Interrupt service routine support functions. Everything in this block
+*   executes under an ISR. Keep it brief...
+*******************************************************************************/
+
+extern "C" {
+/**
+* DMA ISR. Rx
 */
-void DMA2_Stream2_IRQHandler(void) {
+void DMA2_Stream2_IRQHandler() {
   Kernel::log("DMA2_Stream2_IRQHandler()\n");
-  __HAL_DMA_DISABLE_IT(&_dma_r_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
-  __HAL_DMA_DISABLE_IT(&_dma_w_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+  DMA_Base_Registers* regs = (DMA_Base_Registers*)_dma_r.StreamBaseAddress;
+  int streamIndex = _dma_r.StreamIndex;
+  /* Transfer Error Interrupt management */
+  if ((regs->ISR & (DMA_FLAG_TEIF0_4 << streamIndex)) != RESET) {
+    if(__HAL_DMA_GET_IT_SOURCE(&_dma_r, DMA_IT_TE) != RESET) {
+      /* Disable the transfer error interrupt */
+      __HAL_DMA_DISABLE_IT(&_dma_r, DMA_IT_TE);
+      /* Clear the transfer error flag */
+      regs->IFCR = DMA_FLAG_TEIF0_4 << streamIndex;
+      /* Update error code */
+      _dma_r.ErrorCode |= HAL_DMA_ERROR_TE;
+      /* Change the DMA state */
+      _dma_r.State = HAL_DMA_STATE_ERROR;
+      Kernel::log("DMA2_Stream2 Error (Transfer)\n");
+    }
+  }
+  /* FIFO Error Interrupt management */
+  if ((regs->ISR & (DMA_FLAG_FEIF0_4 << streamIndex)) != RESET) {
+    if(__HAL_DMA_GET_IT_SOURCE(&_dma_r, DMA_IT_FE) != RESET) {
+      /* Disable the FIFO Error interrupt */
+      __HAL_DMA_DISABLE_IT(&_dma_r, DMA_IT_FE);
+      /* Clear the FIFO error flag */
+      regs->IFCR = DMA_FLAG_FEIF0_4 << streamIndex;
+      /* Update error code */
+      _dma_r.ErrorCode |= HAL_DMA_ERROR_FE;
+      /* Change the DMA state */
+      _dma_r.State = HAL_DMA_STATE_ERROR;
+      Kernel::log("DMA2_Stream2 Error (FIFO)\n");
+    }
+  }
+  /* Transfer Complete Interrupt management */
+  if ((regs->ISR & (DMA_FLAG_TCIF0_4 << streamIndex)) != RESET) {
+    Kernel::log("DMA2_Stream2 TC\n");
+    if(__HAL_DMA_GET_IT_SOURCE(&_dma_r, DMA_IT_TC) != RESET) {
+      /* Clear the transfer complete flag */
+      regs->IFCR = DMA_FLAG_TCIF0_4 << streamIndex;
+    }
+    /* Update error code */
+    _dma_r.ErrorCode |= HAL_DMA_ERROR_NONE;
+    /* Change the DMA state */
+    _dma_r.State = HAL_DMA_STATE_READY_MEM0;
+    __HAL_DMA_DISABLE(&_dma_r);
+    if (NULL != CPLDDriver::current_queue_item) {
+      CPLDDriver::current_queue_item->advance_operation(0, 0);
+    }
+  }
 }
 
 
 /*
-*
+* DMA ISR. Tx
 */
 void DMA2_Stream3_IRQHandler(void) {
   Kernel::log("DMA2_Stream3_IRQHandler()\n");
-  __HAL_DMA_DISABLE_IT(&_dma_r_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
-  __HAL_DMA_DISABLE_IT(&_dma_w_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+  __HAL_DMA_DISABLE_IT(&_dma_r, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+  __HAL_DMA_DISABLE_IT(&_dma_w, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
 }
 
 
+}
 
-
-/****************************************************************************************************
+/*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
 *     /       |           |   /   \  |           ||  |  /      |   /       |
 *    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
@@ -79,58 +142,11 @@ void DMA2_Stream3_IRQHandler(void) {
 * .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
 * |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
 *
-* Static members and initializers should be located here. Initializers first, functions second.
-****************************************************************************************************/
-
-/* Static Initializers */
+* Static members and initializers should be located here.
+*******************************************************************************/
 uint32_t SPIBusOp::total_transfers  = 0;  // How many total SPI transfers have we seen?
 uint32_t SPIBusOp::failed_transfers = 0;  // How many failed SPI transfers have we seen?
 uint16_t SPIBusOp::spi_wait_timeout = 20; // In microseconds. Per-byte.
-//uint32_t SPIBusOp::spi_cs_delay     = 0;  // How many microseconds to delay before CS disassertion?
-
-/**
-* This is called upon CPLD instantiation to build the DMA init structures for the bus operation.
-* This data is retained following a wipe(), so we eat the minor memory penalty so that the
-*   same init doesn't need to be done a million times for repeat operations.
-*/
-void SPIBusOp::buildDMAMembers() {
-  // We setup the interrupt-driven stuff so we aren't surprised on the first use of the bus.
-  enableSPI_DMA(false);
-
-  _dma_r_handle.Instance                  = DMA2_Stream2;
-  _dma_r_handle.Init.Direction            = DMA_PERIPH_TO_MEMORY;   // Receive
-  _dma_r_handle.Init.Channel              = DMA_CHANNEL_3;
-  _dma_r_handle.Init.PeriphDataAlignment  = DMA_PDATAALIGN_BYTE;
-  _dma_r_handle.Init.MemDataAlignment     = DMA_MDATAALIGN_BYTE;
-  _dma_r_handle.Init.Priority             = DMA_PRIORITY_HIGH;
-  _dma_r_handle.Init.FIFOMode             = DMA_FIFOMODE_DISABLE;  // Required for differnt access-widths.
-  _dma_r_handle.Init.FIFOThreshold        = DMA_FIFO_THRESHOLD_FULL;
-  _dma_r_handle.Init.MemBurst             = DMA_MBURST_SINGLE;
-  _dma_r_handle.Init.PeriphInc            = DMA_PINC_DISABLE;
-  _dma_r_handle.Init.PeriphBurst          = DMA_PBURST_SINGLE;
-  _dma_r_handle.Init.Mode                 = DMA_NORMAL;
-  _dma_r_handle.Init.MemInc               = DMA_MINC_ENABLE;
-  //DMA_InitStructure_Read.DMA_PeripheralBaseAddr  = (uint32_t) &SPI1->DR;
-
-  _dma_w_handle.Instance                 = DMA2_Stream3;
-  _dma_w_handle.Init.Direction           = DMA_MEMORY_TO_PERIPH;   // Transmit
-  _dma_w_handle.Init.Channel             = DMA_CHANNEL_3;
-  _dma_w_handle.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-  _dma_w_handle.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
-  _dma_w_handle.Init.Priority            = DMA_PRIORITY_HIGH;
-  _dma_w_handle.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;  // Required for differnt access-widths.
-  _dma_w_handle.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
-  _dma_w_handle.Init.MemBurst            = DMA_MBURST_SINGLE;
-  _dma_w_handle.Init.PeriphInc           = DMA_PINC_DISABLE;
-  _dma_w_handle.Init.PeriphBurst         = DMA_PBURST_SINGLE;
-  _dma_w_handle.Init.Mode                = DMA_NORMAL;
-  _dma_w_handle.Init.MemInc              = DMA_MINC_ENABLE;
-  //DMA_InitStructure_Write.DMA_PeripheralBaseAddr = (uint32_t) &SPI1->DR;
-
-  //__HAL_DMA_ENABLE_IT(&_dma_r_handle, DMA_IT_TC);
-  //__HAL_DMA_ENABLE_IT(&_dma_w_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
-}
-
 
 /**
 * Used to disable the DMA IRQs at the NVIC.
@@ -150,17 +166,14 @@ void SPIBusOp::enableSPI_DMA(bool enable) {
 
 
 
-
-
-
-/****************************************************************************************************
+/*******************************************************************************
 *   ___ _              ___      _ _              _      _
 *  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
 * | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
 *  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
-****************************************************************************************************/
+*******************************************************************************/
 
 /**
 * Vanilla constructor that calls wipe().
@@ -181,8 +194,8 @@ SPIBusOp::SPIBusOp() {
 */
 SPIBusOp::SPIBusOp(BusOpcode nu_op, BusOpCallback* requester) {
   wipe();
-  this->opcode          = nu_op;
-  callback = requester;
+  this->opcode = nu_op;
+  callback     = requester;
 }
 
 
@@ -200,7 +213,6 @@ SPIBusOp::~SPIBusOp() {
   }
   if (debug_log.length() > 0) Kernel::log(&debug_log);
 }
-
 
 
 /**
@@ -256,15 +268,15 @@ void SPIBusOp::setParams(uint8_t _reg_addr, uint8_t _val) {
 * @return 0 on success, or non-zero on failure.
 */
 int8_t SPIBusOp::init_dma() {
-//  if (HAL_DMA_GetState(&_dma_w_handle) != HAL_DMA_STATE_RESET) __HAL_DMA_DISABLE(&_dma_w_handle);
-//  if (HAL_DMA_GetState(&_dma_r_handle) != HAL_DMA_STATE_RESET) __HAL_DMA_DISABLE(&_dma_r_handle);
+//  if (HAL_DMA_GetState(&_dma_w) != HAL_DMA_STATE_RESET) __HAL_DMA_DISABLE(&_dma_w);
+//  if (HAL_DMA_GetState(&_dma_r) != HAL_DMA_STATE_RESET) __HAL_DMA_DISABLE(&_dma_r);
 //
 //  uint32_t _origin_buf = 0;
 //  uint32_t _target_buf = 0;
 //
 //  if (opcode == BusOpcode::RX) {
-//    _dma_r_handle.Init.MemInc = DMA_MINC_DISABLE;
-//    _dma_w_handle.Init.MemInc = DMA_MINC_DISABLE;
+//    _dma_r.Init.MemInc = DMA_MINC_DISABLE;
+//    _dma_w.Init.MemInc = DMA_MINC_DISABLE;
 //
 //    //DMA_InitStructure_Read.DMA_Memory0BaseAddr    = (uint32_t) buf;
 //
@@ -272,8 +284,8 @@ int8_t SPIBusOp::init_dma() {
 //    //DMA_InitStructure_Write.DMA_Memory0BaseAddr   = (uint32_t) &STATIC_ZERO;
 //  }
 //  else if (opcode == BusOpcode::TX) {
-//    _dma_r_handle.Init.MemInc = DMA_MINC_DISABLE;
-//    _dma_w_handle.Init.MemInc = DMA_MINC_ENABLE;
+//    _dma_r.Init.MemInc = DMA_MINC_DISABLE;
+//    _dma_w.Init.MemInc = DMA_MINC_ENABLE;
 //
 //    //DMA_InitStructure_Write.DMA_Memory0BaseAddr   = (uint32_t) buf;
 //
@@ -285,23 +297,22 @@ int8_t SPIBusOp::init_dma() {
 //    return -1;
 //  }
 //
-//  while (HAL_DMA_GetState(&_dma_w_handle) != HAL_DMA_STATE_RESET) {}  // TODO: Might-could cut this.
-//  HAL_DMA_Init(&_dma_w_handle);
+//  while (HAL_DMA_GetState(&_dma_w) != HAL_DMA_STATE_RESET) {}  // TODO: Might-could cut this.
+//  HAL_DMA_Init(&_dma_w);
 //
-//  while (HAL_DMA_GetState(&_dma_r_handle) != HAL_DMA_STATE_RESET) {}  // TODO: Might-could cut this.
-//  HAL_DMA_Init(&_dma_r_handle);
+//  while (HAL_DMA_GetState(&_dma_r) != HAL_DMA_STATE_RESET) {}  // TODO: Might-could cut this.
+//  HAL_DMA_Init(&_dma_r);
 //
 //  if (opcode == BusOpcode::RX) {
-//    HAL_DMA_Start_IT(&_dma_r_handle, (uint32_t) hspi1.pRxBuffPtr, (uint32_t) buf, (uint32_t) buf_len);
-//    HAL_DMA_Start_IT(&_dma_w_handle, (uint32_t) buf, (uint32_t) hspi1.pTxBuffPtr, (uint32_t) buf_len);
+//    HAL_DMA_Start_IT(&_dma_r, (uint32_t) hspi1.pRxBuffPtr, (uint32_t) buf, (uint32_t) buf_len);
+//    HAL_DMA_Start_IT(&_dma_w, (uint32_t) buf, (uint32_t) hspi1.pTxBuffPtr, (uint32_t) buf_len);
 //  }
 //  else if (opcode == BusOpcode::TX) {
-//    HAL_DMA_Start_IT(&_dma_w_handle, (uint32_t) buf, (uint32_t) hspi1.pTxBuffPtr, (uint32_t) buf_len);
+//    HAL_DMA_Start_IT(&_dma_w, (uint32_t) buf, (uint32_t) hspi1.pTxBuffPtr, (uint32_t) buf_len);
 //  }
 //
   return 0;
 }
-
 
 
 /**
@@ -328,37 +339,14 @@ void SPIBusOp::wipe() {
 }
 
 
-/**
-* Ensure that the bus is free prior to beginning a new operation. This function
-*   will return after spi_wait_timeout milliseconds.
-*
-* @return true if the bus is available. False otherwise.
-*/
-//bool SPIBusOp::wait_with_timeout() {
-//  uint32_t to_mark = micros();
-//  uint32_t timeout_val = (2 * spi_wait_timeout) + (buf_len * spi_wait_timeout);
-//  uint32_t m_mark = micros();
-//  while((hspi1.State & SPI_FLAG_BSY) && ((max(to_mark, m_mark) - min(to_mark, m_mark)) <= timeout_val) ) {
-//    m_mark = micros();
-//  } // wait until bus is not busy, JIC.
-//  if (hspi1.State & SPI_FLAG_BSY) {
-//    debug_log.concatf("SPI Bus timeout after %uuS.\n", timeout_val);
-//    return false;
-//  }
-//  else {
-//    return true;
-//  }
-//}
-
-
-/****************************************************************************************************
+/*******************************************************************************
 *     8                  eeeeee
 *     8  eeeee eeeee     8    e eeeee eeeee eeeee eeeee  eeeee e
 *     8e 8  88 8   8     8e     8  88 8   8   8   8   8  8  88 8
 *     88 8   8 8eee8e    88     8   8 8e  8   8e  8eee8e 8   8 8e
 * e   88 8   8 88   8    88   e 8   8 88  8   88  88   8 8   8 88
 * 8eee88 8eee8 88eee8    88eee8 8eee8 88  8   88  88   8 8eee8 88eee
-****************************************************************************************************/
+*******************************************************************************/
 // Useful trick to mask warnings that the compiler raises, but which we know are
 //   intentional.
 //   http://stackoverflow.com/questions/3378560/how-to-disable-gcc-warnings-for-a-few-lines-of-code
@@ -418,11 +406,11 @@ int8_t SPIBusOp::markComplete() {
     if (buf_len > 1) {
       // We have DMA cruft to clean.
       enableSPI_DMA(false);
-      __HAL_DMA_DISABLE(&_dma_r_handle);
-      __HAL_DMA_CLEAR_FLAG(&_dma_r_handle, DMA_FLAG_TCIF2_6 | DMA_FLAG_HTIF2_6 | DMA_FLAG_TEIF2_6 | DMA_FLAG_DMEIF2_6 | DMA_FLAG_FEIF2_6);
+      //__HAL_DMA_DISABLE(&_dma_r);
+      //__HAL_DMA_CLEAR_FLAG(&_dma_r, DMA_FLAG_TCIF2_6 | DMA_FLAG_HTIF2_6 | DMA_FLAG_TEIF2_6 | DMA_FLAG_DMEIF2_6 | DMA_FLAG_FEIF2_6);
 
-      __HAL_DMA_DISABLE(&_dma_w_handle);
-      __HAL_DMA_CLEAR_FLAG(&_dma_w_handle, DMA_FLAG_TCIF3_7 | DMA_FLAG_HTIF3_7 | DMA_FLAG_TEIF3_7 | DMA_FLAG_DMEIF3_7 | DMA_FLAG_FEIF3_7);
+      //__HAL_DMA_DISABLE(&_dma_w);
+      //__HAL_DMA_CLEAR_FLAG(&_dma_w, DMA_FLAG_TCIF3_7 | DMA_FLAG_HTIF3_7 | DMA_FLAG_TEIF3_7 | DMA_FLAG_DMEIF3_7 | DMA_FLAG_FEIF3_7);
     }
   }
 
@@ -458,8 +446,6 @@ int8_t SPIBusOp::abort(XferFault cause) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-result"
 int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
-  int8_t return_value = 0;
-
   //debug_log.concatf("advance_op(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
   //Kernel::log(&debug_log);
 
@@ -487,7 +473,19 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
           HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) buf, buf_len);
         }
         else {
-          HAL_SPI_Receive_IT(&hspi1, (uint8_t*) buf, buf_len);
+          HAL_SPI_Receive_DMA(&hspi1, buf, buf_len);
+          //HAL_NVIC_DisableIRQ(SPI1_IRQn);
+          //HAL_DMA_Init(&_dma_r);
+          //_dma_r.State = HAL_DMA_STATE_BUSY;
+          //__HAL_DMA_DISABLE(&_dma_r);
+          //DMA2_Stream2->PAR   = (uint32_t) &hspi1.Instance->DR;
+          //DMA2_Stream2->M0AR  = (uint32_t) buf;
+          //DMA2_Stream2->NDTR  = buf_len;
+          //DMA2_Stream2->CR   &= ~((uint32_t) (DMA_SxCR_DBM | DMA_SxCR_CT));
+          //DMA2_Stream2->CR   |= (uint32_t) (DMA_IT_TC | DMA_IT_TE | DMA_IT_DME);
+          //DMA2_Stream2->FCR  |= (uint32_t) DMA_IT_FE;
+          //__HAL_DMA_ENABLE(&_dma_r);
+          //__HAL_SPI_ENABLE(&hspi1);
         }
       }
       return 0;
@@ -501,92 +499,15 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
       return 0;
   }
 
-//  if (buf_len == 1) {
-//    /*
-//    * This is the IRQ-only block.
-//    */
-//    if (profile()) debug_log.concatf("IRQ  %s\t status: 0x%08x\n", getStateString(), (unsigned long) status_reg);
-//    switch (xfer_state) {
-//      case XferState::ADDR:
-//        break;
-//
-//      case XferState::STOP:
-//        markComplete();
-//        //if (profile()) transition_time_STOP = micros();
-//        break;
-//
-//      /* Below are the states that we shouldn't be in at this point... */
-//      case XferState::IO_WAIT:
-//      default:
-//        abort(XferFault::ILLEGAL_STATE);
-//        break;
-//    }
-//  }
-//
-//  else {
-//    /*
-//    * This is the DMA block.
-//    */
-//    if (profile()) {
-//      uint16_t count_0 = __HAL_DMA_GET_COUNTER(&_dma_r_handle);
-//      debug_log.concatf("DMA  %s\t DMA0: %d \t buf_len: %d \t status: 0x%08x\n", getStateString(), (uint16_t) count_0, buf_len, (unsigned long) hspi1.State);
-//    }
-//
-//    switch (xfer_state) {
-//      case XferState::ADDR:
-//        xfer_state = XferState::IO_WAIT;   // We will only ever end up here ONCE per job.
-//
-//        wait_with_timeout();    // Just in case the bus is still running (it ought not be).
-//
-//        if (__HAL_SPI_GET_FLAG(&hspi1, SPI_FLAG_RXNE)) {
-//          //data_reg = hspi1->DR;   // Clear the Rx flag (if set).
-//          //debug_log.concatf("\t DMA had to wait on a byte before address setup: 0x%02x. SR is now 0x%04x \n", data_reg, hspi1->SR);
-//        }
-//
-//        init_dma();
-//        //SPI_I2S_DMACmd(hspi1, SPI_I2S_DMAReq_Rx, ENABLE);
-//        //SPI_I2S_DMACmd(hspi1, SPI_I2S_DMAReq_Tx, ENABLE);
-//        enableSPI_DMA(true);
-//        break;
-//
-//      case XferState::IO_WAIT:
-//        //if (profile()) transition_time_DMA_WAIT = micros();
-//        if (0 == __HAL_DMA_GET_COUNTER(&_dma_r_handle)) {
-//          xfer_state = XferState::STOP;
-//          if (HAL_DMA_GetState(&_dma_r_handle) == HAL_DMA_STATE_RESET) {
-//            markComplete();
-//          }
-//          else {
-//            //if (profile()) debug_log.concat("\t DMA looks sick...\n");
-//            abort(XferFault::DMA_FAULT);
-//          }
-//        }
-//        else {
-//          //if (profile()) debug_log.concatf("\tJob 0x%04x looks incomplete, but DMA is IRQ. Advancing state to STOP for next IRQ and hope.\n", txn_id);
-//          debug_log.concat("\tJob looks incomplete, but DMA is IRQ. Advancing state to STOP for next IRQ and hope.\n");
-//          abort(XferFault::DMA_FAULT); // TODO: WRONG
-//        }
-//        break;
-//
-//      case XferState::STOP:
-//        //if (profile()) transition_time_STOP = micros();
-//        markComplete();
-//        break;
-//
-//      default:
-//        abort(XferFault::ILLEGAL_STATE);
-//        break;
-//    }
-//  }
-  return return_value;
+  return -1;
 }
 #pragma GCC diagnostic pop
 
 
 
-/****************************************************************************************************
-* Memory-management and cleanup support.                                                            *
-****************************************************************************************************/
+/*******************************************************************************
+* Memory-management and cleanup support.                                       *
+*******************************************************************************/
 
 /**
 * The client class calls this fxn to set this object's post-completion behavior.
@@ -601,7 +522,6 @@ bool SPIBusOp::shouldReap(bool nu_reap_state) {
   flags = (nu_reap_state) ? (flags & (uint8_t) ~SPI_XFER_FLAG_NO_FREE) : (flags | SPI_XFER_FLAG_NO_FREE);
   return ((flags & SPI_XFER_FLAG_NO_FREE) == 0);
 }
-
 
 /**
 * Call this on instantiation with a value of 'true' to disable reap, and indicate to the bus manager that
@@ -621,7 +541,6 @@ bool SPIBusOp::returnToPrealloc(bool nu_prealloc_state) {
   return (flags & SPI_XFER_FLAG_PREALLOCATE_Q);
 }
 
-
 /**
 * This is a means for a client class to remind itself if the write operation advanced the
 *   device's registers or not.
@@ -638,25 +557,24 @@ bool SPIBusOp::devRegisterAdvance(bool _reg_advance) {
 
 
 
-/****************************************************************************************************
-* These functions are for logging support.                                                          *
-****************************************************************************************************/
+/*******************************************************************************
+* These functions are for logging support.                                     *
+*******************************************************************************/
 
 /**
 * Debug support method. This fxn is only present in debug builds.
 *
-* @param   StringBuilder* The buffer into which this fxn should write its output.
+* @param  StringBuilder* The buffer into which this fxn should write its output.
 */
 void SPIBusOp::printDebug(StringBuilder *output) {
   if (NULL == output) return;
   output->concatf("-----SPIBusOp 0x%08x (%s)------------\n", (uint32_t) this, getOpcodeString());
+  if (shouldReap())       output->concat("\t Will reap\n");
+  if (returnToPrealloc()) output->concat("\t Returns to prealloc\n");
   output->concatf("\t xfer_state        %s\n\t err               %s\n", getStateString(), getErrorString());
   //if (XferState::COMPLETE == xfer_state) {
   //  output->concatf("\t completed (uS)   %u\n",   (unsigned long) time_ended - time_began);
   //}
-  output->concatf("\t callback set      %s\n", (callback ? "yes":"no"));
-  output->concatf("\t will reap?        %s\n", shouldReap()?"yes":"no");
-  output->concatf("\t ret to prealloc?  %s\n", returnToPrealloc()?"yes":"no");
   output->concatf("\t param_len         %d\n", _param_len);
   output->concat("\t params            ");
 
@@ -675,5 +593,11 @@ void SPIBusOp::printDebug(StringBuilder *output) {
       output->concatf("0x%02x ", (uint8_t) *(buf + i));
     }
   }
+
+  output->concatf("\n\t _dma_r State      0x%04x\n", _dma_r.State);
+  output->concatf("\t _dma_r->CR        0x%08x\n", DMA2_Stream2->CR);
+  output->concatf("\t _dma_r->FCR       0x%08x\n", DMA2_Stream2->FCR);
+  output->concatf("\t _dma_r->NDTR      0x%08x\n", DMA2_Stream2->NDTR);
+
   output->concat("\n\n");
 }

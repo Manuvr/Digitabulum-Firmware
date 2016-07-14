@@ -39,8 +39,10 @@ extern "C" {
 * Static members and initializers should be located here. Initializers first, functions second.
 ****************************************************************************************************/
 
-SPIBusOp LegendManager::_preformed_read_ag;
+SPIBusOp LegendManager::_preformed_read_a;
+SPIBusOp LegendManager::_preformed_read_g;
 SPIBusOp LegendManager::_preformed_read_m;
+SPIBusOp LegendManager::_preformed_fifo_read;
 
 Vector3<int16_t> LegendManager::reflection_mag;
 Vector3<int16_t> LegendManager::reflection_acc;
@@ -141,22 +143,61 @@ LegendManager::LegendManager() {
   reflection_gyr.y = 1;
   reflection_gyr.z = -1;
 
+
+  _preformed_read_a.shouldReap(false);
+  _preformed_read_a.devRegisterAdvance(true);
+  _preformed_read_a.set_opcode(BusOpcode::RX);
+  _preformed_read_a.callback = (BusOpCallback*) this;
+  // Starting from the first accelerometer...
+  // Read 6 bytes...
+  // ...across 17 sensors...
+  // ...from this base address...
+  _preformed_read_a.setParams(CPLD_REG_IMU_DM_P_I|0x80, 6, 17, LSM9DS1_A_DATA_X);
+  // ...and drop the results here.
+  _preformed_read_a.buf      = (uint8_t*) __frame_buf_a;
+  _preformed_read_a.buf_len  = 102;
+
+  _preformed_read_g.shouldReap(false);
+  _preformed_read_g.devRegisterAdvance(true);
+  _preformed_read_g.set_opcode(BusOpcode::RX);
+  _preformed_read_g.callback = (BusOpCallback*) this;
+  // Starting from the first gyro...
+  // Read 6 bytes...
+  // ...across 17 sensors...
+  // ...from this base address...
+  _preformed_read_g.setParams(CPLD_REG_IMU_DM_P_I|0x80, 6, 17, LSM9DS1_G_DATA_X);
+  // ...and drop the results here.
+  _preformed_read_g.buf      = (uint8_t*) __frame_buf_g;
+  _preformed_read_g.buf_len  = 102;
+
   _preformed_read_m.shouldReap(false);
   _preformed_read_m.devRegisterAdvance(true);
   _preformed_read_m.set_opcode(BusOpcode::RX);
-  _preformed_read_m.callback = (SPIDeviceWithRegisters*) this;
-
+  _preformed_read_m.callback = (BusOpCallback*) this;
   // Starting from the first magnetometer...
   // Read 6 bytes...
   // ...across 17 sensors...
   // ...from this base address...
   _preformed_read_m.setParams(CPLD_REG_IMU_DM_P_M|0x80, 6, 17, LSM9DS1_M_DATA_X);
-
   // ...and drop the results here.
   _preformed_read_m.buf      = (uint8_t*) __frame_buf_m;
   _preformed_read_m.buf_len  = 102;
 
-    /* Populate all the static preallocation slots for measurements. */
+  _preformed_fifo_read.shouldReap(false);
+  _preformed_fifo_read.devRegisterAdvance(true);
+  _preformed_fifo_read.set_opcode(BusOpcode::RX);
+  _preformed_fifo_read.callback = (BusOpCallback*) this;
+  // Starting from the first inertial...
+  // Read 1 byte...
+  // ...across 17 sensors...
+  // ...from this base address...
+  _preformed_fifo_read.setParams(CPLD_REG_IMU_DM_P_I|0x80, 1, 17, LSM9DS1_AG_FIFO_SRC);
+  // ...and drop the results here.
+  _preformed_fifo_read.buf      = (uint8_t*) __fifo_levels;
+  _preformed_fifo_read.buf_len  = 17;
+
+
+  /* Populate all the static preallocation slots for measurements. */
   for (uint16_t i = 0; i < PREALLOCATED_IIU_MEASUREMENTS; i++) {
     __prealloc[i].wipe();
     preallocd_measurements.insert(&__prealloc[i]);
@@ -439,8 +480,9 @@ int8_t LegendManager::io_op_callback(BusOp* _op) {
     return SPI_CALLBACK_ERROR;
   }
 
-  // Yes... we will switch on a pointer.
-  if (op == &_preformed_read_ag) {
+  if (op == &_preformed_read_a) {
+  }
+  else if (op == &_preformed_read_g) {
   }
   else if (op == &_preformed_read_m) {
   }

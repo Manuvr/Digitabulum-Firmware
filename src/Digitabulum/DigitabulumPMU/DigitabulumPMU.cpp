@@ -103,13 +103,13 @@ int8_t PMU::cpu_scale(uint8_t _freq) {
     case 0:
       _cpu_clock = CPUFreqSetting::CPU_216;
       RCC_ClkInitStruct.AHBCLKDivider  = RCC_SYSCLK_DIV1;
-      RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV16;
+      RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
       RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV4;
       break;
     case 1:
       _cpu_clock = CPUFreqSetting::CPU_54;
       RCC_ClkInitStruct.AHBCLKDivider  = RCC_SYSCLK_DIV4;
-      RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+      RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
       RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
       break;
     default:

@@ -337,6 +337,12 @@ void IIU::assign_legend_pointers(void* a,
 }
 
 
+void IIU::assign_register_pointers(IMURegisterPointers* _reg) {
+  for (size_t i = 0; i < sizeof(IMURegisterPointers); i+=4) {
+    *(&_reg_ptrs + i) = *(_reg + i);
+  }
+}
+
 
 /*
 * For now:
@@ -609,6 +615,10 @@ void IIU::dumpPointers(StringBuilder* output) {
 }
 
 
+void IIU::dumpRegisterPointers(StringBuilder* output) {
+}
+
+
 
 const char* IIU::getSourceTypeString(uint8_t t) {
   switch (t) {
@@ -621,8 +631,6 @@ const char* IIU::getSourceTypeString(uint8_t t) {
   }
 }
 
-
-#define IIU_DEG_TO_RAD_SCALAR   (3.14159f / 180.0f)
 
 /**
 * Taken from

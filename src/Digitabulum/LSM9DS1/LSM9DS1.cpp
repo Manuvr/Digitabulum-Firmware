@@ -118,7 +118,7 @@ const char* LSM9DSx_Common::getStateString(State state) {
 * Should probably avoid putting things here that directly pertain to sensor functionality.
 ****************************************************************************************************/
 
-LSM9DSx_Common::LSM9DSx_Common(const char* t_str, uint8_t bus_address, IIU* _integrator, uint8_t r_count) : SPIDeviceWithRegisters(bus_address, r_count) {
+LSM9DSx_Common::LSM9DSx_Common(const char* t_str, uint8_t bus_address, IIU* _integrator) {
   integrator = _integrator;
   imu_type   = t_str;
 }
@@ -139,7 +139,7 @@ int8_t LSM9DSx_Common::init() {
   hardware_writable  = false;
   sample_count       = 0;
   time_stamp_base    = 0;
-  pending_samples    = 0;
+  *pending_samples   = 0;
   return IMU_ERROR_NO_ERROR;
 }
 
@@ -149,7 +149,8 @@ int8_t LSM9DSx_Common::init() {
 *   default states.
 */
 void LSM9DSx_Common::reset() {
-  mark_it_zero();   // Blow away our idea of what is in the registers.
+  // TODO: Blow away our idea of what is in the registers.
+  // mark_it_zero();
   init();
 }
 
@@ -171,8 +172,8 @@ void LSM9DSx_Common::write_test_bytes() {
   io_test_val_0 = (uint8_t) randomInt() % 128;
   io_test_val_1 = (uint8_t) randomInt() % 128;
 
-  SPIDeviceWithRegisters::writeRegister(idx_io_test_0, io_test_val_0);
-  SPIDeviceWithRegisters::writeRegister(idx_io_test_1, io_test_val_1);
+  writeRegister(idx_io_test_0, io_test_val_0);
+  writeRegister(idx_io_test_1, io_test_val_1);
 }
 
 
@@ -353,28 +354,43 @@ int8_t LSM9DSx_Common::bulk_refresh() {
 }
 
 
+/*
+* Ultimately, all bus access this class does passes to this function as its last-stop
+*   before becoming folded into the SPI bus queue.
+*/
+int8_t LSM9DSx_Common::queue_io_job(BusOp* _op) {
+  if (NULL == _op) return -1;   // This should never happen.
+  SPIBusOp* op = (SPIBusOp*) _op;
+  op->callback = (BusOpCallback*) this;         // Notify us of the results.
+  return ((CPLDDriver*)cpld)->queue_io_job(op);     // Pass it to the CPLD for bus access.
+}
 
 
+int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t nu_val) {
+  if (regExists(reg_index) && regWritable(reg_index)) {
+    uint8_t* tmp = regPtr(reg_index);
+    *tmp = nu_val;
+    return writeRegister(reg_index, tmp, 1, false);
+  }
+  return IMU_ERROR_REGISTER_UNDEFINED;
+}
 int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t len) {     return writeRegister(reg_index, buf, len, (len > 1)); }
 int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t len, bool advance_regs) {
-  if (reg_index >= reg_count) {
-    return IMU_ERROR_REGISTER_UNDEFINED;
-  }
-  if (!reg_defs[reg_index].writable) {
+  if (!regWritable(reg_index)) {
     return IMU_ERROR_NOT_WRITABLE;
   }
   else {
-    uint8_t first_byte = reg_defs[reg_index].addr;
+    uint8_t first_byte = reg_index;
     if (advance_regs) {
       // If we are advancing the register address,..
       // ..does the device even have that many...
-       if ((reg_index + len) > reg_count) {
+       if (regExists(reg_index + len)) {  // TODO: Sketchy.... might be unnecessary.
          Kernel::log(__PRETTY_FUNCTION__, 1, "SENSOR_ERROR_REG_NOT_DEFINED %d, LEN %d, idx = %d\n", bus_addr, len, reg_index);
          return IMU_ERROR_REGISTER_UNDEFINED;
        }
       // ...and is the entire range writable? Fail if not.
         for (uint8_t i = 0; i < len; i++) {
-          if (!reg_defs[i + reg_index].writable) {
+          if (regWritable(reg_index)) {
             Kernel::log(__PRETTY_FUNCTION__, 1, "IMU_ERROR_NOT_WRITABLE %d\n", bus_addr);
             return IMU_ERROR_NOT_WRITABLE;
           }
@@ -387,12 +403,8 @@ int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t le
     op->set_opcode(BusOpcode::TX);
     op->buf             = buf;
     op->buf_len         = len;
-    op->callback        = this;
+    op->callback        = (BusOpCallback*) this;
     op->setParams(bus_addr, len, 1, first_byte);
-
-    // TODO: Add this to a local-scope linked list, and throw all bus ops into the queue in one call.
-    // This will keep bus operations for a single IMU atomic in the priority queue.
-    reg_defs[reg_index].dirty = true;
 
     if (profile) {
       op->profile(true);
@@ -421,28 +433,16 @@ int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t le
 */
 int8_t LSM9DSx_Common::readRegister(uint8_t reg_index, uint8_t *buf, uint8_t len) {   return readRegister(reg_index, buf, len, (len > 1)); }
 int8_t LSM9DSx_Common::readRegister(uint8_t reg_index, uint8_t *buf, uint8_t len, bool advance_regs) {
-  if (reg_index >= reg_count) {
-    Kernel::log(__PRETTY_FUNCTION__, 1, "SENSOR_ERROR_REG_NOT_DEFINED %d", bus_addr);
-    return IMU_ERROR_REGISTER_UNDEFINED;
-  }
-  uint8_t first_byte = reg_defs[reg_index].addr | 0x80;
+  uint8_t first_byte = reg_index | 0x80;
   if (advance_regs) {
     // Mark all the registers covered by the range as being unread.
     int temp_len = len;
     int temp_idx = reg_index;
-    while ((temp_len < len) && (reg_count > temp_idx)) {
-      temp_len += reg_defs[temp_idx].len;
-      if (temp_len <= len) {
-        reg_defs[temp_idx].unread = true;
-        reg_defs[temp_idx].dirty  = false;  // Reading will cancel a write operation.
-      }
+    while ((temp_len < len) && regExists(temp_idx)) {
+      temp_len++;
       temp_idx++;
     }
     first_byte |= 0x40;
-  }
-  else {
-    reg_defs[reg_index].unread = true;
-    reg_defs[reg_index].dirty  = false;  // Reading will cancel a write operation.
   }
 
   SPIBusOp* op = ((CPLDDriver*)cpld)->issue_spi_op_obj();
@@ -450,7 +450,7 @@ int8_t LSM9DSx_Common::readRegister(uint8_t reg_index, uint8_t *buf, uint8_t len
   op->set_opcode(BusOpcode::RX);
   op->buf             = buf;
   op->buf_len         = len;
-  op->callback        = this;
+  op->callback        = (BusOpCallback*) this;
   op->setParams(bus_addr|0x80, len, 1, first_byte);
 
   if (profile) {
@@ -463,35 +463,68 @@ int8_t LSM9DSx_Common::readRegister(uint8_t reg_index, uint8_t *buf, uint8_t len
 
 
 int8_t LSM9DSx_Common::readRegister(uint8_t idx) {
-  return readRegister(idx, reg_defs[idx].val, reg_defs[idx].len, (reg_defs[idx].len > 1));
+  return readRegister(idx, regPtr(idx), 1, false);
 }
 
 
-/**
-* Any registers marked dirty will be written to the device if the register is also marked wriatable.
-*
-* @return  IMU_ERROR_NO_ERROR or appropriate failure code.
+/*
+* Convenience fxn. Returns 0 if register index is out of bounds.
 */
-int8_t LSM9DSx_Common::writeDirtyRegisters() {
-  int8_t return_value = IMU_ERROR_NO_ERROR;
-  for (int i = 0; i < reg_count; i++) {
-    if (reg_defs[i].dirty) {
-      if (reg_defs[i].writable) {
-        int8_t return_value = writeRegister(i, reg_defs[i].val, reg_defs[i].len);
-
-        if (return_value != IMU_ERROR_NO_ERROR) {
-          Kernel::log(__PRETTY_FUNCTION__, 2, "Failed to write dirty register %d with code(%d). The dropped data was (%d). Aborting...", reg_defs[i].addr, return_value, reg_defs[i].val);
-          return return_value;
-        }
-      }
-      else {
-        Kernel::log(__PRETTY_FUNCTION__, 3, "Uh oh... register %d was marked dirty but it isn't writable. Marking clean with no write...", reg_defs[i].addr);
-      }
-    }
+unsigned int LSM9DSx_Common::regValue(uint8_t idx) {
+  switch (idx) {
+    case 2:
+    case 4:
+      return 0;
+    case 1:
+    default:
+      return 1;
   }
-  return return_value;
 }
 
+
+/*
+*
+*/
+bool LSM9DSx_Common::regWritable(uint8_t idx) {
+  switch (idx) {
+    case 2:
+    case 4:
+      return true;
+    case 1:
+    default:
+      return false;
+  }
+}
+
+
+/*
+* Convenience fxn. Returns 0 if register index is out of bounds.
+*/
+bool LSM9DSx_Common::regExists(uint8_t idx) {
+  switch (idx) {
+    case 2:
+    case 4:
+      return true;
+    case 1:
+    default:
+      return false;
+  }
+}
+
+
+/*
+*
+*/
+uint8_t* LSM9DSx_Common::regPtr(uint8_t idx) {
+  switch (idx) {
+    case 2:
+    case 4:
+      return &io_test_val_0;
+    case 1:
+    default:
+      return &io_test_val_1;
+  }
+}
 
 
 /**
@@ -566,7 +599,7 @@ void LSM9DSx_Common::dumpPreformedElements(StringBuilder *output) {
 */
 void LSM9DSx_Common::dumpDevRegs(StringBuilder *output) {
   output->concatf("\n-------------------------------------------------------\n--- IMU 0x%04x  %s ==>  %s \n-------------------------------------------------------\n", bus_addr, getStateString(imu_state), (desired_state_attained() ? "STABLE" : getStateString(desired_state)));
-  output->concatf("--- sample_count        %d\n--- pending_samples     %d\n\n", sample_count, pending_samples);
+  output->concatf("--- sample_count        %d\n--- pending_samples     %d\n\n", sample_count, *pending_samples);
   if (verbosity > 1) {
     output->concatf("--- calibration smpls   %d\n", sb_next_write);
     output->concatf("--- Base filter param   %d\n", base_filter_param);
