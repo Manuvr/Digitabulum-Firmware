@@ -296,7 +296,7 @@ int main(void) {
   HapticStrap strap;
   kernel->subscribe((EventReceiver*) &strap);
 
-  PMU pmu;
+  PMU pmu(&ina219);
   kernel->subscribe((EventReceiver*) &pmu);
 
   kernel->bootstrap();

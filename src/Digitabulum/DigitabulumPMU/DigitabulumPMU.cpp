@@ -47,6 +47,7 @@ volatile PMU* PMU::INSTANCE = NULL;
 
 int PMU::pmu_cpu_clock_rate(CPUFreqSetting _setting) {
   switch (_setting) {
+    case CPUFreqSetting::CPU_27:         return 27;
     case CPUFreqSetting::CPU_54:         return 54;
     case CPUFreqSetting::CPU_216:        return 216;
     case CPUFreqSetting::CPU_CLK_UNDEF:  return 0;
@@ -80,11 +81,12 @@ const char* PMU::getChargeStateString(ChargeState code) {
 * Constructors/destructors, class initialization functions and so-forth...
 ****************************************************************************************************/
 
-PMU::PMU() {
+PMU::PMU(INA219* _cv_sense) {
   INSTANCE   = this;
   _cpu_clock = CPUFreqSetting::CPU_CLK_UNDEF;
   _stat1_pin = 16;
   _stat2_pin = 17;
+  _ina219 = _cv_sense;
 }
 
 
@@ -231,8 +233,6 @@ void PMU::printDebug(StringBuilder* output) {
 
 
 /**
-* There is a NULL-check performed upstream for the scheduler member. So no need
-*   to do it again here.
 *
 * @return 0 on no action, 1 on action, -1 on failure.
 */
@@ -308,6 +308,19 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
     case 'f':
     case 'F':
       cpu_scale(*(str) == 'f' ? 0 : 1);
+      break;
+
+    case 'w':
+      // Find the current wattage draw.
+      break;
+
+    case 'p':
+    case 'P':
+      // Start or stop the periodic sensor read.
+      break;
+
+    case 'e':
+      // Read the present battery voltage.
       break;
 
     case 'm':   // Set the system-wide power mode.
