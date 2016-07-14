@@ -362,7 +362,8 @@ void SystemClock_Config(void) {
 
     RCC_OscInitStruct.PLL.PLLM = 16;
   #endif
-  RCC_OscInitStruct.PLL.PLLN = 432;
+  //RCC_OscInitStruct.PLL.PLLN = 432;   // 216MHz
+  RCC_OscInitStruct.PLL.PLLN = 400;   // 200MHz
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 8;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
@@ -380,7 +381,7 @@ void SystemClock_Config(void) {
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource   = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider  = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV16;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV4;
   if(HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_6) != HAL_OK) {
     while(1) { ; }
@@ -389,16 +390,16 @@ void SystemClock_Config(void) {
   PeriphClkInitStruct.PeriphClockSelection =
                               RCC_PERIPHCLK_USART2 | RCC_PERIPHCLK_I2C1 |
                               RCC_PERIPHCLK_SDMMC1 | RCC_PERIPHCLK_CLK48;
-  PeriphClkInitStruct.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
-  PeriphClkInitStruct.I2c1ClockSelection   = RCC_I2C1CLKSOURCE_PCLK1;
+  PeriphClkInitStruct.Usart2ClockSelection = RCC_USART2CLKSOURCE_HSI;
+  PeriphClkInitStruct.I2c1ClockSelection   = RCC_I2C1CLKSOURCE_HSI;
   PeriphClkInitStruct.Clk48ClockSelection  = RCC_CLK48SOURCE_PLLSAIP;
   PeriphClkInitStruct.Sdmmc1ClockSelection = RCC_SDMMC1CLKSOURCE_CLK48;
 
   /* We are going to setup the 48MHz source to be consistent regardless of CPU clock. */
   PeriphClkInitStruct.PLLSAI.PLLSAIN = 192;
-  PeriphClkInitStruct.PLLSAI.PLLSAIQ = 2;
-  PeriphClkInitStruct.PLLSAI.PLLSAIR = 2;
+  PeriphClkInitStruct.PLLSAI.PLLSAIQ = RCC_PLLSAIP_DIV4;
   PeriphClkInitStruct.PLLSAI.PLLSAIP = RCC_PLLSAIP_DIV4;
+  PeriphClkInitStruct.PLLSAI.PLLSAIR = 2;
   PeriphClkInitStruct.PLLSAIDivQ = 1;
   PeriphClkInitStruct.PLLSAIDivR = RCC_PLLSAIDIVR_2;
 

@@ -414,9 +414,9 @@ class IIU;
 #define CPLD_REG_RANK_D_M      0x27  // |
 
 #define CPLD_REG_CONFIG        0x28  // | CPLD operating parameters
-#define CPLD_REG_VERSION       0xA8  // | Holds CPLD revision number.
 #define CPLD_REG_WAKEUP_IRQ    0x29  // | WAKEUP mapping
 #define CPLD_REG_DIGIT_FORSAKE 0x2A  // | Forsaken digit register.
+#define CPLD_REG_VERSION       0xA8  // | Holds CPLD revision number.
 
 /* Bitmask defs for the CONFIG register. */
 #define CPLD_CONF_BIT_INT_CLK    0x01  // Internal clock enable
@@ -455,6 +455,7 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     int8_t advance_work_queue();
     inline void step_queues(){  Kernel::isrRaiseEvent(&event_spi_queue_ready); }
     SPIBusOp* issue_spi_op_obj();
+    SPIBusOp* issue_spi_op_obj(BusOpcode, BusOpCallback*);
 
     /* Power vs performance */
     void     reset();                  // Causes the CPLD to be reset.

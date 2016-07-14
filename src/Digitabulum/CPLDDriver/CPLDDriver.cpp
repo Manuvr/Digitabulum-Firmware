@@ -73,6 +73,9 @@ extern "C" {
   SPI_HandleTypeDef hspi1;
   SPI_HandleTypeDef hspi2;
   DMA_HandleTypeDef _spi2_dma;
+  DMA_HandleTypeDef _dma_r;  // SPI1
+  DMA_HandleTypeDef _dma_w;  // SPI1
+
 
   /**
   * DMA ISR. This DMA stream is responsible for..
@@ -334,14 +337,14 @@ const MessageTypeDef cpld_message_defs[] = {
 
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *   ___ _              ___      _ _              _      _
 *  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
 * | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
 *  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
-****************************************************************************************************/
+*******************************************************************************/
 
 /**
 * Constructor. Also populates the global pointer reference.
@@ -545,6 +548,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   }
   else {
     __HAL_RCC_SPI1_CLK_ENABLE();
+    __HAL_RCC_DMA2_CLK_ENABLE();
   }
 
   /* These Port A pins are associated with the SPI1 peripheral:
@@ -567,7 +571,40 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
+  _dma_r.Instance                  = DMA2_Stream2;
+  _dma_r.Init.Channel              = DMA_CHANNEL_3;
+  _dma_r.Init.Direction            = DMA_PERIPH_TO_MEMORY;   // Receive
+  _dma_r.Init.PeriphInc            = DMA_PINC_DISABLE;
+  _dma_r.Init.MemInc               = DMA_MINC_ENABLE;
+  _dma_r.Init.PeriphDataAlignment  = DMA_PDATAALIGN_BYTE;
+  _dma_r.Init.MemDataAlignment     = DMA_MDATAALIGN_BYTE;
+  _dma_r.Init.Mode                 = DMA_NORMAL;
+  _dma_r.Init.Priority             = DMA_PRIORITY_LOW;
+  _dma_r.Init.FIFOMode             = DMA_FIFOMODE_DISABLE;  // Required for differnt access-widths.
+  _dma_r.Init.FIFOThreshold        = DMA_FIFO_THRESHOLD_FULL;
+  _dma_r.Init.MemBurst             = DMA_MBURST_SINGLE;
+  _dma_r.Init.PeriphBurst          = DMA_PBURST_SINGLE;
+  HAL_DMA_Init(&_dma_r);
+  HAL_NVIC_EnableIRQ(DMA2_Stream2_IRQn);
+
+  _dma_w.Instance                 = DMA2_Stream3;
+  _dma_w.Init.Channel             = DMA_CHANNEL_3;
+  _dma_w.Init.Direction           = DMA_MEMORY_TO_PERIPH;   // Transmit
+  _dma_w.Init.PeriphInc           = DMA_PINC_DISABLE;
+  _dma_w.Init.MemInc              = DMA_MINC_ENABLE;
+  _dma_w.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+  _dma_w.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
+  _dma_w.Init.Mode                = DMA_NORMAL;
+  _dma_w.Init.Priority            = DMA_PRIORITY_HIGH;
+  _dma_w.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;  // Required for differnt access-widths.
+  _dma_w.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
+  _dma_w.Init.MemBurst            = DMA_MBURST_SINGLE;
+  _dma_w.Init.PeriphBurst         = DMA_PBURST_SINGLE;
+  HAL_DMA_Init(&_dma_w);
+
   hspi1.Instance            = SPI1;
+  hspi1.hdmarx              = &_dma_r;
+  hspi1.hdmatx              = &_dma_w;
   hspi1.Init.Mode           = SPI_MODE_SLAVE;
   hspi1.Init.Direction      = SPI_DIRECTION_2LINES;
   hspi1.Init.NSS            = SPI_NSS_HARD_INPUT;
@@ -1041,6 +1078,21 @@ SPIBusOp* CPLDDriver::issue_spi_op_obj() {
 
 
 /**
+* Return a vacant SPIBusOp to the caller, allocating if necessary.
+*
+* @param  _op   The device pointer that owns jobs we wish purged.
+* @param  _req  The device pointer that owns jobs we wish purged.
+* @return an SPIBusOp to be used. Only NULL if out-of-mem.
+*/
+SPIBusOp* CPLDDriver::issue_spi_op_obj(BusOpcode _op, BusOpCallback* _req) {
+  SPIBusOp* return_value = issue_spi_op_obj();
+  return_value->set_opcode(_op);
+  return_value->callback = _req;
+  return return_value;
+}
+
+
+/**
 * This fxn will either free() the memory associated with the SPIBusOp object, or it
 *   will return it to the preallocation queue.
 *
@@ -1303,7 +1355,6 @@ int8_t CPLDDriver::bootComplete() {
 
   gpioSetup();
   init_ext_clk();
-  SPIBusOp::buildDMAMembers();
 
   init_spi(1, 0);   // CPOL=1, CPHA=0, HW-driven
   init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
@@ -1417,8 +1468,6 @@ int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
 *
 * Code in here only exists for as long as it takes to debug something. Don't write against these.
 ****************************************************************************************************/
-
-
 
 /**
 * Debug support method. This fxn is only present in debug builds.
@@ -1691,8 +1740,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
     case 'n':    // Many bytes for a given address...
       if (temp_byte < 35) {
         for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
-        SPIBusOp* op = issue_spi_op_obj();
-        op->set_opcode(BusOpcode::RX);
+        SPIBusOp* op = issue_spi_op_obj(BusOpcode::RX, this);
         op->setParams((active_imu_position | 0x80), temp_byte, 0x01, 0x8F);
         op->setBuffer(__hack_buffer, temp_byte);
         queue_io_job((BusOp*) op);
@@ -1705,8 +1753,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
     case 'N':    // Single byte for a multiple access...
       if (temp_byte < 35) {
         for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
-        SPIBusOp* op = issue_spi_op_obj();
-        op->set_opcode(BusOpcode::RX);
+        SPIBusOp* op = issue_spi_op_obj(BusOpcode::RX, this);
         op->setParams((active_imu_position | 0x80), 0x01, temp_byte, 0x8F);
         op->setBuffer(__hack_buffer, temp_byte);
         queue_io_job((BusOp*) op);

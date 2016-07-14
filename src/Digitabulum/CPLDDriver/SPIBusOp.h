@@ -137,7 +137,6 @@ class SPIBusOp : public BusOp {
     static uint32_t  total_transfers;
     static uint32_t  failed_transfers;
     static uint16_t  spi_wait_timeout;   // In microseconds. Per-byte.
-    static void buildDMAMembers();
 
 
   private:

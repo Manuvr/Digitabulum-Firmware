@@ -53,22 +53,6 @@ extern PCD_HandleTypeDef hpcd_HS;
 #endif
 
 TM_USB_Result_t TM_USB_Init(void) {
-#if defined(STM32F7xx)
-	RCC_PeriphCLKInitTypeDef PeriphClkInitStruct;
-
-	/* Select PLLSAI output as USB clock source */
-	PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_CLK48;
-	PeriphClkInitStruct.Clk48ClockSelection = RCC_CLK48SOURCE_PLLSAIP;
-	PeriphClkInitStruct.PLLSAI.PLLSAIN = 192;
-	PeriphClkInitStruct.PLLSAI.PLLSAIQ = 4;
-	PeriphClkInitStruct.PLLSAI.PLLSAIP = RCC_PLLSAIP_DIV4;
-
-	if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK) {
-		/* Return Error */
-		return TM_USB_Result_Error;
-	}
-#endif
-
 	/* Return OK */
 	return TM_USB_Result_Ok;
 }
