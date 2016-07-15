@@ -26,7 +26,7 @@ limitations under the License.
 #include <Platform/Platform.h>
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
 *     /       |           |   /   \  |           ||  |  /      |   /       |
 *    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
@@ -34,9 +34,8 @@ limitations under the License.
 * .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
 * |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
 *
-* Static members and initializers should be located here. Initializers first, functions second.
-****************************************************************************************************/
-
+* Static members and initializers should be located here.
+*******************************************************************************/
 volatile static unsigned long _stat1_change_time = 0;
 volatile static unsigned long _stat2_change_time = 0;
 volatile static unsigned int  _stat1_prior_delta = 0;
@@ -44,15 +43,6 @@ volatile static unsigned int  _stat2_prior_delta = 0;
 
 
 volatile PMU* PMU::INSTANCE = NULL;
-
-int PMU::pmu_cpu_clock_rate(CPUFreqSetting _setting) {
-  switch (_setting) {
-    case CPUFreqSetting::CPU_54:         return 54;
-    case CPUFreqSetting::CPU_216:        return 216;
-    case CPUFreqSetting::CPU_CLK_UNDEF:  return 0;
-  }
-  return 0;
-}
 
 /**
 * Debug and logging support.
@@ -71,14 +61,14 @@ const char* PMU::getChargeStateString(ChargeState code) {
 }
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *   ___ _              ___      _ _              _      _
 *  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
 * | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
 *  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
-****************************************************************************************************/
+*******************************************************************************/
 
 PMU::PMU() {
   INSTANCE   = this;
@@ -118,8 +108,12 @@ int8_t PMU::cpu_scale(uint8_t _freq) {
   if(HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_6) != HAL_OK) {
     while(1) { ; }
   }
+  _cpu_clock_rate = HAL_RCC_GetHCLKFreq();
+  HAL_SYSTICK_Config(_cpu_clock_rate/8000);
+  HAL_SYSTICK_CLKSourceConfig(SYSTICK_CLKSOURCE_HCLK_DIV8);
+  HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 
-  local_log.concatf("CPU now at %dMHz\n", pmu_cpu_clock_rate(_cpu_clock));
+  local_log.concatf("CPU now at %dMHz\n", (_cpu_clock_rate/1000000));
   if (local_log.length() > 0) {    Kernel::log(&local_log);  }
   return 0;
 }
@@ -215,7 +209,7 @@ const char* PMU::getReceiverName() {  return "PMU";  }
 */
 void PMU::printDebug(StringBuilder* output) {
   EventReceiver::printDebug(output);
-  output->concatf("-- CPU freq                  %d MHz\n",  pmu_cpu_clock_rate(_cpu_clock));
+  output->concatf("-- CPU freq                  %d MHz\n",  _cpu_clock_rate);
   output->concatf("-- Charge state              %s\n",      getChargeStateString());
   output->concatf("-- STAT1                     %s\n",      (_er_flag(DIGITAB_PMU_FLAG_STAT1) ? "hi" : "lo"));
   output->concatf("-- STAT2                     %s\n",      (_er_flag(DIGITAB_PMU_FLAG_STAT2) ? "hi" : "lo"));
@@ -332,21 +326,15 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
 
 
 
-/****************************************************************************************************
- ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄       ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄
-▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌     ▐░▌          ▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░▌
- ▀▀▀▀█░█▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌     ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌░▌     ▐░▌▐░█▀▀▀▀▀▀▀█░▌
-     ▐░▌     ▐░▌          ▐░▌       ▐░▌     ▐░▌          ▐░▌       ▐░▌▐░▌▐░▌    ▐░▌▐░▌       ▐░▌
-     ▐░▌     ▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌     ▐░▌          ▐░█▄▄▄▄▄▄▄█░▌▐░▌ ▐░▌   ▐░▌▐░▌       ▐░▌
-     ▐░▌     ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌     ▐░▌          ▐░░░░░░░░░░░▌▐░▌  ▐░▌  ▐░▌▐░▌       ▐░▌
-     ▐░▌      ▀▀▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀█░█▀▀      ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌   ▐░▌ ▐░▌▐░▌       ▐░▌
-     ▐░▌               ▐░▌▐░▌     ▐░▌       ▐░▌          ▐░▌       ▐░▌▐░▌    ▐░▌▐░▌▐░▌       ▐░▌
- ▄▄▄▄█░█▄▄▄▄  ▄▄▄▄▄▄▄▄▄█░▌▐░▌      ▐░▌      ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌       ▐░▌▐░▌     ▐░▐░▌▐░█▄▄▄▄▄▄▄█░▌
-▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌     ▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░▌      ▐░░▌▐░░░░░░░░░░▌
- ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀       ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀        ▀▀  ▀▀▀▀▀▀▀▀▀▀
-
-Interrupt service routine support functions...
-****************************************************************************************************/
+/*******************************************************************************
+* .-. .----..----.    .-.     .--.  .-. .-..----.
+* | |{ {__  | {}  }   | |    / {} \ |  `| || {}  \
+* | |.-._} }| .-. \   | `--./  /\  \| |\  ||     /
+* `-'`----' `-' `-'   `----'`-'  `-'`-' `-'`----'
+*
+* Interrupt service routine support functions. Everything in this block
+*   executes under an ISR. Keep it brief...
+*******************************************************************************/
 
 /*
 * This is an ISR.

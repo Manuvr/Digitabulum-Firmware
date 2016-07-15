@@ -20,10 +20,322 @@ limitations under the License.
 */
 
 #include "SDCard.h"
+#include "bsp_driver_sd.h"
 
-SD_HandleTypeDef hsd1;
-HAL_SD_CardInfoTypedef SDCardInfo1;
+/*******************************************************************************
+* .-. .----..----.    .-.     .--.  .-. .-..----.
+* | |{ {__  | {}  }   | |    / {} \ |  `| || {}  \
+* | |.-._} }| .-. \   | `--./  /\  \| |\  ||     /
+* `-'`----' `-' `-'   `----'`-'  `-'`-' `-'`----'
+*
+* Interrupt service routine support functions. Everything in this block
+*   executes under an ISR. Keep it brief...
+*******************************************************************************/
 
+extern "C" {
+  SD_HandleTypeDef hsd1;
+  HAL_SD_CardInfoTypedef SDCardInfo1;
+
+  /*
+  * ISR for the SDMMC peripheral.
+  */
+  void SDMMC1_IRQHandler() {
+  }
+
+
+/**
+  * @brief  Initializes the SD card device.
+  * @param  None
+  * @retval SD status
+  */
+uint8_t BSP_SD_Init(void)
+{
+  uint8_t SD_state = MSD_OK;
+  /* Check if the SD card is plugged in the slot */
+  if (BSP_SD_IsDetected() != SD_PRESENT)
+  {
+    return MSD_ERROR;
+  }
+  SD_state = HAL_SD_Init(&hsd1, &SDCardInfo1);
+#ifdef BUS_4BITS
+  if (SD_state == MSD_OK)
+  {
+    if (HAL_SD_WideBusOperation_Config(&hsd1, SDMMC_BUS_WIDE_4B) != SD_OK)
+    {
+      SD_state = MSD_ERROR;
+    }
+    else
+    {
+      SD_state = MSD_OK;
+    }
+  }
+#endif
+  return SD_state;
+}
+
+/**
+  * @brief  Configures Interrupt mode for SD detection pin.
+  * @param  None
+  * @retval Returns 0 in success otherwise 1.
+  */
+uint8_t BSP_SD_ITConfig(void)
+{
+  /* TBI: add user code here depending on the hardware configuration used */
+
+  return 0;
+}
+
+/** @brief  SD detect IT treatment
+  * @param  None
+  * @retval None
+  */
+void BSP_SD_DetectIT(void)
+{
+  /* TBI: add user code here depending on the hardware configuration used */
+}
+
+/** @brief  SD detect IT detection callback
+  * @param  None
+  * @retval None
+  */
+__weak void BSP_SD_DetectCallback(void)
+{
+  /* NOTE: This function Should not be modified, when the callback is needed,
+  the SD_DetectCallback could be implemented in the user file
+  */
+
+}
+
+/**
+  * @brief  Reads block(s) from a specified address in an SD card, in polling mode.
+  * @param  pData: Pointer to the buffer that will contain the data to transmit
+  * @param  ReadAddr: Address from where data is to be read
+  * @param  BlockSize: SD card data block size, that should be 512
+  * @param  NumOfBlocks: Number of SD blocks to read
+  * @retval SD status
+  */
+uint8_t BSP_SD_ReadBlocks(uint32_t *pData, uint64_t ReadAddr, uint32_t BlockSize, uint32_t NumOfBlocks)
+{
+  if(HAL_SD_ReadBlocks(&hsd1, pData, ReadAddr, BlockSize, NumOfBlocks) != SD_OK)
+  {
+    return MSD_ERROR;
+  }
+  else
+  {
+    return MSD_OK;
+  }
+}
+
+/**
+  * @brief  Writes block(s) to a specified address in an SD card, in polling mode.
+  * @param  pData: Pointer to the buffer that will contain the data to transmit
+  * @param  WriteAddr: Address from where data is to be written
+  * @param  BlockSize: SD card data block size, that should be 512
+  * @param  NumOfBlocks: Number of SD blocks to write
+  * @retval SD status
+  */
+uint8_t BSP_SD_WriteBlocks(uint32_t *pData, uint64_t WriteAddr, uint32_t BlockSize, uint32_t NumOfBlocks)
+{
+  if(HAL_SD_WriteBlocks(&hsd1, pData, WriteAddr, BlockSize, NumOfBlocks) != SD_OK)
+  {
+    return MSD_ERROR;
+  }
+  else
+  {
+    return MSD_OK;
+  }
+}
+
+/**
+  * @brief  Reads block(s) from a specified address in an SD card, in DMA mode.
+  * @param  pData: Pointer to the buffer that will contain the data to transmit
+  * @param  ReadAddr: Address from where data is to be read
+  * @param  BlockSize: SD card data block size, that should be 512
+  * @param  NumOfBlocks: Number of SD blocks to read
+  * @retval SD status
+  */
+uint8_t BSP_SD_ReadBlocks_DMA(uint32_t *pData, uint64_t ReadAddr, uint32_t BlockSize, uint32_t NumOfBlocks)
+{
+  uint8_t SD_state = MSD_OK;
+
+  /* Read block(s) in DMA transfer mode */
+  if(HAL_SD_ReadBlocks_DMA(&hsd1, pData, ReadAddr, BlockSize, NumOfBlocks) != SD_OK)
+  {
+    SD_state = MSD_ERROR;
+  }
+  else
+  {
+    SD_state = MSD_OK;
+  }
+
+  /* Wait until transfer is complete */
+  if(SD_state == MSD_OK)
+  {
+    if(HAL_SD_CheckReadOperation(&hsd1, (uint32_t)SD_DATATIMEOUT) != SD_OK)
+    {
+      SD_state = MSD_ERROR;
+    }
+    else
+    {
+      SD_state = MSD_OK;
+    }
+  }
+
+  return SD_state;
+}
+
+/**
+  * @brief  Writes block(s) to a specified address in an SD card, in DMA mode.
+  * @param  pData: Pointer to the buffer that will contain the data to transmit
+  * @param  WriteAddr: Address from where data is to be written
+  * @param  BlockSize: SD card data block size, that should be 512
+  * @param  NumOfBlocks: Number of SD blocks to write
+  * @retval SD status
+  */
+uint8_t BSP_SD_WriteBlocks_DMA(uint32_t *pData, uint64_t WriteAddr, uint32_t BlockSize, uint32_t NumOfBlocks)
+{
+  uint8_t SD_state = SD_OK;
+
+  /* Write block(s) in DMA transfer mode */
+  if(HAL_SD_WriteBlocks_DMA(&hsd1, pData, WriteAddr, BlockSize, NumOfBlocks) != SD_OK)
+  {
+    SD_state = MSD_ERROR;
+  }
+  else
+  {
+    SD_state = MSD_OK;
+  }
+
+  /* Wait until transfer is complete */
+  if(SD_state == MSD_OK)
+  {
+    if(HAL_SD_CheckWriteOperation(&hsd1, (uint32_t)SD_DATATIMEOUT) != SD_OK)
+    {
+      SD_state = MSD_ERROR;
+    }
+    else
+    {
+      SD_state = MSD_OK;
+    }
+  }
+
+  return SD_state;
+}
+
+/**
+  * @brief  Erases the specified memory area of the given SD card.
+  * @param  StartAddr: Start byte address
+  * @param  EndAddr: End byte address
+  * @retval SD status
+  */
+uint8_t BSP_SD_Erase(uint64_t StartAddr, uint64_t EndAddr)
+{
+  if(HAL_SD_Erase(&hsd1, StartAddr, EndAddr) != SD_OK)
+  {
+    return MSD_ERROR;
+  }
+  else
+  {
+    return MSD_OK;
+  }
+}
+
+/**
+  * @brief  Handles SD card interrupt request.
+  * @param  None
+  * @retval None
+  */
+void BSP_SD_IRQHandler(void)
+{
+  HAL_SD_IRQHandler(&hsd1);
+}
+
+/**
+  * @brief  Handles SD DMA Tx transfer interrupt request.
+  * @param  None
+  * @retval None
+  */
+void BSP_SD_DMA_Tx_IRQHandler(void)
+{
+  HAL_DMA_IRQHandler(hsd1.hdmatx);
+}
+
+/**
+  * @brief  Handles SD DMA Rx transfer interrupt request.
+  * @param  None
+  * @retval None
+  */
+void BSP_SD_DMA_Rx_IRQHandler(void)
+{
+  HAL_DMA_IRQHandler(hsd1.hdmarx);
+}
+
+/**
+  * @brief  Gets the current SD card data status.
+  * @param  None
+  * @retval Data transfer state.
+  *          This value can be one of the following values:
+  *            @arg  SD_TRANSFER_OK: No data transfer is acting
+  *            @arg  SD_TRANSFER_BUSY: Data transfer is acting
+  *            @arg  SD_TRANSFER_ERROR: Data transfer error
+  */
+HAL_SD_TransferStateTypedef BSP_SD_GetStatus(void) {
+  return(HAL_SD_GetStatus(&hsd1));
+}
+
+/**
+  * @brief  Get SD information about specific SD card.
+  * @param  CardInfo: Pointer to HAL_SD_CardInfoTypedef structure
+  * @retval None
+  */
+void BSP_SD_GetCardInfo(HAL_SD_CardInfoTypedef* CardInfo) {
+  /* Get SD card Information */
+  HAL_SD_Get_CardInfo(&hsd1, CardInfo);
+}
+/* USER CODE END 0 */
+
+/**
+ * @brief  Detects if SD card is correctly plugged in the memory slot or not.
+ * @param  None
+ * @retval Returns if SD is detected or not
+ */
+uint8_t BSP_SD_IsDetected(void) {
+  __IO uint8_t status = SD_PRESENT;
+
+  /* Check SD card detect pin */
+  if (HAL_GPIO_ReadPin(SD_PORT,SD_PIN) == GPIO_PIN_RESET) {
+    status = SD_NOT_PRESENT;
+  }
+
+  return status;
+}
+
+
+
+}
+
+
+/*******************************************************************************
+*      _______.___________.    ___   .___________. __    ______     _______.
+*     /       |           |   /   \  |           ||  |  /      |   /       |
+*    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
+*     \   \       |  |      /  /_\  \    |  |     |  | |  |        \   \
+* .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
+* |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
+*
+* Static members and initializers should be located here.
+*******************************************************************************/
+
+
+
+/*******************************************************************************
+*   ___ _              ___      _ _              _      _
+*  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
+* | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
+*  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
+*                                          |_|
+* Constructors/destructors, class initialization functions and so-forth...
+*******************************************************************************/
 
 SDCard::SDCard() {
 }
@@ -54,33 +366,33 @@ void SDCard::gpioSetup() {
   * -----------------------------------------------
   * 7     1      SD_PRESENT
   */
-  GPIO_InitStruct.Pin = GPIO_PIN_7;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Pin   = GPIO_PIN_7;
+  GPIO_InitStruct.Mode  = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull  = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_11|GPIO_PIN_10|GPIO_PIN_9|GPIO_PIN_8;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
+  GPIO_InitStruct.Pin       = GPIO_PIN_12|GPIO_PIN_11|GPIO_PIN_10|GPIO_PIN_9|GPIO_PIN_8;
+  GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull      = GPIO_NOPULL;
+  GPIO_InitStruct.Speed     = GPIO_SPEED_HIGH;
   GPIO_InitStruct.Alternate = GPIO_AF12_SDMMC;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  GPIO_InitStruct.Pin = GPIO_PIN_2;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_HIGH;
+  GPIO_InitStruct.Pin       = GPIO_PIN_2;
+  GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull      = GPIO_NOPULL;
+  GPIO_InitStruct.Speed     = GPIO_SPEED_HIGH;
   GPIO_InitStruct.Alternate = GPIO_AF12_SDMMC;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  hsd1.Instance = SDMMC1;
-  hsd1.Init.ClockEdge = SDMMC_CLOCK_EDGE_RISING;
-  hsd1.Init.ClockBypass = SDMMC_CLOCK_BYPASS_DISABLE;
-  hsd1.Init.ClockPowerSave = SDMMC_CLOCK_POWER_SAVE_DISABLE;
-  hsd1.Init.BusWide = SDMMC_BUS_WIDE_1B;
+  hsd1.Instance                 = SDMMC1;
+  hsd1.Init.ClockEdge           = SDMMC_CLOCK_EDGE_RISING;
+  hsd1.Init.ClockBypass         = SDMMC_CLOCK_BYPASS_DISABLE;
+  hsd1.Init.ClockPowerSave      = SDMMC_CLOCK_POWER_SAVE_DISABLE;
+  hsd1.Init.BusWide             = SDMMC_BUS_WIDE_1B;
   hsd1.Init.HardwareFlowControl = SDMMC_HARDWARE_FLOW_CONTROL_DISABLE;
-  hsd1.Init.ClockDiv = 4;
+  hsd1.Init.ClockDiv            = 4;
   HAL_SD_Init(&hsd1, &SDCardInfo1);
 
   HAL_SD_WideBusOperation_Config(&hsd1, SDMMC_BUS_WIDE_4B);

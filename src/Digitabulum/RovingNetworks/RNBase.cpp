@@ -33,7 +33,38 @@ static volatile uint8_t uart2_rec_cnt = 0;
 uint32_t read_millis_0 = 0;
 uint32_t read_millis_1 = 0;
 
-/****************************************************************************************************
+// Messages that are specific to Digitabulum.
+const MessageTypeDef rn_module_message_defs[] = {
+  /*
+    For messages that have arguments, we have the option of defining inline lables for each parameter.
+    This is advantageous for debugging and writing front-ends. We case-off here to make this choice at
+    compile time.
+  */
+  #if defined (__ENABLE_MSG_SEMANTICS)
+  {  MANUVR_MSG_BT_EXIT_RESET        , 0x000,                "RN_RESET"             , ManuvrMsg::MSG_ARGS_NONE }, //
+  #else
+  {  MANUVR_MSG_BT_EXIT_RESET        , 0x000,                "RN_RESET"             , ManuvrMsg::MSG_ARGS_NONE, NULL }, //
+  #endif
+};
+
+
+/*******************************************************************************
+* .-. .----..----.    .-.     .--.  .-. .-..----.
+* | |{ {__  | {}  }   | |    / {} \ |  `| || {}  \
+* | |.-._} }| .-. \   | `--./  /\  \| |\  ||     /
+* `-'`----' `-' `-'   `----'`-'  `-'`-' `-'`----'
+*
+* Interrupt service routine support functions. Everything in this block
+*   executes under an ISR. Keep it brief...
+*******************************************************************************/
+/*
+*
+*/
+void USART2_IRQHandler(void) {
+}
+
+
+/*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
 *     /       |           |   /   \  |           ||  |  /      |   /       |
 *    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
@@ -41,9 +72,8 @@ uint32_t read_millis_1 = 0;
 * .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
 * |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
 *
-* Static members and initializers should be located here. Initializers first, functions second.
-****************************************************************************************************/
-
+* Static members and initializers should be located here.
+*******************************************************************************/
 volatile RNBase* RNBase::INSTANCE = NULL;
 volatile unsigned long RNBase::last_gpio_5_event = 0;
 BTQueuedOperation* RNBase::current_work_item = NULL;
@@ -92,7 +122,7 @@ BTQueuedOperation* RNBase::fetchPreallocation() {
 *   up until we hit the boundaries of the STM32 CCM.
 *                                 ---J. Ian Lindsay   Mon Apr 13 10:51:54 MST 2015
 *
-* @param Measurement* obj is the pointer to the object to be reclaimed.
+* @param BTQueuedOperation* obj is the pointer to the object to be reclaimed.
 */
 void RNBase::reclaimPreallocation(BTQueuedOperation* obj) {
   unsigned int obj_addr = ((uint32_t) obj);
@@ -167,21 +197,25 @@ void host_read_abort() {
 RNBase::RNBase(uint8_t rst_pin) {
   //__class_initializer();
   //BTQueuedOperation::buildDMAMembers();
-  //INSTANCE = this;
+  if (NULL == INSTANCE) {
+    INSTANCE = this;
+    ManuvrMsg::registerMessages(
+      rn_module_message_defs,
+      sizeof(rn_module_message_defs) / sizeof(MessageTypeDef)
+    );
+  }
 
   _reset_pin = rst_pin;
 
-  ///* Populate all the static preallocation slots for messages. */
-  //for (uint16_t i = 0; i < PREALLOCATED_BT_Q_OPS; i++) {
-  //  __prealloc_pool[i].wipe();
-  //  preallocated.insert(&__prealloc_pool[i]);
-  //}
+  /* Populate all the static preallocation slots for messages. */
+  for (uint16_t i = 0; i < PREALLOCATED_BT_Q_OPS; i++) {
+    __prealloc_pool[i].wipe();
+    preallocated.insert(&__prealloc_pool[i]);
+  }
 
   // Clear all the flags.
   _er_clear_flag(RNBASE_FLAG_LOCK_OUT | RNBASE_FLAG_CMD_MODE);
   _er_clear_flag(RNBASE_FLAG_CMD_PEND | RNBASE_FLAG_AUTOCONN);
-
-  //current_work_item = NULL;
 
   //connected(GPIOB->IDR & GPIO_PIN_10);
 

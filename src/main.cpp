@@ -1,35 +1,24 @@
-/**
-  ******************************************************************************
-  * File Name          : main.c
-  * Description        : Main program body
-  ******************************************************************************
-  *
-  * COPYRIGHT(c) 2015 STMicroelectronics
-  *
-  * Redistribution and use in source and binary forms, with or without modification,
-  * are permitted provided that the following conditions are met:
-  *   1. Redistributions of source code must retain the above copyright notice,
-  *      this list of conditions and the following disclaimer.
-  *   2. Redistributions in binary form must reproduce the above copyright notice,
-  *      this list of conditions and the following disclaimer in the documentation
-  *      and/or other materials provided with the distribution.
-  *   3. Neither the name of STMicroelectronics nor the names of its contributors
-  *      may be used to endorse or promote products derived from this software
-  *      without specific prior written permission.
-  *
-  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-  * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-  * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-  * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-  * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-  *
-  ******************************************************************************
-  */
+/*
+File:   main.cpp
+Author: J. Ian Lindsay
+Date:   2016.03.01
+
+Copyright 2016 Manuvr, Inc
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+
+*/
 
 #include "FirmwareDefs.h"
 
@@ -49,7 +38,6 @@
   extern "C" {
 #endif
 
-/* Includes ------------------------------------------------------------------*/
 #include "stm32f7xx_hal.h"
 #include "cmsis_os.h"
 #include "fatfs.h"
@@ -66,20 +54,6 @@ volatile void _hack_sadvance() {
   if (kernel) kernel->advanceScheduler();
 }
 
-// Messages that are specific to Digitabulum.
-const MessageTypeDef digitabulum_message_defs[] = {
-  /*
-    For messages that have arguments, we have the option of defining inline lables for each parameter.
-    This is advantageous for debugging and writing front-ends. We case-off here to make this choice at
-    compile time.
-  */
-  #if defined (__ENABLE_MSG_SEMANTICS)
-  {  MANUVR_MSG_BT_EXIT_RESET        , 0x000,                "RN_RESET"             , ManuvrMsg::MSG_ARGS_NONE }, //
-  #else
-  {  MANUVR_MSG_BT_EXIT_RESET        , 0x000,                "RN_RESET"             , ManuvrMsg::MSG_ARGS_NONE, NULL }, //
-  #endif
-};
-
 
 /* Function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
@@ -90,6 +64,11 @@ void unused_gpio(void);
 static char _cmd_buf[CMD_BUFF_SIZE];
 static int _cmd_buf_ptr = 0;
 
+
+void HAL_MspInit() {
+  HAL_NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4);
+  HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
+}
 
 void MX_TIM2_Init(void) {
   TIM_ClockConfigTypeDef sClockSourceConfig;
@@ -253,11 +232,6 @@ int main(void) {
     kernel->profiler(true);
   #endif
 
-  ManuvrMsg::registerMessages(
-    digitabulum_message_defs,
-    sizeof(digitabulum_message_defs) / sizeof(MessageTypeDef)
-  );
-
   CPLDDriver _cpld;
   kernel->subscribe(&_cpld);
 
@@ -336,7 +310,6 @@ void SystemClock_Config(void) {
   __HAL_RCC_PWR_CLK_ENABLE();  // Or this?  __PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-
   #if defined(RUN_WITH_HSE)
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
 
@@ -367,8 +340,6 @@ void SystemClock_Config(void) {
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 8;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-
-
   if(HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
     while(1) { ; }
   }
@@ -403,15 +374,12 @@ void SystemClock_Config(void) {
   PeriphClkInitStruct.PLLSAIDivQ = 1;
   PeriphClkInitStruct.PLLSAIDivR = RCC_PLLSAIDIVR_2;
 
-
   if(HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct)  != HAL_OK) {
     while(1) { ; }
   }
 
   HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/8000);
-
   HAL_SYSTICK_CLKSourceConfig(SYSTICK_CLKSOURCE_HCLK_DIV8);
-
   /* SysTick_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 }

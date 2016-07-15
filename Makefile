@@ -58,7 +58,7 @@ INCLUDES   += -Ilib/Middlewares/Third_Party/FatFs/src
 INCLUDES   += -Ilib/Middlewares/Third_Party/FatFs/src/drivers
 
 # Describing the target arch....
-MCUFLAGS  = -DHSE_VALUE=$(EXT_CLK_RATE)
+#MCUFLAGS  = -DHSE_VALUE=$(EXT_CLK_RATE)
 #MCUFLAGS += -DRUN_WITH_HSE
 MCUFLAGS += -DRUN_WITH_HSI
 MCUFLAGS += -DSTM32F746xx -DARM_MATH_CM7
@@ -131,8 +131,8 @@ export STM32F746xx
 # Source file definitions...
 ###########################################################################
 SRCS    = src/syscalls.c src/gpio.c
-SRCS   += src/bsp_driver_sd.c src/fatfs.c src/freertos.c
-SRCS   += src/stm32f7xx_hal_msp.c src/stm32f7xx_it.c
+SRCS   += src/fatfs.c src/freertos.c
+SRCS   += src/stm32f7xx_it.c
 SRCS   += src/system_stm32f7xx.c
 
 CPP_SRCS   = src/main.cpp

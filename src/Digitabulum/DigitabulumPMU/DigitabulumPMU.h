@@ -110,7 +110,6 @@ class PMU : public EventReceiver {
     inline const char* getChargeStateString() {  return getChargeStateString(_charge_state); };
 
     static volatile PMU *INSTANCE;
-    static int pmu_cpu_clock_rate(CPUFreqSetting);
 
 
   protected:
@@ -118,6 +117,7 @@ class PMU : public EventReceiver {
 
 
   private:
+    uint32_t     _cpu_clock_rate;
     /* Values for the MCP73833 charge controller. */
     unsigned int _stat1_delta;
     unsigned int _stat2_delta;

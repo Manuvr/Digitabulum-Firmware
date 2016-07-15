@@ -56,6 +56,27 @@ void unused_gpio() {
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
   HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
   HAL_GPIO_Init(GPIOI, &GPIO_InitStruct);
+  // Digitabulum doesn't use these ports...
+  __GPIOF_CLK_DISABLE();
+  __GPIOG_CLK_DISABLE();
+  __GPIOI_CLK_DISABLE();
+
+  // GPIO_PIN_1 is the HSE input. If we aren't going to use it, disable the port.
+  #if defined(HSE_VALUE)
+    /*Configure GPIO pins : PH15 PH13 PH14 PH2
+                             PH3 PH4 PH5 PH12
+                             PH11 PH10 PH6 PH8
+                             PH9 PH7 */
+    GPIO_InitStruct.Pin = GPIO_PIN_15|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_2
+                            |GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_12
+                            |GPIO_PIN_11|GPIO_PIN_10|GPIO_PIN_6|GPIO_PIN_8
+                            |GPIO_PIN_9|GPIO_PIN_7;
+  #endif
+  HAL_GPIO_Init(GPIOH, &GPIO_InitStruct);
+  #if defined(HSE_VALUE)
+    // TODO: Might-could disable this too? Only pin in-use is the EXT CLK input.
+    __GPIOH_CLK_DISABLE();
+  #endif
 
   /*Configure GPIO pins : PD7 PD0 PD5 PD1
                            PD4 PD15 PD14 PD12
@@ -64,17 +85,6 @@ void unused_gpio() {
                           |GPIO_PIN_4|GPIO_PIN_15|GPIO_PIN_14|GPIO_PIN_12
                           |GPIO_PIN_11|GPIO_PIN_9|GPIO_PIN_8;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
-
-
-  /*Configure GPIO pins : PH15 PH13 PH14 PH2
-                           PH3 PH4 PH5 PH12
-                           PH11 PH10 PH6 PH8
-                           PH9 PH7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_15|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_2
-                          |GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_12
-                          |GPIO_PIN_11|GPIO_PIN_10|GPIO_PIN_6|GPIO_PIN_8
-                          |GPIO_PIN_9|GPIO_PIN_7;
-  HAL_GPIO_Init(GPIOH, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PC1 PC5 */
   GPIO_InitStruct.Pin = GPIO_PIN_1|GPIO_PIN_5;
@@ -85,12 +95,4 @@ void unused_gpio() {
                           |GPIO_PIN_7|GPIO_PIN_10|GPIO_PIN_12
                           |GPIO_PIN_15;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
-
-  // Digitabulum doesn't use these ports...
-  __GPIOF_CLK_DISABLE();
-  __GPIOG_CLK_DISABLE();
-  __GPIOI_CLK_DISABLE();
-
-  // TODO: Might-could disable this too? Only pin in-use is the EXT CLK input.
-  //__GPIOH_CLK_DISABLE();
 }
