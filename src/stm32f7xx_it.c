@@ -187,10 +187,3 @@ void USART2_IRQHandler(void) {
 */
 void SDMMC1_IRQHandler(void) {
 }
-
-
-/*
-*
-*/
-void RNG_IRQHandler(void) {
-}
