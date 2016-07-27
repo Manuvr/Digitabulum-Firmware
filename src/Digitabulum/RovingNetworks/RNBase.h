@@ -130,6 +130,10 @@ class RNBase : public ManuvrXport {
     RNBase(uint8_t _rst_pin);
     virtual ~RNBase();
 
+    /* Override from BufferPipe. */
+    virtual int8_t toCounterparty(uint8_t* buf, unsigned int len, int8_t mm);
+    virtual int8_t fromCounterparty(uint8_t* buf, unsigned int len, int8_t mm);
+
     /* Overrides from the Transport class. */
     virtual int8_t connect();
     //virtual int8_t disconnect();
