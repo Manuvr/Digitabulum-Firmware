@@ -25,6 +25,9 @@ limitations under the License.
 #include <Kernel.h>
 #include <Drivers/i2c-adapter/i2c-adapter.h>
 #include <Drivers/ADP8866/ADP8866.h>
+#include <Transports/BufferPipes/XportBridge/XportBridge.h>
+#include <XenoSession/Console/ManuvrConsole.h>
+
 
 #include "Digitabulum/CPLDDriver/CPLDDriver.h"
 #include "Digitabulum/RovingNetworks/RN4677/RN4677.h"
@@ -33,6 +36,7 @@ limitations under the License.
 #include "Digitabulum/HapticStrap/HapticStrap.h"
 #include "Digitabulum/SDCard/SDCard.h"
 #include "Digitabulum/DigitabulumPMU/DigitabulumPMU.h"
+#include "Digitabulum/USB/STM32F7USB.h"
 
 #ifdef __cplusplus
   extern "C" {
@@ -41,9 +45,6 @@ limitations under the License.
 #include "stm32f7xx_hal.h"
 #include "cmsis_os.h"
 #include "fatfs.h"
-
-#include "tm_stm32_usb_device.h"
-#include "tm_stm32_usb_device_cdc.h"
 
 
 Kernel* kernel      = NULL;
@@ -59,10 +60,6 @@ volatile void _hack_sadvance() {
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
 void unused_gpio(void);
-
-#define CMD_BUFF_SIZE 128
-static char _cmd_buf[CMD_BUFF_SIZE];
-static int _cmd_buf_ptr = 0;
 
 
 void HAL_MspInit() {
@@ -142,45 +139,6 @@ void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* htim_base) {
 }
 
 
-static void CDC_Device(void) {
-	char ch;
-	/* Check if we are ready to use, if drivers are OK installed on computer */
-	if (TM_USBD_IsDeviceReady(TM_USB_FS) == TM_USBD_Result_Ok) {
-		/* We are ready */
-		/* Check if anything received */
-		while (TM_USBD_CDC_Getc(TM_USB_FS, &ch)) {
-			//TM_USBD_CDC_Putc(TM_USB_FS, ch);
-      if ((ch == '\r') || (ch == '\n') || (ch == '\0')) {
-        TM_USBD_CDC_Putc(TM_USB_FS, '\n');
-        #if defined(__MANUVR_CONSOLE_SUPPORT)
-          kernel->accumulateConsoleInput((uint8_t*)_cmd_buf, strlen(_cmd_buf), true);
-        #endif  // __MANUVR_CONSOLE_SUPPORT
-        _cmd_buf_ptr = 0;
-        for (int i = 0; i < CMD_BUFF_SIZE; i++) *(_cmd_buf + i) = '\0';
-      }
-      else {
-        _cmd_buf[_cmd_buf_ptr++] = ch;
-      }
-		}
-	}
-  else {
-		/* We are not ready */
-	}
-}
-
-
-bool _tx_in_progress = false;
-bool _rx_ready = false;
-
-void VCP_Rx_Notify(uint8_t*, int) {
-  _rx_ready = true;
-}
-
-void VCP_Tx_Complete() {
-  _tx_in_progress = false;
-}
-
-
 
 void system_setup() {
   GPIO_InitTypeDef GPIO_InitStruct;
@@ -205,10 +163,16 @@ void system_setup() {
   /* MCU Configuration----------------------------------------------------------*/
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-
-  for (int i = 0; i < CMD_BUFF_SIZE; i++) *(_cmd_buf + i) = '\0';
 }
 
+
+/*******************************************************************************
+* Functions that just print things.                                            *
+*******************************************************************************/
+// TODO: This is a kludge until proper fxn ptrs can be passed into the Console.
+void printHelp() {
+  Kernel::log("Help would ordinarily be displayed here.\n");
+}
 
 /****************************************************************************************************
 * Main function                                                                                     *
@@ -270,31 +234,23 @@ int main(void) {
   HapticStrap strap;
   kernel->subscribe((EventReceiver*) &strap);
 
-  PMU pmu;
+  PMU pmu(&ina219);
   kernel->subscribe((EventReceiver*) &pmu);
+
+  // TODO: Until smarter idea is finished, manually patch the USB-VCP into a
+  //         BufferPipe that takes the place of the transport driver.
+  STM32F7USB _vcp_patch;
+  ManuvrConsole _console((BufferPipe*) &_vcp_patch);
+  kernel->subscribe((EventReceiver*) &_console);
+
+  _vcp_patch.setFar(&_console);
 
   kernel->bootstrap();
 
   /* Infinite loop */
   while (1) {
     kernel->procIdleFlags();
-    if (_rx_ready) CDC_Device();
-
-    if (!_tx_in_progress) {
-      if (Kernel::log_buffer.count()) {
-        if (!kernel->getVerbosity()) {
-          Kernel::log_buffer.clear();
-        }
-        else {
-          if (TM_USBD_IsDeviceReady(TM_USB_FS) == TM_USBD_Result_Ok) {
-            TM_USBD_CDC_Puts(TM_USB_FS, Kernel::log_buffer.position(0));
-            _tx_in_progress = true;
-      		  TM_USBD_CDC_Process(TM_USB_FS);
-            Kernel::log_buffer.drop_position(0);
-          }
-        }
-      }
-    }
+    _vcp_patch.read_port();
   }
 }
 

@@ -67,6 +67,7 @@ In Digitabulum, the shunt resistor is Yageo part number RL1210FR-070R2L. It is
 
 // Valid CPU frequencies.
 enum class CPUFreqSetting {
+  CPU_27,
   CPU_54,
   CPU_216,
   CPU_CLK_UNDEF
@@ -88,7 +89,7 @@ void mcp73833_stat2_isr();
 
 class PMU : public EventReceiver {
   public:
-    PMU();
+    PMU(INA219*);
     ~PMU();
 
     /* Overrides from EventReceiver */
@@ -111,13 +112,14 @@ class PMU : public EventReceiver {
 
     static volatile PMU *INSTANCE;
 
-
   protected:
     int8_t bootComplete();
 
 
   private:
     uint32_t     _cpu_clock_rate;
+    ManuvrRunnable _periodic_pmu_read;  // Read the INA219 regularly.
+
     /* Values for the MCP73833 charge controller. */
     unsigned int _stat1_delta;
     unsigned int _stat2_delta;
@@ -127,10 +129,13 @@ class PMU : public EventReceiver {
     CPUFreqSetting _cpu_clock;
     ChargeState    _charge_state = ChargeState::UNDEF;
 
+    INA219*      _ina219;
+
     void gpioSetup();
     int8_t cpu_scale(uint8_t _freq);
 
     static const char* getChargeStateString(ChargeState);
+    static int pmu_cpu_clock_rate(CPUFreqSetting);
 };
 
 #endif //__DIGITABULUM_PMU_DRIVER_H__

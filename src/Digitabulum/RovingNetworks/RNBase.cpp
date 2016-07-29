@@ -63,7 +63,6 @@ const MessageTypeDef rn_module_message_defs[] = {
 void USART2_IRQHandler(void) {
 }
 
-
 /*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
 *     /       |           |   /   \  |           ||  |  /      |   /       |
@@ -183,16 +182,14 @@ void host_read_abort() {
 
 
 
-
-
-/****************************************************************************************************
+/*******************************************************************************
 *   ___ _              ___      _ _              _      _
 *  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
 * | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
 *  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
-****************************************************************************************************/
+*******************************************************************************/
 
 RNBase::RNBase(uint8_t rst_pin) {
   //__class_initializer();
@@ -249,6 +246,106 @@ void RNBase::gpioSetup() {
   setPin(_reset_pin, false);
 }
 
+
+/*******************************************************************************
+*  _       _   _        _
+* |_)    _|_ _|_ _  ._ |_) o ._   _
+* |_) |_| |   | (/_ |  |   | |_) (/_
+*                            |
+* Overrides and addendums to BufferPipe.
+*******************************************************************************/
+/**
+* Inward toward the transport.
+*
+* @param  buf    A pointer to the buffer.
+* @param  len    How long the buffer is.
+* @param  mm     A declaration of memory-management responsibility.
+* @return A declaration of memory-management responsibility.
+*/
+int8_t RNBase::toCounterparty(uint8_t* buf, unsigned int len, int8_t mm) {
+  switch (mm) {
+    case MEM_MGMT_RESPONSIBLE_CALLER:
+      // NOTE: No break. This might be construed as a way of saying CREATOR.
+    case MEM_MGMT_RESPONSIBLE_CREATOR:
+      /* The system that allocated this buffer either...
+          a) Did so with the intention that it never be free'd, or...
+          b) Has a means of discovering when it is safe to free.  */
+      {
+        StringBuilder *temp = new StringBuilder(buf, len);
+        insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
+      }
+      return mm;
+
+    case MEM_MGMT_RESPONSIBLE_BEARER:
+      /* We are now the bearer. That means that by returning non-failure, the
+          caller will expect _us_ to manage this memory.  */
+      // TODO: Freeing the buffer?
+      {
+        StringBuilder *temp = new StringBuilder(buf, len);
+        insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
+      }
+      return mm;
+
+    default:
+      /* This is more ambiguity than we are willing to bear... */
+      return MEM_MGMT_RESPONSIBLE_ERROR;
+  }
+  return MEM_MGMT_RESPONSIBLE_ERROR;
+}
+
+/**
+* Outward toward the application (or into the accumulator).
+*
+* @param  buf    A pointer to the buffer.
+* @param  len    How long the buffer is.
+* @param  mm     A declaration of memory-management responsibility.
+* @return A declaration of memory-management responsibility.
+*/
+int8_t RNBase::fromCounterparty(uint8_t* buf, unsigned int len, int8_t mm) {
+  switch (mm) {
+    case MEM_MGMT_RESPONSIBLE_CALLER:
+      // NOTE: No break. This might be construed as a way of saying CREATOR.
+    case MEM_MGMT_RESPONSIBLE_CREATOR:
+      /* The system that allocated this buffer either...
+          a) Did so with the intention that it never be free'd, or...
+          b) Has a means of discovering when it is safe to free.  */
+      if (haveFar()) {
+        return _far->fromCounterparty(buf, len, mm);
+      }
+      else {
+        return MEM_MGMT_RESPONSIBLE_BEARER;   // We take responsibility.
+      }
+
+    case MEM_MGMT_RESPONSIBLE_BEARER:
+      /* We are now the bearer. That means that by returning non-failure, the
+          caller will expect _us_ to manage this memory.  */
+      if (haveFar()) {
+        /* We are not the transport driver, and we do no transformation. */
+        return _far->fromCounterparty(buf, len, mm);
+      }
+      else {
+        return MEM_MGMT_RESPONSIBLE_BEARER;   // We take responsibility.
+      }
+
+    default:
+      /* This is more ambiguity than we are willing to bear... */
+      return MEM_MGMT_RESPONSIBLE_ERROR;
+  }
+  return MEM_MGMT_RESPONSIBLE_ERROR;
+}
+
+
+
+/*******************************************************************************
+* ___________                                                  __
+* \__    ___/___________    ____   ____________   ____________/  |_
+*   |    |  \_  __ \__  \  /    \ /  ___/\____ \ /  _ \_  __ \   __\
+*   |    |   |  | \// __ \|   |  \\___ \ |  |_> >  <_> )  | \/|  |
+*   |____|   |__|  (____  /___|  /____  >|   __/ \____/|__|   |__|
+*                       \/     \/     \/ |__|
+* These members are particular to the transport driver and any implicit
+*   protocol it might contain.
+*******************************************************************************/
 
 int8_t RNBase::connect() {
   return 0;
@@ -470,7 +567,7 @@ int8_t RNBase::idleService(void) {
       if (current_work_item->completed) {   // Is it completed?
         if (current_work_item->xenomsg_id) {
           // If we have a xenomsg_id, we should tell the session that it completed.
-          if (NULL != session) {
+          if (haveFar()) {
             //if (current_work_item->opcode) {
               if (getVerbosity() > 4) Kernel::log(__PRETTY_FUNCTION__, 2, "About to mark message complete.\n");
               //session->markMessageComplete(current_work_item->xenomsg_id);
@@ -738,9 +835,7 @@ void RNBase::feed_rx_buffer(unsigned char *nu, uint8_t len) {
     }
   }
   else {   // This data must be meant for a session... (So we hope)
-    if (NULL != session) {   // If we don't yet have a session, create one.
-      session->bin_stream_rx(nu, len);  // Feed the session...
-    }
+    fromCounterparty(nu, len, MEM_MGMT_RESPONSIBLE_BEARER);
   }
 
   if (local_log.length() > 0) {
