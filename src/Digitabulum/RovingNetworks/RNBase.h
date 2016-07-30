@@ -229,6 +229,7 @@ class RNBase : public ManuvrXport {
     void setAutoconnect(bool);
 
     int8_t sendBreak();           // Send a break stream to the counterparty if things get hosed.
+
     int8_t enterCommandMode();    // Convenience fxn for entering command mode.
     int8_t exitCommandMode();     // Convenience fxn for exiting command mode.
 

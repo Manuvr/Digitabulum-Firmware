@@ -384,14 +384,22 @@ int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t le
     if (advance_regs) {
       // If we are advancing the register address,..
       // ..does the device even have that many...
-       if (regExists(reg_index + len)) {  // TODO: Sketchy.... might be unnecessary.
-         Kernel::log(__PRETTY_FUNCTION__, 1, "SENSOR_ERROR_REG_NOT_DEFINED %d, LEN %d, idx = %d\n", bus_addr, len, reg_index);
-         return IMU_ERROR_REGISTER_UNDEFINED;
-       }
+      #ifdef __MANUVR_DEBUG
+      StringBuilder _log;
+      _log.concatf("SENSOR_ERROR_REG_NOT_DEFINED %d, LEN %d, idx = %d\n", bus_addr, len, reg_index);
+      Kernel::log(&_log);
+      #endif
+      if (regExists(reg_index + len)) {  // TODO: Sketchy.... might be unnecessary.
+        return IMU_ERROR_REGISTER_UNDEFINED;
+      }
       // ...and is the entire range writable? Fail if not.
         for (uint8_t i = 0; i < len; i++) {
           if (regWritable(reg_index)) {
-            Kernel::log(__PRETTY_FUNCTION__, 1, "IMU_ERROR_NOT_WRITABLE %d\n", bus_addr);
+            #ifdef __MANUVR_DEBUG
+              StringBuilder _log;
+              _log.concatf("IMU_ERROR_NOT_WRITABLE %d\n", bus_addr);
+              Kernel::log(&_log);
+            #endif
             return IMU_ERROR_NOT_WRITABLE;
           }
         }

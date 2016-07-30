@@ -419,7 +419,12 @@ void RNBase::sendGeneralCommand(StringBuilder *cmd) {
   enterCommandMode();
   insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, cmd);
   exitCommandMode();
-  if (getVerbosity() > 5) Kernel::log(__PRETTY_FUNCTION__, 2, "Sent command %s.\n", cmd->string());
+  #ifdef __MANUVR_DEBUG
+    if (getVerbosity() > 5) {
+      local_log.concatf("Sent command %s.\n", cmd->string());
+      Kernel::log(&local_log);
+    }
+  #endif
 }
 
 
@@ -433,7 +438,12 @@ void RNBase::sendGeneralCommand(const char *cmd) {
   StringBuilder *temp = new StringBuilder(cmd);
   insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
   exitCommandMode();
-  if (getVerbosity() > 5) Kernel::log(__PRETTY_FUNCTION__, 2, "Sent command %s.\n", cmd);
+  #ifdef __MANUVR_DEBUG
+    if (getVerbosity() > 5) {
+      local_log.concatf("Sent command %s.\n", cmd);
+      Kernel::log(&local_log);
+    }
+  #endif
 }
 
 
@@ -445,7 +455,9 @@ void RNBase::setHIDMode(void) {
   StringBuilder *temp = new StringBuilder(RNBASE_MODE_HID);
   insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
   exitCommandMode();
-  if (getVerbosity() > 5) Kernel::log(__PRETTY_FUNCTION__, 2, "Tried to enter HID mode.");
+  #ifdef __MANUVR_DEBUG
+    if (getVerbosity() > 5) Kernel::log("Tried to enter HID mode.\n");
+  #endif
 }
 
 
@@ -457,7 +469,9 @@ void RNBase::setSPPMode(void) {
   StringBuilder *temp = new StringBuilder(RNBASE_PROTO_SPP);
   insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
   exitCommandMode();
-  if (getVerbosity() > 5) Kernel::log(__PRETTY_FUNCTION__, 2, "Tried to enter SPP mode.");
+  #ifdef __MANUVR_DEBUG
+    if (getVerbosity() > 5) Kernel::log("Tried to enter SPP mode.\n");
+  #endif
 }
 
 
@@ -538,12 +552,22 @@ void RNBase::setAutoconnect(bool autocon) {
     _er_set_flag(RNBASE_FLAG_CMD_PEND, autocon);
     StringBuilder *temp = new StringBuilder(autocon ? RNBASE_MODE_AUTOCONNECT : RNBASE_MODE_MANUCONNECT);
     insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
-    if (getVerbosity() > 4) Kernel::log(__PRETTY_FUNCTION__, 2, "Autoconnect is now %sabled.", (autocon ? "en" : "dis"));
+    #ifdef __MANUVR_DEBUG
+    if (getVerbosity() > 4) {
+      local_log.concatf("Autoconnect is now %sabled.", (autocon ? "en" : "dis"));
+      Kernel::log(&local_log);
+    }
+    #endif
     exitCommandMode();
     sendRebootCommand();
   }
   else {
-    if (getVerbosity() > 4) Kernel::log(__PRETTY_FUNCTION__, 2, "Autoconnect mode was already %sabled.", (autocon ? "en" : "dis"));
+    #ifdef __MANUVR_DEBUG
+    if (getVerbosity() > 4) {
+      local_log.concatf("Autoconnect mode was already %sabled.", (autocon ? "en" : "dis"));
+      Kernel::log(&local_log);
+    }
+    #endif
   }
 }
 
@@ -569,7 +593,9 @@ int8_t RNBase::idleService(void) {
           // If we have a xenomsg_id, we should tell the session that it completed.
           if (haveFar()) {
             //if (current_work_item->opcode) {
-              if (getVerbosity() > 4) Kernel::log(__PRETTY_FUNCTION__, 2, "About to mark message complete.\n");
+              #ifdef __MANUVR_DEBUG
+                if (getVerbosity() > 4) Kernel::log("RNBase About to mark message complete.\n");
+              #endif
               //session->markMessageComplete(current_work_item->xenomsg_id);
             //}
           }
@@ -599,7 +625,9 @@ int8_t RNBase::idleService(void) {
             }
             break;
           default:
-            if (getVerbosity() > 1) Kernel::log("idleService(): We should not be here (initiation block).\n");
+            #ifdef __MANUVR_DEBUG
+              if (getVerbosity() > 1) Kernel::log("idleService(): We should not be here (initiation block).\n");
+            #endif
             break;
         }
         return 1;   // We fired off a transaction.
@@ -698,9 +726,9 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
       }
       else {
         return_value = 0;
-        if (getVerbosity() > 3) {
-          Kernel::log("Dropping BT send. Queue too large.\n");
-        }
+        #ifdef __MANUVR_DEBUG
+          if (getVerbosity() > 3) Kernel::log("Dropping BT send. Queue too large.\n");
+        #endif
         queue_floods++;
         reclaimPreallocation(nu);
       }
@@ -734,7 +762,9 @@ void RNBase::hostRxFlush(void) {
 
   if (uart2_rec_cnt > 0) {
     ((RNBase*)INSTANCE)->feed_rx_buffer((unsigned char*) uart2_received_string, uart2_rec_cnt);
-    if (((EventReceiver*) INSTANCE)->getVerbosity() > 4) Kernel::log("Flushed bytes\n");
+    #ifdef __MANUVR_DEBUG
+      if (((EventReceiver*) INSTANCE)->getVerbosity() > 4) Kernel::log("Flushed bytes\n");
+    #endif
     uart2_rec_cnt = 0;
   }
   else {
@@ -811,6 +841,7 @@ void RNBase::feed_rx_buffer(unsigned char *nu, uint8_t len) {
 
           case BusOpcode::TX_CMD:
           case BusOpcode::TX:
+            #ifdef __MANUVR_DEBUG
             if (getVerbosity() > 2) {
               local_log.concat("Don't know what to do with data. In command_mode (or pending), but have wrong opcode for work_queue item.\n\t");
               for (int i = 0; i < len; i++) {
@@ -818,13 +849,17 @@ void RNBase::feed_rx_buffer(unsigned char *nu, uint8_t len) {
               }
               local_log.concat("\n\n");
             }
+            #endif
             break;
           default:
-            local_log.concat("RNBase: Unknown opcode.\n");
+            #ifdef __MANUVR_DEBUG
+            if (getVerbosity() > 2) local_log.concat("RNBase: Unknown opcode.\n");
+            #endif
             break;
         }
     }
     else {
+      #ifdef __MANUVR_DEBUG
       if (getVerbosity() > 2) {
         local_log.concatf("Don't know what to do with data. In command_mode (or pending), but have no work_queue item to feed.\n\t");
         for (int i = 0; i < len; i++) {
@@ -832,16 +867,14 @@ void RNBase::feed_rx_buffer(unsigned char *nu, uint8_t len) {
         }
         local_log.concat("\n\n");
       }
+      #endif
     }
   }
   else {   // This data must be meant for a session... (So we hope)
     fromCounterparty(nu, len, MEM_MGMT_RESPONSIBLE_BEARER);
   }
 
-  if (local_log.length() > 0) {
-    if (getVerbosity() > 6) local_log.prepend("feed_rx_buffer():\t");
-    Kernel::log(&local_log);
-  }
+  if (local_log.length() > 0) Kernel::log(&local_log);
 }
 
 
@@ -851,7 +884,9 @@ void RNBase::feed_rx_buffer(unsigned char *nu, uint8_t len) {
 */
 int8_t RNBase::sendBuffer(StringBuilder* _to_send) {
   if (NULL == _to_send) return -1;
-  if (getVerbosity() > 3) local_log.concatf("We about to print %d bytes to the host.\n", _to_send->length());
+  #ifdef __MANUVR_DEBUG
+    if (getVerbosity() > 3) local_log.concatf("We about to print %d bytes to the host.\n", _to_send->length());
+  #endif
   printToHost(_to_send);
   return 0;
 }
@@ -863,7 +898,7 @@ int8_t RNBase::sendBuffer(StringBuilder* _to_send) {
 */
 volatile void RNBase::irqServiceBT_data_activity(void) {
   if (NULL == INSTANCE) return;
-  if (((EventReceiver*) INSTANCE)->getVerbosity() > 6) Kernel::log(__PRETTY_FUNCTION__, 6, "We aren't doing anything here yet.");
+  // We aren't doing anything here yet.
 }
 
 /*
@@ -912,8 +947,15 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
       // Should watch GPIO2 for this.
     }
   }
-  if (((EventReceiver*) INSTANCE)->getVerbosity() > 6) Kernel::log(__PRETTY_FUNCTION__, 0, "BT GPIO 5: %lu.\n", ms);
   last_gpio_5_event = ms;
+
+  #ifdef __MANUVR_DEBUG
+    if (((EventReceiver*) INSTANCE)->getVerbosity() > 6) {
+      StringBuilder _log;
+      _log.concatf("BT GPIO 5: %lu.\n", ms);
+      Kernel::log(&_log);
+    }
+  #endif
 }
 
 
@@ -1048,7 +1090,9 @@ int8_t RNBase::notify(ManuvrRunnable *active_event) {
       break;
     case MANUVR_MSG_BT_CONNECTION_LOST:
       connected(false);
-      if (getVerbosity() > 3) local_log.concat("We lost our bluetooth connection. About to tear down the session...\n");
+      #ifdef __MANUVR_DEBUG
+        if (getVerbosity() > 3) local_log.concat("We lost our bluetooth connection. About to tear down the session...\n");
+      #endif
       burn_or_recycle_current();
       // Purge the queue.
       for (int i = 0; i < work_queue.size(); i++) {
@@ -1075,7 +1119,9 @@ int8_t RNBase::notify(ManuvrRunnable *active_event) {
       {
         StringBuilder* temp_sb;
         if (0 == active_event->getArgAs(&temp_sb)) {
-          if (getVerbosity() > 3) local_log.concatf("We about to print %d bytes to the host.\n", temp_sb->length());
+          #ifdef __MANUVR_DEBUG
+            if (getVerbosity() > 3) local_log.concatf("We about to print %d bytes to the host.\n", temp_sb->length());
+          #endif
           printToHost(temp_sb);
           //active_event->clearArgs();
         }
