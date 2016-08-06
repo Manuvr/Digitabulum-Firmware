@@ -104,8 +104,8 @@ CFLAGS += -DMANUVR_OVER_THE_WIRE
 #CFLAGS += -g -ggdb
 
 CPP_FLAGS = -std=$(CPP_STANDARD) $(CFLAGS)
+CPP_FLAGS += -fno-rtti -fno-exceptions
 #CPP_FLAGS += -fno-use-linker-plugin
-#CPP_FLAGS += -fno-rtti -fno-exceptions
 #CPP_FLAGS += -fstack-usage
 
 ###########################################################################

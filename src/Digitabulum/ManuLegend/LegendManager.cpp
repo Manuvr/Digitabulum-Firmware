@@ -126,8 +126,8 @@ void LegendManager::reclaimMeasurement(InertialMeasurement* obj) {
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
-LegendManager::LegendManager() {
-  __class_initializer();
+LegendManager::LegendManager() : EventReceiver() {
+  setReceiverName("ManuMgmt");
   INSTANCE = this;
 
   reflection_mag.x = 1;
@@ -394,15 +394,6 @@ int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
 
 
 
-
-/**
-* Debug support function.
-*
-* @return a pointer to a string constant.
-*/
-const char* LegendManager::getReceiverName() {  return "LegendManager";  }
-
-
 void LegendManager::printDebug(StringBuilder *output) {
   if (output == NULL) return;
   EventReceiver::printDebug(output);
@@ -521,7 +512,6 @@ int8_t LegendManager::queue_io_job(BusOp* _op) {
 *
 * These are overrides from EventReceiver interface...
 ****************************************************************************************************/
-
 /**
 * There is a NULL-check performed upstream for the scheduler member. So no need
 *   to do it again here.

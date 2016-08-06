@@ -25,10 +25,9 @@ limitations under the License.
 #include <Kernel.h>
 #include <Drivers/i2c-adapter/i2c-adapter.h>
 #include <Drivers/ADP8866/ADP8866.h>
-#include <Transports/BufferPipes/XportBridge/XportBridge.h>
 #include <XenoSession/Console/ManuvrConsole.h>
 
-
+#include "Digitabulum/USB/STM32F7USB.h"
 #include "Digitabulum/CPLDDriver/CPLDDriver.h"
 #include "Digitabulum/RovingNetworks/RN4677/RN4677.h"
 #include "Digitabulum/ManuLegend/ManuLegend.h"
@@ -36,7 +35,6 @@ limitations under the License.
 #include "Digitabulum/HapticStrap/HapticStrap.h"
 #include "Digitabulum/SDCard/SDCard.h"
 #include "Digitabulum/DigitabulumPMU/DigitabulumPMU.h"
-#include "Digitabulum/USB/STM32F7USB.h"
 
 #ifdef __cplusplus
   extern "C" {
@@ -166,95 +164,6 @@ void system_setup() {
 }
 
 
-/*******************************************************************************
-* Functions that just print things.                                            *
-*******************************************************************************/
-// TODO: This is a kludge until proper fxn ptrs can be passed into the Console.
-void printHelp() {
-  Kernel::log("Help would ordinarily be displayed here.\n");
-}
-
-/****************************************************************************************************
-* Main function                                                                                     *
-* TODO: We should sort-out what can be in CCM and what cannot be, and after we've allocated all the *
-*         I/O buffers, switch over to CCM for our execution stacks.                                 *                                                                                 *
-****************************************************************************************************/
-int main(void) {
-  system_setup();   // Need to setup clocks and CPU...
-
-  unused_gpio();    // We don't use all the GPIO on this platform.
-  MX_TIM2_Init();
-
-  /* Call init function for freertos objects (in freertos.c) */
-  //MX_FREERTOS_Init();
-
-  /* Start scheduler */
-  //osKernelStart();
-
-  kernel = new Kernel();  // Instance a kernel.
-  #if defined(__MANUVR_DEBUG)
-    kernel->profiler(true);
-  #endif
-
-  CPLDDriver _cpld;
-  kernel->subscribe(&_cpld);
-
-  LegendManager _legend_manager;
-  kernel->subscribe(&_legend_manager);
-
-  I2CAdapter i2c(1);
-  kernel->subscribe(&i2c);
-
-  // Pins 58 and 63 are the reset and IRQ pin, respectively.
-  // This is translated to pins 10 and 13 on PortD.
-  ADP8866 leds(58, 63, 0x27);
-  i2c.addSlaveDevice(&leds);
-  kernel->subscribe((EventReceiver*) &leds);
-
-  INA219 ina219(0x4A);
-  i2c.addSlaveDevice(&ina219);
-
-  /* These Port E pins are push-pull outputs:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 4     0      ~BT_RESET
-  * 5     1      BT_EAN
-  * 6     1      BT_PIO_24
-  */
-  RN4677 bt(68);
-  kernel->subscribe((EventReceiver*) &bt);
-
-  SDCard sd;
-  kernel->subscribe((EventReceiver*) &sd);
-
-  IREmitter ir;
-  kernel->subscribe((EventReceiver*) &ir);
-
-  HapticStrap strap;
-  kernel->subscribe((EventReceiver*) &strap);
-
-  PMU pmu(&ina219);
-  kernel->subscribe((EventReceiver*) &pmu);
-
-  // TODO: Until smarter idea is finished, manually patch the USB-VCP into a
-  //         BufferPipe that takes the place of the transport driver.
-  STM32F7USB _vcp_patch;
-  ManuvrConsole _console((BufferPipe*) &_vcp_patch);
-  kernel->subscribe((EventReceiver*) &_console);
-
-  _vcp_patch.setFar(&_console);
-
-  kernel->bootstrap();
-
-  /* Infinite loop */
-  while (1) {
-    kernel->procIdleFlags();
-    _vcp_patch.read_port();
-  }
-}
-
-
 /****************************************************************************************************
 * Clock-tree config...                                                                              *
 ****************************************************************************************************/
@@ -358,6 +267,104 @@ void assert_failed(uint8_t* file, uint32_t line) {
   }
 }
 #endif
+
+
+
+/*******************************************************************************
+* Functions that just print things.                                            *
+*******************************************************************************/
+// TODO: This is a kludge until proper fxn ptrs can be passed into the Console.
+void printHelp() {
+  Kernel::log("Help would ordinarily be displayed here.\n");
+}
+
+
+/****************************************************************************************************
+* Main function                                                                                     *
+* TODO: We should sort-out what can be in CCM and what cannot be, and after we've allocated all the *
+*         I/O buffers, switch over to CCM for our execution stacks.                                 *                                                                                 *
+****************************************************************************************************/
+int main(void) {
+  system_setup();   // Need to setup clocks and CPU...
+
+  unused_gpio();    // We don't use all the GPIO on this platform.
+  MX_TIM2_Init();
+
+  /* Call init function for freertos objects (in freertos.c) */
+  //MX_FREERTOS_Init();
+
+  /* Start scheduler */
+  //osKernelStart();
+
+  kernel = new Kernel();  // Instance a kernel.
+  #if defined(__MANUVR_DEBUG)
+    kernel->profiler(true);
+  #endif
+
+  // TODO: Until smarter idea is finished, manually patch the USB-VCP into a
+  //         BufferPipe that takes the place of the transport driver.
+  STM32F7USB _console_patch;
+  ManuvrConsole _console((BufferPipe*) &_console_patch);
+  kernel->subscribe((EventReceiver*) &_console);
+  kernel->subscribe((EventReceiver*) &_console_patch);
+
+  CPLDDriver _cpld;
+  kernel->subscribe(&_cpld);
+
+  LegendManager _legend_manager;
+  kernel->subscribe(&_legend_manager);
+
+  I2CAdapter i2c(1);
+  kernel->subscribe(&i2c);
+
+  // Pins 58 and 63 are the reset and IRQ pin, respectively.
+  // This is translated to pins 10 and 13 on PortD.
+  ADP8866 leds(58, 63, 0x27);
+  i2c.addSlaveDevice(&leds);
+  kernel->subscribe((EventReceiver*) &leds);
+
+  INA219 ina219(0x4A);
+  i2c.addSlaveDevice(&ina219);
+
+  /* These Port E pins are push-pull outputs:
+  *
+  * #  Default   Purpose
+  * -----------------------------------------------
+  * 4     0      ~BT_RESET
+  * 5     1      BT_EAN
+  * 6     1      BT_PIO_24
+  */
+  RN4677 bt(68);
+  kernel->subscribe((EventReceiver*) &bt);
+
+  SDCard sd;
+  kernel->subscribe((EventReceiver*) &sd);
+
+  IREmitter ir;
+  kernel->subscribe((EventReceiver*) &ir);
+
+  HapticStrap strap;
+  kernel->subscribe((EventReceiver*) &strap);
+
+  PMU pmu(&ina219);
+  kernel->subscribe((EventReceiver*) &pmu);
+
+  unsigned char* help  = (unsigned char*) "This is a test message\n";
+  unsigned char* help1 = (unsigned char*) "A seconded\n";
+  _console_patch.bootComplete();
+  _console.bootComplete();
+
+  kernel->bootstrap();
+
+  //_console_patch.toCounterparty((unsigned char*)help, 1+strlen((const char*)help), MEM_MGMT_RESPONSIBLE_CREATOR);
+  //_console.toCounterparty((unsigned char*)help1, 1+strlen((const char*)help1), MEM_MGMT_RESPONSIBLE_CREATOR);
+
+  /* Infinite loop */
+  while (1) {
+    kernel->procIdleFlags();
+    _console_patch.read_port();
+  }
+}
 
 #ifdef __cplusplus
   }

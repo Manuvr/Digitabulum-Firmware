@@ -39,6 +39,7 @@ UART_HandleTypeDef huart2;
 
 
 RN4677::RN4677(uint8_t _rst_pin) : RNBase(_rst_pin) {
+  setReceiverName("RN4677");
 }
 
 
@@ -110,7 +111,6 @@ void RN4677::gpioSetup() {
   GPIO_InitStruct.Pull       = GPIO_NOPULL;
   GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
-
 
   /* These Port B pins are push-pull outputs:
   *
@@ -270,14 +270,6 @@ void RN4677::factoryReset() {
 
 These are overrides from EventReceiver interface...
 ****************************************************************************************************/
-/**
-* Debug support function.
-*
-* @return a pointer to a string constant.
-*/
-const char* RN4677::getReceiverName() {  return "RN4677";  }
-
-
 /**
 * If we find ourselves in this fxn, it means an event that this class built (the argument)
 *   has been serviced and we are now getting the chance to see the results. The argument

@@ -443,7 +443,6 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     int8_t queue_io_job(BusOp*);
 
     /* Overrides from EventReceiver */
-    const char* getReceiverName();
     void printDebug(StringBuilder*);
     int8_t notify(ManuvrRunnable*);
     int8_t callback_proc(ManuvrRunnable *);

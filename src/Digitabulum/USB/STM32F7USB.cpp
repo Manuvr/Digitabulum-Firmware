@@ -23,11 +23,6 @@ Transport driver for the STM32F7 USB peripheral.
 
 #if defined(STM32F7XX) | defined(STM32F746xx)
 
-#if defined(ENABLE_USB_VCP)
-  #include "tm_stm32_usb_device.h"
-  #include "tm_stm32_usb_device_cdc.h"
-#endif
-
 #include "STM32F7USB.h"
 #include "FirmwareDefs.h"
 
@@ -49,9 +44,10 @@ Transport driver for the STM32F7 USB peripheral.
 * Interrupt service routine support functions. Everything in this block
 *   executes under an ISR. Keep it brief...
 *******************************************************************************/
-StringBuilder _accumulator;  // TODO: Should be a class member. Tired...
 
 extern "C" {
+  StringBuilder _accumulator;  // TODO: Should be a class member. Tired...
+
   static char _cmd_buf[MANUVR_USB_BUF_SIZE];
   static int  _cmd_buf_ptr = 0;
 
@@ -59,8 +55,9 @@ extern "C" {
   static volatile bool _rx_ready       = false;
 
 
-  void VCP_Rx_Notify(uint8_t*, int) {
+  void VCP_Rx_Notify(uint8_t* _in_buf, int _len) {
     _rx_ready = true;
+    TM_USBD_CDC_Putc(TM_USB_FS, *_in_buf);  // Local echo
   }
 
   void VCP_Tx_Complete() {
@@ -101,29 +98,14 @@ volatile STM32F7USB* STM32F7USB::INSTANCE = NULL;
 *
 */
 STM32F7USB::STM32F7USB() : ManuvrXport() {
-  __class_initializer();
-  _xport_mtu = MANUVR_USB_BUF_SIZE;
-}
-
-/**
-* Destructor
-*/
-STM32F7USB::~STM32F7USB() {
-  __kernel->unsubscribe(this);
-  _accumulator.clear();
-}
-
-/**
-* This is here for compatibility with C++ standards that do not allow for definition and declaration
-*   in the header file. Takes no parameters, and returns nothing.
-*/
-void STM32F7USB::__class_initializer() {
-  for (unsigned int i = 0; i < _xport_mtu; i++) *(_cmd_buf + i) = '\0';
   INSTANCE = this;
+  setReceiverName("USB");
+  for (unsigned int i = 0; i < _xport_mtu; i++) *(_cmd_buf + i) = '\0';
+  _bp_set_flag(BPIPE_FLAG_IS_BUFFERED, true);
 
   // We are the software nearest to the counterparty, and we do not
   //   allocate buffers we send.
-  setNear(this, MEM_MGMT_RESPONSIBLE_BEARER);
+  setNear(this);
 
   // Build some pre-formed Events.
   read_abort_event.repurpose(MANUVR_MSG_XPORT_QUEUE_RDY);
@@ -132,6 +114,15 @@ void STM32F7USB::__class_initializer() {
   read_abort_event.originator      = (EventReceiver*) this;
   read_abort_event.priority        = 5;
   read_abort_event.addArg(xport_id);  // Add our assigned transport ID to our pre-baked argument.
+
+  _xport_mtu = MANUVR_USB_BUF_SIZE;
+}
+
+/**
+* Destructor
+*/
+STM32F7USB::~STM32F7USB() {
+  _accumulator.clear();
 }
 
 
@@ -152,45 +143,13 @@ void STM32F7USB::__class_initializer() {
 */
 int8_t STM32F7USB::toCounterparty(StringBuilder* buf, int8_t mm) {
   _accumulator.concatHandoff(buf);
-  if (!_tx_in_progress) {
-    char* working_chunk = _accumulator.position(0);
-    if (write_port((uint8_t*) working_chunk, strlen(working_chunk))) {
-      _accumulator.drop_position(0);
-    }
+  char* working_chunk = _accumulator.position(0);
+  if (write_port((uint8_t*) working_chunk, strlen(working_chunk))) {
+    _accumulator.drop_position(0);
   }
   return MEM_MGMT_RESPONSIBLE_BEARER;  // We took the buffer.
 }
 
-
-
-/**
-* Log has reached the end of its journey. This class will render it to the user.
-*
-* @param  buf    A pointer to the buffer.
-* @param  len    How long the buffer is.
-* @param  mm     A declaration of memory-management responsibility.
-* @return A declaration of memory-management responsibility.
-*/
-int8_t STM32F7USB::toCounterparty(uint8_t* buf, unsigned int len, int8_t mm) {
-  if (!_tx_in_progress) {
-    char* working_chunk = (char*) buf;
-    if (_accumulator.length()) {
-      _accumulator.concat(buf, len);
-      working_chunk = _accumulator.position(0);
-    }
-
-    if (write_port((uint8_t*) working_chunk, strlen(working_chunk))) {
-      if (_accumulator.length()) {
-        // TODO: Ugly ugly ugly...
-        _accumulator.drop_position(0);
-      }
-    }
-  }
-  else {
-    _accumulator.concat(buf, len);
-  }
-  return MEM_MGMT_RESPONSIBLE_BEARER;  // We took the buffer.
-}
 
 /**
 * The buffer contains keyboard input.
@@ -200,7 +159,7 @@ int8_t STM32F7USB::toCounterparty(uint8_t* buf, unsigned int len, int8_t mm) {
 * @param  mm     A declaration of memory-management responsibility.
 * @return A declaration of memory-management responsibility.
 */
-int8_t STM32F7USB::fromCounterparty(uint8_t* buf, unsigned int len, int8_t mm) {
+int8_t STM32F7USB::fromCounterparty(StringBuilder* buf, int8_t mm) {
   switch (mm) {
     case MEM_MGMT_RESPONSIBLE_CALLER:
       // NOTE: No break. This might be construed as a way of saying CREATOR.
@@ -209,7 +168,7 @@ int8_t STM32F7USB::fromCounterparty(uint8_t* buf, unsigned int len, int8_t mm) {
           a) Did so with the intention that it never be free'd, or...
           b) Has a means of discovering when it is safe to free.  */
       if (haveFar()) {
-        return _far->fromCounterparty(buf, len, mm);
+        return _far->fromCounterparty(buf, mm);
       }
       else {
         return MEM_MGMT_RESPONSIBLE_BEARER;   // We take responsibility.
@@ -220,7 +179,7 @@ int8_t STM32F7USB::fromCounterparty(uint8_t* buf, unsigned int len, int8_t mm) {
           caller will expect _us_ to manage this memory.  */
       if (haveFar()) {
         /* We are not the transport driver, and we do no transformation. */
-        return _far->fromCounterparty(buf, len, mm);
+        return _far->fromCounterparty(buf, mm);
       }
       else {
         return MEM_MGMT_RESPONSIBLE_BEARER;   // We take responsibility.
@@ -267,14 +226,14 @@ int8_t STM32F7USB::listen() {
 
 // TODO: Perhaps reset the terminal?
 int8_t STM32F7USB::reset() {
-  #if defined(__MANUVR_DEBUG)
-    if (getVerbosity() > 3) local_log.concatf("STM32F7USB initialized.\n");
-  #endif
+  //#if defined(__MANUVR_DEBUG)
+  //  if (getVerbosity() > 3) local_log.concatf("STM32F7USB initialized.\n");
+  //#endif
   initialized(true);
   listening(true);
   connected(true);
 
-  if (local_log.length() > 0) Kernel::log(&local_log);
+  //if (local_log.length() > 0) Kernel::log(&local_log);
   return 0;
 }
 
@@ -282,24 +241,22 @@ int8_t STM32F7USB::reset() {
 * Read input from local keyboard.
 */
 int8_t STM32F7USB::read_port() {
-	char ch;
   int read_len = 0;
-
 	/* Check if we are ready to use, if drivers are OK installed on computer */
 	if (TM_USBD_IsDeviceReady(TM_USB_FS) == TM_USBD_Result_Ok) {
 		/* We are ready */
 		/* Check if anything received */
+	  char ch;
 		while (TM_USBD_CDC_Getc(TM_USB_FS, &ch)) {
+      //TM_USBD_CDC_Putc(TM_USB_FS, ch);  // Local echo
+      if (ch == '\r') ch = '\n';
       read_len++;
+      _cmd_buf[_cmd_buf_ptr++] = ch;
 
-      if ((ch == '\r') || (ch == '\n') || (ch == '\0')) {
-        TM_USBD_CDC_Putc(TM_USB_FS, '\n');  // Local echo
-        fromCounterparty((uint8_t*)_cmd_buf, read_len, MEM_MGMT_RESPONSIBLE_CREATOR);
+      if ((ch == '\n') || (ch == '\0')) {
+        BufferPipe::fromCounterparty((uint8_t*)_cmd_buf, read_len, MEM_MGMT_RESPONSIBLE_BEARER);
         _cmd_buf_ptr = 0;
         for (int i = 0; i < MANUVR_USB_BUF_SIZE; i++) *(_cmd_buf + i) = '\0';
-      }
-      else {
-        _cmd_buf[_cmd_buf_ptr++] = ch;
       }
 		}
 	}
@@ -307,19 +264,24 @@ int8_t STM32F7USB::read_port() {
 		/* We are not ready */
 	}
 
-  if (local_log.length() > 0) Kernel::log(&local_log);
   return read_len;
 }
 
 
 bool STM32F7USB::write_port(uint8_t* out, int out_len) {
-  if (!_tx_in_progress) {
+  if (connected()) {
     if (TM_USBD_IsDeviceReady(TM_USB_FS) == TM_USBD_Result_Ok) {
       TM_USBD_CDC_Puts(TM_USB_FS, (char*) out);
       _tx_in_progress = true;
     	TM_USBD_CDC_Process(TM_USB_FS);
       bytes_sent += out_len;
+      return true;
     }
+  }
+  else {
+    TM_USBD_CDC_Puts(TM_USB_FS, "write_port claims not connected\n");
+    _tx_in_progress = true;
+  	TM_USBD_CDC_Process(TM_USB_FS);
   }
   return false;
 }
@@ -341,20 +303,11 @@ bool STM32F7USB::write_port(uint8_t* out, int out_len) {
 * These are overrides from EventReceiver interface...
 ****************************************************************************************************/
 /**
-* Debug support function.
-*
-* @return a pointer to a string constant.
-*/
-const char* STM32F7USB::getReceiverName() {  return "USB";  }
-
-
-/**
 * Debug support method. This fxn is only present in debug builds.
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
 void STM32F7USB::printDebug(StringBuilder *temp) {
-  if (temp == NULL) return;
   ManuvrXport::printDebug(temp);
   temp->concatf("-- Class size      %d\n",     sizeof(STM32F7USB));
 }
@@ -369,14 +322,21 @@ void STM32F7USB::printDebug(StringBuilder *temp) {
 int8_t STM32F7USB::bootComplete() {
   EventReceiver::bootComplete();
 
+  /* Init USB peripheral as VCP */
+  TM_USBD_CDC_Init(TM_USB_FS);
+  TM_USBD_Start(TM_USB_FS);
+
   // Tolerate 30ms of latency on the line before flushing the buffer.
   read_abort_event.alterScheduleRecurrence(0);
   read_abort_event.alterSchedulePeriod(30);
   read_abort_event.autoClear(false);
   read_abort_event.enableSchedule(false);
-  read_abort_event.enableSchedule(false);
 
   reset();
+      TM_USBD_CDC_Puts(TM_USB_FS, (const char*)_accumulator.string());
+      _tx_in_progress = true;
+    	TM_USBD_CDC_Process(TM_USB_FS);
+      //_accumulator.clear();
   return 1;
 }
 
@@ -402,6 +362,12 @@ int8_t STM32F7USB::callback_proc(ManuvrRunnable *event) {
 
   /* Some class-specific set of conditionals below this line. */
   switch (event->event_code) {
+    case MANUVR_MSG_SYS_BOOTLOADER:
+    case MANUVR_MSG_SYS_REBOOT:
+    case MANUVR_MSG_SYS_SHUTDOWN:
+      TM_USBD_Stop(TM_USB_FS);    // DeInit() The USB device.
+      break;
+
     case MANUVR_MSG_XPORT_SEND:
       event->clearArgs();
       break;

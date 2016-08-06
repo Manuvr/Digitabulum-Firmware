@@ -349,8 +349,8 @@ const MessageTypeDef cpld_message_defs[] = {
 /**
 * Constructor. Also populates the global pointer reference.
 */
-CPLDDriver::CPLDDriver() {
-  __class_initializer();
+CPLDDriver::CPLDDriver() : EventReceiver() {
+  setReceiverName("CPLDDriver");
 
   if (NULL == cpld) {
     cpld = this;
@@ -1318,14 +1318,6 @@ int8_t CPLDDriver::iiu_group_irq() {
 *
 * These are overrides from EventReceiver interface...
 ****************************************************************************************************/
-/**
-* Debug support function.
-*
-* @return a pointer to a string constant.
-*/
-const char* CPLDDriver::getReceiverName() {  return "CPLD";  }
-
-
 /**
 * Fire-up anything that depends on the Kernel...
 *

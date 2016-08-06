@@ -30,6 +30,10 @@ This driver allows us to treat an STDIO set under linux as if it were
 
 #define MANUVR_USB_BUF_SIZE  255
 
+#if defined(ENABLE_USB_VCP)
+  #include "tm_stm32_usb_device.h"
+  #include "tm_stm32_usb_device_cdc.h"
+#endif
 
 #include <Transports/ManuvrXport.h>
 
@@ -41,31 +45,27 @@ class STM32F7USB : public ManuvrXport {
 
     /* Override from BufferPipe. */
     virtual int8_t toCounterparty(StringBuilder*, int8_t mm);
-    virtual int8_t toCounterparty(uint8_t* buf, unsigned int len, int8_t mm);
-    virtual int8_t fromCounterparty(uint8_t* buf, unsigned int len, int8_t mm);
+    virtual int8_t fromCounterparty(StringBuilder* buf, int8_t mm);
 
     /* Overrides from EventReceiver */
     int8_t bootComplete();
-    const char* getReceiverName();
     void printDebug(StringBuilder *);
     int8_t notify(ManuvrRunnable*);
     int8_t callback_proc(ManuvrRunnable*);
 
-
+    /* Overrides from ManuvrXport */
     int8_t connect();
     int8_t disconnect();
     int8_t listen();
     int8_t reset();
 
-    int8_t read_port();
+    virtual int8_t read_port();
     bool   write_port(uint8_t* out, int out_len);
 
     volatile static STM32F7USB* INSTANCE;
 
 
   protected:
-    void __class_initializer();
-
 
   private:
 };

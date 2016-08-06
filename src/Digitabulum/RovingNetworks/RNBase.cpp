@@ -191,8 +191,8 @@ void host_read_abort() {
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 
-RNBase::RNBase(uint8_t rst_pin) {
-  //__class_initializer();
+RNBase::RNBase(uint8_t rst_pin) : ManuvrXport() {
+  setReceiverName("RNBase");
   //BTQueuedOperation::buildDMAMembers();
   if (NULL == INSTANCE) {
     INSTANCE = this;
@@ -262,7 +262,7 @@ void RNBase::gpioSetup() {
 * @param  mm     A declaration of memory-management responsibility.
 * @return A declaration of memory-management responsibility.
 */
-int8_t RNBase::toCounterparty(uint8_t* buf, unsigned int len, int8_t mm) {
+int8_t RNBase::toCounterparty(StringBuilder* buf, int8_t mm) {
   switch (mm) {
     case MEM_MGMT_RESPONSIBLE_CALLER:
       // NOTE: No break. This might be construed as a way of saying CREATOR.
@@ -271,7 +271,8 @@ int8_t RNBase::toCounterparty(uint8_t* buf, unsigned int len, int8_t mm) {
           a) Did so with the intention that it never be free'd, or...
           b) Has a means of discovering when it is safe to free.  */
       {
-        StringBuilder *temp = new StringBuilder(buf, len);
+        StringBuilder *temp = new StringBuilder();
+        temp->concatHandoff(buf);
         insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
       }
       return mm;
@@ -281,7 +282,8 @@ int8_t RNBase::toCounterparty(uint8_t* buf, unsigned int len, int8_t mm) {
           caller will expect _us_ to manage this memory.  */
       // TODO: Freeing the buffer?
       {
-        StringBuilder *temp = new StringBuilder(buf, len);
+        StringBuilder *temp = new StringBuilder();
+        temp->concatHandoff(buf);
         insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
       }
       return mm;
@@ -301,7 +303,7 @@ int8_t RNBase::toCounterparty(uint8_t* buf, unsigned int len, int8_t mm) {
 * @param  mm     A declaration of memory-management responsibility.
 * @return A declaration of memory-management responsibility.
 */
-int8_t RNBase::fromCounterparty(uint8_t* buf, unsigned int len, int8_t mm) {
+int8_t RNBase::fromCounterparty(StringBuilder* buf, int8_t mm) {
   switch (mm) {
     case MEM_MGMT_RESPONSIBLE_CALLER:
       // NOTE: No break. This might be construed as a way of saying CREATOR.
@@ -310,7 +312,7 @@ int8_t RNBase::fromCounterparty(uint8_t* buf, unsigned int len, int8_t mm) {
           a) Did so with the intention that it never be free'd, or...
           b) Has a means of discovering when it is safe to free.  */
       if (haveFar()) {
-        return _far->fromCounterparty(buf, len, mm);
+        return _far->fromCounterparty(buf, mm);
       }
       else {
         return MEM_MGMT_RESPONSIBLE_BEARER;   // We take responsibility.
@@ -321,7 +323,7 @@ int8_t RNBase::fromCounterparty(uint8_t* buf, unsigned int len, int8_t mm) {
           caller will expect _us_ to manage this memory.  */
       if (haveFar()) {
         /* We are not the transport driver, and we do no transformation. */
-        return _far->fromCounterparty(buf, len, mm);
+        return _far->fromCounterparty(buf, mm);
       }
       else {
         return MEM_MGMT_RESPONSIBLE_BEARER;   // We take responsibility.
@@ -871,7 +873,7 @@ void RNBase::feed_rx_buffer(unsigned char *nu, uint8_t len) {
     }
   }
   else {   // This data must be meant for a session... (So we hope)
-    fromCounterparty(nu, len, MEM_MGMT_RESPONSIBLE_BEARER);
+    BufferPipe::fromCounterparty(nu, len, MEM_MGMT_RESPONSIBLE_BEARER);
   }
 
   if (local_log.length() > 0) Kernel::log(&local_log);
