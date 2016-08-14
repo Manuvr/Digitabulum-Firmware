@@ -29,7 +29,8 @@ limitations under the License.
 volatile IREmitter* IREmitter::INSTANCE = NULL;
 
 
-IREmitter::IREmitter() {
+IREmitter::IREmitter() : EventReceiver() {
+  setReceiverName("IREmitter");
   INSTANCE = (IREmitter*) this;
 }
 
@@ -71,15 +72,6 @@ void IREmitter::gpioSetup() {
 *
 * These are overrides from EventReceiver interface...
 ****************************************************************************************************/
-
-/**
-* Debug support function.
-*
-* @return a pointer to a string constant.
-*/
-const char* IREmitter::getReceiverName() {  return "IREmitter";  }
-
-
 /**
 * Debug support function.
 *

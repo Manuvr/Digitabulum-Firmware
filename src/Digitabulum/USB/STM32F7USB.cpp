@@ -151,48 +151,6 @@ int8_t STM32F7USB::toCounterparty(StringBuilder* buf, int8_t mm) {
 }
 
 
-/**
-* The buffer contains keyboard input.
-*
-* @param  buf    A pointer to the buffer.
-* @param  len    How long the buffer is.
-* @param  mm     A declaration of memory-management responsibility.
-* @return A declaration of memory-management responsibility.
-*/
-int8_t STM32F7USB::fromCounterparty(StringBuilder* buf, int8_t mm) {
-  switch (mm) {
-    case MEM_MGMT_RESPONSIBLE_CALLER:
-      // NOTE: No break. This might be construed as a way of saying CREATOR.
-    case MEM_MGMT_RESPONSIBLE_CREATOR:
-      /* The system that allocated this buffer either...
-          a) Did so with the intention that it never be free'd, or...
-          b) Has a means of discovering when it is safe to free.  */
-      if (haveFar()) {
-        return _far->fromCounterparty(buf, mm);
-      }
-      else {
-        return MEM_MGMT_RESPONSIBLE_BEARER;   // We take responsibility.
-      }
-
-    case MEM_MGMT_RESPONSIBLE_BEARER:
-      /* We are now the bearer. That means that by returning non-failure, the
-          caller will expect _us_ to manage this memory.  */
-      if (haveFar()) {
-        /* We are not the transport driver, and we do no transformation. */
-        return _far->fromCounterparty(buf, mm);
-      }
-      else {
-        return MEM_MGMT_RESPONSIBLE_BEARER;   // We take responsibility.
-      }
-
-    default:
-      /* This is more ambiguity than we are willing to bear... */
-      return MEM_MGMT_RESPONSIBLE_ERROR;
-  }
-  return MEM_MGMT_RESPONSIBLE_ERROR;
-}
-
-
 
 /*******************************************************************************
 * ___________                                                  __
@@ -333,7 +291,8 @@ int8_t STM32F7USB::bootComplete() {
   read_abort_event.enableSchedule(false);
 
   reset();
-      TM_USBD_CDC_Puts(TM_USB_FS, (const char*)_accumulator.string());
+      //TM_USBD_CDC_Puts(TM_USB_FS, (const char*)_accumulator.string());
+      TM_USBD_CDC_Puts(TM_USB_FS, "USB Came up.\n");
       _tx_in_progress = true;
     	TM_USBD_CDC_Process(TM_USB_FS);
       //_accumulator.clear();

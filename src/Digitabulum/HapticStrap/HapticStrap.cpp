@@ -67,8 +67,9 @@ const MessageTypeDef haptic_message_defs[] = {
 * Constructors/destructors, class initialization functions and so-forth...
 ****************************************************************************************************/
 
-HapticStrap::HapticStrap() {
+HapticStrap::HapticStrap() : EventReceiver() {
   if (NULL == INSTANCE) {
+    setReceiverName("StandardIO");
     INSTANCE = this;
     ManuvrMsg::registerMessages(
       haptic_message_defs,
@@ -112,15 +113,6 @@ void HapticStrap::gpioSetup() {
 *
 * These are overrides from EventReceiver interface...
 ****************************************************************************************************/
-
-/**
-* Debug support function.
-*
-* @return a pointer to a string constant.
-*/
-const char* HapticStrap::getReceiverName() {  return "HapticStrap";  }
-
-
 /**
 * Debug support function.
 *
@@ -129,7 +121,6 @@ const char* HapticStrap::getReceiverName() {  return "HapticStrap";  }
 void HapticStrap::printDebug(StringBuilder* output) {
   EventReceiver::printDebug(output);
 }
-
 
 
 /**
@@ -142,7 +133,6 @@ int8_t HapticStrap::bootComplete() {
   EventReceiver::bootComplete();   // Call up to get scheduler ref and class init.
   return 0;
 }
-
 
 
 /**
@@ -172,7 +162,6 @@ int8_t HapticStrap::callback_proc(ManuvrRunnable *event) {
 
   return return_value;
 }
-
 
 
 int8_t HapticStrap::notify(ManuvrRunnable *active_event) {

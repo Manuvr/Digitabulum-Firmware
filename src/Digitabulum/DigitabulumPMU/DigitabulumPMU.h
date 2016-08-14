@@ -90,12 +90,11 @@ void mcp73833_stat2_isr();
 class PMU : public EventReceiver {
   public:
     PMU(INA219*);
-    ~PMU();
+    virtual ~PMU();
 
     /* Overrides from EventReceiver */
     int8_t notify(ManuvrRunnable*);
     int8_t callback_proc(ManuvrRunnable *);
-    const char* getReceiverName();
     void printDebug(StringBuilder*);
     #if defined(__MANUVR_CONSOLE_SUPPORT)
       void procDirectDebugInstruction(StringBuilder*);
@@ -111,6 +110,7 @@ class PMU : public EventReceiver {
     inline const char* getChargeStateString() {  return getChargeStateString(_charge_state); };
 
     static volatile PMU *INSTANCE;
+
 
   protected:
     int8_t bootComplete();

@@ -80,7 +80,8 @@ const char* PMU::getChargeStateString(ChargeState code) {
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 
-PMU::PMU(INA219* _cv_sense) {
+PMU::PMU(INA219* _cv_sense) : EventReceiver() {
+  setReceiverName("PMU");
   INSTANCE   = this;
   _cpu_clock = CPUFreqSetting::CPU_CLK_UNDEF;
   _stat1_pin = 16;
@@ -204,15 +205,6 @@ void PMU::set_stat2_delta(unsigned int nu) {
 *
 * These are overrides from EventReceiver interface...
 ****************************************************************************************************/
-
-/**
-* Debug support function.
-*
-* @return a pointer to a string constant.
-*/
-const char* PMU::getReceiverName() {  return "PMU";  }
-
-
 /**
 * Debug support function.
 *
@@ -234,7 +226,6 @@ void PMU::printDebug(StringBuilder* output) {
 }
 
 
-
 /**
 *
 * @return 0 on no action, 1 on action, -1 on failure.
@@ -245,7 +236,6 @@ int8_t PMU::bootComplete() {
   cpu_scale(1);
   return 0;
 }
-
 
 
 /**
@@ -275,7 +265,6 @@ int8_t PMU::callback_proc(ManuvrRunnable *event) {
 
   return return_value;
 }
-
 
 
 int8_t PMU::notify(ManuvrRunnable *active_event) {

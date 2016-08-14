@@ -32,7 +32,8 @@ limitations under the License.
 //volatile ExpansionPort* ExpansionPort::INSTANCE = NULL;
 
 
-ExpansionPort::ExpansionPort() {
+ExpansionPort::ExpansionPort() : EventReceiver() {
+  setReceiverName("ExpansionPort");
   INSTANCE = this;
 }
 
@@ -60,15 +61,6 @@ void ExpansionPort::gpioSetup() {
 *
 * These are overrides from EventReceiver interface...
 ****************************************************************************************************/
-
-/**
-* Debug support function.
-*
-* @return a pointer to a string constant.
-*/
-const char* ExpansionPort::getReceiverName() {  return "ExpansionPort";  }
-
-
 /**
 * Debug support function.
 *
@@ -77,7 +69,6 @@ const char* ExpansionPort::getReceiverName() {  return "ExpansionPort";  }
 void ExpansionPort::printDebug(StringBuilder* output) {
   EventReceiver::printDebug(output);
 }
-
 
 
 /**
@@ -90,7 +81,6 @@ int8_t ExpansionPort::bootComplete() {
   EventReceiver::bootComplete();   // Call up to get scheduler ref and class init.
   return 0;
 }
-
 
 
 /**

@@ -319,9 +319,9 @@ int main(void) {
 
   // Pins 58 and 63 are the reset and IRQ pin, respectively.
   // This is translated to pins 10 and 13 on PortD.
-  ADP8866 leds(58, 63, 0x27);
-  i2c.addSlaveDevice(&leds);
-  kernel->subscribe((EventReceiver*) &leds);
+  //ADP8866 leds(58, 63, 0x27);
+  //i2c.addSlaveDevice(&leds);
+  //kernel->subscribe((EventReceiver*) &leds);
 
   INA219 ina219(0x4A);
   i2c.addSlaveDevice(&ina219);
@@ -348,11 +348,6 @@ int main(void) {
 
   PMU pmu(&ina219);
   kernel->subscribe((EventReceiver*) &pmu);
-
-  unsigned char* help  = (unsigned char*) "This is a test message\n";
-  unsigned char* help1 = (unsigned char*) "A seconded\n";
-  _console_patch.bootComplete();
-  _console.bootComplete();
 
   kernel->bootstrap();
 

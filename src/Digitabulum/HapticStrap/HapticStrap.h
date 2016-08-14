@@ -33,12 +33,11 @@ limitations under the License.
 class HapticStrap : public EventReceiver {
   public:
     HapticStrap();
-    ~HapticStrap();
+    virtual ~HapticStrap();
 
     /* Overrides from EventReceiver */
     int8_t notify(ManuvrRunnable*);
     int8_t callback_proc(ManuvrRunnable *);
-    const char* getReceiverName();
     void printDebug(StringBuilder*);
     #if defined(__MANUVR_CONSOLE_SUPPORT)
       void procDirectDebugInstruction(StringBuilder*);

@@ -337,7 +337,8 @@ uint8_t BSP_SD_IsDetected(void) {
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 
-SDCard::SDCard() {
+SDCard::SDCard() : EventReceiver() {
+  setReceiverName("SDCard");
 }
 
 
@@ -426,15 +427,6 @@ void SDCard::gpioSetup() {
 *
 * These are overrides from EventReceiver interface...
 ****************************************************************************************************/
-
-/**
-* Debug support function.
-*
-* @return a pointer to a string constant.
-*/
-const char* SDCard::getReceiverName() {  return "SDCard";  }
-
-
 /**
 * Debug support method. This fxn is only present in debug builds.
 *
