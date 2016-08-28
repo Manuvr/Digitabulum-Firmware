@@ -1380,7 +1380,7 @@ int8_t CPLDDriver::callback_proc(ManuvrRunnable *event) {
   int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
 
   /* Some class-specific set of conditionals below this line. */
-  switch (event->event_code) {
+  switch (event->eventCode()) {
     case DIGITABULUM_MSG_SPI_QUEUE_READY:
       return_value = ((work_queue.size() > 0) || (NULL != current_queue_item)) ? EVENT_CALLBACK_RETURN_RECYCLE : return_value;
       break;
@@ -1397,7 +1397,7 @@ int8_t CPLDDriver::callback_proc(ManuvrRunnable *event) {
 
 int8_t CPLDDriver::notify(ManuvrRunnable *active_event) {
   int8_t return_value = 0;
-  switch (active_event->event_code) {
+  switch (active_event->eventCode()) {
     /* General system events */
     case MANUVR_MSG_INTERRUPTS_MASKED:
       break;

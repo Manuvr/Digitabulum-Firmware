@@ -382,7 +382,7 @@ int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
     legend_broadcast->originator      = (EventReceiver*) this;
     legend_broadcast->specific_target = nu_legend->owner;
     legend_broadcast->priority        = EVENT_PRIORITY_LOWEST + 1;
-    legend_broadcast->markArgForReap(legend_broadcast->addArg(legend_string), true);
+    legend_broadcast->addArg(legend_string)->reapValue(true);
 
     if (should_enable_pid) {
       event_legend_frame_ready.enableSchedule(true);
@@ -581,7 +581,7 @@ int8_t LegendManager::callback_proc(ManuvrRunnable *event) {
   int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
 
   /* Some class-specific set of conditionals below this line. */
-  switch (event->event_code) {
+  switch (event->eventCode()) {
     case DIGITABULUM_MSG_IMU_READ:
       switch (last_imu_read) {
         case 0:
@@ -698,7 +698,7 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
   uint8_t temp_uint_8 = 0;
 
   /* Some class-specific set of conditionals below this line. */
-  switch (active_event->event_code) {
+  switch (active_event->eventCode()) {
     case DIGITABULUM_MSG_IMU_READ:
       iius[last_imu_read].readSensor();
       return_value++;

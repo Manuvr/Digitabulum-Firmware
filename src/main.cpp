@@ -44,8 +44,9 @@ limitations under the License.
 #include "cmsis_os.h"
 #include "fatfs.h"
 
+/* This global makes this source file read better. */
+Kernel* kernel = nullptr;
 
-Kernel* kernel      = NULL;
 TIM_HandleTypeDef htim2;  // This is the timer for the CPLD clock.
 
 
@@ -296,10 +297,13 @@ int main(void) {
   /* Start scheduler */
   //osKernelStart();
 
-  kernel = new Kernel();  // Instance a kernel.
-  #if defined(__MANUVR_DEBUG)
-    kernel->profiler(true);
-  #endif
+  /*
+  * The platform object is created on the stack, but takes no action upon
+  *   construction. The first thing that should be done is to call the preinit
+  *   function to setup the defaults of the platform.
+  */
+  platform.platformPreInit();
+  kernel = platform.getKernel();
 
   // TODO: Until smarter idea is finished, manually patch the USB-VCP into a
   //         BufferPipe that takes the place of the transport driver.
@@ -349,7 +353,12 @@ int main(void) {
   PMU pmu(&ina219);
   kernel->subscribe((EventReceiver*) &pmu);
 
-  kernel->bootstrap();
+  platform.bootstrap();
+  
+  /*
+  * If that function returned 'nominal', we call postInit() to finalize.
+  */
+  platform.platformPostInit();
 
   //_console_patch.toCounterparty((unsigned char*)help, 1+strlen((const char*)help), MEM_MGMT_RESPONSIBLE_CREATOR);
   //_console.toCounterparty((unsigned char*)help1, 1+strlen((const char*)help1), MEM_MGMT_RESPONSIBLE_CREATOR);
