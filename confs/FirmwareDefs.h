@@ -71,17 +71,6 @@ This is an example file for building firmware on linux. Anticipated target is a 
 
 #define EXTENDED_DETAIL_STRING    "{}"  // Optional. User-defined.
 
-// We have console support on linux. On a bare-metal build, this would mean that we've designated
-//   a serial port (or some other transport) as a target for plaintext interaction. This is
-//   typically only useful for debugging firmware.
-// If you don't want console support, comment the line below.
-// NOTE: If your Makefile passes the __MANUVR_DEBUG option, this will be enabled regardless.
-#define __MANUVR_CONSOLE_SUPPORT
-
-// If you want the console exposed via an arbitrary transport, rather than declaring
-//   a serial port for unsecured access, uncomment the flag below.
-//#define MANUVR_CONSOLE_SESSION
-
 // If another Manuverable asks, we will send them semantic definitions for our messages.
 // Comment the line below if your platform is too-small to support these, or you don't intend
 //   your Manuvrable to be used by a human directly.

@@ -7,19 +7,11 @@
 # Make the lib directory...
 mkdir lib
 
-# CoAP, if desired.
-rm -rf lib/wakaama
-git clone https://github.com/eclipse/wakaama.git lib/wakaama
-
-# MQTT, if desired.
+# CBOR...
 # Note that we do special-handling here to make the build-process smoother...
-rm -rf lib/paho.mqtt.embedded-c
-git clone https://github.com/eclipse/paho.mqtt.embedded-c.git lib/paho.mqtt.embedded-c
-cp lib/paho.mqtt.embedded-c/MQTTPacket/src/* lib/paho.mqtt.embedded-c/
-
-# Telehash
-rm -rf lib/telehash-c
-git clone https://github.com/telehash/telehash-c.git lib/telehash-c
+rm -rf lib/cbor-cpp
+git clone https://github.com/naphaso/cbor-cpp.git lib/cbor-cpp
+ln -s `pwd`/lib/cbor-cpp/src/ lib/cbor-cpp/include
 
 # Return...
 cd ..

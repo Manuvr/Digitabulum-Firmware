@@ -1,14 +1,39 @@
 # Build all libraries
+C_STANDARD   = c99
+CPP_STANDARD = gnu++11
 
-all:
+LOCAL_CXX_FLAGS = -nostdlib $(CPP_FLAGS)
+
+SOURCES_CBOR  = cbor-cpp/src/encoder.cpp
+SOURCES_CBOR += cbor-cpp/src/decoder.cpp
+SOURCES_CBOR += cbor-cpp/src/input.cpp
+SOURCES_CBOR += cbor-cpp/src/output_dynamic.cpp
+SOURCES_CBOR += cbor-cpp/src/output_static.cpp
+
+SOURCES_CPP = $(SOURCES_CBOR)
+
+OBJS  = $(SOURCES_C:.c=.o) $(SOURCES_CPP:.cpp=.o)
+
+LIBNAME = libcbor.a
+
+
+all: $(LIBNAME)
 	$(MAKE) -C Drivers
 	$(MAKE) -C Middlewares
-	$(MAKE) -C telehash-c
 	$(MAKE) -C ManuvrOS
 
+%.o : %.c
+	$(CC) $(INCLUDES) $(LOCAL_C_FLAGS) -std=$(C_STANDARD) -c $< -o $@
+
+%.o : %.cpp
+	$(CXX) $(INCLUDES) $(LOCAL_CXX_FLAGS) -std=$(CPP_STANDARD) -c $< -o $@
+
+$(LIBNAME): $(OBJS)
+	$(AR) -rvs $(OUTPUT_PATH)/$@ $(OBJS)
+
 clean:
-	rm -f *.a
+	rm -f $(OBJS)
+	rm -f $(OUTPUT_PATH)/$(LIBNAME)
 	$(MAKE) clean -C Drivers
 	$(MAKE) clean -C Middlewares
-	$(MAKE) clean -C telehash-c
 	$(MAKE) clean -C ManuvrOS

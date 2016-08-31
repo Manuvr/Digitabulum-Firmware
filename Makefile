@@ -3,19 +3,15 @@
 # Author: J. Ian Lindsay
 # Date:   2014.08.13
 #
-#
-#
 # Variables for the firmware compilation...
 ###########################################################################
 FIRMWARE_NAME      = digitabulum
-
-MCU                = cortex-m7
-EXT_CLK_RATE       = 24000000
-#OPTIMIZATION       = -O0 -g
 OPTIMIZATION       = -O2
 C_STANDARD         = gnu99
 CPP_STANDARD       = gnu++11
 
+MCU                = cortex-m7
+EXT_CLK_RATE       = 24000000
 
 ###########################################################################
 # Environmental awareness...
@@ -35,7 +31,7 @@ export AS      = $(TOOLCHAIN)/arm-none-eabi-as
 export CP      = $(TOOLCHAIN)/arm-none-eabi-objcopy
 export OD      = $(TOOLCHAIN)/arm-none-eabi-objdump
 export SZ      = $(TOOLCHAIN)/arm-none-eabi-size
-export MAKE    = make
+export MAKE    = $(shell which make)
 
 
 ###########################################################################
@@ -44,8 +40,9 @@ export MAKE    = make
 INCLUDES    = -iquote. -iquotesrc/
 INCLUDES   += -Icompiler/arm-none-eabi/include/
 INCLUDES   += -I$(WHERE_I_AM)/lib/ManuvrOS
-INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/STM32F7xx_HAL_Driver/Inc/
+INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/STM32F7xx_HAL_Driver/Inc
 INCLUDES   += -I$(WHERE_I_AM)/lib/Inc
+INCLUDES   += -I$(WHERE_I_AM)/lib
 INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/CMSIS/Device/ST/STM32F7xx/Include
 INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/CMSIS/Include
 INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/USB_Device/Class/CDC/Inc
@@ -68,10 +65,10 @@ MCUFLAGS += -mfpu=fpv5-sp-d16 -mfloat-abi=hard
 MCUFLAGS += -ffreestanding
 
 # Library paths
-LIBPATHS  = -L. -Llib/
+LIBPATHS  = -L. -L$(OUTPUT_PATH)
 
 # Libraries to link
-LIBS = -lm -lstdperiph -lfatfs -lfreertos -lc -lgcc -lstdc++
+LIBS = -lm -lfatfs -lfreertos -lc -lgcc -lstdc++
 
 # Flags for the linker...
 LDFLAGS  = -static $(MCUFLAGS)
@@ -82,7 +79,6 @@ LDFLAGS += -Wl,-Map=$(FIRMWARE_NAME).map
 
 # Wrap the include paths into the flags...
 CFLAGS =  $(INCLUDES)
-CFLAGS += -L$(OUTPUT_PATH)
 CFLAGS += $(OPTIMIZATION) -Wall
 
 # We include this specifically so that we can get a grip on configuration headers
@@ -96,34 +92,21 @@ CFLAGS += -DREENTRANT_SYSCALLS_PROVIDED -DUSE_STDPERIPH_DRIVER
 CFLAGS += -DENABLE_USB_VCP
 #CFLAGS += -DHAL_CORTEX_MODULE_ENABLED
 
-CFLAGS += -D__MANUVR_DEBUG
 #CFLAGS += -DMANUVR_SUPPORT_MQTT
-CFLAGS += -DMANUVR_OVER_THE_WIRE
+MANUVR_OPTIONS += -DMANUVR_OVER_THE_WIRE
+MANUVR_OPTIONS += -DMANUVR_CBOR
+MANUVR_OPTIONS += -D__MANUVR_CONSOLE_SUPPORT
+MANUVR_OPTIONS += -D__MANUVR_DEBUG
+MANUVR_OPTIONS += -D__MANUVR_EVENT_PROFILER
 
 # Debug options.
 #CFLAGS += -g -ggdb
-
-CPP_FLAGS = -std=$(CPP_STANDARD) $(CFLAGS)
-CPP_FLAGS += -fno-rtti -fno-exceptions
 #CPP_FLAGS += -fno-use-linker-plugin
 #CPP_FLAGS += -fstack-usage
 
-###########################################################################
-# Are we on a 64-bit system? If so, we'll need to specify
-#   that we want a 32-bit build...
-# Thanks, estabroo...
-# http://www.linuxquestions.org/questions/programming-9/how-can-make-makefile-detect-64-bit-os-679513/
-###########################################################################
-LBITS = $(shell getconf LONG_BIT)
-ifeq ($(LBITS),64)
-  TARGET_WIDTH = -m32
-else
-  TARGET_WIDTH =
-endif
-
 # Finally, export our flags for downstream Makefiles...
-export CFLAGS
-export CPP_FLAGS
+export CFLAGS += $(MANUVR_OPTIONS)
+export CPP_FLAGS = -std=$(CPP_STANDARD) $(CFLAGS) -fno-rtti -fno-exceptions
 
 export STM32F746xx
 
@@ -155,14 +138,11 @@ CPP_SRCS  += src/Digitabulum/ExpansionPort/ExpansionPort.cpp
 CPP_SRCS  += src/Digitabulum/DigitabulumPMU/DigitabulumPMU.cpp
 
 
-# TODO: Need to understand why -l won't blend....
-LIB_HARDCODES = $(OUTPUT_PATH)/*.a
-
 ###################################################
 
 vpath %.cpp src
 vpath %.c src
-vpath %.a lib
+vpath %.a $(OUTPUT_PATH)
 
 
 ###########################################################################
@@ -170,8 +150,7 @@ vpath %.a lib
 ###########################################################################
 OBJS = $(SRCS:.c=.o)
 
-.PHONY: lib $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
-
+.PHONY: all
 
 all: $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 	$(SZ) $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
@@ -181,14 +160,13 @@ all: $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 	$(CC) $(CFLAGS) -c -o $@ $^
 
 
-lib: $(OBJS)
+libs:
 	mkdir -p $(OUTPUT_PATH)
 	$(MAKE) -C lib
 
 
-$(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: lib
-	$(shell mkdir $(OUTPUT_PATH))
-	$(CXX) $(CPP_FLAGS) $(LDFLAGS) src/startup.s $(CPP_SRCS) $(OBJS) $(LIB_HARDCODES) -o $@
+$(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: $(OBJS) libs
+	$(CXX) $(CPP_FLAGS) $(LDFLAGS) src/startup.s $(CPP_SRCS) $(OBJS) -lmanuvr -lcbor -lstdperiph -o $@
 	$(CP) -O ihex $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 	$(CP) -O binary $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin
 
