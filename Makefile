@@ -19,6 +19,8 @@ EXT_CLK_RATE       = 24000000
 WHERE_I_AM         = $(shell pwd)
 TOOLCHAIN          = $(WHERE_I_AM)/compiler/bin
 STLINK_LOADER_PATH = $(WHERE_I_AM)/compiler/stlink
+CPP_FLAGS          = -fno-rtti -fno-exceptions
+CFLAGS             =
 
 # This is where we will store compiled libs and the final output.
 export OUTPUT_PATH  = $(WHERE_I_AM)/build
@@ -96,19 +98,19 @@ CFLAGS += -DENABLE_USB_VCP
 MANUVR_OPTIONS += -DMANUVR_OVER_THE_WIRE
 MANUVR_OPTIONS += -DMANUVR_CBOR
 MANUVR_OPTIONS += -D__MANUVR_CONSOLE_SUPPORT
-MANUVR_OPTIONS += -D__MANUVR_DEBUG
 MANUVR_OPTIONS += -D__MANUVR_EVENT_PROFILER
 
-# Debug options.
+# Debugging options...
+ifeq ($(DEBUG),1)
+MANUVR_OPTIONS += -D__MANUVR_DEBUG
+#MANUVR_OPTIONS += -D__MANUVR_PIPE_DEBUG
 #CFLAGS += -g -ggdb
 #CPP_FLAGS += -fno-use-linker-plugin
 #CPP_FLAGS += -fstack-usage
-
-# Finally, export our flags for downstream Makefiles...
-export CFLAGS += $(MANUVR_OPTIONS)
-export CPP_FLAGS = -std=$(CPP_STANDARD) $(CFLAGS) -fno-rtti -fno-exceptions
+endif
 
 export STM32F746xx
+export MANUVR_PLATFORM = STM32F7
 
 ###########################################################################
 # Source file definitions...
@@ -138,17 +140,23 @@ CPP_SRCS  += src/Digitabulum/ExpansionPort/ExpansionPort.cpp
 CPP_SRCS  += src/Digitabulum/DigitabulumPMU/DigitabulumPMU.cpp
 
 
-###################################################
+
+###########################################################################
+# exports, consolidation....
+###########################################################################
+OBJS = $(SRCS:.c=.o)
+
+# Finally, export our flags for downstream Makefiles...
+export CFLAGS += $(MANUVR_OPTIONS)
+export CPP_FLAGS += -std=$(CPP_STANDARD) $(CFLAGS)
 
 vpath %.cpp src
 vpath %.c src
 vpath %.a $(OUTPUT_PATH)
 
-
 ###########################################################################
 # Rules for building the firmware follow...
 ###########################################################################
-OBJS = $(SRCS:.c=.o)
 
 .PHONY: all
 
@@ -166,7 +174,7 @@ libs:
 
 
 $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: $(OBJS) libs
-	$(CXX) $(CPP_FLAGS) $(LDFLAGS) src/startup.s $(CPP_SRCS) $(OBJS) -lmanuvr -lcbor -lstdperiph -o $@
+	$(CXX) $(CPP_FLAGS) $(LDFLAGS) src/startup.s $(CPP_SRCS) $(OBJS) -lmanuvr -lstdperiph -o $@
 	$(CP) -O ihex $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 	$(CP) -O binary $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin
 

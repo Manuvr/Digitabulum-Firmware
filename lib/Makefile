@@ -4,17 +4,11 @@ CPP_STANDARD = gnu++11
 
 LOCAL_CXX_FLAGS = -nostdlib $(CPP_FLAGS)
 
-SOURCES_CBOR  = cbor-cpp/src/encoder.cpp
-SOURCES_CBOR += cbor-cpp/src/decoder.cpp
-SOURCES_CBOR += cbor-cpp/src/input.cpp
-SOURCES_CBOR += cbor-cpp/src/output_dynamic.cpp
-SOURCES_CBOR += cbor-cpp/src/output_static.cpp
-
-SOURCES_CPP = $(SOURCES_CBOR)
+SOURCES_CPP =
 
 OBJS  = $(SOURCES_C:.c=.o) $(SOURCES_CPP:.cpp=.o)
 
-LIBNAME = libcbor.a
+LIBNAME = libextras.a
 
 
 all: $(LIBNAME)
