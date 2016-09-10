@@ -54,6 +54,16 @@ The contents of this file will be periodically archived and purged to keep the l
 ### 2016.08.16
  265240    2816    9432  277488   More cleanup and fat trimming.
 
+------
 
 ### 2016.08.28
  266104    2856    9420  278380   After platform re-work.
+
+------
+
+### 2016.09.09
+ 271744    2856   10072  284672   New baseline after massive upheaval in Manuvr.
+
+This needs to be investigated. But I'm willing to bet that it's a simple goof I will find on accident if I ignore it for awhile. I have the whole weekend to knock down some hard problems. Let's see where this goes...
+
+------

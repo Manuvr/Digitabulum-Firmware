@@ -24,7 +24,7 @@ Transport driver for the STM32F7 USB peripheral.
 #if defined(STM32F7XX) | defined(STM32F746xx)
 
 #include "STM32F7USB.h"
-#include "FirmwareDefs.h"
+#include "ManuvrConf.h"
 
 #include <Kernel.h>
 #include <Platform/Platform.h>

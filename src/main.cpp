@@ -17,12 +17,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
+    .__       ,    .     .
+    |  \* _ *-+- _.|_ . .|. .._ _
+    |__/|(_]| | (_][_)(_||(_|[ | )
+         ._|
 
+Intended target is an STM32F7.
 */
 
-#include "FirmwareDefs.h"
-
 #include <Kernel.h>
+#include <Platform/Platform.h>
 #include <Drivers/i2c-adapter/i2c-adapter.h>
 #include <Drivers/ADP8866/ADP8866.h>
 #include <XenoSession/Console/ManuvrConsole.h>
@@ -303,7 +307,7 @@ int main(void) {
   *   function to setup the defaults of the platform.
   */
   platform.platformPreInit();
-  kernel = platform.getKernel();
+  kernel = platform.kernel();
 
   // TODO: Until smarter idea is finished, manually patch the USB-VCP into a
   //         BufferPipe that takes the place of the transport driver.
@@ -354,11 +358,6 @@ int main(void) {
   kernel->subscribe((EventReceiver*) &pmu);
 
   platform.bootstrap();
-  
-  /*
-  * If that function returned 'nominal', we call postInit() to finalize.
-  */
-  platform.platformPostInit();
 
   //_console_patch.toCounterparty((unsigned char*)help, 1+strlen((const char*)help), MEM_MGMT_RESPONSIBLE_CREATOR);
   //_console.toCounterparty((unsigned char*)help1, 1+strlen((const char*)help1), MEM_MGMT_RESPONSIBLE_CREATOR);

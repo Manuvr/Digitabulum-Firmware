@@ -325,7 +325,7 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #define __CPLD_DRIVER_H__
 
 #include "SPIBusOp.h"
-#include <Kernel.h>
+#include <Platform/Platform.h>
 
 #include <stm32f7xx_hal_gpio.h>
 #include <stm32f7xx_hal_spi.h>
