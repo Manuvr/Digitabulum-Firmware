@@ -66,4 +66,9 @@ The contents of this file will be periodically archived and purged to keep the l
 
 This needs to be investigated. But I'm willing to bet that it's a simple goof I will find on accident if I ignore it for awhile. I have the whole weekend to knock down some hard problems. Let's see where this goes...
 
+ 266344    2856   10072  279272   As expected... Some cleanup in Manuvr yields this.
+
 ------
+
+### 2016.09.10
+   266752    2816   10076  279644   Following the platform abstraction.

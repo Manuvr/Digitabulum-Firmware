@@ -342,17 +342,17 @@ int main(void) {
   * 5     1      BT_EAN
   * 6     1      BT_PIO_24
   */
-  RN4677 bt(68);
-  kernel->subscribe((EventReceiver*) &bt);
+  //RN4677 bt(68);
+  //kernel->subscribe((EventReceiver*) &bt);
 
-  SDCard sd;
-  kernel->subscribe((EventReceiver*) &sd);
+  //SDCard sd;
+  //kernel->subscribe((EventReceiver*) &sd);
 
-  IREmitter ir;
-  kernel->subscribe((EventReceiver*) &ir);
+  //IREmitter ir;
+  //kernel->subscribe((EventReceiver*) &ir);
 
-  HapticStrap strap;
-  kernel->subscribe((EventReceiver*) &strap);
+  //HapticStrap strap;
+  //kernel->subscribe((EventReceiver*) &strap);
 
   PMU pmu(&ina219);
   kernel->subscribe((EventReceiver*) &pmu);
