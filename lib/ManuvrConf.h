@@ -37,9 +37,6 @@ This is an example file for building firmware on linux. Anticipated target is a 
 #define PROTOCOL_MTU                    3000    // See MTU notes above....
 
 
-#define MANUVR_OVER_THE_WIRE               1    // We support Manuvr's native wire protocol.
-#define MANUVR_SUPPORT_MQTT                1    // We support MQTT.
-
 /*
 * Particulars of this Manuvrable.
 */

@@ -47,9 +47,7 @@ Transport driver for the STM32F7 USB peripheral.
 
 extern "C" {
   StringBuilder _accumulator;  // TODO: Should be a class member. Tired...
-
-  static char _cmd_buf[MANUVR_USB_BUF_SIZE];
-  static int  _cmd_buf_ptr = 0;
+  StringBuilder _usb_rx_buf;   // TODO: Should be a class member. Tired...
 
   static volatile bool _tx_in_progress = false;
   static volatile bool _rx_ready       = false;
@@ -57,17 +55,12 @@ extern "C" {
 
   void VCP_Rx_Notify(uint8_t* _in_buf, int _len) {
     _rx_ready = true;
-    TM_USBD_CDC_Putc(TM_USB_FS, *_in_buf);  // Local echo
+    //_usb_rx_buf.concat(_in_buf, _len);
   }
 
   void VCP_Tx_Complete() {
+    _accumulator.drop_position(0);
     _tx_in_progress = false;
-    if (_accumulator.length()) {
-      char* working_chunk = _accumulator.position(0);
-      if (((STM32F7USB*) STM32F7USB::INSTANCE)->write_port((uint8_t*) working_chunk, strlen(working_chunk))) {
-        _accumulator.drop_position(0);
-      }
-    }
   }
 }
 
@@ -100,7 +93,11 @@ volatile STM32F7USB* STM32F7USB::INSTANCE = NULL;
 STM32F7USB::STM32F7USB() : ManuvrXport() {
   INSTANCE = this;
   setReceiverName("USB");
-  for (unsigned int i = 0; i < _xport_mtu; i++) *(_cmd_buf + i) = '\0';
+
+  // /* Init USB peripheral as VCP */
+  // TM_USBD_CDC_Init(TM_USB_FS);
+  // TM_USBD_Start(TM_USB_FS);
+
   _bp_set_flag(BPIPE_FLAG_IS_BUFFERED, true);
 
   // We are the software nearest to the counterparty, and we do not
@@ -143,9 +140,11 @@ STM32F7USB::~STM32F7USB() {
 */
 int8_t STM32F7USB::toCounterparty(StringBuilder* buf, int8_t mm) {
   _accumulator.concatHandoff(buf);
-  char* working_chunk = _accumulator.position(0);
-  if (write_port((uint8_t*) working_chunk, strlen(working_chunk))) {
-    _accumulator.drop_position(0);
+  if (connected() && !_tx_in_progress) {
+    char* working_chunk = _accumulator.position(0);
+    if (write_port((uint8_t*) working_chunk, strlen(working_chunk))) {
+      // TODO: Fail-over timer? Disconnection signal?
+    }
   }
   return MEM_MGMT_RESPONSIBLE_BEARER;  // We took the buffer.
 }
@@ -204,19 +203,17 @@ int8_t STM32F7USB::read_port() {
 	if (TM_USBD_IsDeviceReady(TM_USB_FS) == TM_USBD_Result_Ok) {
 		/* We are ready */
 		/* Check if anything received */
-	  char ch;
-		while (TM_USBD_CDC_Getc(TM_USB_FS, &ch)) {
-      //TM_USBD_CDC_Putc(TM_USB_FS, ch);  // Local echo
-      if (ch == '\r') ch = '\n';
-      read_len++;
-      _cmd_buf[_cmd_buf_ptr++] = ch;
-
-      if ((ch == '\n') || (ch == '\0')) {
-        BufferPipe::fromCounterparty((uint8_t*)_cmd_buf, read_len, MEM_MGMT_RESPONSIBLE_BEARER);
-        _cmd_buf_ptr = 0;
-        for (int i = 0; i < MANUVR_USB_BUF_SIZE; i++) *(_cmd_buf + i) = '\0';
-      }
-		}
+    uint8_t buf[256];
+    uint16_t n = TM_USBD_CDC_GetArray(TM_USB_FS, buf, 255);
+    //int n = _usb_rx_buf.length();
+    if (n > 0) {
+      buf[n] = '\0';
+      bytes_received += n;
+      //TM_USBD_CDC_Putc(TM_USB_FS, buf[0]);  // Local echo
+      const char* test_str = "Got a character.\n";
+      write_port((uint8_t*) test_str, strlen(test_str));
+      BufferPipe::fromCounterparty(buf, n, MEM_MGMT_RESPONSIBLE_BEARER);
+    }
 	}
   else {
 		/* We are not ready */
@@ -229,17 +226,12 @@ int8_t STM32F7USB::read_port() {
 bool STM32F7USB::write_port(uint8_t* out, int out_len) {
   if (connected()) {
     if (TM_USBD_IsDeviceReady(TM_USB_FS) == TM_USBD_Result_Ok) {
-      TM_USBD_CDC_Puts(TM_USB_FS, (char*) out);
+      TM_USBD_CDC_PutArray(TM_USB_FS, out, (uint16_t) out_len);
       _tx_in_progress = true;
     	TM_USBD_CDC_Process(TM_USB_FS);
       bytes_sent += out_len;
       return true;
     }
-  }
-  else {
-    TM_USBD_CDC_Puts(TM_USB_FS, "write_port claims not connected\n");
-    _tx_in_progress = true;
-  	TM_USBD_CDC_Process(TM_USB_FS);
   }
   return false;
 }
@@ -280,22 +272,21 @@ void STM32F7USB::printDebug(StringBuilder *temp) {
 int8_t STM32F7USB::bootComplete() {
   EventReceiver::bootComplete();
 
-  /* Init USB peripheral as VCP */
-  TM_USBD_CDC_Init(TM_USB_FS);
-  TM_USBD_Start(TM_USB_FS);
-
   // Tolerate 30ms of latency on the line before flushing the buffer.
   read_abort_event.alterScheduleRecurrence(0);
-  read_abort_event.alterSchedulePeriod(30);
+  read_abort_event.alterSchedulePeriod(50);
   read_abort_event.autoClear(false);
-  read_abort_event.enableSchedule(false);
+  read_abort_event.enableSchedule(true);
+  #if !defined (__MANUVR_FREERTOS) && !defined (__MANUVR_LINUX)
+  __kernel->addSchedule(&read_abort_event);
+  #endif
 
   reset();
-      //TM_USBD_CDC_Puts(TM_USB_FS, (const char*)_accumulator.string());
-      TM_USBD_CDC_Puts(TM_USB_FS, "USB Came up.\n");
-      _tx_in_progress = true;
-    	TM_USBD_CDC_Process(TM_USB_FS);
-      //_accumulator.clear();
+  if (_accumulator.count() > 0) {
+    TM_USBD_CDC_Puts(TM_USB_FS, (const char*)_accumulator.string());
+    _tx_in_progress = true;
+  	TM_USBD_CDC_Process(TM_USB_FS);
+  }
   return 1;
 }
 
@@ -321,12 +312,6 @@ int8_t STM32F7USB::callback_proc(ManuvrRunnable *event) {
 
   /* Some class-specific set of conditionals below this line. */
   switch (event->eventCode()) {
-    case MANUVR_MSG_SYS_BOOTLOADER:
-    case MANUVR_MSG_SYS_REBOOT:
-    case MANUVR_MSG_SYS_SHUTDOWN:
-      TM_USBD_Stop(TM_USB_FS);    // DeInit() The USB device.
-      break;
-
     case MANUVR_MSG_XPORT_SEND:
       event->clearArgs();
       break;
@@ -342,6 +327,23 @@ int8_t STM32F7USB::notify(ManuvrRunnable *active_event) {
   int8_t return_value = 0;
 
   switch (active_event->eventCode()) {
+    case MANUVR_MSG_XPORT_QUEUE_RDY:
+      read_port();
+      if (_accumulator.count()) {
+        char* working_chunk = _accumulator.position(0);
+        if ( ! write_port((uint8_t*) working_chunk, strlen(working_chunk))) {
+          // TODO: Fail-over timer? Disconnection signal?
+        }
+      }
+      return_value++;
+      break;
+
+    case MANUVR_MSG_SYS_BOOTLOADER:
+    case MANUVR_MSG_SYS_REBOOT:
+    case MANUVR_MSG_SYS_SHUTDOWN:
+      TM_USBD_Stop(TM_USB_FS);    // DeInit() The USB device.
+      return_value++;
+      break;
     default:
       return_value += ManuvrXport::notify(active_event);
       break;

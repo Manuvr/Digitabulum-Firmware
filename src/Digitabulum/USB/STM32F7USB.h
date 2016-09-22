@@ -18,10 +18,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-This driver allows us to treat an STDIO set under linux as if it were
-  any other transport. It should be extendable to any situation where
-  there exists a physical UI on the platform, and it may therefore be
-  renamed and further extended in the future.
+This is the transport driver for the USB peripheral on the STM32F7.
 */
 
 
@@ -30,10 +27,13 @@ This driver allows us to treat an STDIO set under linux as if it were
 
 #define MANUVR_USB_BUF_SIZE  255
 
-#if defined(ENABLE_USB_VCP)
-  #include "tm_stm32_usb_device.h"
-  #include "tm_stm32_usb_device_cdc.h"
-#endif
+
+extern "C" {
+  #if defined(ENABLE_USB_VCP)
+    #include "tm_stm32_usb_device.h"
+    #include "tm_stm32_usb_device_cdc.h"
+  #endif
+}
 
 #include <Transports/ManuvrXport.h>
 

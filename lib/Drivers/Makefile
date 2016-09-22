@@ -3,7 +3,6 @@ vpath %.c STM32F7xx_HAL_Driver/Src
 
 # Includes
 INCLUDES  = -ISTM32F7xx_HAL_Driver/Inc/ -I../Inc/ -ICMSIS/Device/ST/STM32F7xx/Include/ -ICMSIS/Include/
-INCLUDES += -IUSB_Device/Core/Inc -IUSB_Device/Class/CDC/Inc
 
 # Sources
 SRCS  = stm32f7xx_hal_adc.c
@@ -68,23 +67,24 @@ SRCS += stm32f7xx_ll_fmc.c
 SRCS += stm32f7xx_ll_sdmmc.c
 SRCS += stm32f7xx_ll_usb.c
 
-SRCS += tm_stm32_buffer.c
-SRCS += tm_stm32_gpio.c
-SRCS += tm_stm32_usb_device.c
-SRCS += tm_stm32_usb.c
-SRCS += tm_stm32_usb_device_cdc.c
-
-SRCS += USB_Device/Core/Src/usbd_conf.c
-SRCS += USB_Device/Core/Src/usbd_core.c
-SRCS += USB_Device/Core/Src/usbd_ctlreq.c
-SRCS += USB_Device/Core/Src/usbd_ioreq.c
-SRCS += USB_Device/Class/CDC/Src/usbd_cdc.c
-SRCS += USB_Device/Class/CDC/Src/usbd_cdc_if.c
-
-#LOCAL_FLAGS += -DUSB_USE_FS -DUSB_USE_HS -DUSB_USE_DEVICE
 
 ifeq ($(ENABLE_USB_VCP),)
+	#LOCAL_FLAGS += -DUSB_USE_FS -DUSB_USE_HS -DUSB_USE_DEVICE
 	LOCAL_FLAGS += -DUSB_USE_FS -DUSB_USE_HS -DUSB_USE_DEVICE -DHAL_PCD_MODULE_ENABLED
+	INCLUDES += -IUSB_Device/Core/Inc -IUSB_Device/Class/CDC/Inc
+
+	SRCS += tm_stm32_buffer.c
+	SRCS += tm_stm32_gpio.c
+	SRCS += tm_stm32_usb_device.c
+	SRCS += tm_stm32_usb.c
+	SRCS += tm_stm32_usb_device_cdc.c
+
+	SRCS += USB_Device/Core/Src/usbd_conf.c
+	SRCS += USB_Device/Core/Src/usbd_core.c
+	SRCS += USB_Device/Core/Src/usbd_ctlreq.c
+	SRCS += USB_Device/Core/Src/usbd_ioreq.c
+	SRCS += USB_Device/Class/CDC/Src/usbd_cdc.c
+	SRCS += USB_Device/Class/CDC/Src/usbd_cdc_if.c
 endif
 
 OBJS = $(SRCS:.c=.o)

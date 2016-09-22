@@ -48,6 +48,7 @@ Intended target is an STM32F7.
 #include "cmsis_os.h"
 #include "fatfs.h"
 
+
 /* This global makes this source file read better. */
 Kernel* kernel = nullptr;
 
@@ -300,6 +301,8 @@ int main(void) {
 
   /* Start scheduler */
   //osKernelStart();
+  TM_USBD_CDC_Init(TM_USB_FS);
+  TM_USBD_Start(TM_USB_FS);
 
   /*
   * The platform object is created on the stack, but takes no action upon
@@ -309,18 +312,11 @@ int main(void) {
   platform.platformPreInit();
   kernel = platform.kernel();
 
-  // TODO: Until smarter idea is finished, manually patch the USB-VCP into a
-  //         BufferPipe that takes the place of the transport driver.
-  STM32F7USB _console_patch;
-  ManuvrConsole _console((BufferPipe*) &_console_patch);
-  kernel->subscribe((EventReceiver*) &_console);
-  kernel->subscribe((EventReceiver*) &_console_patch);
-
   CPLDDriver _cpld;
   kernel->subscribe(&_cpld);
 
-  LegendManager _legend_manager;
-  kernel->subscribe(&_legend_manager);
+  //LegendManager _legend_manager;
+  //kernel->subscribe(&_legend_manager);
 
   I2CAdapter i2c(1);
   kernel->subscribe(&i2c);
@@ -359,13 +355,19 @@ int main(void) {
 
   platform.bootstrap();
 
+  // TODO: Until smarter idea is finished, manually patch the USB-VCP into a
+  //         BufferPipe that takes the place of the transport driver.
+  STM32F7USB _console_patch;
+  ManuvrConsole _console((BufferPipe*) &_console_patch);
+  kernel->subscribe((EventReceiver*) &_console);
+  kernel->subscribe((EventReceiver*) &_console_patch);
+
   //_console_patch.toCounterparty((unsigned char*)help, 1+strlen((const char*)help), MEM_MGMT_RESPONSIBLE_CREATOR);
   //_console.toCounterparty((unsigned char*)help1, 1+strlen((const char*)help1), MEM_MGMT_RESPONSIBLE_CREATOR);
 
   /* Infinite loop */
   while (1) {
     kernel->procIdleFlags();
-    _console_patch.read_port();
   }
 }
 
