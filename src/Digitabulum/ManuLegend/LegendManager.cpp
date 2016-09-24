@@ -76,7 +76,7 @@ InertialMeasurement* LegendManager::fetchMeasurement(uint8_t type_code) {
   }
   else {
     return_value = preallocd_measurements.dequeue();
-    minimum_prealloc_level = min((uint32_t) preallocd_measurements.size(), minimum_prealloc_level);
+    minimum_prealloc_level = std::min((uint32_t) preallocd_measurements.size(), minimum_prealloc_level);
   }
   return return_value;
 }

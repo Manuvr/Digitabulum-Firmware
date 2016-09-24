@@ -61,6 +61,9 @@ class STM32F7USB : public ManuvrXport {
     virtual int8_t read_port();
     bool   write_port(uint8_t* out, int out_len);
 
+    void tx_wakeup();
+    void rx_wakeup();
+
     volatile static STM32F7USB* INSTANCE;
 
 

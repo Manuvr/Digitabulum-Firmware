@@ -1512,7 +1512,7 @@ void CPLDDriver::printDebug(StringBuilder *output) {
     }
 
     if (work_queue.size() > 0) {
-      int print_depth = min(3, CPLD_SPI_MAX_QUEUE_PRINT);
+      int print_depth = std::min(3, CPLD_SPI_MAX_QUEUE_PRINT);
       output->concatf("\nQueue Listing (top %d of %d total)\n", print_depth, work_queue.size());
       for (int i = 0; i < print_depth; i++) {
         work_queue.get(i)->printDebug(output);

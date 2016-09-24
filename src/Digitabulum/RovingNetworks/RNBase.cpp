@@ -174,7 +174,7 @@ void host_read_abort() {
     return;
   }
   uint32_t current_millis = millis();
-  if (CHARACTER_CHRONOLOGICAL_BREAK < (max(current_millis, read_millis_1) - min(current_millis, read_millis_1))) {
+  if (CHARACTER_CHRONOLOGICAL_BREAK < (std::max(current_millis, read_millis_1) - std::min(current_millis, read_millis_1))) {
     RNBase::hostRxFlush();
     read_millis_0 = 0;
   }
@@ -881,7 +881,7 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
   if (NULL == INSTANCE) return;
 
   if (last_gpio_5_event != 0) {
-    unsigned long delta = max(ms, (unsigned long) last_gpio_5_event) - min(ms, (unsigned long) last_gpio_5_event);
+    unsigned long delta = std::max(ms, (unsigned long) last_gpio_5_event) - std::min(ms, (unsigned long) last_gpio_5_event);
     if (delta < 500) {
       // Probably the 10Hz signal. Means we are in command mode.
       if (INSTANCE != NULL) {
@@ -1025,7 +1025,7 @@ void RNBase::printDebug(StringBuilder *temp) {
   if (getVerbosity() > 3) {
     if (work_queue.hasNext()) {
       temp->concatf("\n-- Queue Listing (top %d of %d)", RNBASE_MAX_QUEUE_PRINT, work_queue.size());
-      for (int i = 0; i < min(work_queue.size(), RNBASE_MAX_QUEUE_PRINT); i++) {
+      for (int i = 0; i < std::min(work_queue.size(), RNBASE_MAX_QUEUE_PRINT); i++) {
         q_item = work_queue.get(i);
         q_item->printDebug(temp);
       }

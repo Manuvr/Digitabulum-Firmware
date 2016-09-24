@@ -54,12 +54,16 @@ extern "C" {
 
 
   void VCP_Rx_Notify(uint8_t* _in_buf, int _len) {
+    if (STM32F7USB::INSTANCE) {
+      ((STM32F7USB*) STM32F7USB::INSTANCE)->rx_wakeup();
+    }
     _rx_ready = true;
-    //_usb_rx_buf.concat(_in_buf, _len);
   }
 
   void VCP_Tx_Complete() {
-    _accumulator.drop_position(0);
+    if (STM32F7USB::INSTANCE) {
+      ((STM32F7USB*) STM32F7USB::INSTANCE)->tx_wakeup();
+    }
     _tx_in_progress = false;
   }
 }
@@ -109,7 +113,7 @@ STM32F7USB::STM32F7USB() : ManuvrXport() {
   read_abort_event.isManaged(true);
   read_abort_event.specific_target = (EventReceiver*) this;
   read_abort_event.originator      = (EventReceiver*) this;
-  read_abort_event.priority        = 5;
+  read_abort_event.priority        = 1;
   read_abort_event.addArg(xport_id);  // Add our assigned transport ID to our pre-baked argument.
 
   _xport_mtu = MANUVR_USB_BUF_SIZE;
@@ -121,6 +125,18 @@ STM32F7USB::STM32F7USB() : ManuvrXport() {
 STM32F7USB::~STM32F7USB() {
   _accumulator.clear();
 }
+
+
+
+void STM32F7USB::tx_wakeup() {
+  read_abort_event.fireNow();
+}
+
+
+void STM32F7USB::rx_wakeup() {
+  read_abort_event.fireNow();
+}
+
 
 
 /*******************************************************************************
@@ -144,6 +160,7 @@ int8_t STM32F7USB::toCounterparty(StringBuilder* buf, int8_t mm) {
     char* working_chunk = _accumulator.position(0);
     if (write_port((uint8_t*) working_chunk, strlen(working_chunk))) {
       // TODO: Fail-over timer? Disconnection signal?
+      _accumulator.drop_position(0);
     }
   }
   return MEM_MGMT_RESPONSIBLE_BEARER;  // We took the buffer.
@@ -210,8 +227,8 @@ int8_t STM32F7USB::read_port() {
       buf[n] = '\0';
       bytes_received += n;
       //TM_USBD_CDC_Putc(TM_USB_FS, buf[0]);  // Local echo
-      const char* test_str = "Got a character.\n";
-      write_port((uint8_t*) test_str, strlen(test_str));
+      //const char* test_str = "Got a character.\n";
+      //write_port((uint8_t*) test_str, strlen(test_str));
       BufferPipe::fromCounterparty(buf, n, MEM_MGMT_RESPONSIBLE_BEARER);
     }
 	}
@@ -227,7 +244,7 @@ bool STM32F7USB::write_port(uint8_t* out, int out_len) {
   if (connected()) {
     if (TM_USBD_IsDeviceReady(TM_USB_FS) == TM_USBD_Result_Ok) {
       TM_USBD_CDC_PutArray(TM_USB_FS, out, (uint16_t) out_len);
-      _tx_in_progress = true;
+      //_tx_in_progress = true;
     	TM_USBD_CDC_Process(TM_USB_FS);
       bytes_sent += out_len;
       return true;
@@ -272,7 +289,6 @@ void STM32F7USB::printDebug(StringBuilder *temp) {
 int8_t STM32F7USB::bootComplete() {
   EventReceiver::bootComplete();
 
-  // Tolerate 30ms of latency on the line before flushing the buffer.
   read_abort_event.alterScheduleRecurrence(0);
   read_abort_event.alterSchedulePeriod(50);
   read_abort_event.autoClear(false);
@@ -284,7 +300,7 @@ int8_t STM32F7USB::bootComplete() {
   reset();
   if (_accumulator.count() > 0) {
     TM_USBD_CDC_Puts(TM_USB_FS, (const char*)_accumulator.string());
-    _tx_in_progress = true;
+    //_tx_in_progress = true;
   	TM_USBD_CDC_Process(TM_USB_FS);
   }
   return 1;
@@ -315,6 +331,11 @@ int8_t STM32F7USB::callback_proc(ManuvrRunnable *event) {
     case MANUVR_MSG_XPORT_SEND:
       event->clearArgs();
       break;
+    case MANUVR_MSG_XPORT_QUEUE_RDY:
+      if (_accumulator.count()) {
+        return_value = EVENT_CALLBACK_RETURN_RECYCLE;
+      }
+      break;
     default:
       break;
   }
@@ -331,8 +352,9 @@ int8_t STM32F7USB::notify(ManuvrRunnable *active_event) {
       read_port();
       if (_accumulator.count()) {
         char* working_chunk = _accumulator.position(0);
-        if ( ! write_port((uint8_t*) working_chunk, strlen(working_chunk))) {
+        if (write_port((uint8_t*) working_chunk, strlen(working_chunk))) {
           // TODO: Fail-over timer? Disconnection signal?
+          _accumulator.drop_position(0);
         }
       }
       return_value++;
@@ -341,6 +363,8 @@ int8_t STM32F7USB::notify(ManuvrRunnable *active_event) {
     case MANUVR_MSG_SYS_BOOTLOADER:
     case MANUVR_MSG_SYS_REBOOT:
     case MANUVR_MSG_SYS_SHUTDOWN:
+      connected(false);
+      listening(false);
       TM_USBD_Stop(TM_USB_FS);    // DeInit() The USB device.
       return_value++;
       break;
