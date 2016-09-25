@@ -72,3 +72,12 @@ This needs to be investigated. But I'm willing to bet that it's a simple goof I 
 
 ### 2016.09.10
    266752    2816   10076  279644   Following the platform abstraction.
+
+------
+
+### 2016.09.24
+Tuned out of this project for two weeks for work and hardware issues. ManuvrOS
+  saw steady improvements in that period.
+  273192    2816    9836  285844   45c94   New baseline
+  273200    2816    9832  285848   45c98   Moved XPORT_MSG defs into Kernel.
+  279032    2816    9840  291688   47368   Re-added most of the driver stubs.

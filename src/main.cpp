@@ -315,17 +315,17 @@ int main(void) {
   CPLDDriver _cpld;
   kernel->subscribe(&_cpld);
 
-  //LegendManager _legend_manager;
-  //kernel->subscribe(&_legend_manager);
+  LegendManager _legend_manager;
+  kernel->subscribe(&_legend_manager);
 
   I2CAdapter i2c(1);
   kernel->subscribe(&i2c);
 
   // Pins 58 and 63 are the reset and IRQ pin, respectively.
   // This is translated to pins 10 and 13 on PortD.
-  //ADP8866 leds(58, 63, 0x27);
-  //i2c.addSlaveDevice(&leds);
-  //kernel->subscribe((EventReceiver*) &leds);
+  ADP8866 leds(58, 63, 0x27);
+  i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
+  kernel->subscribe((EventReceiver*) &leds);
 
   INA219 ina219(0x4A);
   i2c.addSlaveDevice(&ina219);
@@ -338,17 +338,17 @@ int main(void) {
   * 5     1      BT_EAN
   * 6     1      BT_PIO_24
   */
-  //RN4677 bt(68);
-  //kernel->subscribe((EventReceiver*) &bt);
+  RN4677 bt(68);
+  kernel->subscribe((EventReceiver*) &bt);
 
-  //SDCard sd;
-  //kernel->subscribe((EventReceiver*) &sd);
+  SDCard sd;
+  kernel->subscribe((EventReceiver*) &sd);
 
-  //IREmitter ir;
-  //kernel->subscribe((EventReceiver*) &ir);
+  IREmitter ir;
+  kernel->subscribe((EventReceiver*) &ir);
 
-  //HapticStrap strap;
-  //kernel->subscribe((EventReceiver*) &strap);
+  HapticStrap strap;
+  kernel->subscribe((EventReceiver*) &strap);
 
   PMU pmu(&ina219);
   kernel->subscribe((EventReceiver*) &pmu);
@@ -362,13 +362,7 @@ int main(void) {
   kernel->subscribe((EventReceiver*) &_console);
   kernel->subscribe((EventReceiver*) &_console_patch);
 
-  //_console_patch.toCounterparty((unsigned char*)help, 1+strlen((const char*)help), MEM_MGMT_RESPONSIBLE_CREATOR);
-  //_console.toCounterparty((unsigned char*)help1, 1+strlen((const char*)help1), MEM_MGMT_RESPONSIBLE_CREATOR);
-
-  /* Infinite loop */
-  while (1) {
-    kernel->procIdleFlags();
-  }
+  platform.forsakeMain();
 }
 
 #ifdef __cplusplus
