@@ -145,9 +145,9 @@ class RNBase : public ManuvrXport {
     void printDebug(StringBuilder *);
     int8_t notify(ManuvrRunnable*);
     int8_t callback_proc(ManuvrRunnable *);
-    #if defined(__MANUVR_CONSOLE_SUPPORT)
+    #if defined(MANUVR_CONSOLE_SUPPORT)
       void procDirectDebugInstruction(StringBuilder*);
-    #endif  //__MANUVR_CONSOLE_SUPPORT
+    #endif  //MANUVR_CONSOLE_SUPPORT
 
     /* These are used to send data to a BT connected device. */
     inline bool roomInQueue() {    return !(work_queue.size() < RNBASE_MAX_BT_Q_DEPTH);  }
@@ -183,7 +183,7 @@ class RNBase : public ManuvrXport {
     virtual int8_t sendBuffer(StringBuilder*);
 
 
-    virtual int8_t bootComplete();      // This is called from the base notify().
+    virtual int8_t attached();      // This is called from the base notify().
 
     // Mandatory overrides.
     virtual void factoryReset(void)    =0;   // Perform the sequence that will factory-reset the RN.

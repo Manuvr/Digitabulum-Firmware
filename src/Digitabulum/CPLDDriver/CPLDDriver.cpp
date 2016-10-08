@@ -321,13 +321,13 @@ const MessageTypeDef cpld_message_defs[] = {
   {  DIGITABULUM_MSG_IMU_IRQ_RAISED       , 0x0000,               "IMU_IRQ_RAISED"     , ManuvrMsg::MSG_ARGS_NONE }, // IRQ asserted by CPLD.
   {  DIGITABULUM_MSG_IMU_READ             , 0x0000,               "IMU_READ"           , MSG_ARGS_IMU_READ },  // IMU read request. Argument is the ID.
   {  DIGITABULUM_MSG_IMU_MAP_STATE        , MSG_FLAG_EXPORTABLE,  "IMU_MAP_STATE"      , MSG_ARGS_IMU_MAP_STATE }, //
-  {  DIGITABULUM_MSG_IMU_INIT             , MSG_FLAG_EXPORTABLE,  "IMU_INIT"           , ManuvrMsg::MSG_ARGS_U8 }, // Signal to build the IMUs.
+  {  DIGITABULUM_MSG_IMU_INIT             , MSG_FLAG_EXPORTABLE,  "IMU_INIT"           , ManuvrMsg::MSG_ARGS_NONE }, // Signal to build the IMUs.
 
   {  DIGITABULUM_MSG_CPLD_RESET_COMPLETE  , 0x0000,               "CPLD_RST_COMPLETE"  , ManuvrMsg::MSG_ARGS_NONE }, //
   {  DIGITABULUM_MSG_CPLD_RESET_CALLBACK  , 0x0000,               "CPLD_RST_CALLBACK"  , ManuvrMsg::MSG_ARGS_NONE }, //
   {  DIGITABULUM_MSG_IMU_LEGEND           , MSG_FLAG_EXPORTABLE,  "IMU_LEGEND"         , MSG_ARGS_IMU_LEGEND }, // No args? Asking for this legend. Many args: Legend provided.
 
-  {  DIGITABULUM_MSG_IMU_QUAT_CRUNCH      , 0x0000,               "IMU_QUAT_CRUNCH"    , ManuvrMsg::MSG_ARGS_U8 }, //
+  {  DIGITABULUM_MSG_IMU_QUAT_CRUNCH      , 0x0000,               "IMU_QUAT_CRUNCH"    , ManuvrMsg::MSG_ARGS_NONE }, //
   {  DIGITABULUM_MSG_IMU_TAP              , MSG_FLAG_EXPORTABLE,  "IMU_TAP"            , MSG_ARGS_U8_FLOAT }, // IMU id and optional threshold.
   {  DIGITABULUM_MSG_IMU_DOUBLE_TAP       , MSG_FLAG_EXPORTABLE,  "IMU_DOUBLE_TAP"     , MSG_ARGS_U8_FLOAT }, // IMU id and optional threshold.
 
@@ -358,16 +358,14 @@ CPLDDriver::CPLDDriver() : EventReceiver() {
   }
 
   // Build some pre-formed Events.
-  event_spi_callback_ready.repurpose(DIGITABULUM_MSG_SPI_CB_QUEUE_READY);
+  event_spi_callback_ready.repurpose(DIGITABULUM_MSG_SPI_CB_QUEUE_READY, (EventReceiver*) this);
   event_spi_callback_ready.isManaged(true);
   event_spi_callback_ready.specific_target = (EventReceiver*) this;
-  event_spi_callback_ready.originator      = (EventReceiver*) this;
   event_spi_callback_ready.priority        = 5;
 
-  event_spi_queue_ready.repurpose(DIGITABULUM_MSG_SPI_QUEUE_READY);
+  event_spi_queue_ready.repurpose(DIGITABULUM_MSG_SPI_QUEUE_READY, (EventReceiver*) this);
   event_spi_queue_ready.isManaged(true);
   event_spi_queue_ready.specific_target    = (EventReceiver*) this;
-  event_spi_queue_ready.originator         = (EventReceiver*) this;
   event_spi_queue_ready.priority           = 5;
 
   // Mark all of our preallocated SPI jobs as "No Reap" and pass them into the prealloc queue.
@@ -1303,39 +1301,35 @@ int8_t CPLDDriver::iiu_group_irq() {
 
 
 
-/****************************************************************************************************
-*  ▄▄▄▄▄▄▄▄▄▄▄  ▄               ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄
-* ▐░░░░░░░░░░░▌▐░▌             ▐░▌▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
-* ▐░█▀▀▀▀▀▀▀▀▀  ▐░▌           ▐░▌ ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌░▌     ▐░▌ ▀▀▀▀█░█▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀
-* ▐░▌            ▐░▌         ▐░▌  ▐░▌          ▐░▌▐░▌    ▐░▌     ▐░▌     ▐░▌
-* ▐░█▄▄▄▄▄▄▄▄▄    ▐░▌       ▐░▌   ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌ ▐░▌   ▐░▌     ▐░▌     ▐░█▄▄▄▄▄▄▄▄▄
-* ▐░░░░░░░░░░░▌    ▐░▌     ▐░▌    ▐░░░░░░░░░░░▌▐░▌  ▐░▌  ▐░▌     ▐░▌     ▐░░░░░░░░░░░▌
-* ▐░█▀▀▀▀▀▀▀▀▀      ▐░▌   ▐░▌     ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌   ▐░▌ ▐░▌     ▐░▌      ▀▀▀▀▀▀▀▀▀█░▌
-* ▐░▌                ▐░▌ ▐░▌      ▐░▌          ▐░▌    ▐░▌▐░▌     ▐░▌               ▐░▌
-* ▐░█▄▄▄▄▄▄▄▄▄        ▐░▐░▌       ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌     ▐░▐░▌     ▐░▌      ▄▄▄▄▄▄▄▄▄█░▌
-* ▐░░░░░░░░░░░▌        ▐░▌        ▐░░░░░░░░░░░▌▐░▌      ▐░░▌     ▐░▌     ▐░░░░░░░░░░░▌
-*  ▀▀▀▀▀▀▀▀▀▀▀          ▀          ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀       ▀       ▀▀▀▀▀▀▀▀▀▀▀
+/*******************************************************************************
+* ######## ##     ## ######## ##    ## ########  ######
+* ##       ##     ## ##       ###   ##    ##    ##    ##
+* ##       ##     ## ##       ####  ##    ##    ##
+* ######   ##     ## ######   ## ## ##    ##     ######
+* ##        ##   ##  ##       ##  ####    ##          ##
+* ##         ## ##   ##       ##   ###    ##    ##    ##
+* ########    ###    ######## ##    ##    ##     ######
 *
 * These are overrides from EventReceiver interface...
-****************************************************************************************************/
+*******************************************************************************/
+
 /**
-* Fire-up anything that depends on the Kernel...
+* This is called when the kernel attaches the module.
+* This is the first time the class can be expected to have kernel access.
 *
 * @return 0 on no action, 1 on action, -1 on failure.
 */
-int8_t CPLDDriver::bootComplete() {
-  EventReceiver::bootComplete();
+int8_t CPLDDriver::attached() {
+  EventReceiver::attached();
 
-  _irq_data_arrival.repurpose(DIGITABULUM_MSG_IMU_IRQ_RAISED);
+  _irq_data_arrival.repurpose(DIGITABULUM_MSG_IMU_IRQ_RAISED, (EventReceiver*) this);
   _irq_data_arrival.isManaged(true);
   _irq_data_arrival.specific_target = (EventReceiver*) this;
-  _irq_data_arrival.originator      = (EventReceiver*) this;
   _irq_data_arrival.priority        = 2;
 
-  _periodic_debug.repurpose(0x5050);
+  _periodic_debug.repurpose(0x5080, (EventReceiver*) this);
   _periodic_debug.isManaged(true);
   _periodic_debug.specific_target = (EventReceiver*) this;
-  _periodic_debug.originator      = (EventReceiver*) this;
   _periodic_debug.priority        = 1;
   _periodic_debug.alterSchedulePeriod(100);
   _periodic_debug.alterScheduleRecurrence(-1);
@@ -1512,7 +1506,7 @@ void CPLDDriver::printDebug(StringBuilder *output) {
     }
 
     if (work_queue.size() > 0) {
-      int print_depth = std::min(3, CPLD_SPI_MAX_QUEUE_PRINT);
+      int print_depth = min(3, CPLD_SPI_MAX_QUEUE_PRINT);
       output->concatf("\nQueue Listing (top %d of %d total)\n", print_depth, work_queue.size());
       for (int i = 0; i < print_depth; i++) {
         work_queue.get(i)->printDebug(output);
@@ -1533,7 +1527,7 @@ void CPLDDriver::printDebug(StringBuilder *output) {
 }
 
 
-#if defined(__MANUVR_CONSOLE_SUPPORT)
+#if defined(MANUVR_CONSOLE_SUPPORT)
 void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
@@ -1762,4 +1756,4 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
 
   if (local_log.length() > 0) {    Kernel::log(&local_log);  }
 }
-#endif  //__MANUVR_CONSOLE_SUPPORT
+#endif  //MANUVR_CONSOLE_SUPPORT

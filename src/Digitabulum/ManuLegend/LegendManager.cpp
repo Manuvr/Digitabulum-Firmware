@@ -379,9 +379,9 @@ int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
     StringBuilder* legend_string = new StringBuilder();
     nu_legend->formLegendString(legend_string);
     ManuvrRunnable* legend_broadcast     = Kernel::returnEvent(DIGITABULUM_MSG_IMU_LEGEND);
-    legend_broadcast->originator      = (EventReceiver*) this;
     legend_broadcast->specific_target = nu_legend->owner;
     legend_broadcast->priority        = EVENT_PRIORITY_LOWEST + 1;
+    legend_broadcast->setOriginator((EventReceiver*) this);
     legend_broadcast->addArg(legend_string)->reapValue(true);
 
     if (should_enable_pid) {
@@ -497,29 +497,27 @@ int8_t LegendManager::queue_io_job(BusOp* _op) {
 
 
 
-/****************************************************************************************************
-*  ▄▄▄▄▄▄▄▄▄▄▄  ▄               ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄
-* ▐░░░░░░░░░░░▌▐░▌             ▐░▌▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
-* ▐░█▀▀▀▀▀▀▀▀▀  ▐░▌           ▐░▌ ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌░▌     ▐░▌ ▀▀▀▀█░█▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀
-* ▐░▌            ▐░▌         ▐░▌  ▐░▌          ▐░▌▐░▌    ▐░▌     ▐░▌     ▐░▌
-* ▐░█▄▄▄▄▄▄▄▄▄    ▐░▌       ▐░▌   ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌ ▐░▌   ▐░▌     ▐░▌     ▐░█▄▄▄▄▄▄▄▄▄
-* ▐░░░░░░░░░░░▌    ▐░▌     ▐░▌    ▐░░░░░░░░░░░▌▐░▌  ▐░▌  ▐░▌     ▐░▌     ▐░░░░░░░░░░░▌
-* ▐░█▀▀▀▀▀▀▀▀▀      ▐░▌   ▐░▌     ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌   ▐░▌ ▐░▌     ▐░▌      ▀▀▀▀▀▀▀▀▀█░▌
-* ▐░▌                ▐░▌ ▐░▌      ▐░▌          ▐░▌    ▐░▌▐░▌     ▐░▌               ▐░▌
-* ▐░█▄▄▄▄▄▄▄▄▄        ▐░▐░▌       ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌     ▐░▐░▌     ▐░▌      ▄▄▄▄▄▄▄▄▄█░▌
-* ▐░░░░░░░░░░░▌        ▐░▌        ▐░░░░░░░░░░░▌▐░▌      ▐░░▌     ▐░▌     ▐░░░░░░░░░░░▌
-*  ▀▀▀▀▀▀▀▀▀▀▀          ▀          ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀       ▀       ▀▀▀▀▀▀▀▀▀▀▀
+
+/*******************************************************************************
+* ######## ##     ## ######## ##    ## ########  ######
+* ##       ##     ## ##       ###   ##    ##    ##    ##
+* ##       ##     ## ##       ####  ##    ##    ##
+* ######   ##     ## ######   ## ## ##    ##     ######
+* ##        ##   ##  ##       ##  ####    ##          ##
+* ##         ## ##   ##       ##   ###    ##    ##    ##
+* ########    ###    ######## ##    ##    ##     ######
 *
 * These are overrides from EventReceiver interface...
-****************************************************************************************************/
+*******************************************************************************/
+
 /**
-* There is a NULL-check performed upstream for the scheduler member. So no need
-*   to do it again here.
+* This is called when the kernel attaches the module.
+* This is the first time the class can be expected to have kernel access.
 *
 * @return 0 on no action, 1 on action, -1 on failure.
 */
-int8_t LegendManager::bootComplete() {
-  EventReceiver::bootComplete();
+int8_t LegendManager::attached() {
+  EventReceiver::attached();
 
   /* Get ready for a silly pointer dance....
   *  This is an argument-heavy event, and we will be using it ALOT. So we build the Event arguments
@@ -533,10 +531,9 @@ int8_t LegendManager::bootComplete() {
   *    Bassnectar - 01. F.U.N..mp3
   *    ---J. Ian Lindsay   Thu Apr 09 04:04:41 MST 2015
   */
-  event_iiu_read.repurpose(DIGITABULUM_MSG_IMU_READ);
+  event_iiu_read.repurpose(DIGITABULUM_MSG_IMU_READ, (EventReceiver*) this);
   event_iiu_read.isManaged(true);
   event_iiu_read.specific_target = (EventReceiver*) this;
-  event_iiu_read.originator      = (EventReceiver*) this;
   event_iiu_read.priority        = EVENT_PRIORITY_LOWEST;
   event_iiu_read.alterSchedulePeriod(20);
   event_iiu_read.alterScheduleRecurrence(-1);
@@ -544,10 +541,9 @@ int8_t LegendManager::bootComplete() {
   event_iiu_read.enableSchedule(false);
 
   // Build some pre-formed Events.
-  event_legend_frame_ready.repurpose(DIGITABULUM_MSG_IMU_MAP_STATE);
+  event_legend_frame_ready.repurpose(DIGITABULUM_MSG_IMU_MAP_STATE, (EventReceiver*) this);
   event_legend_frame_ready.isManaged(true);
   event_legend_frame_ready.specific_target = NULL; //(EventReceiver*) this;
-  event_legend_frame_ready.originator      = (EventReceiver*) this;
   event_legend_frame_ready.priority        = EVENT_PRIORITY_LOWEST;
   event_legend_frame_ready.alterSchedulePeriod(25);
   event_legend_frame_ready.alterScheduleRecurrence(-1);
@@ -826,7 +822,7 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
 * Code in here only exists for as long as it takes to debug something. Don't write against these.
 ****************************************************************************************************/
 
-#if defined(__MANUVR_CONSOLE_SUPPORT)
+#if defined(MANUVR_CONSOLE_SUPPORT)
 void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
@@ -954,7 +950,7 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
     case 't':
       if (temp_byte < 17) {
         ManuvrRunnable *event = Kernel::returnEvent((*(str) == 'T') ? DIGITABULUM_MSG_IMU_DOUBLE_TAP : DIGITABULUM_MSG_IMU_TAP);
-        event->originator      = (EventReceiver*) this;
+        event->setOriginator((EventReceiver*) this);
         event->addArg((uint8_t) temp_byte);
         Kernel::staticRaiseEvent(event);
         local_log.concatf("Sent %stap event for IMU %d.\n", ((*(str) == 'T') ? "double ":""), temp_byte);
@@ -965,7 +961,6 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
       if (temp_byte < 17) {
         ManuvrRunnable *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_QUAT_CRUNCH);
         event->specific_target = (EventReceiver*) this;
-        event->originator      = NULL;
         event->addArg((uint8_t) temp_byte);
         Kernel::staticRaiseEvent(event);
         local_log.concatf("Running quat on IIU %d.\n", temp_byte);
@@ -1260,4 +1255,4 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
 
   if (local_log.length() > 0) {    Kernel::log(&local_log);  }
 }
-#endif  //__MANUVR_CONSOLE_SUPPORT
+#endif  //MANUVR_CONSOLE_SUPPORT

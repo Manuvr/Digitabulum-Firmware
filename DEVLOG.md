@@ -81,3 +81,5 @@ Tuned out of this project for two weeks for work and hardware issues. ManuvrOS
   273192    2816    9836  285844   45c94   New baseline
   273200    2816    9832  285848   45c98   Moved XPORT_MSG defs into Kernel.
   279032    2816    9840  291688   47368   Re-added most of the driver stubs.
+  282056    2816    9844  294716   47f3c   Testing the waters of Runnable collapse.
+  281768    2800    9772  294340   47dc4   Following flattening of Runnable upstream.

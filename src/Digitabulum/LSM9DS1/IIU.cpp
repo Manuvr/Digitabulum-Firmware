@@ -96,9 +96,8 @@ void IIU::setPositionAndAddress(uint8_t nu_pos, uint8_t imu_addr, uint8_t mag_ad
   beta = 0.2f;
 
   /* Setup our pre-formed quat crunch event. */
-  quat_crunch_event.repurpose(DIGITABULUM_MSG_IMU_QUAT_CRUNCH);
+  quat_crunch_event.repurpose(DIGITABULUM_MSG_IMU_QUAT_CRUNCH, (EventReceiver*) LegendManager::getInstance());
   quat_crunch_event.specific_target = (EventReceiver*) LegendManager::getInstance();
-  quat_crunch_event.originator      = (EventReceiver*) LegendManager::getInstance();
   quat_crunch_event.isManaged(true);
   //quat_crunch_event.priority        = 4;
   quat_crunch_event.addArg((uint8_t) pos_id);
@@ -481,7 +480,7 @@ void IIU::deposit_log(StringBuilder* _log) {
       /* Hard-coding the tap to the secondary IRQ pin for now. */
       ManuvrRunnable* event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_TAP);
       event->addArg((uint8_t) pos_id);  // We must cast this, because it is *really* an int8.
-      event->originator   = LegendManager::getInstance();
+      event->setOriginator(LegendManager::getInstance());
       Kernel::staticRaiseEvent(event);
       //return ((NULL == imu_ag) ? -1 : imu_ag->irq_0());
       return 0;

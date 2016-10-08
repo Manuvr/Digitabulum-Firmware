@@ -217,10 +217,9 @@ RNBase::RNBase(uint8_t rst_pin) : ManuvrXport() {
   //connected(GPIOB->IDR & GPIO_PIN_10);
 
   //// Build some pre-formed Events.
-  //read_abort_event.repurpose(MANUVR_MSG_XPORT_QUEUE_RDY);
+  //read_abort_event.repurpose(MANUVR_MSG_XPORT_QUEUE_RDY, (EventReceiver*) this);
   //read_abort_event.isManaged(true);
   //read_abort_event.specific_target = (EventReceiver*) this;
-  //read_abort_event.originator      = (EventReceiver*) this;
   //read_abort_event.alterScheduleRecurrence(-1);
   //read_abort_event.alterSchedulePeriod(CHARACTER_CHRONOLOGICAL_BREAK);
   //read_abort_event.autoClear(false);
@@ -344,7 +343,7 @@ int8_t RNBase::reset() {
   // Used to disassert the reset line.  TODO: Need a cleaner way to accomplish this...
   ManuvrRunnable* event = Kernel::returnEvent(MANUVR_MSG_BT_EXIT_RESET);
   event->addArg((EventReceiver*) this);
-  event->originator      = (EventReceiver*) this;
+  event->setOriginator((EventReceiver*) this);
   event->specific_target = (EventReceiver*) this;
   event->alterScheduleRecurrence(0);
   event->alterSchedulePeriod(510);
@@ -921,35 +920,32 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
 
 
 
-/****************************************************************************************************
- ▄▄▄▄▄▄▄▄▄▄▄  ▄               ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄
-▐░░░░░░░░░░░▌▐░▌             ▐░▌▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
-▐░█▀▀▀▀▀▀▀▀▀  ▐░▌           ▐░▌ ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌░▌     ▐░▌ ▀▀▀▀█░█▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀
-▐░▌            ▐░▌         ▐░▌  ▐░▌          ▐░▌▐░▌    ▐░▌     ▐░▌     ▐░▌
-▐░█▄▄▄▄▄▄▄▄▄    ▐░▌       ▐░▌   ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌ ▐░▌   ▐░▌     ▐░▌     ▐░█▄▄▄▄▄▄▄▄▄
-▐░░░░░░░░░░░▌    ▐░▌     ▐░▌    ▐░░░░░░░░░░░▌▐░▌  ▐░▌  ▐░▌     ▐░▌     ▐░░░░░░░░░░░▌
-▐░█▀▀▀▀▀▀▀▀▀      ▐░▌   ▐░▌     ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌   ▐░▌ ▐░▌     ▐░▌      ▀▀▀▀▀▀▀▀▀█░▌
-▐░▌                ▐░▌ ▐░▌      ▐░▌          ▐░▌    ▐░▌▐░▌     ▐░▌               ▐░▌
-▐░█▄▄▄▄▄▄▄▄▄        ▐░▐░▌       ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌     ▐░▐░▌     ▐░▌      ▄▄▄▄▄▄▄▄▄█░▌
-▐░░░░░░░░░░░▌        ▐░▌        ▐░░░░░░░░░░░▌▐░▌      ▐░░▌     ▐░▌     ▐░░░░░░░░░░░▌
- ▀▀▀▀▀▀▀▀▀▀▀          ▀          ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀       ▀       ▀▀▀▀▀▀▀▀▀▀▀
+/*******************************************************************************
+* ######## ##     ## ######## ##    ## ########  ######
+* ##       ##     ## ##       ###   ##    ##    ##    ##
+* ##       ##     ## ##       ####  ##    ##    ##
+* ######   ##     ## ######   ## ## ##    ##     ######
+* ##        ##   ##  ##       ##  ####    ##          ##
+* ##         ## ##   ##       ##   ###    ##    ##    ##
+* ########    ###    ######## ##    ##    ##     ######
+*
+* These are overrides from EventReceiver interface...
+*******************************************************************************/
 
-These are overrides from EventReceiver interface...
-****************************************************************************************************/
 /**
-* Fire-up anything that depends on the Kernel...
+* This is called when the kernel attaches the module.
+* This is the first time the class can be expected to have kernel access.
 *
 * @return 0 on no action, 1 on action, -1 on failure.
 */
-int8_t RNBase::bootComplete() {
-  EventReceiver::bootComplete();
+int8_t RNBase::attached() {
+  EventReceiver::attached();
 
   __kernel->addSchedule(&read_abort_event);
 
-  event_bt_queue_ready.repurpose(MANUVR_MSG_BT_QUEUE_READY);
+  event_bt_queue_ready.repurpose(MANUVR_MSG_BT_QUEUE_READY, (EventReceiver*) this);
   event_bt_queue_ready.isManaged(true);
   event_bt_queue_ready.specific_target = (EventReceiver*) this;
-  event_bt_queue_ready.originator      = (EventReceiver*) this;
 
   gpioSetup();
   //force_9600_mode(false);   // Init the UART.
@@ -1116,7 +1112,7 @@ int8_t RNBase::notify(ManuvrRunnable *active_event) {
 }
 
 
-#if defined(__MANUVR_CONSOLE_SUPPORT)
+#if defined(MANUVR_CONSOLE_SUPPORT)
 void RNBase::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
@@ -1224,4 +1220,4 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
 
   if (local_log.length() > 0) {    Kernel::log(&local_log);  }
 }
-#endif  //__MANUVR_CONSOLE_SUPPORT
+#endif  //MANUVR_CONSOLE_SUPPORT

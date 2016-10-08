@@ -46,13 +46,13 @@ class SDCard : public EventReceiver {
     int8_t callback_proc(ManuvrRunnable *);
     const char* getReceiverName();
     void printDebug(StringBuilder*);
-    #if defined(__MANUVR_CONSOLE_SUPPORT)
+    #if defined(MANUVR_CONSOLE_SUPPORT)
       void procDirectDebugInstruction(StringBuilder*);
-    #endif  //__MANUVR_CONSOLE_SUPPORT
+    #endif  //MANUVR_CONSOLE_SUPPORT
 
 
   protected:
-    int8_t bootComplete();
+    int8_t attached();
 
 
   private:
