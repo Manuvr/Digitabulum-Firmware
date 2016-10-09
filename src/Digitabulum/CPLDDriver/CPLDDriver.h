@@ -444,8 +444,8 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
 
     /* Overrides from EventReceiver */
     void printDebug(StringBuilder*);
-    int8_t notify(ManuvrRunnable*);
-    int8_t callback_proc(ManuvrRunnable *);
+    int8_t notify(ManuvrMsg*);
+    int8_t callback_proc(ManuvrMsg*);
     #if defined(MANUVR_CONSOLE_SUPPORT)
       void procDirectDebugInstruction(StringBuilder*);
     #endif  //MANUVR_CONSOLE_SUPPORT
@@ -472,10 +472,10 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
 
 
   private:
-    ManuvrRunnable event_spi_queue_ready;
-    ManuvrRunnable event_spi_callback_ready;
-    ManuvrRunnable event_spi_timeout;
-    ManuvrRunnable _periodic_debug;
+    ManuvrMsg event_spi_queue_ready;
+    ManuvrMsg event_spi_callback_ready;
+    ManuvrMsg event_spi_timeout;
+    ManuvrMsg _periodic_debug;
 
     /* Register representations. */
     uint8_t   cpld_version       = 0;         // If zero, than the CPLD has not been initialized.

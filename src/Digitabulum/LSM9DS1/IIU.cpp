@@ -478,7 +478,7 @@ void IIU::deposit_log(StringBuilder* _log) {
         Kernel::log(&local_log);
       }
       /* Hard-coding the tap to the secondary IRQ pin for now. */
-      ManuvrRunnable* event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_TAP);
+      ManuvrMsg* event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_TAP);
       event->addArg((uint8_t) pos_id);  // We must cast this, because it is *really* an int8.
       event->setOriginator(LegendManager::getInstance());
       Kernel::staticRaiseEvent(event);

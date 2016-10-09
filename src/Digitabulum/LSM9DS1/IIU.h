@@ -440,7 +440,7 @@ class IIU {
     //Vector3<float> gravity;        // If we need gravity, but the Legend doesn't want it.
     StringBuilder local_log;
 
-    ManuvrRunnable quat_crunch_event;
+    ManuvrMsg quat_crunch_event;
 
     int8_t verbosity            =  1; // How chatty should this class be?
     int8_t pos_id               = -1; // We may find it convenient to lookup by sensor position.

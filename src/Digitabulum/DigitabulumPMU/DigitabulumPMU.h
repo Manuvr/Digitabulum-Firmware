@@ -93,8 +93,8 @@ class PMU : public EventReceiver {
     virtual ~PMU();
 
     /* Overrides from EventReceiver */
-    int8_t notify(ManuvrRunnable*);
-    int8_t callback_proc(ManuvrRunnable *);
+    int8_t notify(ManuvrMsg*);
+    int8_t callback_proc(ManuvrMsg*);
     void printDebug(StringBuilder*);
     #if defined(MANUVR_CONSOLE_SUPPORT)
       void procDirectDebugInstruction(StringBuilder*);
@@ -118,7 +118,7 @@ class PMU : public EventReceiver {
 
   private:
     uint32_t     _cpu_clock_rate;
-    ManuvrRunnable _periodic_pmu_read;  // Read the INA219 regularly.
+    ManuvrMsg _periodic_pmu_read;  // Read the INA219 regularly.
 
     /* Values for the MCP73833 charge controller. */
     unsigned int _stat1_delta;

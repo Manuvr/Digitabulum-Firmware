@@ -378,7 +378,7 @@ int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
     //   order to anyone listening is what we intend.
     StringBuilder* legend_string = new StringBuilder();
     nu_legend->formLegendString(legend_string);
-    ManuvrRunnable* legend_broadcast     = Kernel::returnEvent(DIGITABULUM_MSG_IMU_LEGEND);
+    ManuvrMsg* legend_broadcast     = Kernel::returnEvent(DIGITABULUM_MSG_IMU_LEGEND);
     legend_broadcast->specific_target = nu_legend->owner;
     legend_broadcast->priority        = EVENT_PRIORITY_LOWEST + 1;
     legend_broadcast->setOriginator((EventReceiver*) this);
@@ -571,7 +571,7 @@ int8_t LegendManager::attached() {
 * @param  event  The event for which service has been completed.
 * @return A callback return code.
 */
-int8_t LegendManager::callback_proc(ManuvrRunnable *event) {
+int8_t LegendManager::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
   int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
@@ -689,7 +689,7 @@ int8_t LegendManager::callback_proc(ManuvrRunnable *event) {
 
 
 
-int8_t LegendManager::notify(ManuvrRunnable *active_event) {
+int8_t LegendManager::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
   uint8_t temp_uint_8 = 0;
 
@@ -704,7 +704,7 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
     case MANUVR_MSG_SESS_ESTABLISHED:
       event_legend_frame_ready.delaySchedule(1100);     // Enable the periodic frame broadcast.
       {
-        ManuvrRunnable *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
+        ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
         event->addArg((uint8_t) 4);  // Set the desired init stage.
         event->priority = 0;
         raiseEvent(event);
@@ -716,7 +716,7 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
     case MANUVR_MSG_SESS_HANGUP:
       event_legend_frame_ready.enableSchedule(false);
       for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
-        ManuvrRunnable *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
+        ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
         event->addArg((uint8_t) 4);  // Set the desired init stage.
         event->priority = 0;
         raiseEvent(event);
@@ -921,7 +921,7 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'k':
       if ((temp_byte < 6) && (temp_byte >= 0)) {
-        ManuvrRunnable *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
+        ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
         event->addArg((uint8_t) temp_byte);  // Set the desired init stage.
         event->priority = 0;
         raiseEvent(event);
@@ -949,7 +949,7 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
     case 'T':
     case 't':
       if (temp_byte < 17) {
-        ManuvrRunnable *event = Kernel::returnEvent((*(str) == 'T') ? DIGITABULUM_MSG_IMU_DOUBLE_TAP : DIGITABULUM_MSG_IMU_TAP);
+        ManuvrMsg *event = Kernel::returnEvent((*(str) == 'T') ? DIGITABULUM_MSG_IMU_DOUBLE_TAP : DIGITABULUM_MSG_IMU_TAP);
         event->setOriginator((EventReceiver*) this);
         event->addArg((uint8_t) temp_byte);
         Kernel::staticRaiseEvent(event);
@@ -959,7 +959,7 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'q':
       if (temp_byte < 17) {
-        ManuvrRunnable *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_QUAT_CRUNCH);
+        ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_QUAT_CRUNCH);
         event->specific_target = (EventReceiver*) this;
         event->addArg((uint8_t) temp_byte);
         Kernel::staticRaiseEvent(event);

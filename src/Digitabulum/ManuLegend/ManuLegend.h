@@ -281,8 +281,8 @@ class LegendManager : public EventReceiver, public BusOpCallback {
 
     /* Overrides from EventReceiver */
     void printDebug(StringBuilder*);
-    int8_t notify(ManuvrRunnable*);
-    int8_t callback_proc(ManuvrRunnable*);
+    int8_t notify(ManuvrMsg*);
+    int8_t callback_proc(ManuvrMsg*);
     int8_t writeFrameToBuffer(StringBuilder*);
     #if defined(MANUVR_CONSOLE_SUPPORT)
       void procDirectDebugInstruction(StringBuilder*);
@@ -336,8 +336,8 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     uint32_t*       _ptr_sequence = NULL;
     float*          _ptr_delta_t  = NULL;
 
-    ManuvrRunnable event_legend_frame_ready;
-    ManuvrRunnable event_iiu_read;
+    ManuvrMsg event_legend_frame_ready;
+    ManuvrMsg event_iiu_read;
 
     LinkedList<ManuLegend*> active_legends;  // We need to keep track of the legends we've released.
 

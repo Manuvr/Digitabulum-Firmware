@@ -154,7 +154,7 @@ void RNBase::start_lockout(uint32_t milliseconds) {
   if (INSTANCE == NULL) return;
 
   // TODO: Need a cleaner way to accomplish this...
-  platform.kernel()->addSchedule(new ManuvrRunnable(milliseconds,  0, true, oneshot_rn_reenable));
+  platform.kernel()->addSchedule(new ManuvrMsg(milliseconds,  0, true, oneshot_rn_reenable));
   _er_set_flag(RNBASE_FLAG_LOCK_OUT);
 }
 
@@ -332,7 +332,7 @@ int8_t RNBase::reset() {
   tx_buf.clear();
 
   // Used to disassert the reset line.  TODO: Need a cleaner way to accomplish this...
-  ManuvrRunnable* event = Kernel::returnEvent(MANUVR_MSG_BT_EXIT_RESET);
+  ManuvrMsg* event = Kernel::returnEvent(MANUVR_MSG_BT_EXIT_RESET);
   event->addArg((EventReceiver*) this);
   event->setOriginator((EventReceiver*) this);
   event->specific_target = (EventReceiver*) this;
@@ -737,7 +737,7 @@ volatile void RNBase::usart2_character_rx(unsigned char c) {
     // the buffer, raise an event so that we can timeout the transmission.
     read_millis_0 = millis();
     read_millis_1 = read_millis_0;
-    ManuvrRunnable *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_RX_BUF_NOT_EMPTY);
+    ManuvrMsg *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_RX_BUF_NOT_EMPTY);
     Kernel::isrRaiseEvent(nu_event);
   }
   uart2_received_string[uart2_rec_cnt++] = c;
@@ -878,7 +878,7 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
         if (!((RNBase*) INSTANCE)->_er_flag(RNBASE_FLAG_CMD_MODE)) {
           ((RNBase*) INSTANCE)->_er_set_flag(RNBASE_FLAG_CMD_MODE);
           ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_CMD_PEND);
-          ManuvrRunnable *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_ENTERED_CMD_MODE);
+          ManuvrMsg *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_ENTERED_CMD_MODE);
           Kernel::isrRaiseEvent(nu_event);
         }
       }
@@ -888,7 +888,7 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
       if (INSTANCE != NULL) {
         if (((RNBase*) INSTANCE)->_er_flag(RNBASE_FLAG_CMD_MODE)) {
           ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_CMD_MODE | RNBASE_FLAG_CMD_PEND | RNBASE_FLAG_LOCK_OUT);
-          ManuvrRunnable *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_EXITED_CMD_MODE);
+          ManuvrMsg *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_EXITED_CMD_MODE);
           Kernel::isrRaiseEvent(nu_event);
         }
       }
@@ -959,7 +959,7 @@ int8_t RNBase::attached() {
 * @param  event  The event for which service has been completed.
 * @return A callback return code.
 */
-int8_t RNBase::callback_proc(ManuvrRunnable *event) {
+int8_t RNBase::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
   int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
@@ -1029,7 +1029,7 @@ void RNBase::printDebug(StringBuilder *temp) {
 //}
 
 
-int8_t RNBase::notify(ManuvrRunnable *active_event) {
+int8_t RNBase::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
   switch (active_event->eventCode()) {
     case MANUVR_MSG_BT_RX_BUF_NOT_EMPTY:

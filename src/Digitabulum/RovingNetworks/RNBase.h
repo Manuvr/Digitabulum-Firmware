@@ -143,8 +143,8 @@ class RNBase : public ManuvrXport {
 
     /* Overrides from EventReceiver */
     void printDebug(StringBuilder *);
-    int8_t notify(ManuvrRunnable*);
-    int8_t callback_proc(ManuvrRunnable *);
+    int8_t notify(ManuvrMsg*);
+    int8_t callback_proc(ManuvrMsg*);
     #if defined(MANUVR_CONSOLE_SUPPORT)
       void procDirectDebugInstruction(StringBuilder*);
     #endif  //MANUVR_CONSOLE_SUPPORT
@@ -205,7 +205,7 @@ class RNBase : public ManuvrXport {
 
 
   private:
-    ManuvrRunnable event_bt_queue_ready;
+    ManuvrMsg event_bt_queue_ready;
 
     uint8_t _reset_pin = 0;
 
