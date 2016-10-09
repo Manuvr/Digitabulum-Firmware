@@ -113,7 +113,6 @@ STM32F7USB::STM32F7USB() : ManuvrXport() {
   read_abort_event.isManaged(true);
   read_abort_event.specific_target = (EventReceiver*) this;
   read_abort_event.priority        = 1;
-  read_abort_event.addArg(xport_id);  // Add our assigned transport ID to our pre-baked argument.
 
   _xport_mtu = MANUVR_USB_BUF_SIZE;
 }
