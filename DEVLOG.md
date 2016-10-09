@@ -83,3 +83,16 @@ Tuned out of this project for two weeks for work and hardware issues. ManuvrOS
   279032    2816    9840  291688   47368   Re-added most of the driver stubs.
   282056    2816    9844  294716   47f3c   Testing the waters of Runnable collapse.
   281768    2800    9772  294340   47dc4   Following flattening of Runnable upstream.
+
+_---J. Ian Lindsay_
+
+------
+
+### 2016.10.09:
+  281120    2800    9764  293684   47b34   New baseline.
+  281088    2800    9764  293652   47b14   Struck lstdc++ from the linker.
+  281080    2800    9764  293644   47b0c   Struck lgcc from the linker.
+
+I forgot why those linkages were ever there to begin with...
+
+_---J. Ian Lindsay_

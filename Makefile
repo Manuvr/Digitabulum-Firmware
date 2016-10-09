@@ -3,7 +3,6 @@
 # Author: J. Ian Lindsay
 # Date:   2014.08.13
 #
-# Variables for the firmware compilation...
 ###########################################################################
 FIRMWARE_NAME      = digitabulum
 
@@ -36,17 +35,20 @@ export MAKE    = $(shell which make)
 
 
 ###########################################################################
-# Source files, includes, and linker directives...
+# Includes, flags, and linker directives...
 ###########################################################################
-CPP_FLAGS          = -fno-rtti -fno-exceptions
-CFLAGS             =
+CPP_FLAGS    = -fno-rtti -fno-exceptions
+CFLAGS       = -Wall #-nostdlib
+LIBS         = -lc -lm -lstdperiph -lfatfs -lfreertos -lmanuvr
+LD_FILE      = digitabulum.ld
 
 INCLUDES    = -iquote. -iquotesrc/
-INCLUDES   += -Icompiler/arm-none-eabi/include/
+INCLUDES   += -Icompiler/arm-none-eabi/include
 INCLUDES   += -I$(BUILD_ROOT)/lib/ManuvrOS
 INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/STM32F7xx_HAL_Driver/Inc
 INCLUDES   += -I$(BUILD_ROOT)/lib/Inc
 INCLUDES   += -I$(BUILD_ROOT)/lib
+INCLUDES   += -I$(BUILD_ROOT)/confs
 INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/CMSIS/Device/ST/STM32F7xx/Include
 INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/CMSIS/Include
 INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/USB_Device/Class/CDC/Inc
@@ -68,26 +70,13 @@ MCUFLAGS += -fsingle-precision-constant -Wdouble-promotion
 MCUFLAGS += -mfpu=fpv5-sp-d16 -mfloat-abi=hard
 MCUFLAGS += -ffreestanding
 
-# Library paths
-LIBPATHS  = -L. -L$(OUTPUT_PATH)
-
-# Libraries to link
-LIBS = -lc -lgcc -lstdc++ -lm -lstdperiph -lfatfs -lfreertos -lmanuvr -lextras
-
 # Flags for the linker...
 LDFLAGS  = -static $(MCUFLAGS)
 LDFLAGS += $(LIBPATHS)
 LDFLAGS += -Wl,--start-group $(LIBS) -Wl,--end-group
-LDFLAGS += -Wl,--gc-sections -Wall -Tdigitabulum.ld
+LDFLAGS += -Wl,--gc-sections -Wall -T$(LD_FILE)
 LDFLAGS += -Wl,-Map=$(FIRMWARE_NAME).map
-
-# Wrap the include paths into the flags...
-CFLAGS =  $(INCLUDES)
-CFLAGS += $(OPTIMIZATION) -Wall
-
-# We include this specifically so that we can get a grip on configuration headers
-#   downstream.
-CFLAGS += -I$(BUILD_ROOT)/confs
+LDFLAGS += -L. -L$(OUTPUT_PATH)
 
 CFLAGS += $(MCUFLAGS)
 
@@ -96,68 +85,90 @@ CFLAGS += -DREENTRANT_SYSCALLS_PROVIDED -DUSE_STDPERIPH_DRIVER
 CFLAGS += -DENABLE_USB_VCP
 #CFLAGS += -DHAL_CORTEX_MODULE_ENABLED
 
-#CFLAGS += -DMANUVR_SUPPORT_MQTT
+###########################################################################
+# Source file definitions...
+###########################################################################
+SOURCES_C     = src/syscalls.c src/gpio.c
+SOURCES_C    += src/fatfs.c
+SOURCES_C    += src/stm32f7xx_it.c
+SOURCES_C    += src/system_stm32f7xx.c
+
+SOURCES_CPP   = src/main.cpp
+SOURCES_CPP  += src/Digitabulum/CPLDDriver/CPLDDriver.cpp
+SOURCES_CPP  += src/Digitabulum/CPLDDriver/SPIBusOp.cpp
+SOURCES_CPP  += src/Digitabulum/LSM9DS1/IIU.cpp
+SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp
+SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1_AG.cpp
+SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1_M.cpp
+SOURCES_CPP  += src/Digitabulum/ManuLegend/LegendManager.cpp
+SOURCES_CPP  += src/Digitabulum/ManuLegend/ManuLegend.cpp
+SOURCES_CPP  += src/Digitabulum/SDCard/SDCard.cpp
+SOURCES_CPP  += src/Digitabulum/RovingNetworks/RNBase.cpp
+SOURCES_CPP  += src/Digitabulum/RovingNetworks/BTQueuedOperation.cpp
+SOURCES_CPP  += src/Digitabulum/RovingNetworks/RN4677/RN4677.cpp
+SOURCES_CPP  += src/Digitabulum/USB/STM32F7USB.cpp
+SOURCES_CPP  += src/Digitabulum/IREmitter/IREmitter.cpp
+SOURCES_CPP  += src/Digitabulum/HapticStrap/HapticStrap.cpp
+SOURCES_CPP  += src/Digitabulum/ExpansionPort/ExpansionPort.cpp
+SOURCES_CPP  += src/Digitabulum/DigitabulumPMU/DigitabulumPMU.cpp
+
+
+###########################################################################
+# Option conditionals
+###########################################################################
+#MANUVR_OPTIONS += -DMANUVR_SUPPORT_MQTT
 MANUVR_OPTIONS += -DMANUVR_OVER_THE_WIRE
 MANUVR_OPTIONS += -DMANUVR_CBOR
 MANUVR_OPTIONS += -DMANUVR_CONSOLE_SUPPORT
-MANUVR_OPTIONS += -D__MANUVR_EVENT_PROFILER
+
+# Options that build for certain threading models (if any).
+ifeq ($(THREADS),1)
+INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS
+INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/include
+INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1
+SOURCES_C  += src/freertos.c
+MANUVR_OPTIONS += -D__MANUVR_FREERTOS
+export THREADS=1
+endif
+
+# Options for various security features.
+ifeq ($(SECURE),1)
+MANUVR_OPTIONS += -DWITH_BLIND_CRYPTO
+export SECURE=1
+endif
 
 # Debugging options...
 ifeq ($(DEBUG),1)
 MANUVR_OPTIONS += -D__MANUVR_DEBUG
 #MANUVR_OPTIONS += -D__MANUVR_PIPE_DEBUG
+MANUVR_OPTIONS += -D__MANUVR_EVENT_PROFILER
 #CFLAGS += -g -ggdb
 #CPP_FLAGS += -fno-use-linker-plugin
 #CPP_FLAGS += -fstack-usage
 endif
 
-export STM32F746xx
-export MANUVR_PLATFORM = STM32F7
-
-###########################################################################
-# Source file definitions...
-###########################################################################
-SRCS    = src/syscalls.c src/gpio.c
-SRCS   += src/fatfs.c src/freertos.c
-SRCS   += src/stm32f7xx_it.c
-SRCS   += src/system_stm32f7xx.c
-
-CPP_SRCS   = src/main.cpp
-CPP_SRCS  += src/Digitabulum/CPLDDriver/CPLDDriver.cpp
-CPP_SRCS  += src/Digitabulum/CPLDDriver/SPIBusOp.cpp
-CPP_SRCS  += src/Digitabulum/LSM9DS1/IIU.cpp
-CPP_SRCS  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp
-CPP_SRCS  += src/Digitabulum/LSM9DS1/LSM9DS1_AG.cpp
-CPP_SRCS  += src/Digitabulum/LSM9DS1/LSM9DS1_M.cpp
-CPP_SRCS  += src/Digitabulum/ManuLegend/LegendManager.cpp
-CPP_SRCS  += src/Digitabulum/ManuLegend/ManuLegend.cpp
-CPP_SRCS  += src/Digitabulum/SDCard/SDCard.cpp
-CPP_SRCS  += src/Digitabulum/RovingNetworks/RNBase.cpp
-CPP_SRCS  += src/Digitabulum/RovingNetworks/BTQueuedOperation.cpp
-CPP_SRCS  += src/Digitabulum/RovingNetworks/RN4677/RN4677.cpp
-CPP_SRCS  += src/Digitabulum/USB/STM32F7USB.cpp
-CPP_SRCS  += src/Digitabulum/IREmitter/IREmitter.cpp
-CPP_SRCS  += src/Digitabulum/HapticStrap/HapticStrap.cpp
-CPP_SRCS  += src/Digitabulum/ExpansionPort/ExpansionPort.cpp
-CPP_SRCS  += src/Digitabulum/DigitabulumPMU/DigitabulumPMU.cpp
-
 
 ###########################################################################
 # exports, consolidation....
 ###########################################################################
-OBJS = $(SRCS:.c=.o)
+OBJS = $(SOURCES_C:.c=.o)
 
-# Finally, export our flags for downstream Makefiles...
-export CFLAGS += $(MANUVR_OPTIONS)
+# Merge our choices and export them to the downstream Makefiles...
+CFLAGS += $(MANUVR_OPTIONS) $(OPTIMIZATION) $(INCLUDES)
+
+export STM32F746xx
+export MANUVR_PLATFORM = STM32F7
+export CFLAGS
 export CPP_FLAGS += $(CFLAGS)
 
-vpath %.cpp src
-vpath %.c src
-vpath %.a $(OUTPUT_PATH)
 
 ###########################################################################
 # Rules for building the firmware follow...
 ###########################################################################
+vpath %.cpp src
+vpath %.c src
+vpath %.a $(OUTPUT_PATH)
+
 
 .PHONY: all
 
@@ -172,7 +183,7 @@ libs:
 	$(MAKE) -C lib
 
 $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: $(OBJS) libs
-	$(CXX) src/startup.s $(OBJS) $(CPP_SRCS) -o $@ $(CPP_FLAGS) -std=$(CPP_STANDARD) $(LDFLAGS)
+	$(CXX) src/startup.s $(OBJS) $(SOURCES_CPP) -o $@ $(CPP_FLAGS) -std=$(CPP_STANDARD) $(LDFLAGS)
 	$(CP) -O ihex $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 	$(CP) -O binary $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin
 
