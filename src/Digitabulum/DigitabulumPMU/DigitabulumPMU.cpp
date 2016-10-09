@@ -126,7 +126,7 @@ int8_t PMU::cpu_scale(uint8_t _freq) {
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 
   local_log.concatf("CPU now at %dMHz\n", (_cpu_clock_rate/1000000));
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
   return 0;
 }
 
@@ -275,7 +275,7 @@ int8_t PMU::notify(ManuvrRunnable *active_event) {
       break;
   }
 
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
   return return_value;
 }
 
@@ -330,7 +330,7 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
       break;
   }
 
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
 }
 #endif  // MANUVR_CONSOLE_SUPPORT
 

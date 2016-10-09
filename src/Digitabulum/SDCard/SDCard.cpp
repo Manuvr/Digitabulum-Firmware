@@ -500,7 +500,7 @@ int8_t SDCard::notify(ManuvrRunnable *active_event) {
     default:
       break;
   }
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
   return return_value;
 }
 
@@ -515,6 +515,6 @@ void SDCard::procDirectDebugInstruction(StringBuilder *input) {
       break;
   }
 
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
 }
 #endif  //MANUVR_CONSOLE_SUPPORT

@@ -166,7 +166,7 @@ int8_t HapticStrap::notify(ManuvrRunnable *active_event) {
       break;
   }
 
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
   return return_value;
 }
 
@@ -187,6 +187,6 @@ void HapticStrap::procDirectDebugInstruction(StringBuilder *input) {
       break;
   }
 
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
 }
 #endif  //MANUVR_CONSOLE_SUPPORT
