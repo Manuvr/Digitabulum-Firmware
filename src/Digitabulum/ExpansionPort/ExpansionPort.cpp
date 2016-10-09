@@ -32,7 +32,8 @@ limitations under the License.
 //volatile ExpansionPort* ExpansionPort::INSTANCE = NULL;
 
 
-ExpansionPort::ExpansionPort() {
+ExpansionPort::ExpansionPort() : EventReceiver() {
+  setReceiverName("ExpansionPort");
   INSTANCE = this;
 }
 
@@ -45,28 +46,28 @@ void ExpansionPort::gpioSetup() {
 }
 
 
-/****************************************************************************************************
-*  ▄▄▄▄▄▄▄▄▄▄▄  ▄               ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄
-* ▐░░░░░░░░░░░▌▐░▌             ▐░▌▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
-* ▐░█▀▀▀▀▀▀▀▀▀  ▐░▌           ▐░▌ ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌░▌     ▐░▌ ▀▀▀▀█░█▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀
-* ▐░▌            ▐░▌         ▐░▌  ▐░▌          ▐░▌▐░▌    ▐░▌     ▐░▌     ▐░▌
-* ▐░█▄▄▄▄▄▄▄▄▄    ▐░▌       ▐░▌   ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌ ▐░▌   ▐░▌     ▐░▌     ▐░█▄▄▄▄▄▄▄▄▄
-* ▐░░░░░░░░░░░▌    ▐░▌     ▐░▌    ▐░░░░░░░░░░░▌▐░▌  ▐░▌  ▐░▌     ▐░▌     ▐░░░░░░░░░░░▌
-* ▐░█▀▀▀▀▀▀▀▀▀      ▐░▌   ▐░▌     ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌   ▐░▌ ▐░▌     ▐░▌      ▀▀▀▀▀▀▀▀▀█░▌
-* ▐░▌                ▐░▌ ▐░▌      ▐░▌          ▐░▌    ▐░▌▐░▌     ▐░▌               ▐░▌
-* ▐░█▄▄▄▄▄▄▄▄▄        ▐░▐░▌       ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌     ▐░▐░▌     ▐░▌      ▄▄▄▄▄▄▄▄▄█░▌
-* ▐░░░░░░░░░░░▌        ▐░▌        ▐░░░░░░░░░░░▌▐░▌      ▐░░▌     ▐░▌     ▐░░░░░░░░░░░▌
-*  ▀▀▀▀▀▀▀▀▀▀▀          ▀          ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀       ▀       ▀▀▀▀▀▀▀▀▀▀▀
+/*******************************************************************************
+* ######## ##     ## ######## ##    ## ########  ######
+* ##       ##     ## ##       ###   ##    ##    ##    ##
+* ##       ##     ## ##       ####  ##    ##    ##
+* ######   ##     ## ######   ## ## ##    ##     ######
+* ##        ##   ##  ##       ##  ####    ##          ##
+* ##         ## ##   ##       ##   ###    ##    ##    ##
+* ########    ###    ######## ##    ##    ##     ######
 *
 * These are overrides from EventReceiver interface...
-****************************************************************************************************/
+*******************************************************************************/
 
 /**
-* Debug support function.
+* This is called when the kernel attaches the module.
+* This is the first time the class can be expected to have kernel access.
 *
-* @return a pointer to a string constant.
+* @return 0 on no action, 1 on action, -1 on failure.
 */
-const char* ExpansionPort::getReceiverName() {  return "ExpansionPort";  }
+int8_t ExpansionPort::attached() {
+  EventReceiver::attached();   // Call up to get scheduler ref and class init.
+  return 0;
+}
 
 
 /**
@@ -77,20 +78,6 @@ const char* ExpansionPort::getReceiverName() {  return "ExpansionPort";  }
 void ExpansionPort::printDebug(StringBuilder* output) {
   EventReceiver::printDebug(output);
 }
-
-
-
-/**
-* There is a NULL-check performed upstream for the scheduler member. So no need
-*   to do it again here.
-*
-* @return 0 on no action, 1 on action, -1 on failure.
-*/
-int8_t ExpansionPort::bootComplete() {
-  EventReceiver::bootComplete();   // Call up to get scheduler ref and class init.
-  return 0;
-}
-
 
 
 /**
@@ -107,13 +94,13 @@ int8_t ExpansionPort::bootComplete() {
 * @param  event  The event for which service has been completed.
 * @return A callback return code.
 */
-int8_t ExpansionPort::callback_proc(ManuvrRunnable *event) {
+int8_t ExpansionPort::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
   int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
 
   /* Some class-specific set of conditionals below this line. */
-  switch (event->event_code) {
+  switch (event->eventCode()) {
     default:
       break;
   }
@@ -123,21 +110,21 @@ int8_t ExpansionPort::callback_proc(ManuvrRunnable *event) {
 
 
 
-int8_t ExpansionPort::notify(ManuvrRunnable *active_event) {
+int8_t ExpansionPort::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
 
-  switch (active_event->event_code) {
+  switch (active_event->eventCode()) {
     default:
       return_value += EventReceiver::notify(active_event);
       break;
   }
 
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
   return return_value;
 }
 
 
-#if defined(__MANUVR_CONSOLE_SUPPORT)
+#if defined(MANUVR_CONSOLE_SUPPORT)
 void ExpansionPort::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
@@ -149,6 +136,6 @@ void ExpansionPort::procDirectDebugInstruction(StringBuilder *input) {
       break;
   }
 
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
 }
-#endif  //__MANUVR_CONSOLE_SUPPORT
+#endif  //MANUVR_CONSOLE_SUPPORT

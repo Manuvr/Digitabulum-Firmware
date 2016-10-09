@@ -26,7 +26,7 @@ limitations under the License.
 #include <Platform/Platform.h>
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
 *     /       |           |   /   \  |           ||  |  /      |   /       |
 *    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
@@ -34,9 +34,8 @@ limitations under the License.
 * .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
 * |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
 *
-* Static members and initializers should be located here. Initializers first, functions second.
-****************************************************************************************************/
-
+* Static members and initializers should be located here.
+*******************************************************************************/
 volatile static unsigned long _stat1_change_time = 0;
 volatile static unsigned long _stat2_change_time = 0;
 volatile static unsigned int  _stat1_prior_delta = 0;
@@ -47,6 +46,7 @@ volatile PMU* PMU::INSTANCE = NULL;
 
 int PMU::pmu_cpu_clock_rate(CPUFreqSetting _setting) {
   switch (_setting) {
+    case CPUFreqSetting::CPU_27:         return 27;
     case CPUFreqSetting::CPU_54:         return 54;
     case CPUFreqSetting::CPU_216:        return 216;
     case CPUFreqSetting::CPU_CLK_UNDEF:  return 0;
@@ -71,20 +71,22 @@ const char* PMU::getChargeStateString(ChargeState code) {
 }
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *   ___ _              ___      _ _              _      _
 *  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
 * | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
 *  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
-****************************************************************************************************/
+*******************************************************************************/
 
-PMU::PMU() {
+PMU::PMU(INA219* _cv_sense) : EventReceiver() {
+  setReceiverName("PMU");
   INSTANCE   = this;
   _cpu_clock = CPUFreqSetting::CPU_CLK_UNDEF;
   _stat1_pin = 16;
   _stat2_pin = 17;
+  _ina219 = _cv_sense;
 }
 
 
@@ -101,13 +103,13 @@ int8_t PMU::cpu_scale(uint8_t _freq) {
     case 0:
       _cpu_clock = CPUFreqSetting::CPU_216;
       RCC_ClkInitStruct.AHBCLKDivider  = RCC_SYSCLK_DIV1;
-      RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV16;
+      RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
       RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV4;
       break;
     case 1:
       _cpu_clock = CPUFreqSetting::CPU_54;
       RCC_ClkInitStruct.AHBCLKDivider  = RCC_SYSCLK_DIV4;
-      RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+      RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
       RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
       break;
     default:
@@ -118,9 +120,13 @@ int8_t PMU::cpu_scale(uint8_t _freq) {
   if(HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_6) != HAL_OK) {
     while(1) { ; }
   }
+  _cpu_clock_rate = HAL_RCC_GetHCLKFreq();
+  HAL_SYSTICK_Config(_cpu_clock_rate/8000);
+  HAL_SYSTICK_CLKSourceConfig(SYSTICK_CLKSOURCE_HCLK_DIV8);
+  HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 
-  local_log.concatf("CPU now at %dMHz\n", pmu_cpu_clock_rate(_cpu_clock));
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  local_log.concatf("CPU now at %dMHz\n", (_cpu_clock_rate/1000000));
+  flushLocalLog();
   return 0;
 }
 
@@ -184,28 +190,30 @@ void PMU::set_stat2_delta(unsigned int nu) {
 }
 
 
-/****************************************************************************************************
-*  ▄▄▄▄▄▄▄▄▄▄▄  ▄               ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄
-* ▐░░░░░░░░░░░▌▐░▌             ▐░▌▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
-* ▐░█▀▀▀▀▀▀▀▀▀  ▐░▌           ▐░▌ ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌░▌     ▐░▌ ▀▀▀▀█░█▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀
-* ▐░▌            ▐░▌         ▐░▌  ▐░▌          ▐░▌▐░▌    ▐░▌     ▐░▌     ▐░▌
-* ▐░█▄▄▄▄▄▄▄▄▄    ▐░▌       ▐░▌   ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌ ▐░▌   ▐░▌     ▐░▌     ▐░█▄▄▄▄▄▄▄▄▄
-* ▐░░░░░░░░░░░▌    ▐░▌     ▐░▌    ▐░░░░░░░░░░░▌▐░▌  ▐░▌  ▐░▌     ▐░▌     ▐░░░░░░░░░░░▌
-* ▐░█▀▀▀▀▀▀▀▀▀      ▐░▌   ▐░▌     ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌   ▐░▌ ▐░▌     ▐░▌      ▀▀▀▀▀▀▀▀▀█░▌
-* ▐░▌                ▐░▌ ▐░▌      ▐░▌          ▐░▌    ▐░▌▐░▌     ▐░▌               ▐░▌
-* ▐░█▄▄▄▄▄▄▄▄▄        ▐░▐░▌       ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌     ▐░▐░▌     ▐░▌      ▄▄▄▄▄▄▄▄▄█░▌
-* ▐░░░░░░░░░░░▌        ▐░▌        ▐░░░░░░░░░░░▌▐░▌      ▐░░▌     ▐░▌     ▐░░░░░░░░░░░▌
-*  ▀▀▀▀▀▀▀▀▀▀▀          ▀          ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀       ▀       ▀▀▀▀▀▀▀▀▀▀▀
+/*******************************************************************************
+* ######## ##     ## ######## ##    ## ########  ######
+* ##       ##     ## ##       ###   ##    ##    ##    ##
+* ##       ##     ## ##       ####  ##    ##    ##
+* ######   ##     ## ######   ## ## ##    ##     ######
+* ##        ##   ##  ##       ##  ####    ##          ##
+* ##         ## ##   ##       ##   ###    ##    ##    ##
+* ########    ###    ######## ##    ##    ##     ######
 *
 * These are overrides from EventReceiver interface...
-****************************************************************************************************/
+*******************************************************************************/
 
 /**
-* Debug support function.
+* This is called when the kernel attaches the module.
+* This is the first time the class can be expected to have kernel access.
 *
-* @return a pointer to a string constant.
+* @return 0 on no action, 1 on action, -1 on failure.
 */
-const char* PMU::getReceiverName() {  return "PMU";  }
+int8_t PMU::attached() {
+  EventReceiver::attached();   // Call up to get scheduler ref and class init.
+  gpioSetup();
+  cpu_scale(1);
+  return 0;
+}
 
 
 /**
@@ -215,7 +223,7 @@ const char* PMU::getReceiverName() {  return "PMU";  }
 */
 void PMU::printDebug(StringBuilder* output) {
   EventReceiver::printDebug(output);
-  output->concatf("-- CPU freq                  %d MHz\n",  pmu_cpu_clock_rate(_cpu_clock));
+  output->concatf("-- CPU freq                  %d MHz\n",  _cpu_clock_rate);
   output->concatf("-- Charge state              %s\n",      getChargeStateString());
   output->concatf("-- STAT1                     %s\n",      (_er_flag(DIGITAB_PMU_FLAG_STAT1) ? "hi" : "lo"));
   output->concatf("-- STAT2                     %s\n",      (_er_flag(DIGITAB_PMU_FLAG_STAT2) ? "hi" : "lo"));
@@ -227,22 +235,6 @@ void PMU::printDebug(StringBuilder* output) {
   output->concatf("-- _stat1_prior_delta        %lu\n",      _stat1_prior_delta);
   output->concatf("-- _stat2_prior_delta        %lu\n",      _stat2_prior_delta);
 }
-
-
-
-/**
-* There is a NULL-check performed upstream for the scheduler member. So no need
-*   to do it again here.
-*
-* @return 0 on no action, 1 on action, -1 on failure.
-*/
-int8_t PMU::bootComplete() {
-  EventReceiver::bootComplete();   // Call up to get scheduler ref and class init.
-  gpioSetup();
-  cpu_scale(1);
-  return 0;
-}
-
 
 
 /**
@@ -259,13 +251,13 @@ int8_t PMU::bootComplete() {
 * @param  event  The event for which service has been completed.
 * @return A callback return code.
 */
-int8_t PMU::callback_proc(ManuvrRunnable *event) {
+int8_t PMU::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
   int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
 
   /* Some class-specific set of conditionals below this line. */
-  switch (event->event_code) {
+  switch (event->eventCode()) {
     default:
       break;
   }
@@ -274,22 +266,21 @@ int8_t PMU::callback_proc(ManuvrRunnable *event) {
 }
 
 
-
-int8_t PMU::notify(ManuvrRunnable *active_event) {
+int8_t PMU::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
 
-  switch (active_event->event_code) {
+  switch (active_event->eventCode()) {
     default:
       return_value += EventReceiver::notify(active_event);
       break;
   }
 
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
   return return_value;
 }
 
 
-#ifdef __MANUVR_CONSOLE_SUPPORT
+#ifdef MANUVR_CONSOLE_SUPPORT
 void PMU::procDirectDebugInstruction(StringBuilder *input) {
   const char* str = (char *) input->position(0);
   char c    = *str;
@@ -310,9 +301,22 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
       cpu_scale(*(str) == 'f' ? 0 : 1);
       break;
 
+    case 'w':
+      // Find the current wattage draw.
+      break;
+
+    case 'p':
+    case 'P':
+      // Start or stop the periodic sensor read.
+      break;
+
+    case 'e':
+      // Read the present battery voltage.
+      break;
+
     case 'm':   // Set the system-wide power mode.
       if (255 != temp_int) {
-        ManuvrRunnable* event = Kernel::returnEvent(MANUVR_MSG_SYS_POWER_MODE);
+        ManuvrMsg* event = Kernel::returnEvent(MANUVR_MSG_SYS_POWER_MODE);
         event->addArg((uint8_t) temp_int);
         EventReceiver::raiseEvent(event);
         local_log.concatf("Power mode is now %d.\n", temp_int);
@@ -326,27 +330,21 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
       break;
   }
 
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
 }
-#endif  // __MANUVR_CONSOLE_SUPPORT
+#endif  // MANUVR_CONSOLE_SUPPORT
 
 
 
-/****************************************************************************************************
- ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄       ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄
-▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌     ▐░▌          ▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░▌
- ▀▀▀▀█░█▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌     ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌░▌     ▐░▌▐░█▀▀▀▀▀▀▀█░▌
-     ▐░▌     ▐░▌          ▐░▌       ▐░▌     ▐░▌          ▐░▌       ▐░▌▐░▌▐░▌    ▐░▌▐░▌       ▐░▌
-     ▐░▌     ▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌     ▐░▌          ▐░█▄▄▄▄▄▄▄█░▌▐░▌ ▐░▌   ▐░▌▐░▌       ▐░▌
-     ▐░▌     ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌     ▐░▌          ▐░░░░░░░░░░░▌▐░▌  ▐░▌  ▐░▌▐░▌       ▐░▌
-     ▐░▌      ▀▀▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀█░█▀▀      ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌   ▐░▌ ▐░▌▐░▌       ▐░▌
-     ▐░▌               ▐░▌▐░▌     ▐░▌       ▐░▌          ▐░▌       ▐░▌▐░▌    ▐░▌▐░▌▐░▌       ▐░▌
- ▄▄▄▄█░█▄▄▄▄  ▄▄▄▄▄▄▄▄▄█░▌▐░▌      ▐░▌      ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌       ▐░▌▐░▌     ▐░▐░▌▐░█▄▄▄▄▄▄▄█░▌
-▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌     ▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░▌      ▐░░▌▐░░░░░░░░░░▌
- ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀       ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀        ▀▀  ▀▀▀▀▀▀▀▀▀▀
-
-Interrupt service routine support functions...
-****************************************************************************************************/
+/*******************************************************************************
+* .-. .----..----.    .-.     .--.  .-. .-..----.
+* | |{ {__  | {}  }   | |    / {} \ |  `| || {}  \
+* | |.-._} }| .-. \   | `--./  /\  \| |\  ||     /
+* `-'`----' `-' `-'   `----'`-'  `-'`-' `-'`----'
+*
+* Interrupt service routine support functions. Everything in this block
+*   executes under an ISR. Keep it brief...
+*******************************************************************************/
 
 /*
 * This is an ISR.

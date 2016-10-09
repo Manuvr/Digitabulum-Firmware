@@ -130,6 +130,9 @@ class RNBase : public ManuvrXport {
     RNBase(uint8_t _rst_pin);
     virtual ~RNBase();
 
+    /* Override from BufferPipe. */
+    virtual int8_t toCounterparty(StringBuilder* buf, int8_t mm);
+
     /* Overrides from the Transport class. */
     virtual int8_t connect();
     //virtual int8_t disconnect();
@@ -139,13 +142,12 @@ class RNBase : public ManuvrXport {
     int8_t read_port();
 
     /* Overrides from EventReceiver */
-    virtual const char* getReceiverName() =0;
     void printDebug(StringBuilder *);
-    int8_t notify(ManuvrRunnable*);
-    int8_t callback_proc(ManuvrRunnable *);
-    #if defined(__MANUVR_CONSOLE_SUPPORT)
+    int8_t notify(ManuvrMsg*);
+    int8_t callback_proc(ManuvrMsg*);
+    #if defined(MANUVR_CONSOLE_SUPPORT)
       void procDirectDebugInstruction(StringBuilder*);
-    #endif  //__MANUVR_CONSOLE_SUPPORT
+    #endif  //MANUVR_CONSOLE_SUPPORT
 
     /* These are used to send data to a BT connected device. */
     inline bool roomInQueue() {    return !(work_queue.size() < RNBASE_MAX_BT_Q_DEPTH);  }
@@ -181,7 +183,7 @@ class RNBase : public ManuvrXport {
     virtual int8_t sendBuffer(StringBuilder*);
 
 
-    virtual int8_t bootComplete();      // This is called from the base notify().
+    virtual int8_t attached();      // This is called from the base notify().
 
     // Mandatory overrides.
     virtual void factoryReset(void)    =0;   // Perform the sequence that will factory-reset the RN.
@@ -203,7 +205,7 @@ class RNBase : public ManuvrXport {
 
 
   private:
-    ManuvrRunnable event_bt_queue_ready;
+    ManuvrMsg event_bt_queue_ready;
 
     uint8_t _reset_pin = 0;
 
@@ -225,6 +227,7 @@ class RNBase : public ManuvrXport {
     void setAutoconnect(bool);
 
     int8_t sendBreak();           // Send a break stream to the counterparty if things get hosed.
+
     int8_t enterCommandMode();    // Convenience fxn for entering command mode.
     int8_t exitCommandMode();     // Convenience fxn for exiting command mode.
 

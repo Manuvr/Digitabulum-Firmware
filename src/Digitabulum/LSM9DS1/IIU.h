@@ -18,6 +18,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
+IIU == "Intertial Integration Unit"
+
 An IIU is a non-abstract class that tracks measurements from an IMU and
   maintains positional data (by integrating the readings from the IMU).
 
@@ -37,6 +39,7 @@ An IIU can be fed any number of these data:
 
 Data from magnetometers and GPS devices is used to establish error-rates
   and divergence data (and optionally correction).
+
 
 
 */
@@ -78,6 +81,69 @@ class LSM9DSx_Common;   // Forward declaration of the LSM9DSx_Common class.
 //};
 
 
+/*
+* This is a big mess of pointers to our representations of the registers for a
+*   complete sensor. We do things like this because we need this space allocated
+*   contiguously.
+*/
+typedef struct {
+  uint8_t* AG_ACT_THS;
+  uint8_t* AG_ACT_DUR;
+  uint8_t* A_INT_GEN_CFG;
+  uint8_t* A_INT_GEN_THS_X;     // 8-bit threshold registers
+  uint8_t* A_INT_GEN_THS_Y;     // 8-bit threshold registers
+  uint8_t* A_INT_GEN_THS_Z;     // 8-bit threshold registers
+  uint8_t* A_INT_GEN_DURATION;
+  uint8_t* G_REFERENCE;
+  uint8_t* AG_INT1_CTRL;
+  uint8_t* AG_INT2_CTRL;
+  uint8_t* AG_WHO_AM_I;
+  uint8_t* G_CTRL_REG1;
+  uint8_t* G_CTRL_REG2;
+  uint8_t* G_CTRL_REG3;
+  uint8_t* G_ORIENT_CFG;
+  uint8_t* G_INT_GEN_SRC;
+  uint8_t* AG_DATA_TEMP;        // 16-bit temperature register (11-bit)
+  uint8_t* AG_STATUS_REG;
+  uint8_t* G_DATA_X;            // 16-bit gyro data registers
+  uint8_t* G_DATA_Y;            // 16-bit gyro data registers
+  uint8_t* G_DATA_Z;            // 16-bit gyro data registers
+  uint8_t* AG_CTRL_REG4;
+  uint8_t* A_CTRL_REG5;
+  uint8_t* A_CTRL_REG6;
+  uint8_t* A_CTRL_REG7;
+  uint8_t* AG_CTRL_REG8;
+  uint8_t* AG_CTRL_REG9;
+  uint8_t* AG_CTRL_REG10;
+  uint8_t* A_INT_GEN_SRC;
+  uint8_t* AG_STATUS_REG_ALT;
+  uint8_t* A_DATA_X;            // 16-bit accelerometer data registers
+  uint8_t* A_DATA_Y;            // 16-bit accelerometer data registers
+  uint8_t* A_DATA_Z;            // 16-bit accelerometer data registers
+  uint8_t* AG_FIFO_CTRL;
+  uint8_t* AG_FIFO_SRC;
+  uint8_t* G_INT_GEN_CFG;
+  uint8_t* G_INT_GEN_THS_X;     // 16-bit threshold registers
+  uint8_t* G_INT_GEN_THS_Y;     // 16-bit threshold registers
+  uint8_t* G_INT_GEN_THS_Z;     // 16-bit threshold registers
+  uint8_t* G_INT_GEN_DURATION;
+  uint8_t* M_OFFSET_X;          // 16-bit offset registers
+  uint8_t* M_OFFSET_Y;          // 16-bit offset registers
+  uint8_t* M_OFFSET_Z;          // 16-bit offset registers
+  uint8_t* M_WHO_AM_I;
+  uint8_t* M_CTRL_REG1;
+  uint8_t* M_CTRL_REG2;
+  uint8_t* M_CTRL_REG3;
+  uint8_t* M_CTRL_REG4;
+  uint8_t* M_CTRL_REG5;
+  uint8_t* M_STATUS_REG;
+  uint8_t* M_DATA_X;            // 16-bit data registers
+  uint8_t* M_DATA_Y;            // 16-bit data registers
+  uint8_t* M_DATA_Z;            // 16-bit data registers
+  uint8_t* M_INT_CFG;
+  uint8_t* M_INT_SRC;
+  uint8_t* M_INT_TSH;           // 16-bit threshold register
+} IMURegisterPointers;
 
 
 /*
@@ -125,6 +191,8 @@ class LSM9DSx_Common;   // Forward declaration of the LSM9DSx_Common class.
 
 
 #define IIU_STANDARD_GRAVITY           9.80665f // This is Earth's gravity at sea-level, in m/s^2
+#define IIU_DEG_TO_RAD_SCALAR   (3.14159f / 180.0f)
+
 
 /**
 * This is the Inertial Integration Unit class. It has the following responsibilities:
@@ -202,13 +270,16 @@ class IIU {
       void* sample_count_temp
     );
 
+    void assign_register_pointers(IMURegisterPointers* _reg);
+
     uint8_t MadgwickQuaternionUpdate();
 
     void dumpPointers(StringBuilder*);
+    void dumpRegisterPointers(StringBuilder*);
 
-    inline bool isDirty() {   return (dirty_acc||dirty_gyr||dirty_mag);    }   // Has the sensor been updated?
-    inline bool isQuatDirty() {   return (dirty_acc & dirty_gyr);          }   // Has the sensor been updated?
-    inline bool has_quats_left() {       return (quat_queue.size() > 0);   }
+    inline bool isDirty() {         return (dirty_acc||dirty_gyr||dirty_mag); }
+    inline bool isQuatDirty() {     return (dirty_acc & dirty_gyr);           }
+    inline bool has_quats_left() {  return (quat_queue.size() > 0);           }
 
 
     /*
@@ -323,6 +394,7 @@ class IIU {
 
 
   private:
+    IMURegisterPointers _reg_ptrs;
     float delta_t      = 0.0f;
 
     //float GyroMeasError;
@@ -368,7 +440,7 @@ class IIU {
     //Vector3<float> gravity;        // If we need gravity, but the Legend doesn't want it.
     StringBuilder local_log;
 
-    ManuvrRunnable quat_crunch_event;
+    ManuvrMsg quat_crunch_event;
 
     int8_t verbosity            =  1; // How chatty should this class be?
     int8_t pos_id               = -1; // We may find it convenient to lookup by sensor position.

@@ -1,14 +1,15 @@
 # Build all libraries
 
-all:
+.PHONY: all
+
+all: $(LIBNAME)
 	$(MAKE) -C Drivers
 	$(MAKE) -C Middlewares
-	$(MAKE) -C telehash-c
 	$(MAKE) -C ManuvrOS
 
 clean:
-	rm -f *.a
+	rm -f $(OBJS)
+	rm -f $(OUTPUT_PATH)/$(LIBNAME)
 	$(MAKE) clean -C Drivers
 	$(MAKE) clean -C Middlewares
-	$(MAKE) clean -C telehash-c
 	$(MAKE) clean -C ManuvrOS

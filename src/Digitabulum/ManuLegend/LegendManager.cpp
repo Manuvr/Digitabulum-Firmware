@@ -28,7 +28,7 @@ extern "C" {
 
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
 *     /       |           |   /   \  |           ||  |  /      |   /       |
 *    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
@@ -36,11 +36,12 @@ extern "C" {
 * .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
 * |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
 *
-* Static members and initializers should be located here. Initializers first, functions second.
-****************************************************************************************************/
-
-SPIBusOp LegendManager::_preformed_read_ag;
+* Static members and initializers should be located here.
+*******************************************************************************/
+SPIBusOp LegendManager::_preformed_read_a;
+SPIBusOp LegendManager::_preformed_read_g;
 SPIBusOp LegendManager::_preformed_read_m;
+SPIBusOp LegendManager::_preformed_fifo_read;
 
 Vector3<int16_t> LegendManager::reflection_mag;
 Vector3<int16_t> LegendManager::reflection_acc;
@@ -75,7 +76,7 @@ InertialMeasurement* LegendManager::fetchMeasurement(uint8_t type_code) {
   }
   else {
     return_value = preallocd_measurements.dequeue();
-    minimum_prealloc_level = min((uint32_t) preallocd_measurements.size(), minimum_prealloc_level);
+    minimum_prealloc_level = std::min((uint32_t) preallocd_measurements.size(), minimum_prealloc_level);
   }
   return return_value;
 }
@@ -117,16 +118,16 @@ void LegendManager::reclaimMeasurement(InertialMeasurement* obj) {
 
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *   ___ _              ___      _ _              _      _
 *  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
 * | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
 *  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
-****************************************************************************************************/
-LegendManager::LegendManager() {
-  __class_initializer();
+*******************************************************************************/
+LegendManager::LegendManager() : EventReceiver() {
+  setReceiverName("ManuMgmt");
   INSTANCE = this;
 
   reflection_mag.x = 1;
@@ -141,22 +142,61 @@ LegendManager::LegendManager() {
   reflection_gyr.y = 1;
   reflection_gyr.z = -1;
 
+
+  _preformed_read_a.shouldReap(false);
+  _preformed_read_a.devRegisterAdvance(true);
+  _preformed_read_a.set_opcode(BusOpcode::RX);
+  _preformed_read_a.callback = (BusOpCallback*) this;
+  // Starting from the first accelerometer...
+  // Read 6 bytes...
+  // ...across 17 sensors...
+  // ...from this base address...
+  _preformed_read_a.setParams(CPLD_REG_IMU_DM_P_I|0x80, 6, 17, LSM9DS1_A_DATA_X);
+  // ...and drop the results here.
+  _preformed_read_a.buf      = (uint8_t*) __frame_buf_a;
+  _preformed_read_a.buf_len  = 102;
+
+  _preformed_read_g.shouldReap(false);
+  _preformed_read_g.devRegisterAdvance(true);
+  _preformed_read_g.set_opcode(BusOpcode::RX);
+  _preformed_read_g.callback = (BusOpCallback*) this;
+  // Starting from the first gyro...
+  // Read 6 bytes...
+  // ...across 17 sensors...
+  // ...from this base address...
+  _preformed_read_g.setParams(CPLD_REG_IMU_DM_P_I|0x80, 6, 17, LSM9DS1_G_DATA_X);
+  // ...and drop the results here.
+  _preformed_read_g.buf      = (uint8_t*) __frame_buf_g;
+  _preformed_read_g.buf_len  = 102;
+
   _preformed_read_m.shouldReap(false);
   _preformed_read_m.devRegisterAdvance(true);
   _preformed_read_m.set_opcode(BusOpcode::RX);
-  _preformed_read_m.callback = (SPIDeviceWithRegisters*) this;
-
+  _preformed_read_m.callback = (BusOpCallback*) this;
   // Starting from the first magnetometer...
   // Read 6 bytes...
   // ...across 17 sensors...
   // ...from this base address...
   _preformed_read_m.setParams(CPLD_REG_IMU_DM_P_M|0x80, 6, 17, LSM9DS1_M_DATA_X);
-
   // ...and drop the results here.
   _preformed_read_m.buf      = (uint8_t*) __frame_buf_m;
   _preformed_read_m.buf_len  = 102;
 
-    /* Populate all the static preallocation slots for measurements. */
+  _preformed_fifo_read.shouldReap(false);
+  _preformed_fifo_read.devRegisterAdvance(true);
+  _preformed_fifo_read.set_opcode(BusOpcode::RX);
+  _preformed_fifo_read.callback = (BusOpCallback*) this;
+  // Starting from the first inertial...
+  // Read 1 byte...
+  // ...across 17 sensors...
+  // ...from this base address...
+  _preformed_fifo_read.setParams(CPLD_REG_IMU_DM_P_I|0x80, 1, 17, LSM9DS1_AG_FIFO_SRC);
+  // ...and drop the results here.
+  _preformed_fifo_read.buf      = (uint8_t*) __fifo_levels;
+  _preformed_fifo_read.buf_len  = 17;
+
+
+  /* Populate all the static preallocation slots for measurements. */
   for (uint16_t i = 0; i < PREALLOCATED_IIU_MEASUREMENTS; i++) {
     __prealloc[i].wipe();
     preallocd_measurements.insert(&__prealloc[i]);
@@ -338,11 +378,11 @@ int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
     //   order to anyone listening is what we intend.
     StringBuilder* legend_string = new StringBuilder();
     nu_legend->formLegendString(legend_string);
-    ManuvrRunnable* legend_broadcast     = Kernel::returnEvent(DIGITABULUM_MSG_IMU_LEGEND);
-    legend_broadcast->originator      = (EventReceiver*) this;
+    ManuvrMsg* legend_broadcast     = Kernel::returnEvent(DIGITABULUM_MSG_IMU_LEGEND);
     legend_broadcast->specific_target = nu_legend->owner;
     legend_broadcast->priority        = EVENT_PRIORITY_LOWEST + 1;
-    legend_broadcast->markArgForReap(legend_broadcast->addArg(legend_string), true);
+    legend_broadcast->setOriginator((EventReceiver*) this);
+    legend_broadcast->addArg(legend_string)->reapValue(true);
 
     if (should_enable_pid) {
       event_legend_frame_ready.enableSchedule(true);
@@ -352,15 +392,6 @@ int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
   return -1;
 }
 
-
-
-
-/**
-* Debug support function.
-*
-* @return a pointer to a string constant.
-*/
-const char* LegendManager::getReceiverName() {  return "LegendManager";  }
 
 
 void LegendManager::printDebug(StringBuilder *output) {
@@ -439,8 +470,9 @@ int8_t LegendManager::io_op_callback(BusOp* _op) {
     return SPI_CALLBACK_ERROR;
   }
 
-  // Yes... we will switch on a pointer.
-  if (op == &_preformed_read_ag) {
+  if (op == &_preformed_read_a) {
+  }
+  else if (op == &_preformed_read_g) {
   }
   else if (op == &_preformed_read_m) {
   }
@@ -465,30 +497,27 @@ int8_t LegendManager::queue_io_job(BusOp* _op) {
 
 
 
-/****************************************************************************************************
-*  ▄▄▄▄▄▄▄▄▄▄▄  ▄               ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄
-* ▐░░░░░░░░░░░▌▐░▌             ▐░▌▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
-* ▐░█▀▀▀▀▀▀▀▀▀  ▐░▌           ▐░▌ ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌░▌     ▐░▌ ▀▀▀▀█░█▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀
-* ▐░▌            ▐░▌         ▐░▌  ▐░▌          ▐░▌▐░▌    ▐░▌     ▐░▌     ▐░▌
-* ▐░█▄▄▄▄▄▄▄▄▄    ▐░▌       ▐░▌   ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌ ▐░▌   ▐░▌     ▐░▌     ▐░█▄▄▄▄▄▄▄▄▄
-* ▐░░░░░░░░░░░▌    ▐░▌     ▐░▌    ▐░░░░░░░░░░░▌▐░▌  ▐░▌  ▐░▌     ▐░▌     ▐░░░░░░░░░░░▌
-* ▐░█▀▀▀▀▀▀▀▀▀      ▐░▌   ▐░▌     ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌   ▐░▌ ▐░▌     ▐░▌      ▀▀▀▀▀▀▀▀▀█░▌
-* ▐░▌                ▐░▌ ▐░▌      ▐░▌          ▐░▌    ▐░▌▐░▌     ▐░▌               ▐░▌
-* ▐░█▄▄▄▄▄▄▄▄▄        ▐░▐░▌       ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌     ▐░▐░▌     ▐░▌      ▄▄▄▄▄▄▄▄▄█░▌
-* ▐░░░░░░░░░░░▌        ▐░▌        ▐░░░░░░░░░░░▌▐░▌      ▐░░▌     ▐░▌     ▐░░░░░░░░░░░▌
-*  ▀▀▀▀▀▀▀▀▀▀▀          ▀          ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀       ▀       ▀▀▀▀▀▀▀▀▀▀▀
+
+/*******************************************************************************
+* ######## ##     ## ######## ##    ## ########  ######
+* ##       ##     ## ##       ###   ##    ##    ##    ##
+* ##       ##     ## ##       ####  ##    ##    ##
+* ######   ##     ## ######   ## ## ##    ##     ######
+* ##        ##   ##  ##       ##  ####    ##          ##
+* ##         ## ##   ##       ##   ###    ##    ##    ##
+* ########    ###    ######## ##    ##    ##     ######
 *
 * These are overrides from EventReceiver interface...
-****************************************************************************************************/
+*******************************************************************************/
 
 /**
-* There is a NULL-check performed upstream for the scheduler member. So no need
-*   to do it again here.
+* This is called when the kernel attaches the module.
+* This is the first time the class can be expected to have kernel access.
 *
 * @return 0 on no action, 1 on action, -1 on failure.
 */
-int8_t LegendManager::bootComplete() {
-  EventReceiver::bootComplete();
+int8_t LegendManager::attached() {
+  EventReceiver::attached();
 
   /* Get ready for a silly pointer dance....
   *  This is an argument-heavy event, and we will be using it ALOT. So we build the Event arguments
@@ -502,10 +531,9 @@ int8_t LegendManager::bootComplete() {
   *    Bassnectar - 01. F.U.N..mp3
   *    ---J. Ian Lindsay   Thu Apr 09 04:04:41 MST 2015
   */
-  event_iiu_read.repurpose(DIGITABULUM_MSG_IMU_READ);
+  event_iiu_read.repurpose(DIGITABULUM_MSG_IMU_READ, (EventReceiver*) this);
   event_iiu_read.isManaged(true);
   event_iiu_read.specific_target = (EventReceiver*) this;
-  event_iiu_read.originator      = (EventReceiver*) this;
   event_iiu_read.priority        = EVENT_PRIORITY_LOWEST;
   event_iiu_read.alterSchedulePeriod(20);
   event_iiu_read.alterScheduleRecurrence(-1);
@@ -513,10 +541,9 @@ int8_t LegendManager::bootComplete() {
   event_iiu_read.enableSchedule(false);
 
   // Build some pre-formed Events.
-  event_legend_frame_ready.repurpose(DIGITABULUM_MSG_IMU_MAP_STATE);
+  event_legend_frame_ready.repurpose(DIGITABULUM_MSG_IMU_MAP_STATE, (EventReceiver*) this);
   event_legend_frame_ready.isManaged(true);
   event_legend_frame_ready.specific_target = NULL; //(EventReceiver*) this;
-  event_legend_frame_ready.originator      = (EventReceiver*) this;
   event_legend_frame_ready.priority        = EVENT_PRIORITY_LOWEST;
   event_legend_frame_ready.alterSchedulePeriod(25);
   event_legend_frame_ready.alterScheduleRecurrence(-1);
@@ -544,13 +571,13 @@ int8_t LegendManager::bootComplete() {
 * @param  event  The event for which service has been completed.
 * @return A callback return code.
 */
-int8_t LegendManager::callback_proc(ManuvrRunnable *event) {
+int8_t LegendManager::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
   int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
 
   /* Some class-specific set of conditionals below this line. */
-  switch (event->event_code) {
+  switch (event->eventCode()) {
     case DIGITABULUM_MSG_IMU_READ:
       switch (last_imu_read) {
         case 0:
@@ -655,19 +682,19 @@ int8_t LegendManager::callback_proc(ManuvrRunnable *event) {
       break;
   }
 
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
   return return_value;
 }
 
 
 
 
-int8_t LegendManager::notify(ManuvrRunnable *active_event) {
+int8_t LegendManager::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
   uint8_t temp_uint_8 = 0;
 
   /* Some class-specific set of conditionals below this line. */
-  switch (active_event->event_code) {
+  switch (active_event->eventCode()) {
     case DIGITABULUM_MSG_IMU_READ:
       iius[last_imu_read].readSensor();
       return_value++;
@@ -677,7 +704,7 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
     case MANUVR_MSG_SESS_ESTABLISHED:
       event_legend_frame_ready.delaySchedule(1100);     // Enable the periodic frame broadcast.
       {
-        ManuvrRunnable *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
+        ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
         event->addArg((uint8_t) 4);  // Set the desired init stage.
         event->priority = 0;
         raiseEvent(event);
@@ -689,7 +716,7 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
     case MANUVR_MSG_SESS_HANGUP:
       event_legend_frame_ready.enableSchedule(false);
       for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
-        ManuvrRunnable *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
+        ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
         event->addArg((uint8_t) 4);  // Set the desired init stage.
         event->priority = 0;
         raiseEvent(event);
@@ -773,7 +800,7 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
       break;
   }
 
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
   return return_value;
 }
 
@@ -795,7 +822,7 @@ int8_t LegendManager::notify(ManuvrRunnable *active_event) {
 * Code in here only exists for as long as it takes to debug something. Don't write against these.
 ****************************************************************************************************/
 
-#if defined(__MANUVR_CONSOLE_SUPPORT)
+#if defined(MANUVR_CONSOLE_SUPPORT)
 void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
@@ -894,7 +921,7 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'k':
       if ((temp_byte < 6) && (temp_byte >= 0)) {
-        ManuvrRunnable *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
+        ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
         event->addArg((uint8_t) temp_byte);  // Set the desired init stage.
         event->priority = 0;
         raiseEvent(event);
@@ -922,8 +949,8 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
     case 'T':
     case 't':
       if (temp_byte < 17) {
-        ManuvrRunnable *event = Kernel::returnEvent((*(str) == 'T') ? DIGITABULUM_MSG_IMU_DOUBLE_TAP : DIGITABULUM_MSG_IMU_TAP);
-        event->originator      = (EventReceiver*) this;
+        ManuvrMsg *event = Kernel::returnEvent((*(str) == 'T') ? DIGITABULUM_MSG_IMU_DOUBLE_TAP : DIGITABULUM_MSG_IMU_TAP);
+        event->setOriginator((EventReceiver*) this);
         event->addArg((uint8_t) temp_byte);
         Kernel::staticRaiseEvent(event);
         local_log.concatf("Sent %stap event for IMU %d.\n", ((*(str) == 'T') ? "double ":""), temp_byte);
@@ -932,9 +959,8 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'q':
       if (temp_byte < 17) {
-        ManuvrRunnable *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_QUAT_CRUNCH);
+        ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_QUAT_CRUNCH);
         event->specific_target = (EventReceiver*) this;
-        event->originator      = NULL;
         event->addArg((uint8_t) temp_byte);
         Kernel::staticRaiseEvent(event);
         local_log.concatf("Running quat on IIU %d.\n", temp_byte);
@@ -1227,6 +1253,6 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
       break;
   }
 
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
 }
-#endif  //__MANUVR_CONSOLE_SUPPORT
+#endif  //MANUVR_CONSOLE_SUPPORT

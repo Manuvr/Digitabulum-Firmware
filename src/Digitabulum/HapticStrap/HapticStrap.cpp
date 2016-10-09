@@ -48,13 +48,8 @@ const MessageTypeDef haptic_message_defs[] = {
     This is advantageous for debugging and writing front-ends. We case-off here to make this choice at
     compile time.
   */
-  #if defined (__ENABLE_MSG_SEMANTICS)
   {  DIGITABULUM_MSG_GPIO_VIBRATE_0  , MSG_FLAG_EXPORTABLE,  "VIBRATE_0"            , MSG_ARGS_VIBRATE }, // Some class wants to trigger vibrator 0.
   {  DIGITABULUM_MSG_GPIO_VIBRATE_1  , MSG_FLAG_EXPORTABLE,  "VIBRATE_1"            , MSG_ARGS_VIBRATE }, // Some class wants to trigger vibrator 1.
-  #else
-  {  DIGITABULUM_MSG_GPIO_VIBRATE_0  , MSG_FLAG_EXPORTABLE,  "VIBRATE_0"            , MSG_ARGS_VIBRATE, NULL }, // Some class wants to trigger vibrator 0.
-  {  DIGITABULUM_MSG_GPIO_VIBRATE_1  , MSG_FLAG_EXPORTABLE,  "VIBRATE_1"            , MSG_ARGS_VIBRATE, NULL }, // Some class wants to trigger vibrator 1.
-  #endif
 };
 
 
@@ -67,8 +62,9 @@ const MessageTypeDef haptic_message_defs[] = {
 * Constructors/destructors, class initialization functions and so-forth...
 ****************************************************************************************************/
 
-HapticStrap::HapticStrap() {
+HapticStrap::HapticStrap() : EventReceiver() {
   if (NULL == INSTANCE) {
+    setReceiverName("StandardIO");
     INSTANCE = this;
     ManuvrMsg::registerMessages(
       haptic_message_defs,
@@ -97,28 +93,29 @@ void HapticStrap::gpioSetup() {
 }
 
 
-/****************************************************************************************************
-*  ▄▄▄▄▄▄▄▄▄▄▄  ▄               ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄
-* ▐░░░░░░░░░░░▌▐░▌             ▐░▌▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
-* ▐░█▀▀▀▀▀▀▀▀▀  ▐░▌           ▐░▌ ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌░▌     ▐░▌ ▀▀▀▀█░█▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀
-* ▐░▌            ▐░▌         ▐░▌  ▐░▌          ▐░▌▐░▌    ▐░▌     ▐░▌     ▐░▌
-* ▐░█▄▄▄▄▄▄▄▄▄    ▐░▌       ▐░▌   ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌ ▐░▌   ▐░▌     ▐░▌     ▐░█▄▄▄▄▄▄▄▄▄
-* ▐░░░░░░░░░░░▌    ▐░▌     ▐░▌    ▐░░░░░░░░░░░▌▐░▌  ▐░▌  ▐░▌     ▐░▌     ▐░░░░░░░░░░░▌
-* ▐░█▀▀▀▀▀▀▀▀▀      ▐░▌   ▐░▌     ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌   ▐░▌ ▐░▌     ▐░▌      ▀▀▀▀▀▀▀▀▀█░▌
-* ▐░▌                ▐░▌ ▐░▌      ▐░▌          ▐░▌    ▐░▌▐░▌     ▐░▌               ▐░▌
-* ▐░█▄▄▄▄▄▄▄▄▄        ▐░▐░▌       ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌     ▐░▐░▌     ▐░▌      ▄▄▄▄▄▄▄▄▄█░▌
-* ▐░░░░░░░░░░░▌        ▐░▌        ▐░░░░░░░░░░░▌▐░▌      ▐░░▌     ▐░▌     ▐░░░░░░░░░░░▌
-*  ▀▀▀▀▀▀▀▀▀▀▀          ▀          ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀       ▀       ▀▀▀▀▀▀▀▀▀▀▀
+
+/*******************************************************************************
+* ######## ##     ## ######## ##    ## ########  ######
+* ##       ##     ## ##       ###   ##    ##    ##    ##
+* ##       ##     ## ##       ####  ##    ##    ##
+* ######   ##     ## ######   ## ## ##    ##     ######
+* ##        ##   ##  ##       ##  ####    ##          ##
+* ##         ## ##   ##       ##   ###    ##    ##    ##
+* ########    ###    ######## ##    ##    ##     ######
 *
 * These are overrides from EventReceiver interface...
-****************************************************************************************************/
+*******************************************************************************/
 
 /**
-* Debug support function.
+* This is called when the kernel attaches the module.
+* This is the first time the class can be expected to have kernel access.
 *
-* @return a pointer to a string constant.
+* @return 0 on no action, 1 on action, -1 on failure.
 */
-const char* HapticStrap::getReceiverName() {  return "HapticStrap";  }
+int8_t HapticStrap::attached() {
+  EventReceiver::attached();   // Call up to get scheduler ref and class init.
+  return 0;
+}
 
 
 /**
@@ -129,20 +126,6 @@ const char* HapticStrap::getReceiverName() {  return "HapticStrap";  }
 void HapticStrap::printDebug(StringBuilder* output) {
   EventReceiver::printDebug(output);
 }
-
-
-
-/**
-* There is a NULL-check performed upstream for the scheduler member. So no need
-*   to do it again here.
-*
-* @return 0 on no action, 1 on action, -1 on failure.
-*/
-int8_t HapticStrap::bootComplete() {
-  EventReceiver::bootComplete();   // Call up to get scheduler ref and class init.
-  return 0;
-}
-
 
 
 /**
@@ -159,13 +142,13 @@ int8_t HapticStrap::bootComplete() {
 * @param  event  The event for which service has been completed.
 * @return A callback return code.
 */
-int8_t HapticStrap::callback_proc(ManuvrRunnable *event) {
+int8_t HapticStrap::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
   int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
 
   /* Some class-specific set of conditionals below this line. */
-  switch (event->event_code) {
+  switch (event->eventCode()) {
     default:
       break;
   }
@@ -174,22 +157,21 @@ int8_t HapticStrap::callback_proc(ManuvrRunnable *event) {
 }
 
 
-
-int8_t HapticStrap::notify(ManuvrRunnable *active_event) {
+int8_t HapticStrap::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
 
-  switch (active_event->event_code) {
+  switch (active_event->eventCode()) {
     default:
       return_value += EventReceiver::notify(active_event);
       break;
   }
 
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
   return return_value;
 }
 
 
-#if defined(__MANUVR_CONSOLE_SUPPORT)
+#if defined(MANUVR_CONSOLE_SUPPORT)
 void HapticStrap::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
@@ -205,6 +187,6 @@ void HapticStrap::procDirectDebugInstruction(StringBuilder *input) {
       break;
   }
 
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
 }
-#endif  //__MANUVR_CONSOLE_SUPPORT
+#endif  //MANUVR_CONSOLE_SUPPORT

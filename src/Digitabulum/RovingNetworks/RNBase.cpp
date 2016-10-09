@@ -33,7 +33,28 @@ static volatile uint8_t uart2_rec_cnt = 0;
 uint32_t read_millis_0 = 0;
 uint32_t read_millis_1 = 0;
 
-/****************************************************************************************************
+// Messages that are specific to Digitabulum.
+const MessageTypeDef rn_module_message_defs[] = {
+  {  MANUVR_MSG_BT_EXIT_RESET        , 0x000,                "RN_RESET"             , ManuvrMsg::MSG_ARGS_NONE }, //
+};
+
+
+/*******************************************************************************
+* .-. .----..----.    .-.     .--.  .-. .-..----.
+* | |{ {__  | {}  }   | |    / {} \ |  `| || {}  \
+* | |.-._} }| .-. \   | `--./  /\  \| |\  ||     /
+* `-'`----' `-' `-'   `----'`-'  `-'`-' `-'`----'
+*
+* Interrupt service routine support functions. Everything in this block
+*   executes under an ISR. Keep it brief...
+*******************************************************************************/
+/*
+*
+*/
+void USART2_IRQHandler(void) {
+}
+
+/*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
 *     /       |           |   /   \  |           ||  |  /      |   /       |
 *    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
@@ -41,9 +62,8 @@ uint32_t read_millis_1 = 0;
 * .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
 * |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
 *
-* Static members and initializers should be located here. Initializers first, functions second.
-****************************************************************************************************/
-
+* Static members and initializers should be located here.
+*******************************************************************************/
 volatile RNBase* RNBase::INSTANCE = NULL;
 volatile unsigned long RNBase::last_gpio_5_event = 0;
 BTQueuedOperation* RNBase::current_work_item = NULL;
@@ -92,7 +112,7 @@ BTQueuedOperation* RNBase::fetchPreallocation() {
 *   up until we hit the boundaries of the STM32 CCM.
 *                                 ---J. Ian Lindsay   Mon Apr 13 10:51:54 MST 2015
 *
-* @param Measurement* obj is the pointer to the object to be reclaimed.
+* @param BTQueuedOperation* obj is the pointer to the object to be reclaimed.
 */
 void RNBase::reclaimPreallocation(BTQueuedOperation* obj) {
   unsigned int obj_addr = ((uint32_t) obj);
@@ -134,7 +154,7 @@ void RNBase::start_lockout(uint32_t milliseconds) {
   if (INSTANCE == NULL) return;
 
   // TODO: Need a cleaner way to accomplish this...
-  __kernel->addSchedule(new ManuvrRunnable(milliseconds,  0, true, oneshot_rn_reenable));
+  platform.kernel()->addSchedule(new ManuvrMsg(milliseconds,  0, true, oneshot_rn_reenable));
   _er_set_flag(RNBASE_FLAG_LOCK_OUT);
 }
 
@@ -145,7 +165,7 @@ void host_read_abort() {
     return;
   }
   uint32_t current_millis = millis();
-  if (CHARACTER_CHRONOLOGICAL_BREAK < (max(current_millis, read_millis_1) - min(current_millis, read_millis_1))) {
+  if (CHARACTER_CHRONOLOGICAL_BREAK < wrap_accounted_delta(current_millis, read_millis_1)) {
     RNBase::hostRxFlush();
     read_millis_0 = 0;
   }
@@ -153,48 +173,49 @@ void host_read_abort() {
 
 
 
-
-
-/****************************************************************************************************
+/*******************************************************************************
 *   ___ _              ___      _ _              _      _
 *  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
 * | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
 *  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
-****************************************************************************************************/
+*******************************************************************************/
 
-RNBase::RNBase(uint8_t rst_pin) {
-  //__class_initializer();
+RNBase::RNBase(uint8_t rst_pin) : ManuvrXport() {
+  setReceiverName("RNBase");
   //BTQueuedOperation::buildDMAMembers();
-  //INSTANCE = this;
+  if (NULL == INSTANCE) {
+    INSTANCE = this;
+    ManuvrMsg::registerMessages(
+      rn_module_message_defs,
+      sizeof(rn_module_message_defs) / sizeof(MessageTypeDef)
+    );
+  }
 
   _reset_pin = rst_pin;
 
-  ///* Populate all the static preallocation slots for messages. */
-  //for (uint16_t i = 0; i < PREALLOCATED_BT_Q_OPS; i++) {
-  //  __prealloc_pool[i].wipe();
-  //  preallocated.insert(&__prealloc_pool[i]);
-  //}
+  /* Populate all the static preallocation slots for messages. */
+  for (uint16_t i = 0; i < PREALLOCATED_BT_Q_OPS; i++) {
+    __prealloc_pool[i].wipe();
+    preallocated.insert(&__prealloc_pool[i]);
+  }
 
   // Clear all the flags.
   _er_clear_flag(RNBASE_FLAG_LOCK_OUT | RNBASE_FLAG_CMD_MODE);
   _er_clear_flag(RNBASE_FLAG_CMD_PEND | RNBASE_FLAG_AUTOCONN);
 
-  //current_work_item = NULL;
-
   //connected(GPIOB->IDR & GPIO_PIN_10);
 
   //// Build some pre-formed Events.
-  //read_abort_event.repurpose(MANUVR_MSG_XPORT_QUEUE_RDY);
+  //read_abort_event.repurpose(MANUVR_MSG_XPORT_QUEUE_RDY, (EventReceiver*) this);
   //read_abort_event.isManaged(true);
   //read_abort_event.specific_target = (EventReceiver*) this;
-  //read_abort_event.originator      = (EventReceiver*) this;
   //read_abort_event.alterScheduleRecurrence(-1);
   //read_abort_event.alterSchedulePeriod(CHARACTER_CHRONOLOGICAL_BREAK);
   //read_abort_event.autoClear(false);
   //read_abort_event.enableSchedule(false);
-  //__kernel->addSchedule(&read_abort_event);
+  //platform.kernel()->addSchedule(&read_abort_event);
 }
 
 
@@ -215,6 +236,67 @@ void RNBase::gpioSetup() {
   setPin(_reset_pin, false);
 }
 
+
+/*******************************************************************************
+*  _       _   _        _
+* |_)    _|_ _|_ _  ._ |_) o ._   _
+* |_) |_| |   | (/_ |  |   | |_) (/_
+*                            |
+* Overrides and addendums to BufferPipe.
+*******************************************************************************/
+/**
+* Inward toward the transport.
+*
+* @param  buf    A pointer to the buffer.
+* @param  len    How long the buffer is.
+* @param  mm     A declaration of memory-management responsibility.
+* @return A declaration of memory-management responsibility.
+*/
+int8_t RNBase::toCounterparty(StringBuilder* buf, int8_t mm) {
+  switch (mm) {
+    case MEM_MGMT_RESPONSIBLE_CALLER:
+      // NOTE: No break. This might be construed as a way of saying CREATOR.
+    case MEM_MGMT_RESPONSIBLE_CREATOR:
+      /* The system that allocated this buffer either...
+          a) Did so with the intention that it never be free'd, or...
+          b) Has a means of discovering when it is safe to free.  */
+      {
+        StringBuilder *temp = new StringBuilder();
+        temp->concatHandoff(buf);
+        insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
+      }
+      return mm;
+
+    case MEM_MGMT_RESPONSIBLE_BEARER:
+      /* We are now the bearer. That means that by returning non-failure, the
+          caller will expect _us_ to manage this memory.  */
+      // TODO: Freeing the buffer?
+      {
+        StringBuilder *temp = new StringBuilder();
+        temp->concatHandoff(buf);
+        insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
+      }
+      return mm;
+
+    default:
+      /* This is more ambiguity than we are willing to bear... */
+      return MEM_MGMT_RESPONSIBLE_ERROR;
+  }
+  return MEM_MGMT_RESPONSIBLE_ERROR;
+}
+
+
+
+/*******************************************************************************
+* ___________                                                  __
+* \__    ___/___________    ____   ____________   ____________/  |_
+*   |    |  \_  __ \__  \  /    \ /  ___/\____ \ /  _ \_  __ \   __\
+*   |    |   |  | \// __ \|   |  \\___ \ |  |_> >  <_> )  | \/|  |
+*   |____|   |__|  (____  /___|  /____  >|   __/ \____/|__|   |__|
+*                       \/     \/     \/ |__|
+* These members are particular to the transport driver and any implicit
+*   protocol it might contain.
+*******************************************************************************/
 
 int8_t RNBase::connect() {
   return 0;
@@ -250,15 +332,15 @@ int8_t RNBase::reset() {
   tx_buf.clear();
 
   // Used to disassert the reset line.  TODO: Need a cleaner way to accomplish this...
-  ManuvrRunnable* event = Kernel::returnEvent(MANUVR_MSG_BT_EXIT_RESET);
+  ManuvrMsg* event = Kernel::returnEvent(MANUVR_MSG_BT_EXIT_RESET);
   event->addArg((EventReceiver*) this);
-  event->originator      = (EventReceiver*) this;
+  event->setOriginator((EventReceiver*) this);
   event->specific_target = (EventReceiver*) this;
   event->alterScheduleRecurrence(0);
   event->alterSchedulePeriod(510);
   event->autoClear(true);
   event->enableSchedule(true);
-  __kernel->addSchedule(event);
+  platform.kernel()->addSchedule(event);
   return 0;
 }
 
@@ -288,7 +370,12 @@ void RNBase::sendGeneralCommand(StringBuilder *cmd) {
   enterCommandMode();
   insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, cmd);
   exitCommandMode();
-  if (getVerbosity() > 5) Kernel::log(__PRETTY_FUNCTION__, 2, "Sent command %s.\n", cmd->string());
+  #ifdef __MANUVR_DEBUG
+    if (getVerbosity() > 5) {
+      local_log.concatf("Sent command %s.\n", cmd->string());
+      Kernel::log(&local_log);
+    }
+  #endif
 }
 
 
@@ -302,7 +389,12 @@ void RNBase::sendGeneralCommand(const char *cmd) {
   StringBuilder *temp = new StringBuilder(cmd);
   insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
   exitCommandMode();
-  if (getVerbosity() > 5) Kernel::log(__PRETTY_FUNCTION__, 2, "Sent command %s.\n", cmd);
+  #ifdef __MANUVR_DEBUG
+    if (getVerbosity() > 5) {
+      local_log.concatf("Sent command %s.\n", cmd);
+      Kernel::log(&local_log);
+    }
+  #endif
 }
 
 
@@ -314,7 +406,9 @@ void RNBase::setHIDMode(void) {
   StringBuilder *temp = new StringBuilder(RNBASE_MODE_HID);
   insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
   exitCommandMode();
-  if (getVerbosity() > 5) Kernel::log(__PRETTY_FUNCTION__, 2, "Tried to enter HID mode.");
+  #ifdef __MANUVR_DEBUG
+    if (getVerbosity() > 5) Kernel::log("Tried to enter HID mode.\n");
+  #endif
 }
 
 
@@ -326,7 +420,9 @@ void RNBase::setSPPMode(void) {
   StringBuilder *temp = new StringBuilder(RNBASE_PROTO_SPP);
   insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
   exitCommandMode();
-  if (getVerbosity() > 5) Kernel::log(__PRETTY_FUNCTION__, 2, "Tried to enter SPP mode.");
+  #ifdef __MANUVR_DEBUG
+    if (getVerbosity() > 5) Kernel::log("Tried to enter SPP mode.\n");
+  #endif
 }
 
 
@@ -407,12 +503,22 @@ void RNBase::setAutoconnect(bool autocon) {
     _er_set_flag(RNBASE_FLAG_CMD_PEND, autocon);
     StringBuilder *temp = new StringBuilder(autocon ? RNBASE_MODE_AUTOCONNECT : RNBASE_MODE_MANUCONNECT);
     insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
-    if (getVerbosity() > 4) Kernel::log(__PRETTY_FUNCTION__, 2, "Autoconnect is now %sabled.", (autocon ? "en" : "dis"));
+    #ifdef __MANUVR_DEBUG
+    if (getVerbosity() > 4) {
+      local_log.concatf("Autoconnect is now %sabled.", (autocon ? "en" : "dis"));
+      Kernel::log(&local_log);
+    }
+    #endif
     exitCommandMode();
     sendRebootCommand();
   }
   else {
-    if (getVerbosity() > 4) Kernel::log(__PRETTY_FUNCTION__, 2, "Autoconnect mode was already %sabled.", (autocon ? "en" : "dis"));
+    #ifdef __MANUVR_DEBUG
+    if (getVerbosity() > 4) {
+      local_log.concatf("Autoconnect mode was already %sabled.", (autocon ? "en" : "dis"));
+      Kernel::log(&local_log);
+    }
+    #endif
   }
 }
 
@@ -436,9 +542,11 @@ int8_t RNBase::idleService(void) {
       if (current_work_item->completed) {   // Is it completed?
         if (current_work_item->xenomsg_id) {
           // If we have a xenomsg_id, we should tell the session that it completed.
-          if (NULL != session) {
+          if (haveFar()) {
             //if (current_work_item->opcode) {
-              if (getVerbosity() > 4) Kernel::log(__PRETTY_FUNCTION__, 2, "About to mark message complete.\n");
+              #ifdef __MANUVR_DEBUG
+                if (getVerbosity() > 4) Kernel::log("RNBase About to mark message complete.\n");
+              #endif
               //session->markMessageComplete(current_work_item->xenomsg_id);
             //}
           }
@@ -468,7 +576,9 @@ int8_t RNBase::idleService(void) {
             }
             break;
           default:
-            if (getVerbosity() > 1) Kernel::log("idleService(): We should not be here (initiation block).\n");
+            #ifdef __MANUVR_DEBUG
+              if (getVerbosity() > 1) Kernel::log("idleService(): We should not be here (initiation block).\n");
+            #endif
             break;
         }
         return 1;   // We fired off a transaction.
@@ -567,9 +677,9 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
       }
       else {
         return_value = 0;
-        if (getVerbosity() > 3) {
-          Kernel::log("Dropping BT send. Queue too large.\n");
-        }
+        #ifdef __MANUVR_DEBUG
+          if (getVerbosity() > 3) Kernel::log("Dropping BT send. Queue too large.\n");
+        #endif
         queue_floods++;
         reclaimPreallocation(nu);
       }
@@ -603,7 +713,9 @@ void RNBase::hostRxFlush(void) {
 
   if (uart2_rec_cnt > 0) {
     ((RNBase*)INSTANCE)->feed_rx_buffer((unsigned char*) uart2_received_string, uart2_rec_cnt);
-    if (((EventReceiver*) INSTANCE)->getVerbosity() > 4) Kernel::log("Flushed bytes\n");
+    #ifdef __MANUVR_DEBUG
+      if (((EventReceiver*) INSTANCE)->getVerbosity() > 4) Kernel::log("Flushed bytes\n");
+    #endif
     uart2_rec_cnt = 0;
   }
   else {
@@ -625,7 +737,7 @@ volatile void RNBase::usart2_character_rx(unsigned char c) {
     // the buffer, raise an event so that we can timeout the transmission.
     read_millis_0 = millis();
     read_millis_1 = read_millis_0;
-    ManuvrRunnable *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_RX_BUF_NOT_EMPTY);
+    ManuvrMsg *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_RX_BUF_NOT_EMPTY);
     Kernel::isrRaiseEvent(nu_event);
   }
   uart2_received_string[uart2_rec_cnt++] = c;
@@ -680,6 +792,7 @@ void RNBase::feed_rx_buffer(unsigned char *nu, uint8_t len) {
 
           case BusOpcode::TX_CMD:
           case BusOpcode::TX:
+            #ifdef __MANUVR_DEBUG
             if (getVerbosity() > 2) {
               local_log.concat("Don't know what to do with data. In command_mode (or pending), but have wrong opcode for work_queue item.\n\t");
               for (int i = 0; i < len; i++) {
@@ -687,13 +800,17 @@ void RNBase::feed_rx_buffer(unsigned char *nu, uint8_t len) {
               }
               local_log.concat("\n\n");
             }
+            #endif
             break;
           default:
-            local_log.concat("RNBase: Unknown opcode.\n");
+            #ifdef __MANUVR_DEBUG
+            if (getVerbosity() > 2) local_log.concat("RNBase: Unknown opcode.\n");
+            #endif
             break;
         }
     }
     else {
+      #ifdef __MANUVR_DEBUG
       if (getVerbosity() > 2) {
         local_log.concatf("Don't know what to do with data. In command_mode (or pending), but have no work_queue item to feed.\n\t");
         for (int i = 0; i < len; i++) {
@@ -701,18 +818,14 @@ void RNBase::feed_rx_buffer(unsigned char *nu, uint8_t len) {
         }
         local_log.concat("\n\n");
       }
+      #endif
     }
   }
   else {   // This data must be meant for a session... (So we hope)
-    if (NULL != session) {   // If we don't yet have a session, create one.
-      session->bin_stream_rx(nu, len);  // Feed the session...
-    }
+    BufferPipe::fromCounterparty(nu, len, MEM_MGMT_RESPONSIBLE_BEARER);
   }
 
-  if (local_log.length() > 0) {
-    if (getVerbosity() > 6) local_log.prepend("feed_rx_buffer():\t");
-    Kernel::log(&local_log);
-  }
+  if (local_log.length() > 0) Kernel::log(&local_log);
 }
 
 
@@ -722,7 +835,9 @@ void RNBase::feed_rx_buffer(unsigned char *nu, uint8_t len) {
 */
 int8_t RNBase::sendBuffer(StringBuilder* _to_send) {
   if (NULL == _to_send) return -1;
-  if (getVerbosity() > 3) local_log.concatf("We about to print %d bytes to the host.\n", _to_send->length());
+  #ifdef __MANUVR_DEBUG
+    if (getVerbosity() > 3) local_log.concatf("We about to print %d bytes to the host.\n", _to_send->length());
+  #endif
   printToHost(_to_send);
   return 0;
 }
@@ -734,7 +849,7 @@ int8_t RNBase::sendBuffer(StringBuilder* _to_send) {
 */
 volatile void RNBase::irqServiceBT_data_activity(void) {
   if (NULL == INSTANCE) return;
-  if (((EventReceiver*) INSTANCE)->getVerbosity() > 6) Kernel::log(__PRETTY_FUNCTION__, 6, "We aren't doing anything here yet.");
+  // We aren't doing anything here yet.
 }
 
 /*
@@ -756,14 +871,14 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
   if (NULL == INSTANCE) return;
 
   if (last_gpio_5_event != 0) {
-    unsigned long delta = max(ms, (unsigned long) last_gpio_5_event) - min(ms, (unsigned long) last_gpio_5_event);
+    unsigned long delta = wrap_accounted_delta(ms, last_gpio_5_event);
     if (delta < 500) {
       // Probably the 10Hz signal. Means we are in command mode.
       if (INSTANCE != NULL) {
         if (!((RNBase*) INSTANCE)->_er_flag(RNBASE_FLAG_CMD_MODE)) {
           ((RNBase*) INSTANCE)->_er_set_flag(RNBASE_FLAG_CMD_MODE);
           ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_CMD_PEND);
-          ManuvrRunnable *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_ENTERED_CMD_MODE);
+          ManuvrMsg *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_ENTERED_CMD_MODE);
           Kernel::isrRaiseEvent(nu_event);
         }
       }
@@ -773,7 +888,7 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
       if (INSTANCE != NULL) {
         if (((RNBase*) INSTANCE)->_er_flag(RNBASE_FLAG_CMD_MODE)) {
           ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_CMD_MODE | RNBASE_FLAG_CMD_PEND | RNBASE_FLAG_LOCK_OUT);
-          ManuvrRunnable *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_EXITED_CMD_MODE);
+          ManuvrMsg *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_EXITED_CMD_MODE);
           Kernel::isrRaiseEvent(nu_event);
         }
       }
@@ -783,41 +898,45 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
       // Should watch GPIO2 for this.
     }
   }
-  if (((EventReceiver*) INSTANCE)->getVerbosity() > 6) Kernel::log(__PRETTY_FUNCTION__, 0, "BT GPIO 5: %lu.\n", ms);
   last_gpio_5_event = ms;
+
+  #ifdef __MANUVR_DEBUG
+    if (((EventReceiver*) INSTANCE)->getVerbosity() > 6) {
+      StringBuilder _log;
+      _log.concatf("BT GPIO 5: %lu.\n", ms);
+      Kernel::log(&_log);
+    }
+  #endif
 }
 
 
 
-/****************************************************************************************************
- ▄▄▄▄▄▄▄▄▄▄▄  ▄               ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄
-▐░░░░░░░░░░░▌▐░▌             ▐░▌▐░░░░░░░░░░░▌▐░░▌      ▐░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
-▐░█▀▀▀▀▀▀▀▀▀  ▐░▌           ▐░▌ ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌░▌     ▐░▌ ▀▀▀▀█░█▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀
-▐░▌            ▐░▌         ▐░▌  ▐░▌          ▐░▌▐░▌    ▐░▌     ▐░▌     ▐░▌
-▐░█▄▄▄▄▄▄▄▄▄    ▐░▌       ▐░▌   ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌ ▐░▌   ▐░▌     ▐░▌     ▐░█▄▄▄▄▄▄▄▄▄
-▐░░░░░░░░░░░▌    ▐░▌     ▐░▌    ▐░░░░░░░░░░░▌▐░▌  ▐░▌  ▐░▌     ▐░▌     ▐░░░░░░░░░░░▌
-▐░█▀▀▀▀▀▀▀▀▀      ▐░▌   ▐░▌     ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌   ▐░▌ ▐░▌     ▐░▌      ▀▀▀▀▀▀▀▀▀█░▌
-▐░▌                ▐░▌ ▐░▌      ▐░▌          ▐░▌    ▐░▌▐░▌     ▐░▌               ▐░▌
-▐░█▄▄▄▄▄▄▄▄▄        ▐░▐░▌       ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌     ▐░▐░▌     ▐░▌      ▄▄▄▄▄▄▄▄▄█░▌
-▐░░░░░░░░░░░▌        ▐░▌        ▐░░░░░░░░░░░▌▐░▌      ▐░░▌     ▐░▌     ▐░░░░░░░░░░░▌
- ▀▀▀▀▀▀▀▀▀▀▀          ▀          ▀▀▀▀▀▀▀▀▀▀▀  ▀        ▀▀       ▀       ▀▀▀▀▀▀▀▀▀▀▀
+/*******************************************************************************
+* ######## ##     ## ######## ##    ## ########  ######
+* ##       ##     ## ##       ###   ##    ##    ##    ##
+* ##       ##     ## ##       ####  ##    ##    ##
+* ######   ##     ## ######   ## ## ##    ##     ######
+* ##        ##   ##  ##       ##  ####    ##          ##
+* ##         ## ##   ##       ##   ###    ##    ##    ##
+* ########    ###    ######## ##    ##    ##     ######
+*
+* These are overrides from EventReceiver interface...
+*******************************************************************************/
 
-These are overrides from EventReceiver interface...
-****************************************************************************************************/
 /**
-* Fire-up anything that depends on the Kernel...
+* This is called when the kernel attaches the module.
+* This is the first time the class can be expected to have kernel access.
 *
 * @return 0 on no action, 1 on action, -1 on failure.
 */
-int8_t RNBase::bootComplete() {
-  EventReceiver::bootComplete();
+int8_t RNBase::attached() {
+  EventReceiver::attached();
 
-  __kernel->addSchedule(&read_abort_event);
+  platform.kernel()->addSchedule(&read_abort_event);
 
-  event_bt_queue_ready.repurpose(MANUVR_MSG_BT_QUEUE_READY);
+  event_bt_queue_ready.repurpose(MANUVR_MSG_BT_QUEUE_READY, (EventReceiver*) this);
   event_bt_queue_ready.isManaged(true);
   event_bt_queue_ready.specific_target = (EventReceiver*) this;
-  event_bt_queue_ready.originator      = (EventReceiver*) this;
 
   gpioSetup();
   //force_9600_mode(false);   // Init the UART.
@@ -840,13 +959,13 @@ int8_t RNBase::bootComplete() {
 * @param  event  The event for which service has been completed.
 * @return A callback return code.
 */
-int8_t RNBase::callback_proc(ManuvrRunnable *event) {
+int8_t RNBase::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
   int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
 
   /* Some class-specific set of conditionals below this line. */
-  switch (event->event_code) {
+  switch (event->eventCode()) {
     case MANUVR_MSG_XPORT_SEND:
       event->clearArgs();
       break;
@@ -892,8 +1011,9 @@ void RNBase::printDebug(StringBuilder *temp) {
 
   if (getVerbosity() > 3) {
     if (work_queue.hasNext()) {
-      temp->concatf("\n-- Queue Listing (top %d of %d)", RNBASE_MAX_QUEUE_PRINT, work_queue.size());
-      for (int i = 0; i < min(work_queue.size(), RNBASE_MAX_QUEUE_PRINT); i++) {
+      int q_read_count = strict_min((int16_t) work_queue.size(), (int16_t) RNBASE_MAX_QUEUE_PRINT);
+      temp->concatf("\n-- Queue Listing (top %d of %d)", q_read_count, work_queue.size());
+      for (int i = 0; i < q_read_count; i++) {
         q_item = work_queue.get(i);
         q_item->printDebug(temp);
       }
@@ -909,9 +1029,9 @@ void RNBase::printDebug(StringBuilder *temp) {
 //}
 
 
-int8_t RNBase::notify(ManuvrRunnable *active_event) {
+int8_t RNBase::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
-  switch (active_event->event_code) {
+  switch (active_event->eventCode()) {
     case MANUVR_MSG_BT_RX_BUF_NOT_EMPTY:
       // We just received something at the BT port. Start the timeout running...
       read_abort_event.delaySchedule();
@@ -919,7 +1039,9 @@ int8_t RNBase::notify(ManuvrRunnable *active_event) {
       break;
     case MANUVR_MSG_BT_CONNECTION_LOST:
       connected(false);
-      if (getVerbosity() > 3) local_log.concat("We lost our bluetooth connection. About to tear down the session...\n");
+      #ifdef __MANUVR_DEBUG
+        if (getVerbosity() > 3) local_log.concat("We lost our bluetooth connection. About to tear down the session...\n");
+      #endif
       burn_or_recycle_current();
       // Purge the queue.
       for (int i = 0; i < work_queue.size(); i++) {
@@ -946,7 +1068,9 @@ int8_t RNBase::notify(ManuvrRunnable *active_event) {
       {
         StringBuilder* temp_sb;
         if (0 == active_event->getArgAs(&temp_sb)) {
-          if (getVerbosity() > 3) local_log.concatf("We about to print %d bytes to the host.\n", temp_sb->length());
+          #ifdef __MANUVR_DEBUG
+            if (getVerbosity() > 3) local_log.concatf("We about to print %d bytes to the host.\n", temp_sb->length());
+          #endif
           printToHost(temp_sb);
           //active_event->clearArgs();
         }
@@ -980,7 +1104,7 @@ int8_t RNBase::notify(ManuvrRunnable *active_event) {
 }
 
 
-#if defined(__MANUVR_CONSOLE_SUPPORT)
+#if defined(MANUVR_CONSOLE_SUPPORT)
 void RNBase::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
@@ -1086,6 +1210,6 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
       break;
   }
 
-  if (local_log.length() > 0) {    Kernel::log(&local_log);  }
+  flushLocalLog();
 }
-#endif  //__MANUVR_CONSOLE_SUPPORT
+#endif  //MANUVR_CONSOLE_SUPPORT

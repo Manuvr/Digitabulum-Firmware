@@ -57,7 +57,6 @@ enum class RN4677AuthMode {
   LEGACY   = 0x04
 };
 
-
 /*
 *
 */
@@ -67,7 +66,6 @@ enum class RN4677ConnectMode {
   AC_MASTER = 0x03,
   PAIRING   = 0x06
 };
-
 
 /*
 *
@@ -82,25 +80,21 @@ enum class RN4677TxPower {
 
 
 
-
-
 class RN4677 : public RNBase {
-
   public:
     RN4677(uint8_t _rst_pin);
-    ~RN4677();
+    virtual ~RN4677();
 
     /* Overrides from the Transport class. */
 
 
     /* Overrides from EventReceiver */
-    const char* getReceiverName();
     void printDebug(StringBuilder *);
-    int8_t notify(ManuvrRunnable*);
-    int8_t callback_proc(ManuvrRunnable *);
-    #if defined(__MANUVR_CONSOLE_SUPPORT)
+    int8_t notify(ManuvrMsg*);
+    int8_t callback_proc(ManuvrMsg*);
+    #if defined(MANUVR_CONSOLE_SUPPORT)
       void procDirectDebugInstruction(StringBuilder*);
-    #endif  //__MANUVR_CONSOLE_SUPPORT
+    #endif  //MANUVR_CONSOLE_SUPPORT
 
 
   protected:
