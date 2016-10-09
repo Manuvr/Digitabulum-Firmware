@@ -6,24 +6,23 @@
 # Variables for the firmware compilation...
 ###########################################################################
 FIRMWARE_NAME      = digitabulum
+
+MCU                = cortex-m7
+EXT_CLK_RATE       = 24000000
 OPTIMIZATION       = -O2
 C_STANDARD         = gnu99
 CPP_STANDARD       = gnu++11
 
-MCU                = cortex-m7
-EXT_CLK_RATE       = 24000000
 
 ###########################################################################
 # Environmental awareness...
 ###########################################################################
-WHERE_I_AM         = $(shell pwd)
-TOOLCHAIN          = $(WHERE_I_AM)/compiler/bin
-STLINK_LOADER_PATH = $(WHERE_I_AM)/compiler/stlink
-CPP_FLAGS          = -fno-rtti -fno-exceptions
-CFLAGS             =
-
 # This is where we will store compiled libs and the final output.
-export OUTPUT_PATH  = $(WHERE_I_AM)/build
+export BUILD_ROOT   = $(shell pwd)
+export OUTPUT_PATH  = $(BUILD_ROOT)/build
+
+TOOLCHAIN          = $(BUILD_ROOT)/compiler/bin
+STLINK_LOADER_PATH = $(BUILD_ROOT)/compiler/stlink
 
 export CC      = $(TOOLCHAIN)/arm-none-eabi-gcc
 export CXX     = $(TOOLCHAIN)/arm-none-eabi-g++
@@ -39,17 +38,20 @@ export MAKE    = $(shell which make)
 ###########################################################################
 # Source files, includes, and linker directives...
 ###########################################################################
+CPP_FLAGS          = -fno-rtti -fno-exceptions
+CFLAGS             =
+
 INCLUDES    = -iquote. -iquotesrc/
 INCLUDES   += -Icompiler/arm-none-eabi/include/
-INCLUDES   += -I$(WHERE_I_AM)/lib/ManuvrOS
-INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/STM32F7xx_HAL_Driver/Inc
-INCLUDES   += -I$(WHERE_I_AM)/lib/Inc
-INCLUDES   += -I$(WHERE_I_AM)/lib
-INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/CMSIS/Device/ST/STM32F7xx/Include
-INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/CMSIS/Include
-INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/USB_Device/Class/CDC/Inc
-INCLUDES   += -I$(WHERE_I_AM)/lib/Drivers/USB_Device/Core/Inc
-INCLUDES   += -I$(WHERE_I_AM)/src/Digitabulum
+INCLUDES   += -I$(BUILD_ROOT)/lib/ManuvrOS
+INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/STM32F7xx_HAL_Driver/Inc
+INCLUDES   += -I$(BUILD_ROOT)/lib/Inc
+INCLUDES   += -I$(BUILD_ROOT)/lib
+INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/CMSIS/Device/ST/STM32F7xx/Include
+INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/CMSIS/Include
+INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/USB_Device/Class/CDC/Inc
+INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/USB_Device/Core/Inc
+INCLUDES   += -I$(BUILD_ROOT)/src/Digitabulum
 INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS
 INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/include
 INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1
@@ -70,7 +72,7 @@ MCUFLAGS += -ffreestanding
 LIBPATHS  = -L. -L$(OUTPUT_PATH)
 
 # Libraries to link
-LIBS = -lm -lfatfs -lfreertos -lc -lgcc -lstdc++
+LIBS = -lc -lgcc -lstdc++ -lm -lstdperiph -lfatfs -lfreertos -lmanuvr -lextras
 
 # Flags for the linker...
 LDFLAGS  = -static $(MCUFLAGS)
@@ -85,7 +87,7 @@ CFLAGS += $(OPTIMIZATION) -Wall
 
 # We include this specifically so that we can get a grip on configuration headers
 #   downstream.
-CFLAGS += -I$(WHERE_I_AM)/confs
+CFLAGS += -I$(BUILD_ROOT)/confs
 
 CFLAGS += $(MCUFLAGS)
 
@@ -140,7 +142,6 @@ CPP_SRCS  += src/Digitabulum/ExpansionPort/ExpansionPort.cpp
 CPP_SRCS  += src/Digitabulum/DigitabulumPMU/DigitabulumPMU.cpp
 
 
-
 ###########################################################################
 # exports, consolidation....
 ###########################################################################
@@ -148,7 +149,7 @@ OBJS = $(SRCS:.c=.o)
 
 # Finally, export our flags for downstream Makefiles...
 export CFLAGS += $(MANUVR_OPTIONS)
-export CPP_FLAGS += -std=$(CPP_STANDARD) $(CFLAGS)
+export CPP_FLAGS += $(CFLAGS)
 
 vpath %.cpp src
 vpath %.c src
@@ -163,34 +164,29 @@ vpath %.a $(OUTPUT_PATH)
 all: $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 	$(SZ) $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 
-
 %.o : %.c
 	$(CC) $(CFLAGS) -c -o $@ $^
-
 
 libs:
 	mkdir -p $(OUTPUT_PATH)
 	$(MAKE) -C lib
 
-
 $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: $(OBJS) libs
-	$(CXX) $(CPP_FLAGS) $(LDFLAGS) src/startup.s $(CPP_SRCS) $(OBJS) -lmanuvr -lstdperiph -o $@
+	$(CXX) src/startup.s $(OBJS) $(CPP_SRCS) -o $@ $(CPP_FLAGS) -std=$(CPP_STANDARD) $(LDFLAGS)
 	$(CP) -O ihex $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 	$(CP) -O binary $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin
-
 
 program:
 #	$(TOOLCHAIN)/arm-none-eabi-gdb $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf --eval-command="tar extended-remote :4242" --eval-command="load"
 	dfu-util -d 0483:df11 -a 0  -s 0x08000000 -D $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin --reset
 
+clean:
+	rm -f *.o *.su *~ *.map $(OBJS)
 
 fullclean: clean
 	rm -rf doc/doxygen/*
-	$(MAKE) clean -C lib
-
-clean:
-	rm -f *.o *.su *~ *.map $(OBJS)
 	rm -rf $(OUTPUT_PATH)
+	$(MAKE) clean -C lib
 
 doc:
 	mkdir -p doc/doxygen/

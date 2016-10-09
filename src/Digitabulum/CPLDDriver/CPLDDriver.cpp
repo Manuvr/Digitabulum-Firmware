@@ -1336,8 +1336,8 @@ int8_t CPLDDriver::attached() {
   _periodic_debug.autoClear(false);
   _periodic_debug.enableSchedule(false);
 
-  //__kernel->addSchedule(&event_spi_timeout);
-  __kernel->addSchedule(&_periodic_debug);
+  //platform.kernel()->addSchedule(&event_spi_timeout);
+  platform.kernel()->addSchedule(&_periodic_debug);
 
   gpioSetup();
   init_ext_clk();
@@ -1506,9 +1506,9 @@ void CPLDDriver::printDebug(StringBuilder *output) {
     }
 
     if (work_queue.size() > 0) {
-      int print_depth = min(3, CPLD_SPI_MAX_QUEUE_PRINT);
+      unsigned int print_depth = strict_min((uint8_t) 3, (uint8_t) CPLD_SPI_MAX_QUEUE_PRINT);
       output->concatf("\nQueue Listing (top %d of %d total)\n", print_depth, work_queue.size());
-      for (int i = 0; i < print_depth; i++) {
+      for (unsigned int i = 0; i < print_depth; i++) {
         work_queue.get(i)->printDebug(output);
       }
       output->concat("\n");

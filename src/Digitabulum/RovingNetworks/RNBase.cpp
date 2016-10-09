@@ -35,16 +35,7 @@ uint32_t read_millis_1 = 0;
 
 // Messages that are specific to Digitabulum.
 const MessageTypeDef rn_module_message_defs[] = {
-  /*
-    For messages that have arguments, we have the option of defining inline lables for each parameter.
-    This is advantageous for debugging and writing front-ends. We case-off here to make this choice at
-    compile time.
-  */
-  #if defined (__ENABLE_MSG_SEMANTICS)
   {  MANUVR_MSG_BT_EXIT_RESET        , 0x000,                "RN_RESET"             , ManuvrMsg::MSG_ARGS_NONE }, //
-  #else
-  {  MANUVR_MSG_BT_EXIT_RESET        , 0x000,                "RN_RESET"             , ManuvrMsg::MSG_ARGS_NONE, NULL }, //
-  #endif
 };
 
 
@@ -163,7 +154,7 @@ void RNBase::start_lockout(uint32_t milliseconds) {
   if (INSTANCE == NULL) return;
 
   // TODO: Need a cleaner way to accomplish this...
-  __kernel->addSchedule(new ManuvrRunnable(milliseconds,  0, true, oneshot_rn_reenable));
+  platform.kernel()->addSchedule(new ManuvrRunnable(milliseconds,  0, true, oneshot_rn_reenable));
   _er_set_flag(RNBASE_FLAG_LOCK_OUT);
 }
 
@@ -174,7 +165,7 @@ void host_read_abort() {
     return;
   }
   uint32_t current_millis = millis();
-  if (CHARACTER_CHRONOLOGICAL_BREAK < (std::max(current_millis, read_millis_1) - std::min(current_millis, read_millis_1))) {
+  if (CHARACTER_CHRONOLOGICAL_BREAK < wrap_accounted_delta(current_millis, read_millis_1)) {
     RNBase::hostRxFlush();
     read_millis_0 = 0;
   }
@@ -224,7 +215,7 @@ RNBase::RNBase(uint8_t rst_pin) : ManuvrXport() {
   //read_abort_event.alterSchedulePeriod(CHARACTER_CHRONOLOGICAL_BREAK);
   //read_abort_event.autoClear(false);
   //read_abort_event.enableSchedule(false);
-  //__kernel->addSchedule(&read_abort_event);
+  //platform.kernel()->addSchedule(&read_abort_event);
 }
 
 
@@ -349,7 +340,7 @@ int8_t RNBase::reset() {
   event->alterSchedulePeriod(510);
   event->autoClear(true);
   event->enableSchedule(true);
-  __kernel->addSchedule(event);
+  platform.kernel()->addSchedule(event);
   return 0;
 }
 
@@ -880,7 +871,7 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
   if (NULL == INSTANCE) return;
 
   if (last_gpio_5_event != 0) {
-    unsigned long delta = std::max(ms, (unsigned long) last_gpio_5_event) - std::min(ms, (unsigned long) last_gpio_5_event);
+    unsigned long delta = wrap_accounted_delta(ms, last_gpio_5_event);
     if (delta < 500) {
       // Probably the 10Hz signal. Means we are in command mode.
       if (INSTANCE != NULL) {
@@ -941,7 +932,7 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
 int8_t RNBase::attached() {
   EventReceiver::attached();
 
-  __kernel->addSchedule(&read_abort_event);
+  platform.kernel()->addSchedule(&read_abort_event);
 
   event_bt_queue_ready.repurpose(MANUVR_MSG_BT_QUEUE_READY, (EventReceiver*) this);
   event_bt_queue_ready.isManaged(true);
@@ -1020,8 +1011,9 @@ void RNBase::printDebug(StringBuilder *temp) {
 
   if (getVerbosity() > 3) {
     if (work_queue.hasNext()) {
-      temp->concatf("\n-- Queue Listing (top %d of %d)", RNBASE_MAX_QUEUE_PRINT, work_queue.size());
-      for (int i = 0; i < std::min(work_queue.size(), RNBASE_MAX_QUEUE_PRINT); i++) {
+      int q_read_count = strict_min((int16_t) work_queue.size(), (int16_t) RNBASE_MAX_QUEUE_PRINT);
+      temp->concatf("\n-- Queue Listing (top %d of %d)", q_read_count, work_queue.size());
+      for (int i = 0; i < q_read_count; i++) {
         q_item = work_queue.get(i);
         q_item->printDebug(temp);
       }

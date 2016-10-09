@@ -363,6 +363,7 @@ int main(void) {
   kernel->subscribe((EventReceiver*) &_console_patch);
 
   platform.forsakeMain();
+  return 0;
 }
 
 #ifdef __cplusplus

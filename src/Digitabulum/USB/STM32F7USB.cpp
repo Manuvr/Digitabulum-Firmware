@@ -278,8 +278,8 @@ int8_t STM32F7USB::attached() {
   read_abort_event.alterSchedulePeriod(50);
   read_abort_event.autoClear(false);
   read_abort_event.enableSchedule(true);
-  #if !defined (__MANUVR_FREERTOS) && !defined (__MANUVR_LINUX)
-  __kernel->addSchedule(&read_abort_event);
+  #if !defined (__BUILD_HAS_THREADS)
+  platform.kernel()->addSchedule(&read_abort_event);
   #endif
 
   reset();
