@@ -1320,37 +1320,38 @@ int8_t CPLDDriver::iiu_group_irq() {
 * @return 0 on no action, 1 on action, -1 on failure.
 */
 int8_t CPLDDriver::attached() {
-  EventReceiver::attached();
+  if (EventReceiver::attached()) {
+    _irq_data_arrival.repurpose(DIGITABULUM_MSG_IMU_IRQ_RAISED, (EventReceiver*) this);
+    _irq_data_arrival.isManaged(true);
+    _irq_data_arrival.specific_target = (EventReceiver*) this;
+    _irq_data_arrival.priority        = 2;
 
-  _irq_data_arrival.repurpose(DIGITABULUM_MSG_IMU_IRQ_RAISED, (EventReceiver*) this);
-  _irq_data_arrival.isManaged(true);
-  _irq_data_arrival.specific_target = (EventReceiver*) this;
-  _irq_data_arrival.priority        = 2;
+    _periodic_debug.repurpose(0x5080, (EventReceiver*) this);
+    _periodic_debug.isManaged(true);
+    _periodic_debug.specific_target = (EventReceiver*) this;
+    _periodic_debug.priority        = 1;
+    _periodic_debug.alterSchedulePeriod(100);
+    _periodic_debug.alterScheduleRecurrence(-1);
+    _periodic_debug.autoClear(false);
+    _periodic_debug.enableSchedule(false);
 
-  _periodic_debug.repurpose(0x5080, (EventReceiver*) this);
-  _periodic_debug.isManaged(true);
-  _periodic_debug.specific_target = (EventReceiver*) this;
-  _periodic_debug.priority        = 1;
-  _periodic_debug.alterSchedulePeriod(100);
-  _periodic_debug.alterScheduleRecurrence(-1);
-  _periodic_debug.autoClear(false);
-  _periodic_debug.enableSchedule(false);
+    //platform.kernel()->addSchedule(&event_spi_timeout);
+    platform.kernel()->addSchedule(&_periodic_debug);
 
-  //platform.kernel()->addSchedule(&event_spi_timeout);
-  platform.kernel()->addSchedule(&_periodic_debug);
+    gpioSetup();
+    init_ext_clk();
 
-  gpioSetup();
-  init_ext_clk();
+    init_spi(1, 0);   // CPOL=1, CPHA=0, HW-driven
+    init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
 
-  init_spi(1, 0);   // CPOL=1, CPHA=0, HW-driven
-  init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
+    // An SPI transfer might hang (very unlikely). This will un-hang it.
+    event_spi_timeout.alterSchedule(bus_timeout_millis, -1, false, callback_spi_timeout);
+    event_spi_timeout.isManaged(true);
 
-  // An SPI transfer might hang (very unlikely). This will un-hang it.
-  event_spi_timeout.alterSchedule(bus_timeout_millis, -1, false, callback_spi_timeout);
-  event_spi_timeout.isManaged(true);
-
-  reset();
-  return 1;
+    reset();
+    return 1;
+  }
+  return 0;
 }
 
 

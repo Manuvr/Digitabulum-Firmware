@@ -517,40 +517,40 @@ int8_t LegendManager::queue_io_job(BusOp* _op) {
 * @return 0 on no action, 1 on action, -1 on failure.
 */
 int8_t LegendManager::attached() {
-  EventReceiver::attached();
+  if (EventReceiver::attached()) {
+    /* Get ready for a silly pointer dance....
+    *  This is an argument-heavy event, and we will be using it ALOT. So we build the Event arguments
+    *    once, and then change the data at the location being pointed at, and not the pointers in the
+    *    arguments. Technically, we could make this even faster by addingg a new type for Vector3<float>**,
+    *    but this will be a serious undertaking. We should ultimately implement ** types with a flag, not
+    *    a type_code.
+    *    Bassnectar - 04. You &amp; Me ft. W. Darling.mp3
+    *    Knife Party - 04. EDM Trend Machine.mp3
+    *    Bassnectar - 04 - Boomerang.mp3
+    *    Bassnectar - 01. F.U.N..mp3
+    *    ---J. Ian Lindsay   Thu Apr 09 04:04:41 MST 2015
+    */
+    event_iiu_read.repurpose(DIGITABULUM_MSG_IMU_READ, (EventReceiver*) this);
+    event_iiu_read.isManaged(true);
+    event_iiu_read.specific_target = (EventReceiver*) this;
+    event_iiu_read.priority        = EVENT_PRIORITY_LOWEST;
+    event_iiu_read.alterSchedulePeriod(20);
+    event_iiu_read.alterScheduleRecurrence(-1);
+    event_iiu_read.autoClear(false);
+    event_iiu_read.enableSchedule(false);
 
-  /* Get ready for a silly pointer dance....
-  *  This is an argument-heavy event, and we will be using it ALOT. So we build the Event arguments
-  *    once, and then change the data at the location being pointed at, and not the pointers in the
-  *    arguments. Technically, we could make this even faster by addingg a new type for Vector3<float>**,
-  *    but this will be a serious undertaking. We should ultimately implement ** types with a flag, not
-  *    a type_code.
-  *    Bassnectar - 04. You &amp; Me ft. W. Darling.mp3
-  *    Knife Party - 04. EDM Trend Machine.mp3
-  *    Bassnectar - 04 - Boomerang.mp3
-  *    Bassnectar - 01. F.U.N..mp3
-  *    ---J. Ian Lindsay   Thu Apr 09 04:04:41 MST 2015
-  */
-  event_iiu_read.repurpose(DIGITABULUM_MSG_IMU_READ, (EventReceiver*) this);
-  event_iiu_read.isManaged(true);
-  event_iiu_read.specific_target = (EventReceiver*) this;
-  event_iiu_read.priority        = EVENT_PRIORITY_LOWEST;
-  event_iiu_read.alterSchedulePeriod(20);
-  event_iiu_read.alterScheduleRecurrence(-1);
-  event_iiu_read.autoClear(false);
-  event_iiu_read.enableSchedule(false);
-
-  // Build some pre-formed Events.
-  event_legend_frame_ready.repurpose(DIGITABULUM_MSG_IMU_MAP_STATE, (EventReceiver*) this);
-  event_legend_frame_ready.isManaged(true);
-  event_legend_frame_ready.specific_target = NULL; //(EventReceiver*) this;
-  event_legend_frame_ready.priority        = EVENT_PRIORITY_LOWEST;
-  event_legend_frame_ready.alterSchedulePeriod(25);
-  event_legend_frame_ready.alterScheduleRecurrence(-1);
-  event_legend_frame_ready.autoClear(false);
-  event_legend_frame_ready.enableSchedule(false);
-
-  return 1;
+    // Build some pre-formed Events.
+    event_legend_frame_ready.repurpose(DIGITABULUM_MSG_IMU_MAP_STATE, (EventReceiver*) this);
+    event_legend_frame_ready.isManaged(true);
+    event_legend_frame_ready.specific_target = NULL; //(EventReceiver*) this;
+    event_legend_frame_ready.priority        = EVENT_PRIORITY_LOWEST;
+    event_legend_frame_ready.alterSchedulePeriod(25);
+    event_legend_frame_ready.alterScheduleRecurrence(-1);
+    event_legend_frame_ready.autoClear(false);
+    event_legend_frame_ready.enableSchedule(false);
+    return 1;
+  }
+  return 0;
 }
 
 

@@ -271,23 +271,24 @@ bool STM32F7USB::write_port(uint8_t* out, int out_len) {
 * @return 0 on no action, 1 on action, -1 on failure.
 */
 int8_t STM32F7USB::attached() {
-  EventReceiver::attached();
+  if (EventReceiver::attached()) {
+    read_abort_event.alterScheduleRecurrence(0);
+    read_abort_event.alterSchedulePeriod(50);
+    read_abort_event.autoClear(false);
+    read_abort_event.enableSchedule(true);
+    #if !defined (__BUILD_HAS_THREADS)
+      platform.kernel()->addSchedule(&read_abort_event);
+    #endif
 
-  read_abort_event.alterScheduleRecurrence(0);
-  read_abort_event.alterSchedulePeriod(50);
-  read_abort_event.autoClear(false);
-  read_abort_event.enableSchedule(true);
-  #if !defined (__BUILD_HAS_THREADS)
-  platform.kernel()->addSchedule(&read_abort_event);
-  #endif
-
-  reset();
-  if (_accumulator.count() > 0) {
-    TM_USBD_CDC_Puts(TM_USB_FS, (const char*)_accumulator.string());
-    //_tx_in_progress = true;
-  	TM_USBD_CDC_Process(TM_USB_FS);
+    reset();
+    if (_accumulator.count() > 0) {
+      TM_USBD_CDC_Puts(TM_USB_FS, (const char*)_accumulator.string());
+      //_tx_in_progress = true;
+  	  TM_USBD_CDC_Process(TM_USB_FS);
+    }
+    return 1;
   }
-  return 1;
+  return 0;
 }
 
 

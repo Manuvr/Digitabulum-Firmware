@@ -431,8 +431,10 @@ void SDCard::gpioSetup() {
 * @return 0 on no action, 1 on action, -1 on failure.
 */
 int8_t SDCard::attached() {
-  EventReceiver::attached();
-  gpioSetup();
+  if (EventReceiver::attached()) {
+    gpioSetup();
+    return 1;
+  }
   return 0;
 }
 

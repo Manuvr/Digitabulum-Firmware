@@ -76,8 +76,10 @@ void IREmitter::gpioSetup() {
 * @return 0 on no action, 1 on action, -1 on failure.
 */
 int8_t IREmitter::attached() {
-  EventReceiver::attached();   // Call up to get scheduler ref and class init.
-  gpioSetup();
+  if (EventReceiver::attached()) {
+    gpioSetup();
+    return 1;
+  }
   return 0;
 }
 

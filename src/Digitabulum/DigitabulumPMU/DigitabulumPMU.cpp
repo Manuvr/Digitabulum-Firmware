@@ -209,9 +209,11 @@ void PMU::set_stat2_delta(unsigned int nu) {
 * @return 0 on no action, 1 on action, -1 on failure.
 */
 int8_t PMU::attached() {
-  EventReceiver::attached();   // Call up to get scheduler ref and class init.
-  gpioSetup();
-  cpu_scale(1);
+  if (EventReceiver::attached()) {
+    gpioSetup();
+    cpu_scale(1);
+    return 1;
+  }
   return 0;
 }
 

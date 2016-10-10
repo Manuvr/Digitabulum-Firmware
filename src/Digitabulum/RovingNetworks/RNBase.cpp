@@ -930,18 +930,18 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
 * @return 0 on no action, 1 on action, -1 on failure.
 */
 int8_t RNBase::attached() {
-  EventReceiver::attached();
+  if (EventReceiver::attached()) {
+    platform.kernel()->addSchedule(&read_abort_event);
 
-  platform.kernel()->addSchedule(&read_abort_event);
+    event_bt_queue_ready.repurpose(MANUVR_MSG_BT_QUEUE_READY, (EventReceiver*) this);
+    event_bt_queue_ready.isManaged(true);
+    event_bt_queue_ready.specific_target = (EventReceiver*) this;
 
-  event_bt_queue_ready.repurpose(MANUVR_MSG_BT_QUEUE_READY, (EventReceiver*) this);
-  event_bt_queue_ready.isManaged(true);
-  event_bt_queue_ready.specific_target = (EventReceiver*) this;
-
-  gpioSetup();
-  //force_9600_mode(false);   // Init the UART.
-
-  return 1;
+    gpioSetup();
+    //force_9600_mode(false);   // Init the UART.
+    return 1;
+  }
+  return 0;
 }
 
 
