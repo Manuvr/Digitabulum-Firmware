@@ -272,7 +272,7 @@ bool STM32F7USB::write_port(uint8_t* out, int out_len) {
 */
 int8_t STM32F7USB::attached() {
   if (EventReceiver::attached()) {
-    read_abort_event.alterScheduleRecurrence(0);
+    read_abort_event.alterScheduleRecurrence(-1);
     read_abort_event.alterSchedulePeriod(50);
     read_abort_event.autoClear(false);
     read_abort_event.enableSchedule(true);
