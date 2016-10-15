@@ -64,9 +64,9 @@ void USART2_IRQHandler(void) {
 *
 * Static members and initializers should be located here.
 *******************************************************************************/
-volatile RNBase* RNBase::INSTANCE = NULL;
+volatile RNBase* RNBase::INSTANCE = nullptr;
 volatile unsigned long RNBase::last_gpio_5_event = 0;
-BTQueuedOperation* RNBase::current_work_item = NULL;
+BTQueuedOperation* RNBase::current_work_item = nullptr;
 
 BTQueuedOperation RNBase::__prealloc_pool[PREALLOCATED_BT_Q_OPS];
 
@@ -137,7 +137,7 @@ void RNBase::reclaimPreallocation(BTQueuedOperation* obj) {
 ****************************************************************************************************/
 /* Static */
 void RNBase::expire_lockout() {
-  if (INSTANCE == NULL) return;
+  if (INSTANCE == nullptr) return;
 
   if (((EventReceiver*) INSTANCE)->getVerbosity() > 4) Kernel::log("oneshot_rn_reenable()\n");
   ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_LOCK_OUT);
@@ -151,7 +151,7 @@ void oneshot_rn_reenable() {
 
 /* Instance */
 void RNBase::start_lockout(uint32_t milliseconds) {
-  if (INSTANCE == NULL) return;
+  if (INSTANCE == nullptr) return;
 
   // TODO: Need a cleaner way to accomplish this...
   platform.kernel()->addSchedule(new ManuvrMsg(milliseconds,  0, true, oneshot_rn_reenable));
@@ -185,7 +185,7 @@ void host_read_abort() {
 RNBase::RNBase(uint8_t rst_pin) : ManuvrXport() {
   setReceiverName("RNBase");
   //BTQueuedOperation::buildDMAMembers();
-  if (NULL == INSTANCE) {
+  if (nullptr == INSTANCE) {
     INSTANCE = this;
     ManuvrMsg::registerMessages(
       rn_module_message_defs,
@@ -318,9 +318,9 @@ int8_t RNBase::reset() {
   while (work_queue.hasNext()) {
     reclaimPreallocation(work_queue.dequeue());
   }
-  if (NULL != current_work_item) {
+  if (current_work_item) {
     reclaimPreallocation(current_work_item);
-    current_work_item = NULL;
+    current_work_item = nullptr;
   }
 
   _er_set_flag(RNBASE_FLAG_LOCK_OUT);
@@ -538,7 +538,7 @@ int8_t RNBase::idleService(void) {
   we will traverse before our work is done.
   */
   while (true) {
-    if (current_work_item != NULL) {
+    if (current_work_item) {
       if (current_work_item->completed) {   // Is it completed?
         if (current_work_item->xenomsg_id) {
           // If we have a xenomsg_id, we should tell the session that it completed.
@@ -552,7 +552,7 @@ int8_t RNBase::idleService(void) {
           }
         }
         reclaimPreallocation(current_work_item);
-        current_work_item = NULL;
+        current_work_item = nullptr;
       }
       else if (current_work_item->initiated) {   // Is it initiated?
         // We'd probably be interfering with somehting if we do anything. So do nothing.
@@ -589,7 +589,7 @@ int8_t RNBase::idleService(void) {
     }
     else {
       current_work_item = work_queue.dequeue();
-      if (NULL == current_work_item) {
+      if (nullptr == current_work_item) {
         return 0;  // Nothing more to process.
       }
     }
@@ -619,13 +619,13 @@ void RNBase::master_mode(bool force_master_mode) {
 // Return 0 indicates caller should burn or wait.
 // Return 1 indicates we recycled.
 int8_t RNBase::burn_or_recycle_current() {
-  if ((NULL != current_work_item) && (current_work_item->opcode == BusOpcode::TX)) {
+  if ((nullptr != current_work_item) && (current_work_item->opcode == BusOpcode::TX)) {
     // If there is something in-process and it is meant for a counterparty....
     if (! current_work_item->initiated) {
       // If there is an un-initiated counterparty transaction waiting, displace it.
       // Re-queue with retry priority.
       work_queue.insert(current_work_item, RNBASE_RETRY_PRIORITY);
-      current_work_item = NULL;   // Let the downstream code do its job...
+      current_work_item = nullptr;   // Let the downstream code do its job...
       return 1;
     }
     else {
@@ -656,19 +656,19 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
         // Burn
       }
 
-      if ((NULL != current_work_item) && (current_work_item->opcode == BusOpcode::TX_CMD)) {
+      if ((nullptr != current_work_item) && (current_work_item->opcode == BusOpcode::TX_CMD)) {
         if (! current_work_item->initiated) {
           // If there is an un-initiated counterparty transaction waiting, displace it.
           // Re-queue with retry priority.
           work_queue.insert(current_work_item, RNBASE_RETRY_PRIORITY);
-          current_work_item = NULL;   // Let the downstream code do its job...
+          current_work_item = nullptr;   // Let the downstream code do its job...
         }
       }
       priority = RNBASE_CMD_PRIORITY;
       work_queue.insert(nu, priority);
       break;
     case BusOpcode::TX:
-      if (NULL == current_work_item) {
+      if (nullptr == current_work_item) {
         current_work_item = nu;
         current_work_item->begin();
       }
@@ -704,7 +704,7 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
 * This is a static that gets called when we timeout the read operation.
 */
 void RNBase::hostRxFlush(void) {
-  if (NULL == INSTANCE) return;
+  if (nullptr == INSTANCE) return;
 
   // TODO: Disable. Yuck... I hate the way this works....
   ((RNBase*)INSTANCE)->read_abort_event.enableSchedule(false);
@@ -722,7 +722,7 @@ void RNBase::hostRxFlush(void) {
     //Kernel::log(__PRETTY_FUNCTION__, 6, "Flushed 0 bytes.");
   }
 
-  if (INSTANCE->current_work_item != NULL) {
+  if (INSTANCE->current_work_item != nullptr) {
     if (BusOpcode::TX_CMD_WAIT_RX == INSTANCE->current_work_item->opcode) {
       INSTANCE->current_work_item->completed = true;
     }
@@ -742,7 +742,7 @@ volatile void RNBase::usart2_character_rx(unsigned char c) {
   }
   uart2_received_string[uart2_rec_cnt++] = c;
 
-  if (NULL == INSTANCE) return;
+  if (nullptr == INSTANCE) return;
 
   if ((c == '\n') || (uart2_rec_cnt == MAX_UART_STR_LEN)) {
     /* There is a good chance that the downstream call will result in a malloc() at
@@ -780,8 +780,8 @@ volatile void RNBase::usart2_character_rx(unsigned char c) {
 */
 void RNBase::feed_rx_buffer(unsigned char *nu, uint8_t len) {
   if (_er_flag(RNBASE_FLAG_CMD_MODE | RNBASE_FLAG_CMD_PEND)) {
-    BTQueuedOperation *local_work_item = (NULL != current_work_item) ? current_work_item : work_queue.get();
-    if (NULL != local_work_item) {
+    BTQueuedOperation *local_work_item = (nullptr != current_work_item) ? current_work_item : work_queue.get();
+    if (nullptr != local_work_item) {
         switch (local_work_item->opcode) {
           case BusOpcode::TX_CMD_WAIT_RX:
             // We make sure that we tell the class if we are expecting a change in this state.
@@ -834,7 +834,7 @@ void RNBase::feed_rx_buffer(unsigned char *nu, uint8_t len) {
 *
 */
 int8_t RNBase::sendBuffer(StringBuilder* _to_send) {
-  if (NULL == _to_send) return -1;
+  if (nullptr == _to_send) return -1;
   #ifdef __MANUVR_DEBUG
     if (getVerbosity() > 3) local_log.concatf("We about to print %d bytes to the host.\n", _to_send->length());
   #endif
@@ -848,7 +848,7 @@ int8_t RNBase::sendBuffer(StringBuilder* _to_send) {
 *
 */
 volatile void RNBase::irqServiceBT_data_activity(void) {
-  if (NULL == INSTANCE) return;
+  if (nullptr == INSTANCE) return;
   // We aren't doing anything here yet.
 }
 
@@ -856,7 +856,7 @@ volatile void RNBase::irqServiceBT_data_activity(void) {
 * Accept a buffer dump from the UART2 ISR. Feed the RNBASE. This should ultimately be DMA.
 */
 volatile void RNBase::irqServiceBT_data_receive(unsigned char* nu, uint8_t len) {
-  if (NULL == INSTANCE) return;
+  if (nullptr == INSTANCE) return;
   ((RNBase*) INSTANCE)->feed_rx_buffer(nu, len);
 }
 
@@ -868,13 +868,13 @@ volatile void RNBase::isr_bt_queue_ready() {
 
 
 volatile void RNBase::bt_gpio_5(unsigned long ms) {
-  if (NULL == INSTANCE) return;
+  if (nullptr == INSTANCE) return;
 
   if (last_gpio_5_event != 0) {
     unsigned long delta = wrap_accounted_delta(ms, last_gpio_5_event);
     if (delta < 500) {
       // Probably the 10Hz signal. Means we are in command mode.
-      if (INSTANCE != NULL) {
+      if (INSTANCE != nullptr) {
         if (!((RNBase*) INSTANCE)->_er_flag(RNBASE_FLAG_CMD_MODE)) {
           ((RNBase*) INSTANCE)->_er_set_flag(RNBASE_FLAG_CMD_MODE);
           ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_CMD_PEND);
@@ -885,7 +885,7 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
     }
     else if (delta < 3500) {
       // Probably the 1Hz signal. Means we are discoverable and waiting for connection.
-      if (INSTANCE != NULL) {
+      if (INSTANCE != nullptr) {
         if (((RNBase*) INSTANCE)->_er_flag(RNBASE_FLAG_CMD_MODE)) {
           ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_CMD_MODE | RNBASE_FLAG_CMD_PEND | RNBASE_FLAG_LOCK_OUT);
           ManuvrMsg *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_EXITED_CMD_MODE);
@@ -894,7 +894,7 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
       }
     }
     else {
-      //Kernel::raiseEvent(MANUVR_MSG_BT_CONNECTION_GAINED, NULL);
+      //Kernel::raiseEvent(MANUVR_MSG_BT_CONNECTION_GAINED, nullptr);
       // Should watch GPIO2 for this.
     }
   }
@@ -1002,9 +1002,9 @@ void RNBase::printDebug(StringBuilder *temp) {
     temp->concatf("-- gpio5 state             %s\n\n", ((GPIOB->IDR & GPIO_PIN_10) ? "high" : "low"));
   }
 
-  BTQueuedOperation* q_item = NULL;
+  BTQueuedOperation* q_item = nullptr;
 
-  if (NULL != current_work_item) {
+  if (current_work_item) {
     temp->concat("\n-- In working slot:");
     current_work_item->printDebug(temp);
   }
@@ -1118,9 +1118,9 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
       while (work_queue.hasNext()) {
         reclaimPreallocation(work_queue.dequeue());
       }
-      if (NULL != current_work_item) {
+      if (current_work_item) {
         reclaimPreallocation(current_work_item);
-        current_work_item = NULL;
+        current_work_item = nullptr;
       }
       break;
     case 'm':

@@ -71,7 +71,7 @@ TODO: This class is in SORE need of the following things:
 #define RNBASE_CMD_GET_OUR_BT_ADDR  "GB\r\n"   // Gets our BT MAC.
 #define RNBASE_CMD_GET_CP_BT_ADDR   "GF\r\n"   // Gets the BT MAC of the currently connected device.
 #define RNBASE_CMD_GET_STOR_BT_ADDR "GR\r\n"   // Gets the BT MAC of the currently bound device.
-#define RNBASE_CMD_REBOOT         "R,1\r\n"
+#define RNBASE_CMD_REBOOT          "R,1\r\n"
 
 
 #define RNBASE_PROTO_SPP            "AW\r\n"

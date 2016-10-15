@@ -361,12 +361,12 @@ CPLDDriver::CPLDDriver() : EventReceiver() {
   event_spi_callback_ready.repurpose(DIGITABULUM_MSG_SPI_CB_QUEUE_READY, (EventReceiver*) this);
   event_spi_callback_ready.isManaged(true);
   event_spi_callback_ready.specific_target = (EventReceiver*) this;
-  event_spi_callback_ready.priority        = 5;
+  event_spi_callback_ready.priority(5);
 
   event_spi_queue_ready.repurpose(DIGITABULUM_MSG_SPI_QUEUE_READY, (EventReceiver*) this);
   event_spi_queue_ready.isManaged(true);
   event_spi_queue_ready.specific_target    = (EventReceiver*) this;
-  event_spi_queue_ready.priority           = 5;
+  event_spi_queue_ready.priority(5);
 
   // Mark all of our preallocated SPI jobs as "No Reap" and pass them into the prealloc queue.
   for (uint8_t i = 0; i < PREALLOCATED_SPI_JOBS; i++) {
@@ -1324,12 +1324,12 @@ int8_t CPLDDriver::attached() {
     _irq_data_arrival.repurpose(DIGITABULUM_MSG_IMU_IRQ_RAISED, (EventReceiver*) this);
     _irq_data_arrival.isManaged(true);
     _irq_data_arrival.specific_target = (EventReceiver*) this;
-    _irq_data_arrival.priority        = 2;
+    _irq_data_arrival.priority(2);
 
     _periodic_debug.repurpose(0x5080, (EventReceiver*) this);
     _periodic_debug.isManaged(true);
     _periodic_debug.specific_target = (EventReceiver*) this;
-    _periodic_debug.priority        = 1;
+    _periodic_debug.priority(1);
     _periodic_debug.alterSchedulePeriod(100);
     _periodic_debug.alterScheduleRecurrence(-1);
     _periodic_debug.autoClear(false);

@@ -380,7 +380,7 @@ int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
     nu_legend->formLegendString(legend_string);
     ManuvrMsg* legend_broadcast     = Kernel::returnEvent(DIGITABULUM_MSG_IMU_LEGEND);
     legend_broadcast->specific_target = nu_legend->owner;
-    legend_broadcast->priority        = EVENT_PRIORITY_LOWEST + 1;
+    legend_broadcast->priority(EVENT_PRIORITY_LOWEST + 1);
     legend_broadcast->setOriginator((EventReceiver*) this);
     legend_broadcast->addArg(legend_string)->reapValue(true);
 
@@ -533,7 +533,7 @@ int8_t LegendManager::attached() {
     event_iiu_read.repurpose(DIGITABULUM_MSG_IMU_READ, (EventReceiver*) this);
     event_iiu_read.isManaged(true);
     event_iiu_read.specific_target = (EventReceiver*) this;
-    event_iiu_read.priority        = EVENT_PRIORITY_LOWEST;
+    event_iiu_read.priority(EVENT_PRIORITY_LOWEST);
     event_iiu_read.alterSchedulePeriod(20);
     event_iiu_read.alterScheduleRecurrence(-1);
     event_iiu_read.autoClear(false);
@@ -543,7 +543,7 @@ int8_t LegendManager::attached() {
     event_legend_frame_ready.repurpose(DIGITABULUM_MSG_IMU_MAP_STATE, (EventReceiver*) this);
     event_legend_frame_ready.isManaged(true);
     event_legend_frame_ready.specific_target = NULL; //(EventReceiver*) this;
-    event_legend_frame_ready.priority        = EVENT_PRIORITY_LOWEST;
+    event_legend_frame_ready.priority(EVENT_PRIORITY_LOWEST);
     event_legend_frame_ready.alterSchedulePeriod(25);
     event_legend_frame_ready.alterScheduleRecurrence(-1);
     event_legend_frame_ready.autoClear(false);
@@ -706,7 +706,7 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
       {
         ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
         event->addArg((uint8_t) 4);  // Set the desired init stage.
-        event->priority = 0;
+        event->priority(0);
         raiseEvent(event);
       }
       event_iiu_read.delaySchedule(1000);  // Enable the periodic read after letting the dust settle.
@@ -718,7 +718,7 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
       for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
         ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
         event->addArg((uint8_t) 4);  // Set the desired init stage.
-        event->priority = 0;
+        event->priority(0);
         raiseEvent(event);
       }
       event_iiu_read.enableSchedule(false);    // Disable the periodic read.
@@ -923,7 +923,7 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
       if ((temp_byte < 6) && (temp_byte >= 0)) {
         ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
         event->addArg((uint8_t) temp_byte);  // Set the desired init stage.
-        event->priority = 0;
+        event->priority(0);
         raiseEvent(event);
         local_log.concatf("Broadcasting IMU_INIT for stage %u...\n", temp_byte);
       }
