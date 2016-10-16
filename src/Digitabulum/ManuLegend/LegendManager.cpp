@@ -531,7 +531,7 @@ int8_t LegendManager::attached() {
     *    ---J. Ian Lindsay   Thu Apr 09 04:04:41 MST 2015
     */
     event_iiu_read.repurpose(DIGITABULUM_MSG_IMU_READ, (EventReceiver*) this);
-    event_iiu_read.isManaged(true);
+    event_iiu_read.incRefs();
     event_iiu_read.specific_target = (EventReceiver*) this;
     event_iiu_read.priority(EVENT_PRIORITY_LOWEST);
     event_iiu_read.alterSchedulePeriod(20);
@@ -541,7 +541,7 @@ int8_t LegendManager::attached() {
 
     // Build some pre-formed Events.
     event_legend_frame_ready.repurpose(DIGITABULUM_MSG_IMU_MAP_STATE, (EventReceiver*) this);
-    event_legend_frame_ready.isManaged(true);
+    event_legend_frame_ready.incRefs();
     event_legend_frame_ready.specific_target = NULL; //(EventReceiver*) this;
     event_legend_frame_ready.priority(EVENT_PRIORITY_LOWEST);
     event_legend_frame_ready.alterSchedulePeriod(25);
@@ -574,7 +574,7 @@ int8_t LegendManager::attached() {
 int8_t LegendManager::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
-  int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
+  int8_t return_value = (0 == event->refCount()) ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
 
   /* Some class-specific set of conditionals below this line. */
   switch (event->eventCode()) {

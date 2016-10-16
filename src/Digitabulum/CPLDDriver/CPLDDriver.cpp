@@ -359,12 +359,12 @@ CPLDDriver::CPLDDriver() : EventReceiver() {
 
   // Build some pre-formed Events.
   event_spi_callback_ready.repurpose(DIGITABULUM_MSG_SPI_CB_QUEUE_READY, (EventReceiver*) this);
-  event_spi_callback_ready.isManaged(true);
+  event_spi_callback_ready.incRefs();
   event_spi_callback_ready.specific_target = (EventReceiver*) this;
   event_spi_callback_ready.priority(5);
 
   event_spi_queue_ready.repurpose(DIGITABULUM_MSG_SPI_QUEUE_READY, (EventReceiver*) this);
-  event_spi_queue_ready.isManaged(true);
+  event_spi_queue_ready.incRefs();
   event_spi_queue_ready.specific_target    = (EventReceiver*) this;
   event_spi_queue_ready.priority(5);
 
@@ -1322,12 +1322,12 @@ int8_t CPLDDriver::iiu_group_irq() {
 int8_t CPLDDriver::attached() {
   if (EventReceiver::attached()) {
     _irq_data_arrival.repurpose(DIGITABULUM_MSG_IMU_IRQ_RAISED, (EventReceiver*) this);
-    _irq_data_arrival.isManaged(true);
+    _irq_data_arrival.incRefs();
     _irq_data_arrival.specific_target = (EventReceiver*) this;
     _irq_data_arrival.priority(2);
 
     _periodic_debug.repurpose(0x5080, (EventReceiver*) this);
-    _periodic_debug.isManaged(true);
+    _periodic_debug.incRefs();
     _periodic_debug.specific_target = (EventReceiver*) this;
     _periodic_debug.priority(1);
     _periodic_debug.alterSchedulePeriod(100);
@@ -1346,7 +1346,7 @@ int8_t CPLDDriver::attached() {
 
     // An SPI transfer might hang (very unlikely). This will un-hang it.
     event_spi_timeout.alterSchedule(bus_timeout_millis, -1, false, callback_spi_timeout);
-    event_spi_timeout.isManaged(true);
+    event_spi_timeout.incRefs();
 
     reset();
     return 1;
@@ -1372,7 +1372,7 @@ int8_t CPLDDriver::attached() {
 int8_t CPLDDriver::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
-  int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
+  int8_t return_value = (0 == event->refCount()) ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
 
   /* Some class-specific set of conditionals below this line. */
   switch (event->eventCode()) {

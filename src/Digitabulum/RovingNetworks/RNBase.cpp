@@ -209,7 +209,7 @@ RNBase::RNBase(uint8_t rst_pin) : ManuvrXport() {
 
   //// Build some pre-formed Events.
   //read_abort_event.repurpose(MANUVR_MSG_XPORT_QUEUE_RDY, (EventReceiver*) this);
-  //read_abort_event.isManaged(true);
+  //read_abort_event.incRefs();
   //read_abort_event.specific_target = (EventReceiver*) this;
   //read_abort_event.alterScheduleRecurrence(-1);
   //read_abort_event.alterSchedulePeriod(CHARACTER_CHRONOLOGICAL_BREAK);
@@ -333,10 +333,9 @@ int8_t RNBase::reset() {
 
   // Used to disassert the reset line.  TODO: Need a cleaner way to accomplish this...
   ManuvrMsg* event = Kernel::returnEvent(MANUVR_MSG_BT_EXIT_RESET);
-  event->addArg((EventReceiver*) this);
   event->setOriginator((EventReceiver*) this);
   event->specific_target = (EventReceiver*) this;
-  event->alterScheduleRecurrence(0);
+  event->alterScheduleRecurrence(1);
   event->alterSchedulePeriod(510);
   event->autoClear(true);
   event->enableSchedule(true);
@@ -934,7 +933,7 @@ int8_t RNBase::attached() {
     platform.kernel()->addSchedule(&read_abort_event);
 
     event_bt_queue_ready.repurpose(MANUVR_MSG_BT_QUEUE_READY, (EventReceiver*) this);
-    event_bt_queue_ready.isManaged(true);
+    event_bt_queue_ready.incRefs();
     event_bt_queue_ready.specific_target = (EventReceiver*) this;
 
     gpioSetup();
@@ -962,10 +961,16 @@ int8_t RNBase::attached() {
 int8_t RNBase::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
-  int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
+  int8_t return_value = (0 == event->refCount()) ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
 
   /* Some class-specific set of conditionals below this line. */
   switch (event->eventCode()) {
+    case MANUVR_MSG_BT_EXIT_RESET:
+      if (_er_flag(RNBASE_FLAG_LOCK_OUT)) {
+        setPin(_reset_pin, true);     // Drive reset pin high.
+        _er_clear_flag(RNBASE_FLAG_LOCK_OUT);
+      }
+      break;
     case MANUVR_MSG_XPORT_SEND:
       event->clearArgs();
       break;
