@@ -120,6 +120,7 @@ SOURCES_CPP  += src/Digitabulum/DigitabulumPMU/DigitabulumPMU.cpp
 MANUVR_OPTIONS += -DMANUVR_OVER_THE_WIRE
 MANUVR_OPTIONS += -DMANUVR_CBOR
 MANUVR_OPTIONS += -DMANUVR_CONSOLE_SUPPORT
+MANUVR_OPTIONS += -DMANUVR_SUPPORT_I2C
 
 # Options that build for certain threading models (if any).
 ifeq ($(THREADS),1)
