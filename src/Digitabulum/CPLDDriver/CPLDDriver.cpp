@@ -1440,7 +1440,7 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
 
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄         ▄  ▄▄▄▄▄▄▄▄▄▄▄
 * ▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░▌       ▐░▌▐░░░░░░░░░░░▌
 * ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌▐░█▀▀▀▀▀▀▀▀▀
@@ -1452,9 +1452,7 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
 * ▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄█░▌
 * ▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
 *  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀
-*
-* Code in here only exists for as long as it takes to debug something. Don't write against these.
-****************************************************************************************************/
+*******************************************************************************/
 
 /**
 * Debug support method. This fxn is only present in debug builds.
@@ -1482,19 +1480,21 @@ void CPLDDriver::printDebug(StringBuilder *output) {
 
   output->concatf("-- SPI1 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI1_READY)?"on":"OFF"));
   output->concatf("-- hspi1.State:        0x%08x\n", (unsigned long) hspi1.State);
-  output->concatf("-- hspi1.ErrorCode:    0x%08x\n", (unsigned long) hspi1.ErrorCode);
-  output->concatf("-- hspi1.TxXferCount:  0x%04x\n", hspi1.TxXferCount);
+  if (hspi2.ErrorCode) {
+    output->concatf("-- hspi1.ErrorCode:    0x%08x\n", (unsigned long) hspi1.ErrorCode);
+  }
   output->concatf("-- hspi1.RxXferCount:  0x%04x\n", hspi1.RxXferCount);
+  output->concatf("-- hspi1.TxXferCount:  0x%04x\n", hspi1.TxXferCount);
   output->concatf("-- __hack_buffer       0x%08x\n--\n", __hack_buffer);
 
-  //if (getVerbosity() > 2) {
-  //  output->concatf("-- Guarding queue      %s\n",       (_er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no"));
-  //  output->concatf("-- spi_cb_per_event    %d\n--\n",   spi_cb_per_event);
-  //}
-  //output->concatf("-- prealloc queue size %d\n",     preallocated.size());
-  //output->concatf("-- prealloc_misses     %u\n",     (unsigned long) preallocation_misses);
-  //output->concatf("-- total_transfers     %u\n",     (unsigned long) SPIBusOp::total_transfers);
-  //output->concatf("-- failed_transfers    %u\n",     (unsigned long) SPIBusOp::failed_transfers);
+  if (getVerbosity() > 2) {
+    output->concatf("-- Guarding queue      %s\n",       (_er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no"));
+    output->concatf("-- spi_cb_per_event    %d\n--\n",   spi_cb_per_event);
+  }
+  output->concatf("-- prealloc queue size %d\n",     preallocated.size());
+  output->concatf("-- prealloc_misses     %u\n",     (unsigned long) preallocation_misses);
+  output->concatf("-- total_transfers     %u\n",     (unsigned long) SPIBusOp::total_transfers);
+  output->concatf("-- failed_transfers    %u\n",     (unsigned long) SPIBusOp::failed_transfers);
   //output->concatf("-- specificity_burden  %u\n--\n", (unsigned long) specificity_burden);
 
   //output->concatf("-- bus queue depth:    %d\n-- callback q depth    %d\n\n", work_queue.size(), callback_queue.size());
@@ -1597,8 +1597,8 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       local_log.concatf("CPLD servicing IRQs?  %s\n", _er_flag(CPLD_FLAG_SVC_IRQS)?"yes":"no");
       break;
 
-    case 'o':        // CPLD internal oscillator. 1 to engage.
-    case 'O':        // CPLD external oscillator. 1 to engage.
+    case 'o':        // CPLD internal oscillator.
+    case 'O':        // CPLD external oscillator.
       local_log.concatf(
         "%sabling CPLD %sternal oscillator...\n",
         (temp_byte ? "En" : "Dis"),

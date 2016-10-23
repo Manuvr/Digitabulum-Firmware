@@ -446,6 +446,7 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     void printDebug(StringBuilder*);
     int8_t notify(ManuvrMsg*);
     int8_t callback_proc(ManuvrMsg*);
+    int8_t attached();      // This is called from the base notify().
     #if defined(MANUVR_CONSOLE_SUPPORT)
       void procDirectDebugInstruction(StringBuilder*);
     #endif  //MANUVR_CONSOLE_SUPPORT
@@ -466,9 +467,6 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
 
     static SPIBusOp* current_queue_item;
 
-
-  protected:
-    int8_t attached();      // This is called from the base notify().
 
 
   private:

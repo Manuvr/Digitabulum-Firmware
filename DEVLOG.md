@@ -96,3 +96,10 @@ _---J. Ian Lindsay_
 I forgot why those linkages were ever there to begin with...
 
 _---J. Ian Lindsay_
+
+
+### 2016.10.23:
+
+    281816    2800    9664  294280   47d88   New baseline.
+
+_---J. Ian Lindsay_

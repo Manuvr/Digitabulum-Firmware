@@ -401,7 +401,6 @@ void LegendManager::printDebug(StringBuilder *output) {
     // Print just the aggregate sample count and return.
   }
 
-
   if (getVerbosity() > 3) {
     output->concatf("--- __dataset location  0x%08x\n", (uint32_t) __dataset);
     output->concatf("--- __prealloc location 0x%08x\n", (uint32_t) __prealloc);
@@ -454,10 +453,9 @@ uint32_t LegendManager::totalSamples() {
 
 
 
-
-/****************************************************************************************************
-* Overrides from the SPI apparatus...                                                               *
-****************************************************************************************************/
+/*******************************************************************************
+* Overrides from the SPI apparatus...                                          *
+*******************************************************************************/
 
 /*
 * When a bus operation completes, it is passed back to the class that created it.
@@ -552,9 +550,6 @@ int8_t LegendManager::attached() {
   }
   return 0;
 }
-
-
-
 
 
 /**
@@ -806,7 +801,7 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
 
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄         ▄  ▄▄▄▄▄▄▄▄▄▄▄
 * ▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░▌       ▐░▌▐░░░░░░░░░░░▌
 * ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌▐░█▀▀▀▀▀▀▀▀▀
@@ -818,9 +813,7 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
 * ▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄█░▌
 * ▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
 *  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀
-*
-* Code in here only exists for as long as it takes to debug something. Don't write against these.
-****************************************************************************************************/
+*******************************************************************************/
 
 #if defined(MANUVR_CONSOLE_SUPPORT)
 void LegendManager::procDirectDebugInstruction(StringBuilder *input) {

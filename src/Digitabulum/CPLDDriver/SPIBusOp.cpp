@@ -53,8 +53,8 @@ StringBuilder debug_log;   // TODO: Relocate this to a static member.
 * Notated like a const, but should NOT be a const, because we use this as a DMA read sink as well
 *   as a sort of /dev/zero. This never contains any meaningful data.
 */
-uint32_t STATIC_ZERO = 0;
-uint32_t STATIC_SINK = 0;
+static uint32_t STATIC_ZERO = 0;
+static uint32_t STATIC_SINK = 0;
 
 
 /*******************************************************************************

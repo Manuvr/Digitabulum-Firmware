@@ -190,7 +190,7 @@ typedef struct {
 #define IIU_DATA_HANDLING_NULLIFY_GRAVITY  0x80000000
 
 
-#define IIU_STANDARD_GRAVITY           9.80665f // This is Earth's gravity at sea-level, in m/s^2
+#define IIU_STANDARD_GRAVITY     9.80665f // This is Earth's gravity at sea-level, in m/s^2
 #define IIU_DEG_TO_RAD_SCALAR   (3.14159f / 180.0f)
 
 
