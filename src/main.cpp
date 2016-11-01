@@ -330,6 +330,8 @@ int main(void) {
   INA219 ina219(0x4A);
   i2c.addSlaveDevice(&ina219);
 
+
+  RN4677Pins rn_pins;  // TODO: Still not happy about this. Needless stack burn. Const.
   /* These Port E pins are push-pull outputs:
   *
   * #  Default   Purpose
@@ -338,8 +340,29 @@ int main(void) {
   * 5     1      BT_EAN
   * 6     1      BT_PIO_24
   */
-  RN4677 bt(68);
+  rn_pins.reset = 68;
+  rn_pins.ean   = 69; // WO, SystemConf. Pull-down.
+  rn_pins.p24   = 70; // WO, SystemConf. Pull-up.
+
+  rn_pins.sbt   = 51; // WO, SW_BTN
+  rn_pins.swu   = 36; // WO, software wake-up.
+
+  rn_pins.p20   = 21; // WO, SystemConf. Pull-up.
+
+  rn_pins.p04   = 18; // RO, Status 0
+  rn_pins.p15   = 19; // RO, Status 1
+  rn_pins.led   = 35; // RO, LED State
+
+  rn_pins.p05   = 54; // Configurable.
+  rn_pins.p31   = 67; //
+  rn_pins.p32   = 66; //
+  rn_pins.p33   = 65; //
+  rn_pins.p34   = 64; //
+  rn_pins.p37   = 24; //
+
+  RN4677 bt(&rn_pins);
   kernel->subscribe((EventReceiver*) &bt);
+
 
   SDCard sd;
   kernel->subscribe((EventReceiver*) &sd);

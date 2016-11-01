@@ -103,3 +103,16 @@ _---J. Ian Lindsay_
     281816    2800    9664  294280   47d88   New baseline.
 
 _---J. Ian Lindsay_
+
+
+### 2016.10.31:
+
+RN driver... Prior to member re-work to use a Pin object.
+
+    make DEBUG=1
+    281920    2800    9664  294384 Prior to member re-work to use a Pin object.
+    281984    2800    9664  294448 Following conversion.
+    281856    2800    9664  294320 Following conversion of gpioSetup()
+    281936    2800    9664  294400 GPIO treatment is now safe.
+    282064    2800    9664  294528 GPIO mapper completed and safe.
+    282600    2800    9664  295064 Power down and sleep support.

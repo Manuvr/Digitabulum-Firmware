@@ -299,18 +299,10 @@ int8_t IIU::state_change_notice(LSM9DSx_Common* imu_ptr, State p_state, State c_
 
 
 
-void IIU::assign_legend_pointers(void* a,
-                                 void* g,
-                                 void* m,
-                                 void* v,
-                                 void* n_g,
-                                 void* pos,
-                                 void* q,
-                                 void* t,
-                                 void* sc_acc,
-                                 void* sc_gyr,
-                                 void* sc_mag,
-                                 void* sc_temp)
+void IIU::assign_legend_pointers(void* a, void* g, void* m,
+                                 void* v, void* n_g, void* pos,
+                                 void* q, void* t, void* sc_acc,
+                                 void* sc_gyr, void* sc_mag, void* sc_temp)
 {
   legend_writable(false);
   _ptr_acc          = (Vector3<float>*) a;

@@ -41,6 +41,7 @@ TODO: This class is in SORE need of the following things:
 
 
 #define MANUVR_MSG_BT_EXIT_RESET     0x4295
+#define MANUVR_MSG_BT_EXPIRE_LOCKOUT 0x4296
 
 // Bluetooth Modes
 #define RNBASE_MODE_COMMAND       "$$$"
@@ -78,7 +79,8 @@ TODO: This class is in SORE need of the following things:
 
 // Responses that we might get back from the module.
 #define RNBASE_STATUS_ACK         "AOK\r\n"
-#define RNBASE_STATUS_CMD         "CMD\r\n"
+//#define RNBASE_STATUS_CMD         "CMD\r\n"
+#define RNBASE_STATUS_CMD         "CMD>\r\n"
 #define RNBASE_STATUS_END         "END\r\n"
 #define RNBASE_STATUS_REBOOT      "Reboot!\r\n"
 
@@ -115,6 +117,16 @@ TODO: This class is in SORE need of the following things:
 
 
 /*
+* Simple storage class for pin mappings and constraints. Each radio module is
+* likely to have a unique version of this class.
+*/
+class RNPins {
+  public:
+    int8_t reset = -1;
+};
+
+
+/*
 * This is the RN driver. It is an abstraction layer for the Microchip/RovingNetworks integrated
 *   bluetooth modules. This class contains pure-virtual members, and must be extended by a driver
 *   for a specific module (RN4677, RN4020, RN42HID, etc...).
@@ -127,7 +139,7 @@ TODO: This class is in SORE need of the following things:
 */
 class RNBase : public ManuvrXport {
   public:
-    RNBase(uint8_t _rst_pin);
+    RNBase(RNPins* pins);
     virtual ~RNBase();
 
     /* Override from BufferPipe. */
@@ -170,7 +182,6 @@ class RNBase : public ManuvrXport {
     volatile static void bt_gpio_5(unsigned long);
 
     static void hostRxFlush();
-    static void expire_lockout();
 
     static inline RNBase* getInstance() { return (RNBase*)INSTANCE; };
 
@@ -182,12 +193,14 @@ class RNBase : public ManuvrXport {
     void feed_rx_buffer(unsigned char*, uint8_t len);   // Append to the class receive buffer.
     virtual int8_t sendBuffer(StringBuilder*);
 
+    void printQueue(StringBuilder*);
+
 
     virtual int8_t attached();      // This is called from the base notify().
 
     // Mandatory overrides.
     virtual void factoryReset(void)    =0;   // Perform the sequence that will factory-reset the RN.
-    virtual void gpioSetup();
+    virtual void gpioSetup()           =0;
     virtual void force_9600_mode(bool) =0;   // Call with 'true' to force the module into 9600bps.
     virtual void set_bitrate(int)      =0;   //
 
@@ -205,8 +218,6 @@ class RNBase : public ManuvrXport {
 
 
   private:
-    ManuvrMsg event_bt_queue_ready;
-
     uint8_t _reset_pin = 0;
 
     /* Members concerned with the work queue and keeping messages atomic. */

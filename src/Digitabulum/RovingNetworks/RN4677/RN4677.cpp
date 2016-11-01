@@ -38,8 +38,12 @@ up to par.
 UART_HandleTypeDef huart2;
 
 
-RN4677::RN4677(uint8_t _rst_pin) : RNBase(_rst_pin) {
+extern void bt_gpio_5_proxy();
+
+
+RN4677::RN4677(RN4677Pins* p) : RNBase((RNPins*) p) {
   setReceiverName("RN4677");
+  memcpy(&_pins, p, sizeof(RN4677Pins));
 }
 
 
@@ -67,11 +71,10 @@ void RN4677::gpioSetup() {
   * 3     -      BT_PIO_15
   * 8     -      BT_PIO_37 (Tentative)
   */
-  GPIO_InitStruct.Pin        = GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_8;
-  GPIO_InitStruct.Mode       = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_HIGH;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  if (-1 < _pins.p04) gpioDefine(_pins.p04, INPUT);
+  if (-1 < _pins.p15) gpioDefine(_pins.p15, INPUT);
+  if (-1 < _pins.p37) gpioDefine(_pins.p37, INPUT);
+
 
   /* These Port C pins are inputs:
   *
@@ -79,38 +82,30 @@ void RN4677::gpioSetup() {
   * -----------------------------------------------
   * 3     -      BT_LED_1
   */
-  GPIO_InitStruct.Pin        = GPIO_PIN_3;
-  GPIO_InitStruct.Mode       = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+  if (-1 < _pins.led) setPinFxn(_pins.led, CHANGE, bt_gpio_5_proxy);
+
 
   /* These Port D pins are inputs:
   *
   * #  Default   Purpose
   * -----------------------------------------------
-  * 6     -      BT_PIO_05
+  * 6     -      BT_PIO_05 (Configurable) Default: No use
   */
-  GPIO_InitStruct.Pin        = GPIO_PIN_6;
-  GPIO_InitStruct.Mode       = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
-  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+  if (-1 < _pins.p05) gpioDefine(_pins.p05, INPUT);
 
   /* These Port E pins are inputs:
   *
   * #  Default   Purpose
   * -----------------------------------------------
-  * 0     -      BT_PIO_34 (Tentative)
-  * 1     -      BT_PIO_33 (Tentative)
-  * 2     -      BT_PIO_32 (Tentative)
-  * 3     -      BT_PIO_31 (Tentative)
+  * 0     -      BT_PIO_34 (Configurable) Default: Pairing key
+  * 1     -      BT_PIO_33 (Configurable) Default: Rx_indicator
+  * 2     -      BT_PIO_32 (Configurable) Default: Link drop
+  * 3     -      BT_PIO_31 (Configurable) Default: Inquiry configure
   */
-  GPIO_InitStruct.Pin        = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3;
-  GPIO_InitStruct.Mode       = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
-  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+  if (-1 < _pins.p31) gpioDefine(_pins.p31, INPUT);
+  if (-1 < _pins.p32) gpioDefine(_pins.p32, INPUT);
+  if (-1 < _pins.p33) gpioDefine(_pins.p33, INPUT);
+  if (-1 < _pins.p34) gpioDefine(_pins.p34, INPUT);
 
   /* These Port B pins are push-pull outputs:
   *
@@ -118,12 +113,10 @@ void RN4677::gpioSetup() {
   * -----------------------------------------------
   * 5     0      BT_PIO_20
   */
-  GPIO_InitStruct.Pin        = GPIO_PIN_5;
-  GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_HIGH;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
+  if (-1 < _pins.p20) {
+    gpioDefine(_pins.p20, OUTPUT);
+    setPin(_pins.p20, true);
+  }
 
   /* These Port C pins are open-drain outputs:
   *
@@ -131,12 +124,10 @@ void RN4677::gpioSetup() {
   * -----------------------------------------------
   * 4     1      WAKE_SW
   */
-  GPIO_InitStruct.Pin        = GPIO_PIN_4;
-  GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_OD;
-  GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
+  if (-1 < _pins.swu) {
+    gpioDefine(_pins.swu, OUTPUT_OD);
+    setPin(_pins.swu, false);
+  }
 
   /* These Port D pins are push-pull outputs:
   *
@@ -144,12 +135,10 @@ void RN4677::gpioSetup() {
   * -----------------------------------------------
   * 3     0      BT_SW_BTN
   */
-  GPIO_InitStruct.Pin        = GPIO_PIN_3;
-  GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
-  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_3, GPIO_PIN_RESET);
+  if (-1 < _pins.sbt) {
+    gpioDefine(_pins.sbt, OUTPUT);
+    setPin(_pins.sbt, true);
+  }
 
   /* These Port E pins are push-pull outputs:
   *
@@ -159,13 +148,18 @@ void RN4677::gpioSetup() {
   * 5     1      BT_EAN
   * 6     1      BT_PIO_24
   */
-  GPIO_InitStruct.Pin        = GPIO_PIN_5 | GPIO_PIN_6;
-  GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
-  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5 | GPIO_PIN_6, GPIO_PIN_SET);
-
+  if (-1 < _pins.reset) {
+    gpioDefine(_pins.reset, OUTPUT_OD);
+    setPin(_pins.reset, false);
+  }
+  if (-1 < _pins.ean) {
+    gpioDefine(_pins.ean, OUTPUT);
+    setPin(_pins.ean, false);
+  }
+  if (-1 < _pins.p24) {
+    gpioDefine(_pins.p24, OUTPUT);
+    setPin(_pins.p24, true);
+  }
 
   // Setting up USART2 to deal with the module...
   __USART2_CLK_ENABLE();
@@ -253,6 +247,24 @@ void RN4677::factoryReset() {
 }
 
 
+int8_t RN4677::modulePower(bool power) {
+  if (power ^ _module_power) {
+    _module_power = power;
+    setPin(_pins.sbt, power);
+    return 1;
+  }
+  return 0;
+}
+
+
+int8_t RN4677::moduleSleep(bool sleep) {
+  if (sleep ^ _module_sleep) {
+    _module_sleep = sleep;
+    setPin(_pins.swu, !sleep);  // Active-low
+    return 1;
+  }
+  return 0;
+}
 
 
 /*******************************************************************************
@@ -305,6 +317,10 @@ int8_t RN4677::callback_proc(ManuvrMsg* event) {
 */
 void RN4677::printDebug(StringBuilder *temp) {
   RNBase::printDebug(temp);
+  temp->concatf("-- Module mode:            %s\n", RN4677Pins::getModuleModeString(_pins.getModuleMode()));
+  temp->concatf("--\t p05: %s \t p31: %s\n", (readPin(_pins.p05) ? "hi" : "lo"), (readPin(_pins.p31) ? "hi" : "lo"));
+  temp->concatf("--\t p32: %s \t p33: %s\n", (readPin(_pins.p32) ? "hi" : "lo"), (readPin(_pins.p33) ? "hi" : "lo"));
+  temp->concatf("--\t p34: %s \t p37: %s\n", (readPin(_pins.p34) ? "hi" : "lo"), (readPin(_pins.p37) ? "hi" : "lo"));
 }
 
 
@@ -333,6 +349,18 @@ void RN4677::procDirectDebugInstruction(StringBuilder *input) {
   }
 
   switch (*(str)) {
+    case 'S':
+    case 's':
+      if (moduleSleep((*(str) == 'S'))) {
+        local_log.concatf("RN4677 %s.\n", (*(str) == 'S' ? "asleep" : "awake"));
+      }
+      break;
+    case 'P':
+    case 'p':
+      if (modulePower((*(str) == 'P'))) {
+        local_log.concatf("RN4677 o%s.\n", (*(str) == 'P' ? "n" : "ff"));
+      }
+      break;
     default:
       RNBase::procDirectDebugInstruction(input);
       break;
@@ -341,3 +369,28 @@ void RN4677::procDirectDebugInstruction(StringBuilder *input) {
   flushLocalLog();
 }
 #endif  //MANUVR_CONSOLE_SUPPORT
+
+
+
+
+/*******************************************************************************
+* THIS STUFF WILL UNDERGO MITOSIS WHEN IT GETS BIG ENOUGH
+*******************************************************************************/
+
+const char* RN4677Pins::getModuleModeString(RN4677ModuleMode m) {
+  switch (m) {
+    case RN4677ModuleMode::LINK_DATA:     return "LINK_DATA";
+    case RN4677ModuleMode::LINK_NO_DATA:  return "LINK_IDLE";
+    case RN4677ModuleMode::ACCESS:        return "ACCESS";
+    case RN4677ModuleMode::SHUTDOWN:      return "SHUTDOWN";
+  }
+  return "<UNDEF>";
+}
+
+
+RN4677ModuleMode RN4677Pins::getModuleMode() {
+  uint8_t return_value = 0;
+  if (readPin(p04)) return_value += 1;
+  if (readPin(p15)) return_value += 2;
+  return (RN4677ModuleMode) return_value;
+}

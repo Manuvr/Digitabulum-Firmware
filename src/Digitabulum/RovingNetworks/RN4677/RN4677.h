@@ -41,6 +41,17 @@ limitations under the License.
 /*
 *
 */
+enum class RN4677ModuleMode {
+  LINK_DATA    = 0x00,
+  LINK_NO_DATA = 0x01,
+  ACCESS       = 0x02,
+  SHUTDOWN     = 0x03
+};
+
+
+/*
+*
+*/
 enum class RN4677ProtoMode {
   DUAL    = 0x00,
   BLE     = 0x01,
@@ -79,10 +90,38 @@ enum class RN4677TxPower {
 };
 
 
+/*
+* Pin defs for this module.
+*/
+class RN4677Pins : public RNPins {
+  public:
+    int8_t sbt = -1; // WO, SW_BTN
+    int8_t swu = -1; // WO, software wake-up.
+    int8_t p04 = -1; // RO, Status 0
+    int8_t p15 = -1; // RO, Status 1
+    int8_t led = -1; // RO, LED_State
+
+    int8_t p20 = -1; // WO, SystemConf. Pull-up.
+    int8_t p24 = -1; // WO, SystemConf. Pull-up.
+    int8_t ean = -1; // WO, SystemConf. Pull-down.
+
+    int8_t p05 = -1; // Configurable.
+    int8_t p31 = -1; //
+    int8_t p32 = -1; //
+    int8_t p33 = -1; //
+    int8_t p34 = -1; //
+    int8_t p37 = -1; //
+
+    RN4677ModuleMode getModuleMode();
+
+    static const char* getModuleModeString(RN4677ModuleMode);
+};
+
+
 
 class RN4677 : public RNBase {
   public:
-    RN4677(uint8_t _rst_pin);
+    RN4677(RN4677Pins*);
     virtual ~RN4677();
 
     /* Overrides from the Transport class. */
@@ -102,6 +141,9 @@ class RN4677 : public RNBase {
     void gpioSetup(void);
     void force_9600_mode(bool);   // Call with 'true' to force the module into 9600bps.
     void set_bitrate(int);    //
+
+    int8_t modulePower(bool);
+    int8_t moduleSleep(bool);
 
     /* Set commands */
     //void setDeviceClass(uint16_t);
@@ -166,16 +208,12 @@ class RN4677 : public RNBase {
 
 
   private:
-    uint8_t _pin_p04 = 0;
-    uint8_t _pin_p15 = 0;
-    uint8_t _pin_p05 = 0;
-    uint8_t _pin_p20 = 0;
+    RN4677Pins _pins;
 
-    uint8_t _pin_p31 = 0;
-    uint8_t _pin_p32 = 0;
-    uint8_t _pin_p33 = 0;
-    uint8_t _pin_p34 = 0;
-    uint8_t _pin_p37 = 0;
+    // TODO: Migrate into flags member somewhere else.
+    bool _module_power = true;
+    bool _module_sleep = false;
+
 };
 
 
