@@ -40,8 +40,13 @@ TODO: This class is in SORE need of the following things:
 #include <Transports/ManuvrXport.h>
 
 
-#define MANUVR_MSG_BT_EXIT_RESET     0x4295
-#define MANUVR_MSG_BT_EXPIRE_LOCKOUT 0x4296
+#define MANUVR_MSG_BT_EXIT_RESET        0x4295
+#define MANUVR_MSG_BT_EXPIRE_LOCKOUT    0x4296
+#define MANUVR_MSG_BT_CONNECTION_LOST   0x1000 //
+#define MANUVR_MSG_BT_CONNECTION_GAINED 0x1001 //
+#define MANUVR_MSG_BT_ENTERED_CMD_MODE  0x1005 // The module entered command mode.
+#define MANUVR_MSG_BT_EXITED_CMD_MODE   0x1006 // The module exited command mode.
+
 
 // Bluetooth Modes
 #define RNBASE_MODE_COMMAND       "$$$"
@@ -175,13 +180,9 @@ class RNBase : public ManuvrXport {
     volatile static unsigned long last_gpio_5_event;
 
     // Volatile statics that serve as ISRs...
-    volatile static void irqServiceBT_data_activity(void);
     volatile static void irqServiceBT_data_receive(unsigned char* str, uint8_t len);
-    volatile static void usart2_character_rx(unsigned char c);
     volatile static void isr_bt_queue_ready();
     volatile static void bt_gpio_5(unsigned long);
-
-    static void hostRxFlush();
 
     static inline RNBase* getInstance() { return (RNBase*)INSTANCE; };
 

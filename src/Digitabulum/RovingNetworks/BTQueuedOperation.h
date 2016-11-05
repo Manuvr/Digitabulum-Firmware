@@ -55,7 +55,7 @@ class BTQueuedOperation : public BusOp {
     int8_t begin();
 
     /* Call to mark something completed that may not be. */
-    int8_t abort();
+    int8_t abort(XferFault);
 
     /* Call to mark complete and follow the nominal message path. */
     int8_t markComplete();

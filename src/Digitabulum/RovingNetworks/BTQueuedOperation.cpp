@@ -158,8 +158,9 @@ int8_t BTQueuedOperation::begin() {
 
 
 /* Call to mark something completed that may not be. */
-int8_t BTQueuedOperation::abort() {
-  xfer_state = XferState::COMPLETE;
+int8_t BTQueuedOperation::abort(XferFault cause) {
+  xfer_state = XferState::FAULT;
+  xfer_fault = cause;
   buf       = NULL;
   buf_len   = 0;
   RNBase::isr_bt_queue_ready();
@@ -203,9 +204,12 @@ int8_t BTQueuedOperation::markComplete() {
 */
 void BTQueuedOperation::printDebug(StringBuilder *output) {
   if (NULL == output) return;
-  output->concatf("\n\t--- txn_id:  0x%08x -------------\n", txn_id);
+  output->concatf("\t --- txn_id:  0x%08x -------------\n", txn_id);
   output->concatf("\t opcode:      %s\n", BusOp::getOpcodeString(opcode));
-  output->concatf("\t comp/init:   %s\n", BusOp::getStateString(xfer_state));
+  output->concatf("\t xfer_state:  %s\n", BusOp::getStateString(xfer_state));
+  if (XferFault::NONE != xfer_fault) {
+    output->concatf("\t xfer_fault:  %s\n", BusOp::getErrorString(xfer_fault));
+  }
 
   int tmp_len = data.length();
   output->concatf("\t length:      %d\n", tmp_len);

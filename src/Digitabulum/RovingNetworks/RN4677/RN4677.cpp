@@ -35,9 +35,9 @@ up to par.
 #include <stm32f7xx_hal_gpio.h>
 
 
+#define MAX_UART_STR_LEN 64
+
 UART_HandleTypeDef huart2;
-
-
 extern void bt_gpio_5_proxy();
 
 
@@ -54,12 +54,15 @@ extern void bt_gpio_5_proxy();
 
 extern "C" {
   StringBuilder _tx_buf;  // TODO: Should be a class member. Tired...
-  StringBuilder _rx_buf;  // TODO: Should be a class member. Tired...
+
+  static volatile unsigned char _rx_buf[MAX_UART_STR_LEN];
+  static volatile uint8_t _rx_buf_len = 0;
+
+  uint32_t read_millis_0 = 0;
+  uint32_t read_millis_1 = 0;
 
   static volatile bool _tx_in_progress = false;
   static volatile bool _rx_ready       = false;
-
-  static char inglorious_hack[16];
 
   /*
   *
@@ -77,7 +80,6 @@ extern "C" {
 
   void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     _rx_ready = true;
-    _rx_buf.concat(inglorious_hack[0]);
     ((RN4677*) RNBase::getInstance())->rx_wakeup();
   }
 
@@ -156,13 +158,19 @@ bool RN4677::write_port(unsigned char* out, int out_len) {
 
 
 int8_t RN4677::read_port() {
-  int n = _rx_buf.length();
+  int n = _rx_buf_len;
   if (n > 0) {
-    bytes_received += n;
-    local_log.concatf("%c (0x%02x)\n", inglorious_hack[0], inglorious_hack[0]);
+    if ((_rx_buf[0] == '\n') || (_rx_buf_len == MAX_UART_STR_LEN)) {
+      bytes_received += n;
+      feed_rx_buffer((unsigned char*) &_rx_buf[0], n);
+      _rx_buf_len = 0;
+      read_millis_1 = millis();
+    }
+
+      bytes_received += n;
+    local_log.concatf("%c (0x%02x)\n", _rx_buf, _rx_buf);
     flushLocalLog();
-    BufferPipe::fromCounterparty(&_rx_buf, MEM_MGMT_RESPONSIBLE_BEARER);
-    HAL_UART_Receive_IT(&huart2, (uint8_t*) &inglorious_hack, 1);
+    HAL_UART_Receive_IT(&huart2, (uint8_t*) &_rx_buf, 1);
     return n;
   }
   return 0;
@@ -331,6 +339,7 @@ void RN4677::set_bitrate(int _bitrate) {
   //USART2->CR1 |= USART_CR1_RXNEIE | USART_CR1_IDLEIE;
 
   HAL_UART_Init(&huart2);    // finally this enables the complete USART2 peripheral
+  HAL_UART_Receive_IT(&huart2, (uint8_t*) &_rx_buf[0], 1);
 }
 
 
