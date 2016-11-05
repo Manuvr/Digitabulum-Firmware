@@ -41,6 +41,62 @@ UART_HandleTypeDef huart2;
 extern void bt_gpio_5_proxy();
 
 
+
+/*******************************************************************************
+* .-. .----..----.    .-.     .--.  .-. .-..----.
+* | |{ {__  | {}  }   | |    / {} \ |  `| || {}  \
+* | |.-._} }| .-. \   | `--./  /\  \| |\  ||     /
+* `-'`----' `-' `-'   `----'`-'  `-'`-' `-'`----'
+*
+* Interrupt service routine support functions. Everything in this block
+*   executes under an ISR. Keep it brief...
+*******************************************************************************/
+
+extern "C" {
+  StringBuilder _tx_buf;  // TODO: Should be a class member. Tired...
+  StringBuilder _rx_buf;  // TODO: Should be a class member. Tired...
+
+  static volatile bool _tx_in_progress = false;
+  static volatile bool _rx_ready       = false;
+
+
+  /*
+  *
+  */
+  void USART2_IRQHandler() {
+    HAL_UART_IRQHandler(&huart2);
+  }
+
+
+  void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
+    _tx_in_progress = false;
+    ((RN4677*) RNBase::getInstance())->tx_wakeup();
+  }
+
+
+  void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    _rx_ready = true;
+    ((RN4677*) RNBase::getInstance())->rx_wakeup();
+  }
+
+
+  void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+    Kernel::log("UART2 Error.\n");
+  }
+}
+
+
+
+
+/*******************************************************************************
+*   ___ _              ___      _ _              _      _
+*  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
+* | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
+*  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
+*                                          |_|
+* Constructors/destructors, class initialization functions and so-forth...
+*******************************************************************************/
+
 RN4677::RN4677(RN4677Pins* p) : RNBase((RNPins*) p) {
   setReceiverName("RN4677");
   memcpy(&_pins, p, sizeof(RN4677Pins));
@@ -55,6 +111,50 @@ RN4677::~RN4677() {
   HAL_GPIO_DeInit(GPIOD, GPIO_PIN_3 | GPIO_PIN_6);
   HAL_GPIO_DeInit(GPIOE, GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6);
 }
+
+
+void RN4677::tx_wakeup() {
+  read_abort_event.fireNow();
+}
+
+
+void RN4677::rx_wakeup() {
+  read_abort_event.fireNow();
+}
+
+
+
+/*******************************************************************************
+* ___________                                                  __
+* \__    ___/___________    ____   ____________   ____________/  |_
+*   |    |  \_  __ \__  \  /    \ /  ___/\____ \ /  _ \_  __ \   __\
+*   |    |   |  | \// __ \|   |  \\___ \ |  |_> >  <_> )  | \/|  |
+*   |____|   |__|  (____  /___|  /____  >|   __/ \____/|__|   |__|
+*                       \/     \/     \/ |__|
+* These members are particular to the transport driver and any implicit
+*   protocol it might contain.
+*******************************************************************************/
+
+int8_t RN4677::connect() {
+  return 0;
+}
+
+
+int8_t RN4677::listen() {
+  return 0;
+}
+
+
+bool RN4677::write_port(unsigned char* out, int out_len) {
+  //HAL_UART_Transmit_DMA
+  return true;
+}
+
+
+int8_t RN4677::read_port() {
+  return 0;
+}
+
 
 
 /**
@@ -75,7 +175,6 @@ void RN4677::gpioSetup() {
   if (-1 < _pins.p15) gpioDefine(_pins.p15, INPUT);
   if (-1 < _pins.p37) gpioDefine(_pins.p37, INPUT);
 
-
   /* These Port C pins are inputs:
   *
   * #  Default   Purpose
@@ -83,7 +182,6 @@ void RN4677::gpioSetup() {
   * 3     -      BT_LED_1
   */
   if (-1 < _pins.led) setPinFxn(_pins.led, CHANGE, bt_gpio_5_proxy);
-
 
   /* These Port D pins are inputs:
   *

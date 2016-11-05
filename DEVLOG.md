@@ -116,3 +116,8 @@ RN driver... Prior to member re-work to use a Pin object.
     281936    2800    9664  294400 GPIO treatment is now safe.
     282064    2800    9664  294528 GPIO mapper completed and safe.
     282600    2800    9664  295064 Power down and sleep support.
+
+### 2016.11.04:
+
+    283168    2800    9664  295632 New baseline after adding to PMU.
+    283388    2800    9700  295888 Building up support for the BT module.

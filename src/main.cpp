@@ -332,14 +332,6 @@ int main(void) {
 
 
   RN4677Pins rn_pins;  // TODO: Still not happy about this. Needless stack burn. Const.
-  /* These Port E pins are push-pull outputs:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 4     0      ~BT_RESET
-  * 5     1      BT_EAN
-  * 6     1      BT_PIO_24
-  */
   rn_pins.reset = 68;
   rn_pins.ean   = 69; // WO, SystemConf. Pull-down.
   rn_pins.p24   = 70; // WO, SystemConf. Pull-up.

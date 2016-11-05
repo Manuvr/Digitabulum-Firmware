@@ -150,8 +150,8 @@ class RNBase : public ManuvrXport {
     //virtual int8_t disconnect();
     virtual int8_t listen();
     virtual int8_t reset();
-    bool   write_port(unsigned char* out, int out_len);
-    int8_t read_port();
+    virtual bool   write_port(unsigned char* out, int out_len);
+    virtual int8_t read_port();
 
     /* Overrides from EventReceiver */
     void printDebug(StringBuilder *);

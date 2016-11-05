@@ -19,7 +19,7 @@ limitations under the License.
 
 */
 
-#include <stm32f7xx_hal_dma.h>
+//#include <stm32f7xx_hal_dma.h>
 #include "RNBase.h"
 #include "XenoSession/XenoSession.h"
 #include <Drivers/BusQueue/BusQueue.h>
@@ -56,11 +56,6 @@ const MessageTypeDef rn_module_message_defs[] = {
 
 #endif
 
-/*
-*
-*/
-void USART2_IRQHandler(void) {
-}
 
 /*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.

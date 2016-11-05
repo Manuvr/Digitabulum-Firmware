@@ -125,7 +125,14 @@ class RN4677 : public RNBase {
     virtual ~RN4677();
 
     /* Overrides from the Transport class. */
+    int8_t connect();
+    //virtual int8_t disconnect();
+    int8_t listen();
+    bool   write_port(unsigned char* out, int out_len);
+    int8_t read_port();
 
+    void tx_wakeup();
+    void rx_wakeup();
 
     /* Overrides from EventReceiver */
     void printDebug(StringBuilder *);
