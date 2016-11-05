@@ -59,6 +59,7 @@ extern "C" {
   static volatile bool _tx_in_progress = false;
   static volatile bool _rx_ready       = false;
 
+  static char inglorious_hack[16];
 
   /*
   *
@@ -76,6 +77,7 @@ extern "C" {
 
   void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     _rx_ready = true;
+    _rx_buf.concat(inglorious_hack[0]);
     ((RN4677*) RNBase::getInstance())->rx_wakeup();
   }
 
@@ -147,15 +149,29 @@ int8_t RN4677::listen() {
 
 bool RN4677::write_port(unsigned char* out, int out_len) {
   //HAL_UART_Transmit_DMA
-  return true;
+  local_log.concatf("Sending via UART2 (%d bytes)\n", out_len);
+  flushLocalLog();
+  return (HAL_OK == HAL_UART_Transmit_IT(&huart2, out, out_len));
 }
 
 
 int8_t RN4677::read_port() {
+  int n = _rx_buf.length();
+  if (n > 0) {
+    bytes_received += n;
+    local_log.concatf("%c (0x%02x)\n", inglorious_hack[0], inglorious_hack[0]);
+    flushLocalLog();
+    BufferPipe::fromCounterparty(&_rx_buf, MEM_MGMT_RESPONSIBLE_BEARER);
+    HAL_UART_Receive_IT(&huart2, (uint8_t*) &inglorious_hack, 1);
+    return n;
+  }
   return 0;
 }
 
 
+/*******************************************************************************
+* RN-Module member fxns
+*******************************************************************************/
 
 /**
 * Setup GPIO pins and their bindings to on-chip peripherals, if required.
@@ -311,8 +327,8 @@ void RN4677::set_bitrate(int _bitrate) {
   HAL_NVIC_SetPriority(USART2_IRQn, 1, 1);
   HAL_NVIC_EnableIRQ(USART2_IRQn);
   HAL_NVIC_ClearPendingIRQ(USART2_IRQn);
-  HAL_UART_Init(&huart2);
-  USART2->CR1 |= USART_CR1_RXNEIE | USART_CR1_IDLEIE;
+  //HAL_UART_Init(&huart2);
+  //USART2->CR1 |= USART_CR1_RXNEIE | USART_CR1_IDLEIE;
 
   HAL_UART_Init(&huart2);    // finally this enables the complete USART2 peripheral
 }

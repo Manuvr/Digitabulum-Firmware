@@ -121,3 +121,8 @@ RN driver... Prior to member re-work to use a Pin object.
 
     283168    2800    9664  295632 New baseline after adding to PMU.
     283388    2800    9700  295888 Building up support for the BT module.
+
+My god.... RNBase has bad smell. Three refactors died in there and were never cleaned out.
+
+    283564    2800    9716  296080 Can stand it no longer... About to cull...
+    

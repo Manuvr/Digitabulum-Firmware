@@ -519,7 +519,7 @@ int8_t RNBase::idleService(void) {
   through one of the states. We don't know going into this call how many states
   we will traverse before our work is done.
   */
-  while (true) {
+  //while (true) {
     if (current_work_item) {
       if (current_work_item->completed) {   // Is it completed?
         if (current_work_item->xenomsg_id) {
@@ -575,7 +575,7 @@ int8_t RNBase::idleService(void) {
         return 0;  // Nothing more to process.
       }
     }
-  }
+  //}
 }
 
 
@@ -819,6 +819,7 @@ int8_t RNBase::sendBuffer(StringBuilder* _to_send) {
   if (nullptr == _to_send) return -1;
   #ifdef __MANUVR_DEBUG
     if (getVerbosity() > 3) local_log.concatf("We about to print %d bytes to the host.\n", _to_send->length());
+    flushLocalLog();
   #endif
   printToHost(_to_send);
   return 0;
@@ -923,7 +924,7 @@ int8_t RNBase::attached() {
     read_abort_event.autoClear(false);
     reset();
     #if !defined (__BUILD_HAS_THREADS)
-      read_abort_event.enableSchedule(true);
+      //read_abort_event.enableSchedule(true);
       read_abort_event.alterScheduleRecurrence(-1);
       platform.kernel()->addSchedule(&read_abort_event);
     #else
