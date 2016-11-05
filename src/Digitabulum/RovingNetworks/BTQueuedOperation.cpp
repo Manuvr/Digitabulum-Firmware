@@ -77,15 +77,12 @@ BTQueuedOperation::BTQueuedOperation() {
 }
 
 
-BTQueuedOperation::BTQueuedOperation(BusOpcode nu_op) {
-  wipe();
-  this->opcode    = nu_op;
+BTQueuedOperation::BTQueuedOperation(BusOpcode nu_op) : BTQueuedOperation() {
+  opcode    = nu_op;
 }
 
 
-BTQueuedOperation::BTQueuedOperation(BusOpcode nu_op, StringBuilder* nu_data) {
-  wipe();
-  this->opcode    = nu_op;
+BTQueuedOperation::BTQueuedOperation(BusOpcode nu_op, StringBuilder* nu_data) : BTQueuedOperation(nu_op) {
   data.concatHandoff(nu_data);
 }
 
@@ -93,60 +90,59 @@ BTQueuedOperation::BTQueuedOperation(BusOpcode nu_op, StringBuilder* nu_data) {
 /*
 * Specialized constructor for direct buffer spec.
 */
-BTQueuedOperation::BTQueuedOperation(BusOpcode nu_op, unsigned char *nu_data, uint16_t nu_len) {
-  wipe();
-  this->opcode    = nu_op;
+BTQueuedOperation::BTQueuedOperation(BusOpcode nu_op, unsigned char *nu_data, uint16_t nu_len) : BTQueuedOperation(nu_op) {
   data.concat(nu_data, nu_len);
 }
 
 
-BTQueuedOperation::~BTQueuedOperation(void) {
+BTQueuedOperation::~BTQueuedOperation() {
   //StringBuilder log_item("Destroying completed job++++++++++++++++++++++++++++++++++\n");
   //printDebug(&log_item);
   //Kernel::log(&log_item);
 }
 
 
+void BTQueuedOperation::wipe() {
+  //completed  = false;
+  xfer_state = XferState::UNDEF;
+  xfer_fault = XferFault::NONE;
+  opcode     = BusOpcode::UNDEF;
+  buf        = NULL;
+  buf_len    = 0;
+  txn_id     = BusOp::next_txn_id++;
+  data.clear();
+}
+
 
 void BTQueuedOperation::set_data(BusOpcode nu_op, StringBuilder* nu_data) {
-  this->opcode    = nu_op;
+  opcode = nu_op;
   data.concatHandoff(nu_data);
   data.string();
 }
 
 
-void BTQueuedOperation::wipe() {
-  this->completed  = false;
-  this->initiated  = false;
-  this->xenomsg_id = 0;
-  this->opcode     = BusOpcode::UNDEF;
-  this->tx_buf     = NULL;
-  this->tx_len     = 0;
-  this->txn_id     = BusOp::next_txn_id++;
-  data.clear();
-}
-
-
-
 /*
 * This queue item can begin executing. This is where any bus access should be initiated.
 */
-int8_t BTQueuedOperation::begin(void) {
-  initiated = true;
+int8_t BTQueuedOperation::begin() {
+  xfer_state = XferState::INITIATE;
   switch (opcode) {
     case BusOpcode::TX_CMD_WAIT_RX:  // Transmit and remember.
+    case BusOpcode::TX_WAIT_RX:      // Transmit and remember.
     case BusOpcode::TX_CMD:          // Transmit and forget.
     case BusOpcode::TX:              // Transmit and forget.
-      tx_buf = data.string();
-      tx_len = data.length();
-      if (tx_len == 0) {
+      buf     = data.string();
+      buf_len = data.length();
+      if (buf_len == 0) {
+        markComplete();
         StringBuilder log_item;
+        xfer_state = XferState::FAULT;
+        xfer_fault = XferFault::BAD_PARAM;
         printDebug(&log_item);
         Kernel::log(&log_item);
-        mark_complete();
       }
       else {
-        initiated = true;
+        xfer_state = XferState::INITIATE;
         init_dma();
       }
       break;
@@ -162,21 +158,19 @@ int8_t BTQueuedOperation::begin(void) {
 
 
 /* Call to mark something completed that may not be. */
-int8_t BTQueuedOperation::abort(void) {
-  completed = true;
-  initiated = true;
-  tx_buf = NULL;
-  tx_len = 0;
+int8_t BTQueuedOperation::abort() {
+  xfer_state = XferState::COMPLETE;
+  buf       = NULL;
+  buf_len   = 0;
   RNBase::isr_bt_queue_ready();
   return 0;
 }
 
 
 /* Call to mark TX complete. */
-int8_t BTQueuedOperation::mark_complete(void) {
-  initiated = true;
-  tx_buf = NULL;
-  tx_len = 0;
+int8_t BTQueuedOperation::markComplete() {
+  buf       = NULL;
+  buf_len   = 0;
   enable_DMA_IRQ(false);
   HAL_DMA_Abort(&_dma_handle);
 
@@ -189,11 +183,11 @@ int8_t BTQueuedOperation::mark_complete(void) {
       break;
     case BusOpcode::TX_CMD:
     case BusOpcode::TX:
-      completed = true;
+      xfer_state = XferState::COMPLETE;
       RNBase::isr_bt_queue_ready();
       break;
     default:
-      completed = true;
+      xfer_state = XferState::COMPLETE;
       break;
   }
   data.clear();   // Clear the data we just sent.
@@ -210,13 +204,13 @@ int8_t BTQueuedOperation::mark_complete(void) {
 void BTQueuedOperation::printDebug(StringBuilder *output) {
   if (NULL == output) return;
   output->concatf("\n\t--- txn_id:  0x%08x -------------\n", txn_id);
-  output->concatf("\t  opcode:      %s\n", BusOp::getOpcodeString(opcode));
-  output->concatf("\t  comp/init:   %d/%d\n", completed, initiated);
+  output->concatf("\t opcode:      %s\n", BusOp::getOpcodeString(opcode));
+  output->concatf("\t comp/init:   %s\n", BusOp::getStateString(xfer_state));
 
   int tmp_len = data.length();
-  output->concatf("\t  length:      %d\n", tmp_len);
+  output->concatf("\t length:      %d\n", tmp_len);
   if (tmp_len > 0) {
-    output->concatf("\t  data:        %s\n", data.string());
+    output->concatf("\t data:        %s\n", data.string());
   }
 }
 
@@ -254,18 +248,18 @@ void BTQueuedOperation::buildDMAMembers() {
 * Thank you again, clive1
 * https://my.st.com/public/STe2ecommunities/mcu/Lists/cortex_mx_stm32/Flat.aspx?RootFolder=%2Fpublic%2FSTe2ecommunities%2Fmcu%2FLists%2Fcortex_mx_stm32%2FSTM32F4%20Discovery%20UART%20DMA%20TX%20Problem&FolderCTID=0x01200200770978C69A1141439FE559EB459D7580009C4E14902C3CDE46A77F0FFD06506F5B&currentviews=380
 *
-* DMA_InitStructure.DMA_BufferSize         = (uint16_t) tx_len;   // Why did clive1 have (len-1)??   // I know why. clive1 made a mistake.
+* DMA_InitStructure.DMA_BufferSize         = (uint16_t) buf_len;   // Why did clive1 have (len-1)??   // I know why. clive1 made a mistake.
 */
 int8_t BTQueuedOperation::init_dma() {
-  // Disable the DMA Tx Stream.
-  if (HAL_DMA_GetState(&_dma_handle) != HAL_DMA_STATE_RESET) __HAL_DMA_DISABLE(&_dma_handle);
-
-  HAL_DMA_Init(&_dma_handle);
-  HAL_DMA_Start_IT(&_dma_handle, (uint32_t) tx_buf, (uint32_t) huart2.pTxBuffPtr, (uint32_t) tx_len);
-
-  enable_DMA_IRQ(true);
-
-  /* Enable the USART Tx DMA request */
-  //USART_DMACmd(USART2, USART_DMAReq_Tx, ENABLE);
+//  // Disable the DMA Tx Stream.
+//  if (HAL_DMA_GetState(&_dma_handle) != HAL_DMA_STATE_RESET) __HAL_DMA_DISABLE(&_dma_handle);
+//
+//  HAL_DMA_Init(&_dma_handle);
+//  HAL_DMA_Start_IT(&_dma_handle, (uint32_t) buf, (uint32_t) huart2.pTxBuffPtr, (uint32_t) buf_len);
+//
+//  enable_DMA_IRQ(true);
+//
+//  /* Enable the USART Tx DMA request */
+//  //USART_DMACmd(USART2, USART_DMAReq_Tx, ENABLE);
   return 0;
 }

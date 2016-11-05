@@ -572,7 +572,8 @@ bool LSM9DSx_Common::reset_preformed_queue_item(SPIBusOp* op) {
       break;
     case XferState::INITIATE:
     case XferState::ADDR:
-    case XferState::IO_WAIT:
+    case XferState::TX_WAIT:
+    case XferState::RX_WAIT:
     case XferState::STOP:
     case XferState::COMPLETE:
     default:   // Functions like a primitive semaphore.

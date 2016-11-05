@@ -33,21 +33,11 @@ class RNBase;
 /*
 * This is the class that represents an item in the work queue.
 */
-class BTQueuedOperation {
+class BTQueuedOperation : public BusOp {
 
   public:
     StringBuilder data;       // Might need a raw buffer on the way to DMA...
-    BusOpcode  opcode;        // What is the nature of this work-queue item?
-
-    uint8_t*  tx_buf = NULL;
-    uint32_t  tx_len = 0;
     int       txn_id;          // How are we going to keep track of this item?
-
-    uint16_t  xenomsg_id = 0;
-
-    bool      completed;       // Can this buffer be reaped?
-    bool      initiated;       // Is this item fresh or is it waiting on a reply?
-
 
     BTQueuedOperation();
     BTQueuedOperation(BusOpcode nu_op);
@@ -68,7 +58,7 @@ class BTQueuedOperation {
     int8_t abort();
 
     /* Call to mark complete and follow the nominal message path. */
-    int8_t mark_complete();
+    int8_t markComplete();
 
     void wipe();
 

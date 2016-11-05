@@ -376,15 +376,16 @@ int8_t SPIBusOp::begin() {
   set_state(XferState::INITIATE);  // Indicate that we now have bus control.
 
   if ((opcode == BusOpcode::TX) || (2 < _param_len)) {
+    set_state((0 == buf_len) ? XferState::TX_WAIT : XferState::ADDR);
     //__HAL_SPI_ENABLE_IT(&hspi1, (SPI_IT_TXE));
     HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*) &STATIC_SINK, _param_len);
   }
   else {
+    set_state((0 == buf_len) ? XferState::RX_WAIT : XferState::ADDR);
     // We can afford to read two bytes into the same space as our xfer_params...
     HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*)(xfer_params + 2), 2);
   }
 
-  set_state((0 == buf_len) ? XferState::IO_WAIT : XferState::ADDR);
   return 0;
 }
 #pragma GCC diagnostic pop
@@ -455,7 +456,8 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
       abort(XferFault::HUNG_IRQ);
       return 0;
 
-    case XferState::IO_WAIT:
+    case XferState::TX_WAIT:
+    case XferState::RX_WAIT:
       markComplete();
       return 0;
 
@@ -465,14 +467,15 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
     case XferState::QUEUED:
     case XferState::ADDR:
       if (buf_len > 0) {
-        set_state(XferState::IO_WAIT);
         // We have 4 bytes to throw away from the params transfer.
         uint16_t tmpreg = hspi1.Instance->DR;
         tmpreg = hspi1.Instance->DR;
         if (opcode == BusOpcode::TX) {
+          set_state(XferState::TX_WAIT);
           HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) buf, buf_len);
         }
         else {
+          set_state(XferState::RX_WAIT);
           HAL_SPI_Receive_DMA(&hspi1, buf, buf_len);
           //HAL_NVIC_DisableIRQ(SPI1_IRQn);
           //HAL_DMA_Init(&_dma_r);

@@ -125,4 +125,9 @@ RN driver... Prior to member re-work to use a Pin object.
 My god.... RNBase has bad smell. Three refactors died in there and were never cleaned out.
 
     283564    2800    9716  296080 Can stand it no longer... About to cull...
-    
+    283628    2800    9780  296208 My hasty class-merger actually compiled.
+    283436    2800    9780  296016 Cut the xenomgs_id field and delegated constructors.
+    283436    2800    9748  295984 Cut the redundant buffer members.
+    283436    2800    9732  295968 Cut the last remaining boolean member.
+    283316    2800    9732  295848 Cruft elimination. Memory management fixes.
+    283348    2800    9732  295880 Consolidating some inlines. Adding granularity to IO_WAIT.

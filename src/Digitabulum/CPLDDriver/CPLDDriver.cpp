@@ -940,7 +940,8 @@ int8_t CPLDDriver::advance_work_queue() {
   timeout_punch = false;
   if (current_queue_item != NULL) {
     switch (current_queue_item->get_state()) {
-       case XferState::IO_WAIT:
+       case XferState::TX_WAIT:
+       case XferState::RX_WAIT:
          if (current_queue_item->hasFault()) {
            if (getVerbosity() > 3) local_log.concat("CPLDDriver::advance_work_queue():\t Failed at IO_WAIT.\n");
          }
