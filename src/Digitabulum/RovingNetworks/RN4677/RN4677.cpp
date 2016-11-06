@@ -62,25 +62,30 @@ extern "C" {
   uint32_t read_millis_1 = 0;
 
   static volatile bool _tx_in_progress = false;
-  static volatile bool _rx_ready       = false;
 
   /*
   *
   */
   void USART2_IRQHandler() {
+    if((__HAL_UART_GET_IT(&huart2, UART_IT_RXNE) != RESET) && (__HAL_UART_GET_IT_SOURCE(&huart2, UART_IT_RXNE) != RESET)) {
+      // SPLICE FROM HAL DRIVER
+      uint16_t* tmp;
+      uint16_t uhMask = huart2.Mask;
+      _rx_buf[_rx_buf_len++] = (uint8_t)(huart2.Instance->RDR & (uint8_t)uhMask);
+      // END SPLICE FROM HAL DRIVER
+      ((RN4677*) RNBase::getInstance())->rx_wakeup();
+      /* Clear RXNE interrupt flag */
+      __HAL_UART_SEND_REQ(&huart2, UART_RXDATA_FLUSH_REQUEST);
+    }
     HAL_UART_IRQHandler(&huart2);
   }
+
+
 
 
   void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
     _tx_in_progress = false;
     ((RN4677*) RNBase::getInstance())->tx_wakeup();
-  }
-
-
-  void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-    _rx_ready = true;
-    ((RN4677*) RNBase::getInstance())->rx_wakeup();
   }
 
 
@@ -153,7 +158,8 @@ bool RN4677::write_port(unsigned char* out, int out_len) {
   //HAL_UART_Transmit_DMA
   local_log.concatf("Sending via UART2 (%d bytes)\n", out_len);
   flushLocalLog();
-  return (HAL_OK == HAL_UART_Transmit_IT(&huart2, out, out_len));
+  _tx_in_progress = (HAL_OK == HAL_UART_Transmit_IT(&huart2, out, out_len));
+  return _tx_in_progress;
 }
 
 
@@ -167,10 +173,8 @@ int8_t RN4677::read_port() {
       read_millis_1 = millis();
     }
 
-      bytes_received += n;
     local_log.concatf("%c (0x%02x)\n", _rx_buf, _rx_buf);
     flushLocalLog();
-    HAL_UART_Receive_IT(&huart2, (uint8_t*) &_rx_buf, 1);
     return n;
   }
   return 0;
@@ -285,8 +289,8 @@ void RN4677::gpioSetup() {
 
   // Setting up USART2 to deal with the module...
   __USART2_CLK_ENABLE();
-	__HAL_RCC_USART2_CLK_ENABLE();
-	__HAL_RCC_USART2_FORCE_RESET();
+  __HAL_RCC_USART2_CLK_ENABLE();
+  __HAL_RCC_USART2_FORCE_RESET();
 
   GPIO_InitStruct.Pin       = GPIO_PIN_1 | GPIO_PIN_0;
   GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
@@ -339,7 +343,8 @@ void RN4677::set_bitrate(int _bitrate) {
   //USART2->CR1 |= USART_CR1_RXNEIE | USART_CR1_IDLEIE;
 
   HAL_UART_Init(&huart2);    // finally this enables the complete USART2 peripheral
-  HAL_UART_Receive_IT(&huart2, (uint8_t*) &_rx_buf[0], 1);
+  __HAL_UART_ENABLE_IT(&huart2, UART_IT_ERR);
+  __HAL_UART_ENABLE_IT(&huart2, UART_IT_RXNE);
 }
 
 
@@ -440,6 +445,10 @@ int8_t RN4677::callback_proc(ManuvrMsg* event) {
 */
 void RN4677::printDebug(StringBuilder *temp) {
   RNBase::printDebug(temp);
+  temp->concatf("-- _tx_in_progress:        %s\n", (_tx_in_progress ? "yes" : "no"));
+  temp->concatf("-- _rx_buf_len:            %d\n", _rx_buf_len);
+  temp->concatf("-- read_millis_0:          %lu\n", read_millis_0);
+  temp->concatf("-- read_millis_1:          %lu\n", read_millis_1);
   temp->concatf("-- Module mode:            %s\n", RN4677Pins::getModuleModeString(_pins.getModuleMode()));
   temp->concatf("--\t p05: %s \t p31: %s\n", (readPin(_pins.p05) ? "hi" : "lo"), (readPin(_pins.p31) ? "hi" : "lo"));
   temp->concatf("--\t p32: %s \t p33: %s\n", (readPin(_pins.p32) ? "hi" : "lo"), (readPin(_pins.p33) ? "hi" : "lo"));

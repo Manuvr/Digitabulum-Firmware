@@ -469,26 +469,23 @@ void RNBase::setAutoconnect(bool autocon) {
 /*
 * This gets called to service queue events.
 */
-int8_t RNBase::idleService(void) {
+int8_t RNBase::idleService() {
   /* Prepare to generate bugs....
   I normally wouldn't write something this way. The idea is to force an exit
   through one of the states. We don't know going into this call how many states
   we will traverse before our work is done.
   */
-  //while (true) {
+  while (true) {
     if (current_work_item) {
       if (current_work_item->isComplete()) {   // Is it completed?
-        //if (current_work_item->xenomsg_id) {
-          // If we have a xenomsg_id, we should tell the session that it completed.
+        if (BusOpcode::RX == current_work_item->get_opcode()) {
+          // This is meant for the session.
           if (haveFar()) {
-            //if (current_work_item->get_opcode()) {
-              #ifdef __MANUVR_DEBUG
-                if (getVerbosity() > 4) Kernel::log("RNBase About to mark message complete.\n");
-              #endif
-              //session->markMessageComplete(current_work_item->xenomsg_id);
-            //}
+            #ifdef __MANUVR_DEBUG
+              if (getVerbosity() > 4) Kernel::log("RNBase sending RX to application...\n");
+            #endif
           }
-        //}
+        }
         reclaimPreallocation(current_work_item);
         current_work_item = nullptr;
       }
@@ -533,7 +530,8 @@ int8_t RNBase::idleService(void) {
         return 0;  // Nothing more to process.
       }
     }
-  //}
+  }
+  return 0;
 }
 
 
@@ -546,10 +544,8 @@ int8_t RNBase::idleService(void) {
 */
 void RNBase::master_mode(bool force_master_mode) {
   if (force_master_mode) {
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
   }
   else {
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
   }
   reset();
 }
@@ -565,6 +561,7 @@ int8_t RNBase::burn_or_recycle_current() {
       // If there is an un-initiated counterparty transaction waiting, displace it.
       // Re-queue with retry priority.
       work_queue.insert(current_work_item, RNBASE_RETRY_PRIORITY);
+      current_work_item->markQueued();
       current_work_item = nullptr;   // Let the downstream code do its job...
       return 1;
     }
@@ -601,11 +598,13 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
           // If there is an un-initiated counterparty transaction waiting, displace it.
           // Re-queue with retry priority.
           work_queue.insert(current_work_item, RNBASE_RETRY_PRIORITY);
+          current_work_item->markQueued();
           current_work_item = nullptr;   // Let the downstream code do its job...
         }
       }
       priority = RNBASE_CMD_PRIORITY;
       work_queue.insert(nu, priority);
+      nu->markQueued();
       break;
     case BusOpcode::TX:
       if (nullptr == current_work_item) {
@@ -615,6 +614,7 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
       }
       else if (work_queue.size() <= RNBASE_MAX_BT_Q_DEPTH) {
         work_queue.insert(nu, priority);
+        nu->markQueued();
       }
       else {
         return_value = 0;
@@ -639,6 +639,31 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
 /*******************************************************************************
 * Private class members...                                                     *
 *******************************************************************************/
+
+void RNBase::process_connection_change(bool conn) {
+  connected(conn);
+  if (!conn) {
+    #ifdef __MANUVR_DEBUG
+      if (getVerbosity() > 3) local_log.concat("We lost our bluetooth connection. About to tear down the session...\n");
+    #endif
+    burn_or_recycle_current();
+    // Purge the queue.
+    for (int i = 0; i < work_queue.size(); i++) {
+      BTQueuedOperation* current = work_queue.dequeue();
+      if (BusOpcode::TX == current->get_opcode()) {
+        current->abort(XferFault::QUEUE_FLUSH);
+        reclaimPreallocation(current);
+      }
+      else {
+        work_queue.insert(current);
+        current->markQueued();
+      }
+    }
+  }
+  else {
+    idleService();
+  }
+}
 
 
 /**
@@ -902,8 +927,7 @@ void RNBase::printDebug(StringBuilder* temp) {
   temp->concatf("-- command mode            %s\n", (_er_flag(RNBASE_FLAG_CMD_MODE) ? "yes" : "no"));
   temp->concatf("-- autoconnect             %s\n", (_er_flag(RNBASE_FLAG_AUTOCONN) ? "yes" : "no"));
   if (getVerbosity() > 5) {
-    temp->concatf("-- last_gpio5              %u\n", last_gpio_5_event);
-    temp->concatf("-- gpio5 state             %s\n\n", ((GPIOB->IDR & GPIO_PIN_10) ? "high" : "low"));
+    temp->concatf("-- last_gpio5              %u\n\n", last_gpio_5_event);
   }
 }
 
@@ -912,25 +936,6 @@ void RNBase::printDebug(StringBuilder* temp) {
 int8_t RNBase::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
   switch (active_event->eventCode()) {
-    case MANUVR_MSG_BT_CONNECTION_LOST:
-      connected(false);
-      #ifdef __MANUVR_DEBUG
-        if (getVerbosity() > 3) local_log.concat("We lost our bluetooth connection. About to tear down the session...\n");
-      #endif
-      burn_or_recycle_current();
-      // Purge the queue.
-      for (int i = 0; i < work_queue.size(); i++) {
-        BTQueuedOperation* current = work_queue.dequeue();
-        if (BusOpcode::TX == current->get_opcode()) {
-          reclaimPreallocation(current);
-        }
-        else {
-          work_queue.insert(current);
-        }
-      }
-      return_value++;
-      break;
-
     case MANUVR_MSG_XPORT_SEND:
       {
         StringBuilder* temp_sb;
@@ -962,9 +967,6 @@ int8_t RNBase::notify(ManuvrMsg* active_event) {
       return_value++;
       break;
 
-    case MANUVR_MSG_BT_CONNECTION_GAINED:
-      connected(true);
-      return_value++;
     case MANUVR_MSG_BT_ENTERED_CMD_MODE:
     case MANUVR_MSG_BT_EXITED_CMD_MODE:
     case MANUVR_MSG_XPORT_QUEUE_RDY:
@@ -1012,6 +1014,15 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
         current_work_item = nullptr;
       }
       break;
+    case 'c':
+      local_log.concat("RNBase: enterCommandMode()\n");
+      enterCommandMode();
+      break;
+    case 'C':
+      local_log.concat("RNBase: exitCommandMode()\n");
+      exitCommandMode();
+      break;
+
     case 'm':
       {
         int tmp_str_len = strlen((char*) str+1);

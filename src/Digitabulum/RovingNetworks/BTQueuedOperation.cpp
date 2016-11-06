@@ -163,7 +163,6 @@ int8_t BTQueuedOperation::abort(XferFault cause) {
   xfer_fault = cause;
   buf       = NULL;
   buf_len   = 0;
-  RNBase::isr_bt_queue_ready();
   return 0;
 }
 

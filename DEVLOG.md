@@ -131,3 +131,4 @@ My god.... RNBase has bad smell. Three refactors died in there and were never cl
     283436    2800    9732  295968 Cut the last remaining boolean member.
     283316    2800    9732  295848 Cruft elimination. Memory management fixes.
     283348    2800    9732  295880 Consolidating some inlines. Adding granularity to IO_WAIT.
+    283036    2800    9508  295344 Stripped some complexity from session notify().

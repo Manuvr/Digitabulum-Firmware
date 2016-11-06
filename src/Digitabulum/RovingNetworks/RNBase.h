@@ -42,8 +42,6 @@ TODO: This class is in SORE need of the following things:
 
 #define MANUVR_MSG_BT_EXIT_RESET        0x4295
 #define MANUVR_MSG_BT_EXPIRE_LOCKOUT    0x4296
-#define MANUVR_MSG_BT_CONNECTION_LOST   0x1000 //
-#define MANUVR_MSG_BT_CONNECTION_GAINED 0x1001 //
 #define MANUVR_MSG_BT_ENTERED_CMD_MODE  0x1005 // The module entered command mode.
 #define MANUVR_MSG_BT_EXITED_CMD_MODE   0x1006 // The module exited command mode.
 
@@ -192,6 +190,7 @@ class RNBase : public ManuvrXport {
 
     int8_t idleService();
     void feed_rx_buffer(unsigned char*, uint8_t len);   // Append to the class receive buffer.
+    void process_connection_change(bool conn);
     virtual int8_t sendBuffer(StringBuilder*);
 
     void printQueue(StringBuilder*);
