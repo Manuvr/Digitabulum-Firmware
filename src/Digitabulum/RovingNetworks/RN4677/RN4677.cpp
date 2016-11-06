@@ -68,18 +68,18 @@ extern "C" {
   */
   void USART2_IRQHandler() {
     if((__HAL_UART_GET_IT(&huart2, UART_IT_RXNE) != RESET) && (__HAL_UART_GET_IT_SOURCE(&huart2, UART_IT_RXNE) != RESET)) {
-      // SPLICE FROM HAL DRIVER
-      uint16_t* tmp;
-      uint16_t uhMask = huart2.Mask;
-      _rx_buf[_rx_buf_len++] = (uint8_t)(huart2.Instance->RDR & (uint8_t)uhMask);
+      _rx_buf[_rx_buf_len++ % MAX_UART_STR_LEN] = (uint8_t) huart2.Instance->RDR;
       // END SPLICE FROM HAL DRIVER
       ((RN4677*) RNBase::getInstance())->rx_wakeup();
       /* Clear RXNE interrupt flag */
       __HAL_UART_SEND_REQ(&huart2, UART_RXDATA_FLUSH_REQUEST);
     }
-    HAL_UART_IRQHandler(&huart2);
+    else {
+      // TX and errors, we let HAL deal with for now.
+      HAL_UART_IRQHandler(&huart2);
+      USART2->CR1 |= USART_CR1_RXNEIE;
+    }
   }
-
 
 
 
@@ -108,6 +108,8 @@ extern "C" {
 
 RN4677::RN4677(RN4677Pins* p) : RNBase((RNPins*) p) {
   setReceiverName("RN4677");
+  _cmd_return_str = RN4677_CMD_RETURN_STR;
+  _cmd_exit_str   = RN4677_CMD_EXIT_RTRN_STR;
   memcpy(&_pins, p, sizeof(RN4677Pins));
 }
 
@@ -166,15 +168,10 @@ bool RN4677::write_port(unsigned char* out, int out_len) {
 int8_t RN4677::read_port() {
   int n = _rx_buf_len;
   if (n > 0) {
-    if ((_rx_buf[0] == '\n') || (_rx_buf_len == MAX_UART_STR_LEN)) {
-      bytes_received += n;
-      feed_rx_buffer((unsigned char*) &_rx_buf[0], n);
-      _rx_buf_len = 0;
-      read_millis_1 = millis();
-    }
-
-    local_log.concatf("%c (0x%02x)\n", _rx_buf, _rx_buf);
-    flushLocalLog();
+    bytes_received += n;
+    size_t _rx_buf_taken = feed_rx_buffer((unsigned char*) &_rx_buf[0], n);
+    _rx_buf_len = 0;
+    read_millis_1 = millis();
     return n;
   }
   return 0;
@@ -291,6 +288,7 @@ void RN4677::gpioSetup() {
   __USART2_CLK_ENABLE();
   __HAL_RCC_USART2_CLK_ENABLE();
   __HAL_RCC_USART2_FORCE_RESET();
+  __HAL_RCC_USART2_RELEASE_RESET();
 
   GPIO_InitStruct.Pin       = GPIO_PIN_1 | GPIO_PIN_0;
   GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
@@ -298,6 +296,9 @@ void RN4677::gpioSetup() {
   GPIO_InitStruct.Speed     = GPIO_SPEED_HIGH;
   GPIO_InitStruct.Alternate = GPIO_AF7_USART2;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  //gpioDefine(0, INPUT);
+  //gpioDefine(1, OUTPUT);
+  //setPin(1, false);
 
   GPIO_InitStruct.Pin       = GPIO_PIN_2 | GPIO_PIN_3;
   GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
@@ -332,6 +333,7 @@ void RN4677::set_bitrate(int _bitrate) {
   huart2.Init.Parity                 = UART_PARITY_NONE;
   huart2.Init.Mode                   = UART_MODE_TX_RX;
   huart2.Init.HwFlowCtl              = UART_HWCONTROL_RTS_CTS;
+  //huart2.Init.HwFlowCtl              = UART_HWCONTROL_NONE;
   huart2.Init.OverSampling           = UART_OVERSAMPLING_16;
   huart2.Init.OneBitSampling         = UART_ONEBIT_SAMPLING_DISABLED;
   huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
@@ -343,8 +345,8 @@ void RN4677::set_bitrate(int _bitrate) {
   //USART2->CR1 |= USART_CR1_RXNEIE | USART_CR1_IDLEIE;
 
   HAL_UART_Init(&huart2);    // finally this enables the complete USART2 peripheral
+  USART2->CR1 |= USART_CR1_RXNEIE;
   __HAL_UART_ENABLE_IT(&huart2, UART_IT_ERR);
-  __HAL_UART_ENABLE_IT(&huart2, UART_IT_RXNE);
 }
 
 
@@ -360,13 +362,10 @@ void RN4677::force_9600_mode(bool force_low_speed) {
   // TODO: This convention and nomenclature are inverted.
   if (force_low_speed) {
     set_bitrate(9600);
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
   }
   else {
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
     set_bitrate(115200);
   }
-
   reset();
 }
 
@@ -431,6 +430,7 @@ int8_t RN4677::callback_proc(ManuvrMsg* event) {
       event->clearArgs();
       break;
     default:
+      return_value = RNBase::callback_proc(event);
       break;
   }
 
@@ -443,16 +443,21 @@ int8_t RN4677::callback_proc(ManuvrMsg* event) {
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
-void RN4677::printDebug(StringBuilder *temp) {
-  RNBase::printDebug(temp);
-  temp->concatf("-- _tx_in_progress:        %s\n", (_tx_in_progress ? "yes" : "no"));
-  temp->concatf("-- _rx_buf_len:            %d\n", _rx_buf_len);
-  temp->concatf("-- read_millis_0:          %lu\n", read_millis_0);
-  temp->concatf("-- read_millis_1:          %lu\n", read_millis_1);
-  temp->concatf("-- Module mode:            %s\n", RN4677Pins::getModuleModeString(_pins.getModuleMode()));
-  temp->concatf("--\t p05: %s \t p31: %s\n", (readPin(_pins.p05) ? "hi" : "lo"), (readPin(_pins.p31) ? "hi" : "lo"));
-  temp->concatf("--\t p32: %s \t p33: %s\n", (readPin(_pins.p32) ? "hi" : "lo"), (readPin(_pins.p33) ? "hi" : "lo"));
-  temp->concatf("--\t p34: %s \t p37: %s\n", (readPin(_pins.p34) ? "hi" : "lo"), (readPin(_pins.p37) ? "hi" : "lo"));
+void RN4677::printDebug(StringBuilder* output) {
+  RNBase::printDebug(output);
+  output->concatf("-- huart2.State:           0x%08x\n", (unsigned long) huart2.State);
+  if (huart2.ErrorCode) {
+    output->concatf("-- huart2.ErrorCode:       0x%08x\n", (unsigned long) huart2.ErrorCode);
+  }
+  output->concatf("-- _tx_in_progress:        %s\n", (_tx_in_progress ? "yes" : "no"));
+  output->concatf("-- _rx_buf (%02d bytes:     ", _rx_buf_len);
+  for (int i = 0; i < _rx_buf_len; i++) { output->concatf(" %02x", _rx_buf[i]); }
+  output->concatf("\n-- read_millis_0:          %lu\n", read_millis_0);
+  output->concatf("-- read_millis_1:          %lu\n", read_millis_1);
+  output->concatf("-- Module mode:            %s\n", RN4677Pins::getModuleModeString(_pins.getModuleMode()));
+  output->concatf("--\t p05: %s \t p31: %s\n", (readPin(_pins.p05) ? "hi" : "lo"), (readPin(_pins.p31) ? "hi" : "lo"));
+  output->concatf("--\t p32: %s \t p33: %s\n", (readPin(_pins.p32) ? "hi" : "lo"), (readPin(_pins.p33) ? "hi" : "lo"));
+  output->concatf("--\t p34: %s \t p37: %s\n", (readPin(_pins.p34) ? "hi" : "lo"), (readPin(_pins.p37) ? "hi" : "lo"));
 }
 
 
@@ -493,6 +498,9 @@ void RN4677::procDirectDebugInstruction(StringBuilder *input) {
         local_log.concatf("RN4677 o%s.\n", (*(str) == 'P' ? "n" : "ff"));
       }
       break;
+    case 'e':
+      read_port();
+      break;
     default:
       RNBase::procDirectDebugInstruction(input);
       break;
@@ -522,7 +530,7 @@ const char* RN4677Pins::getModuleModeString(RN4677ModuleMode m) {
 
 RN4677ModuleMode RN4677Pins::getModuleMode() {
   uint8_t return_value = 0;
-  if (readPin(p04)) return_value += 1;
-  if (readPin(p15)) return_value += 2;
+  if (readPin(p04)) return_value += 2;
+  if (readPin(p15)) return_value += 1;
   return (RN4677ModuleMode) return_value;
 }

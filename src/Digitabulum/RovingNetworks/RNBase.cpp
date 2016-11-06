@@ -323,15 +323,15 @@ int8_t RNBase::read_port() {
 * @param cmd  A pointer to the string to be sent to the module.
 */
 void RNBase::sendGeneralCommand(StringBuilder *cmd) {
-  enterCommandMode();
-  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, cmd);
-  exitCommandMode();
   #ifdef __MANUVR_DEBUG
     if (getVerbosity() > 5) {
-      local_log.concatf("Sent command %s.\n", cmd->string());
+      local_log.concatf("Sending command %s.\n", cmd->string());
       Kernel::log(&local_log);
     }
   #endif
+  enterCommandMode();
+  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, cmd);
+  exitCommandMode();
 }
 
 
@@ -470,6 +470,7 @@ void RNBase::setAutoconnect(bool autocon) {
 * This gets called to service queue events.
 */
 int8_t RNBase::idleService() {
+  read_port();
   /* Prepare to generate bugs....
   I normally wouldn't write something this way. The idea is to force an exit
   through one of the states. We don't know going into this call how many states
@@ -675,55 +676,83 @@ void RNBase::process_connection_change(bool conn) {
 *   queue item 'complete'. Raise the idle service event, and put the remainder
 *   of the inbound buffer (after the '\n') into a new work-queue item.
 */
-void RNBase::feed_rx_buffer(unsigned char *nu, uint8_t len) {
-  if (_er_flag(RNBASE_FLAG_CMD_MODE | RNBASE_FLAG_CMD_PEND)) {
-    BTQueuedOperation *local_work_item = (nullptr != current_work_item) ? current_work_item : work_queue.get();
-    if (nullptr != local_work_item) {
-      switch (local_work_item->get_opcode()) {
-        case BusOpcode::TX_CMD_WAIT_RX:
-          // We make sure that we tell the class if we are expecting a change in this state.
-          _er_set_flag(RNBASE_FLAG_CMD_PEND, !_er_flag(RNBASE_FLAG_CMD_MODE));
-          local_work_item->data.concat(nu, len);
-          //output.concatf("Rx Local work item length: %d\n", local_work_item->data.length());
-          break;
+size_t RNBase::feed_rx_buffer(unsigned char *nu, size_t len) {
+  size_t remaining_len = len;
+  while (remaining_len > 0) {
+    if (_er_flag(RNBASE_FLAG_CMD_PEND)) {
+      // Reasoning... If the module is in RNBASE_FLAG_CMD_PEND, it can only be $$$.
+      if (current_work_item) {
+        if (BusOpcode::TX_CMD_WAIT_RX == current_work_item->get_opcode()) {
+          size_t temp_len = strict_min((uint32_t) strlen(_cmd_return_str), (uint32_t) remaining_len);
+          if ((remaining_len > temp_len) && (0 != memcmp(nu, _cmd_return_str, temp_len))) {
+            // This is the command prompt.
+            _er_set_flag(RNBASE_FLAG_CMD_PEND, false);
+            _er_set_flag(RNBASE_FLAG_CMD_MODE, true);
+            remaining_len -= temp_len;
+            current_work_item->markComplete();
+          }
+        }
+      }
 
-        case BusOpcode::TX_CMD:
-        case BusOpcode::TX:
+      if (_er_flag(RNBASE_FLAG_CMD_PEND)) {
+        local_log.concat("RNBase: Something has gone bad wrong in feed_rx_buffer().\n");
+        return (len - remaining_len);
+      }
+    }
+    else if (_er_flag(RNBASE_FLAG_CMD_MODE)) {
+      uint8_t* end_idx = (uint8_t*) memchr(nu, '\n', remaining_len);
+      if (nullptr == end_idx) {
+        return (len - remaining_len);
+      }
+      else {
+        remaining_len = end_idx - nu;
+      }
+
+      if (current_work_item) {
+        if (BusOpcode::TX_CMD_WAIT_RX == current_work_item->get_opcode()) {
+          size_t temp_len = strict_min((uint32_t) strlen(_cmd_exit_str), (uint32_t) remaining_len);
+          if ((remaining_len > temp_len) && (0 != memcmp(nu, _cmd_exit_str, temp_len))) {
+            _er_set_flag(RNBASE_FLAG_CMD_MODE, true);
+            remaining_len -= temp_len;
+            current_work_item->markComplete();
+          }
+        }
+        else {
           #ifdef __MANUVR_DEBUG
           if (getVerbosity() > 2) {
-            local_log.concat("Don't know what to do with data. In command_mode (or pending), but have wrong opcode for work_queue item.\n\t");
-            for (int i = 0; i < len; i++) {
+            local_log.concat("RNBase: In command_mode (or pending), but have wrong opcode for work_queue item.\n\t");
+            for (int i = 0; i < remaining_len; i++) {
               local_log.concatf("0x%02x ", *(nu + i));
             }
             local_log.concat("\n\n");
           }
           #endif
-          local_work_item->abort(XferFault::ILLEGAL_STATE);
-          break;
-        default:
-          #ifdef __MANUVR_DEBUG
-          if (getVerbosity() > 2) local_log.concat("RNBase: Unknown opcode.\n");
-          #endif
-          break;
-      }
-    }
-    else {
-      #ifdef __MANUVR_DEBUG
-      if (getVerbosity() > 2) {
-        local_log.concatf("Don't know what to do with data. In command_mode (or pending), but have no work_queue item to feed.\n\t");
-        for (int i = 0; i < len; i++) {
-          local_log.concatf("0x%02x ", *(nu + i));
+          current_work_item->abort(XferFault::ILLEGAL_STATE);
+          return (len - remaining_len);
         }
-        local_log.concat("\n\n");
       }
-      #endif
+      else {
+        #ifdef __MANUVR_DEBUG
+        // TODO: I have _never_ seen this happen.
+        if (getVerbosity() > 2) {
+          local_log.concatf("Don't know what to do with data. In command_mode (or pending), but have no work_queue item to feed.\n\t");
+          for (int i = 0; i < remaining_len; i++) {
+            local_log.concatf("0x%02x ", *(nu + i));
+          }
+          local_log.concat("\n\n");
+        }
+        #endif
+        return (len - remaining_len);
+      }
     }
+    else {   // This data must be meant for a session... (So we hope)
+      // TODO: This is the most-likely case. Promote to top.
+      BufferPipe::fromCounterparty(nu, remaining_len, MEM_MGMT_RESPONSIBLE_BEARER);
+      remaining_len = 0;
+    }
+    flushLocalLog();
   }
-  else {   // This data must be meant for a session... (So we hope)
-    BufferPipe::fromCounterparty(nu, len, MEM_MGMT_RESPONSIBLE_BEARER);
-  }
-
-  if (local_log.length() > 0) Kernel::log(&local_log);
+  return (len - remaining_len);
 }
 
 
@@ -741,15 +770,6 @@ int8_t RNBase::sendBuffer(StringBuilder* _to_send) {
   return 0;
 }
 
-
-
-/*
-* Accept a buffer dump from the UART2 ISR. Feed the RNBASE. This should ultimately be DMA.
-*/
-volatile void RNBase::irqServiceBT_data_receive(unsigned char* nu, uint8_t len) {
-  if (nullptr == INSTANCE) return;
-  ((RNBase*) INSTANCE)->feed_rx_buffer(nu, len);
-}
 
 
 volatile void RNBase::isr_bt_queue_ready() {
@@ -921,7 +941,7 @@ void RNBase::printDebug(StringBuilder* temp) {
   temp->concatf("-- _heap_instantiations:   %u\n", (unsigned long) _heap_instantiations);
   temp->concatf("-- _heap_frees:            %u\n--\n", (unsigned long) _heap_frees);
 
-  temp->concatf("-- bitrate to module       %d\n", configured_bitrate);
+  temp->concatf("-- bitrate to module       %u\n", configured_bitrate);
   temp->concatf("-- lockout_active          %s\n", (_er_flag(RNBASE_FLAG_LOCK_OUT) ? "yes" : "no"));
   temp->concatf("-- command mode (pend)     %s\n", (_er_flag(RNBASE_FLAG_CMD_PEND) ? "yes" : "no"));
   temp->concatf("-- command mode            %s\n", (_er_flag(RNBASE_FLAG_CMD_MODE) ? "yes" : "no"));
@@ -1023,28 +1043,21 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
       exitCommandMode();
       break;
 
+    case 'M':
     case 'm':
       {
         int tmp_str_len = strlen((char*) str+1);
         if (tmp_str_len > 0) {
           *((char*) str+tmp_str_len) = 0x00; // Careful... tricky...
           StringBuilder *temp = new StringBuilder((char*) str+1);
-          local_log.concatf("Sending \"%s\" to RN.\n", ((char*) str+1));
-          //temp->concat("\r\n");
-          printToHost(temp);
-        }
-      }
-      break;
-
-    case 'M':
-      {
-        int tmp_str_len = strlen((char*) str+1);
-        if (tmp_str_len > 0) {
-          *((char*) str+tmp_str_len) = 0x00; // Careful... tricky...
-          StringBuilder *temp = new StringBuilder((char*) str+1);
+          local_log.concatf("Sending to RN: (%s)\n\"%s\"\n", ('M' == *str ? "CMD" : "HOST"), ((char*) str+1));
           temp->concat("\r\n");
-          local_log.concatf("Sending command \"%s\" to RN.\n", temp->string());
-          sendGeneralCommand(temp);
+          if ('M' == *str) {
+            sendGeneralCommand(temp);
+          }
+          else {
+            printToHost(temp);
+          }
         }
       }
       break;

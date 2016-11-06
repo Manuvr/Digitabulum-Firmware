@@ -171,26 +171,11 @@ int8_t BTQueuedOperation::abort(XferFault cause) {
 int8_t BTQueuedOperation::markComplete() {
   buf       = NULL;
   buf_len   = 0;
-  enable_DMA_IRQ(false);
-  HAL_DMA_Abort(&_dma_handle);
-
-  switch (opcode) {
-    case BusOpcode::TX_CMD_WAIT_RX:
-      {
-      // We need to be able to time out...
-      //Kernel::raiseEvent(MANUVR_MSG_BT_RX_BUF_NOT_EMPTY, NULL);
-      }
-      break;
-    case BusOpcode::TX_CMD:
-    case BusOpcode::TX:
-      xfer_state = XferState::COMPLETE;
-      RNBase::isr_bt_queue_ready();
-      break;
-    default:
-      xfer_state = XferState::COMPLETE;
-      break;
-  }
+  //enable_DMA_IRQ(false);
+  //HAL_DMA_Abort(&_dma_handle);
   data.clear();   // Clear the data we just sent.
+  xfer_state = XferState::COMPLETE;
+  RNBase::isr_bt_queue_ready();
   return 0;
 }
 
@@ -237,7 +222,7 @@ void BTQueuedOperation::buildDMAMembers() {
   _dma_handle.Init.PeriphBurst         = DMA_PBURST_SINGLE;
 
   /* Enable DMA Stream Transfer Complete interrupt */
-  enable_DMA_IRQ(false);
+  //enable_DMA_IRQ(false);
   //__HAL_DMA_ENABLE_IT(&_dma_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
 }
 

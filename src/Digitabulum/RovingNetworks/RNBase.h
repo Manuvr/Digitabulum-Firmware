@@ -186,10 +186,12 @@ class RNBase : public ManuvrXport {
 
 
   protected:
-    int configured_bitrate;   // The bitrate we have between the CPU and the RN.
+    uint32_t configured_bitrate;   // The bitrate we have between the CPU and the RN.
+    char*    _cmd_return_str = NULL;
+    char*    _cmd_exit_str   = NULL;
 
     int8_t idleService();
-    void feed_rx_buffer(unsigned char*, uint8_t len);   // Append to the class receive buffer.
+    size_t feed_rx_buffer(unsigned char*, size_t len);   // Append to the class receive buffer.
     void process_connection_change(bool conn);
     virtual int8_t sendBuffer(StringBuilder*);
 
