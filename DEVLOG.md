@@ -133,3 +133,5 @@ My god.... RNBase has bad smell. Three refactors died in there and were never cl
     283348    2800    9732  295880 Consolidating some inlines. Adding granularity to IO_WAIT.
     283036    2800    9508  295344 Stripped some complexity from session notify().
     283492    2800    9496  295788 Migrated gpio_5 fxns out of RNBase. Pruned cruft.
+    283388    2800    9496  295684 Relocation of hardware-specifics.
+    283236    2800    9496  295532 Cutting some needless string.

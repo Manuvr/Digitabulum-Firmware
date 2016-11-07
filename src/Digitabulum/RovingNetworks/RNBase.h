@@ -51,7 +51,6 @@ TODO: This class is in SORE need of the following things:
 #define RNBASE_MODE_COMMAND       "$$$"
 #define RNBASE_MODE_EXITCOMMAND   "---\r\n"
 #define RNBASE_MODE_SPP           "S~,0\r\n"
-#define RNBASE_MODE_HID           "S~,6\r\n"
 #define RNBASE_MODE_AUTOCONNECT   "SM,6\r\n"
 #define RNBASE_MODE_MANUCONNECT   "SM,4\r\n"
 #define RNBASE_MODE_STATUS        "SO,/#\r\n"
@@ -86,7 +85,8 @@ TODO: This class is in SORE need of the following things:
 //#define RNBASE_STATUS_CMD         "CMD\r\n"
 #define RNBASE_STATUS_CMD         "CMD>\r\n"
 #define RNBASE_STATUS_END         "END\r\n"
-#define RNBASE_STATUS_REBOOT      "Reboot!\r\n"
+//#define RNBASE_STATUS_REBOOT      "Reboot!\r\n"
+#define RNBASE_STATUS_REBOOT      "%REBOOT%\r\n"
 
 
 // These are only relevant for debug.
@@ -104,7 +104,7 @@ TODO: This class is in SORE need of the following things:
 #define RNBASE_FLAG_LOCK_OUT  0x01    // While this is true, don't interact with the RN.
 #define RNBASE_FLAG_CMD_MODE  0x02    // Set when the module is verified to be in command mode.
 #define RNBASE_FLAG_CMD_PEND  0x04    // Set when we are expecting the module to enter command mode.
-#define RNBASE_FLAG_AUTOCONN  0x08    // Should we connect whenever possible?
+#define RNBASE_FLAG_RESERVED2 0x08    //
 #define RNBASE_FLAG_REST_PEND 0x10    // Is a reset pending?
 #define RNBASE_FLAG_FORCE9600 0x20    // Are we forced into 9600 mode?
 #define RNBASE_FLAG_RESERVED0 0x40    //
@@ -186,8 +186,8 @@ class RNBase : public ManuvrXport {
 
   protected:
     uint32_t configured_bitrate;   // The bitrate we have between the CPU and the RN.
-    char*    _cmd_return_str = NULL;
-    char*    _cmd_exit_str   = NULL;
+    const char* _cmd_return_str = NULL;
+    const char* _cmd_exit_str   = NULL;
 
     int8_t idleService();
     size_t feed_rx_buffer(unsigned char*, size_t len);   // Append to the class receive buffer.
@@ -227,7 +227,6 @@ class RNBase : public ManuvrXport {
 
     /* Macros for RN radio states. */
     void master_mode(bool);       // Call with 'true' to switch the radio into master mode.
-    void setHIDMode(void);
     void setSPPMode(void);
     void setAutoconnect(bool);
 
@@ -250,7 +249,6 @@ class RNBase : public ManuvrXport {
 
     static BTQueuedOperation* fetchPreallocation();
     static void reclaimPreallocation(BTQueuedOperation*);
-
 };
 
 #endif  //__RNBASE_H__

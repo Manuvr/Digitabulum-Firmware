@@ -25,41 +25,6 @@ TODO: It would be really nice to unify this basic "work-queue" pattern and
 
 
 #include "RNBase.h"
-#include <stm32f7xx.h>
-#include <stm32f7xx_hal_dma.h>
-
-DMA_HandleTypeDef _dma_handle;
-
-extern UART_HandleTypeDef huart2;
-
-
-/**
-* Used to disable the DMA IRQs at the NVIC.
-*
-* @param bool enable the interrupts?
-*/
-void BTQueuedOperation::enable_DMA_IRQ(bool enable) {
-  if (!enable) {
-    HAL_NVIC_DisableIRQ(DMA1_Stream6_IRQn);
-  }
-  else {
-    // Clear all DMA flags.
-    __HAL_DMA_CLEAR_FLAG(&_dma_handle, DMA_FLAG_TCIF2_6 | DMA_FLAG_HTIF2_6 | DMA_FLAG_TEIF2_6 | DMA_FLAG_DMEIF2_6 | DMA_FLAG_FEIF2_6);
-    // Clear all possible pending interrupts.
-    //DMA_ClearITPendingBit(DMA1_Stream6, ());
-
-    // Allow the DMA module IRQ in the interrupt controller.
-    HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
-  }
-}
-
-//{
-//  HAL_OK       = 0x00,
-//  HAL_ERROR    = 0x01,
-//  HAL_BUSY     = 0x02,
-//  HAL_TIMEOUT  = 0x03
-//} HAL_StatusTypeDef;
-
 
 
 /***************************************************************************************
@@ -143,7 +108,7 @@ int8_t BTQueuedOperation::begin() {
       }
       else {
         xfer_state = XferState::INITIATE;
-        init_dma();
+        //init_dma();
       }
       break;
     default:
@@ -187,7 +152,6 @@ int8_t BTQueuedOperation::markComplete() {
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
 void BTQueuedOperation::printDebug(StringBuilder *output) {
-  if (NULL == output) return;
   output->concatf("\t --- txn_id:  0x%08x -------------\n", txn_id);
   output->concatf("\t opcode:      %s\n", BusOp::getOpcodeString(opcode));
   output->concatf("\t xfer_state:  %s\n", BusOp::getStateString(xfer_state));
@@ -200,54 +164,4 @@ void BTQueuedOperation::printDebug(StringBuilder *output) {
   if (tmp_len > 0) {
     output->concatf("\t data:        %s\n", data.string());
   }
-}
-
-
-
-void BTQueuedOperation::buildDMAMembers() {
-  HAL_DMA_DeInit(&_dma_handle);
-
-  _dma_handle.Instance                 = DMA1_Stream6;
-  _dma_handle.Init.Channel             = DMA_CHANNEL_4;
-  _dma_handle.Init.Direction           = DMA_MEMORY_TO_PERIPH;   // Transmit
-  _dma_handle.Init.PeriphInc           = DMA_PINC_DISABLE;
-  _dma_handle.Init.MemInc              = DMA_MINC_ENABLE;
-  _dma_handle.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-  _dma_handle.Init.MemDataAlignment    = DMA_MDATAALIGN_WORD;
-  _dma_handle.Init.Mode                = DMA_NORMAL;
-  _dma_handle.Init.Priority            = DMA_PRIORITY_LOW;
-  _dma_handle.Init.FIFOMode            = DMA_FIFOMODE_ENABLE;  // Required for differnt access-widths.
-  _dma_handle.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
-  _dma_handle.Init.MemBurst            = DMA_MBURST_SINGLE;
-  _dma_handle.Init.PeriphBurst         = DMA_PBURST_SINGLE;
-
-  /* Enable DMA Stream Transfer Complete interrupt */
-  //enable_DMA_IRQ(false);
-  //__HAL_DMA_ENABLE_IT(&_dma_handle, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
-}
-
-
-
-/*
-* This is actually the function that does the work of sending things to
-*   the host. It is to be the last stop for a buffer prior to being fed
-*   to USART2's DMA channel.
-*
-* Thank you again, clive1
-* https://my.st.com/public/STe2ecommunities/mcu/Lists/cortex_mx_stm32/Flat.aspx?RootFolder=%2Fpublic%2FSTe2ecommunities%2Fmcu%2FLists%2Fcortex_mx_stm32%2FSTM32F4%20Discovery%20UART%20DMA%20TX%20Problem&FolderCTID=0x01200200770978C69A1141439FE559EB459D7580009C4E14902C3CDE46A77F0FFD06506F5B&currentviews=380
-*
-* DMA_InitStructure.DMA_BufferSize         = (uint16_t) buf_len;   // Why did clive1 have (len-1)??   // I know why. clive1 made a mistake.
-*/
-int8_t BTQueuedOperation::init_dma() {
-//  // Disable the DMA Tx Stream.
-//  if (HAL_DMA_GetState(&_dma_handle) != HAL_DMA_STATE_RESET) __HAL_DMA_DISABLE(&_dma_handle);
-//
-//  HAL_DMA_Init(&_dma_handle);
-//  HAL_DMA_Start_IT(&_dma_handle, (uint32_t) buf, (uint32_t) huart2.pTxBuffPtr, (uint32_t) buf_len);
-//
-//  enable_DMA_IRQ(true);
-//
-//  /* Enable the USART Tx DMA request */
-//  //USART_DMACmd(USART2, USART_DMAReq_Tx, ENABLE);
-  return 0;
 }

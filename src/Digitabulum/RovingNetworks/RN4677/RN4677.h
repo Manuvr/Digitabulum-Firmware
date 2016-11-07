@@ -29,9 +29,6 @@ limitations under the License.
 #define RN4677_BT_SET_ISW         "SI,"     // Set inquiry scan window.
 #define RN4677_BT_SET_PSW         "SJ,"     // Set page scan window.
 
-#define RN4677_CMD_RETURN_STR     "CMD> "    //
-#define RN4677_CMD_EXIT_RTRN_STR  "END\r\n"  //
-
 #define RNBASE_CMD_CHANGE_NAME      "SN,"
 #define RNBASE_CMD_SET_STATUS_DELIM "SO,"   // Set extended status string.
 #define RNBASE_CMD_SET_SEC_PIN      "SP,"   // Set security pin.
@@ -138,7 +135,7 @@ class RN4677 : public RNBase {
     void rx_wakeup();
 
     /* Overrides from EventReceiver */
-    void printDebug(StringBuilder *);
+    void printDebug(StringBuilder*);
     int8_t notify(ManuvrMsg*);
     int8_t callback_proc(ManuvrMsg*);
     #if defined(MANUVR_CONSOLE_SUPPORT)
@@ -154,6 +151,7 @@ class RN4677 : public RNBase {
 
     int8_t modulePower(bool);
     int8_t moduleSleep(bool);
+    void printGPIOInfo(StringBuilder*);
 
     /* Set commands */
     //void setDeviceClass(uint16_t);

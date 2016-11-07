@@ -176,7 +176,7 @@ RNBase::RNBase(RNPins* pins) : ManuvrXport() {
 
   // Clear all the flags.
   _er_clear_flag(RNBASE_FLAG_LOCK_OUT | RNBASE_FLAG_CMD_MODE);
-  _er_clear_flag(RNBASE_FLAG_CMD_PEND | RNBASE_FLAG_AUTOCONN);
+  _er_clear_flag(RNBASE_FLAG_CMD_PEND);
 
   //connected(GPIOB->IDR & GPIO_PIN_10);
 }
@@ -274,7 +274,7 @@ int8_t RNBase::reset() {
   }
 
   _er_set_flag(RNBASE_FLAG_LOCK_OUT);
-  _er_clear_flag(RNBASE_FLAG_CMD_PEND | RNBASE_FLAG_AUTOCONN);
+  _er_clear_flag(RNBASE_FLAG_CMD_PEND);
 
   //connected(0 != HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_10));
   _queue_floods = 0;
@@ -338,17 +338,6 @@ void RNBase::sendGeneralCommand(const char *cmd) {
 
 
 /**
-* Put the module into HID mode. This setting persists across runtimes.
-*/
-void RNBase::setHIDMode(void) {
-  sendGeneralCommand(RNBASE_MODE_HID);
-  #ifdef __MANUVR_DEBUG
-    if (getVerbosity() > 5) Kernel::log("Tried to enter HID mode.\n");
-  #endif
-}
-
-
-/**
 * Put the module into SPP mode. This setting persists across runtimes.
 */
 void RNBase::setSPPMode(void) {
@@ -387,7 +376,6 @@ void RNBase::sendRebootCommand(void) {
 }
 
 
-
 /**
 * Send a break sequence to the module.
 *
@@ -399,6 +387,7 @@ int8_t RNBase::sendBreak() {
   return 0;
 }
 
+
 /**
 * Put the module into command mode.
 *
@@ -407,6 +396,7 @@ int8_t RNBase::sendBreak() {
 int8_t RNBase::enterCommandMode() {
   StringBuilder temp(RNBASE_MODE_COMMAND);
   insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, &temp);
+  _er_set_flag(RNBASE_FLAG_CMD_PEND, true);
   //start_lockout(1100);
   return 0;
 }
@@ -427,9 +417,9 @@ int8_t RNBase::exitCommandMode() {
 
 
 void RNBase::setAutoconnect(bool autocon) {
-  if (_er_flag(RNBASE_FLAG_AUTOCONN) ^ autocon) {
+  if (autoConnect() ^ autocon) {
+    autoConnect(autocon);
     enterCommandMode();
-    _er_set_flag(RNBASE_FLAG_CMD_PEND, autocon);
     StringBuilder temp(autocon ? RNBASE_MODE_AUTOCONNECT : RNBASE_MODE_MANUCONNECT);
     insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, &temp);
     #ifdef __MANUVR_DEBUG
@@ -490,7 +480,7 @@ int8_t RNBase::idleService() {
         switch (current_work_item->get_opcode()) {
           case BusOpcode::TX_CMD_WAIT_RX:
           case BusOpcode::TX_CMD:
-            _er_set_flag(RNBASE_FLAG_CMD_PEND, !_er_flag(RNBASE_FLAG_CMD_MODE));
+            //_er_set_flag(RNBASE_FLAG_CMD_PEND, !_er_flag(RNBASE_FLAG_CMD_MODE));
             current_work_item->begin();
             write_port(current_work_item->buf, current_work_item->buf_len);
             break;
@@ -506,7 +496,7 @@ int8_t RNBase::idleService() {
             break;
           default:
             #ifdef __MANUVR_DEBUG
-              if (getVerbosity() > 1) Kernel::log("idleService(): We should not be here (initiation block).\n");
+              if (getVerbosity() > 1) Kernel::log("idleService(): We should not be here.\n");
             #endif
             break;
         }
@@ -611,7 +601,7 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
       else {
         return_value = 0;
         #ifdef __MANUVR_DEBUG
-          if (getVerbosity() > 5) Kernel::log("Dropping BT send. Queue too large.\n");
+          if (getVerbosity() > 5) Kernel::log("Dropping BT send. Queue flooded.\n");
         #endif
         _queue_floods++;
         reclaimPreallocation(nu);
@@ -636,7 +626,7 @@ void RNBase::process_connection_change(bool conn) {
   connected(conn);
   if (!conn) {
     #ifdef __MANUVR_DEBUG
-      if (getVerbosity() > 3) local_log.concat("We lost our bluetooth connection. About to tear down the session...\n");
+      if (getVerbosity() > 3) Kernel::log("We lost connection...\n");
     #endif
     burn_or_recycle_current();
     // Purge the queue.
@@ -686,7 +676,7 @@ size_t RNBase::feed_rx_buffer(unsigned char *nu, size_t len) {
       }
 
       if (_er_flag(RNBASE_FLAG_CMD_PEND)) {
-        local_log.concat("RNBase: Something has gone bad wrong in feed_rx_buffer().\n");
+        Kernel::log("RNBase: Something has gone bad wrong in feed_rx_buffer().\n");
         return (len - remaining_len);
       }
     }
@@ -711,8 +701,8 @@ size_t RNBase::feed_rx_buffer(unsigned char *nu, size_t len) {
         else {
           #ifdef __MANUVR_DEBUG
           if (getVerbosity() > 2) {
-            local_log.concat("RNBase: In command_mode (or pending), but have wrong opcode for work_queue item.\n\t");
-            for (int i = 0; i < remaining_len; i++) {
+            Kernel::log("RNBase: In command_mode (or pending), but have wrong opcode for work_queue item.\n\t");
+            for (size_t i = 0; i < remaining_len; i++) {
               local_log.concatf("0x%02x ", *(nu + i));
             }
             local_log.concat("\n\n");
@@ -726,8 +716,8 @@ size_t RNBase::feed_rx_buffer(unsigned char *nu, size_t len) {
         #ifdef __MANUVR_DEBUG
         // TODO: I have _never_ seen this happen.
         if (getVerbosity() > 2) {
-          local_log.concatf("Don't know what to do with data. In command_mode (or pending), but have no work_queue item to feed.\n\t");
-          for (int i = 0; i < remaining_len; i++) {
+          Kernel::log("Don't know what to do with data. In command_mode (or pending), but have no work_queue item to feed.\n\t");
+          for (size_t i = 0; i < remaining_len; i++) {
             local_log.concatf("0x%02x ", *(nu + i));
           }
           local_log.concat("\n\n");
@@ -866,17 +856,20 @@ void RNBase::printQueue(StringBuilder* temp) {
 void RNBase::printDebug(StringBuilder* temp) {
   ManuvrXport::printDebug(temp);
   //temp->concatf("-- __prealloc_pool addres: 0x%08x\n", (uint32_t) __prealloc_pool);
-  temp->concatf("-- prealloc depth:         %d\n", preallocated.size());
-  temp->concatf("-- prealloc_starves:       %u\n", _prealloc_starves);
-  temp->concatf("-- queue_floods:           %u\n", (unsigned long) _queue_floods);
-  temp->concatf("-- _heap_instantiations:   %u\n", (unsigned long) _heap_instantiations);
-  temp->concatf("-- _heap_frees:            %u\n--\n", (unsigned long) _heap_frees);
+  temp->concatf("--\n-- depth:          %d\n", preallocated.size());
+  temp->concatf("-- starves:        %u\n", _prealloc_starves);
+  temp->concatf("-- queue_floods:   %u\n", (unsigned long) _queue_floods);
+  temp->concatf("-- _heap_allocs:   %u\n", (unsigned long) _heap_instantiations);
+  temp->concatf("-- _heap_frees:    %u\n--\n", (unsigned long) _heap_frees);
 
-  temp->concatf("-- bitrate to module       %u\n", configured_bitrate);
-  temp->concatf("-- lockout_active          %s\n", (_er_flag(RNBASE_FLAG_LOCK_OUT) ? "yes" : "no"));
-  temp->concatf("-- command mode (pend)     %s\n", (_er_flag(RNBASE_FLAG_CMD_PEND) ? "yes" : "no"));
-  temp->concatf("-- command mode            %s\n", (_er_flag(RNBASE_FLAG_CMD_MODE) ? "yes" : "no"));
-  temp->concatf("-- autoconnect             %s\n", (_er_flag(RNBASE_FLAG_AUTOCONN) ? "yes" : "no"));
+  temp->concatf("-- bitrate:        %u\n", configured_bitrate);
+  temp->concatf("-- lockout_active: %s\n", (_er_flag(RNBASE_FLAG_LOCK_OUT) ? "yes" : "no"));
+
+  const char* cmd_mode_str;
+  if (_er_flag(RNBASE_FLAG_CMD_MODE))      cmd_mode_str = "CMD";
+  else if (_er_flag(RNBASE_FLAG_CMD_PEND)) cmd_mode_str = "CMD_PENDING";
+  else cmd_mode_str = "DATA";
+  temp->concatf("-- cmd mode:       %s\n", cmd_mode_str);
 }
 
 
@@ -998,10 +991,6 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
         case 1:   // Set module in SPP mode.
           setSPPMode();
           break;
-        case 2:   // Set module in HID mode.
-          setHIDMode();
-          break;
-
         case 3:   // Show firmware revision.
           sendGeneralCommand(RNBASE_CMD_GET_FIRMWARE_REV);
           break;
@@ -1025,7 +1014,7 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
           break;
 
         case 200:
-          setDevName((char*) "ManuDelIon");
+          setDevName((char*) "Digitabulum");
           break;
         default:
           break;

@@ -34,7 +34,6 @@ class RNBase;
 * This is the class that represents an item in the work queue.
 */
 class BTQueuedOperation : public BusOp {
-
   public:
     StringBuilder data;       // Might need a raw buffer on the way to DMA...
     int       txn_id;          // How are we going to keep track of this item?
@@ -64,19 +63,8 @@ class BTQueuedOperation : public BusOp {
 
     void printDebug(StringBuilder *);
 
-    static void buildDMAMembers();
-
 
   private:
-    /*
-    * This is actually the function that does the work of sending things to
-    *   the counterparty. It is to be the last stop for a buffer prior to being fed
-    *   to USART2's DMA channel.
-    */
-    int8_t init_dma();
-
-
-    static void enable_DMA_IRQ(bool);
 };
 
 
