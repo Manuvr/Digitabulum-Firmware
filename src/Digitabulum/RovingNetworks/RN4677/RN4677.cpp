@@ -35,10 +35,60 @@ up to par.
 #include <stm32f7xx_hal_gpio.h>
 
 
-#define MAX_UART_STR_LEN 64
-
+/*******************************************************************************
+*      _______.___________.    ___   .___________. __    ______     _______.
+*     /       |           |   /   \  |           ||  |  /      |   /       |
+*    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
+*     \   \       |  |      /  /_\  \    |  |     |  | |  |        \   \
+* .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
+* |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
+*
+* Static members and initializers should be located here.
+*******************************************************************************/
 UART_HandleTypeDef huart2;
-extern void bt_gpio_5_proxy();
+
+void RN4677::bt_gpio_5() {
+  RN4677* inst = ((RN4677*) RNBase::getInstance());
+  if (nullptr == inst) return;
+  unsigned long ms = millis();
+  if (inst->_last_gpio_5_event != 0) {
+    unsigned long delta = wrap_accounted_delta(ms, inst->_last_gpio_5_event);
+//    if (delta < 500) {
+//      // Probably the 10Hz signal. Means we are in command mode.
+//      if (INSTANCE != nullptr) {
+//        if (!((RNBase*) INSTANCE)->_er_flag(RNBASE_FLAG_CMD_MODE)) {
+//          ((RNBase*) INSTANCE)->_er_set_flag(RNBASE_FLAG_CMD_MODE);
+//          ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_CMD_PEND);
+//          ManuvrMsg *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_ENTERED_CMD_MODE);
+//          Kernel::isrRaiseEvent(nu_event);
+//        }
+//      }
+//    }
+//    else if (delta < 3500) {
+//      // Probably the 1Hz signal. Means we are discoverable and waiting for connection.
+//      if (INSTANCE != nullptr) {
+//        if (((RNBase*) INSTANCE)->_er_flag(RNBASE_FLAG_CMD_MODE)) {
+//          ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_CMD_MODE | RNBASE_FLAG_CMD_PEND | RNBASE_FLAG_LOCK_OUT);
+//          ManuvrMsg *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_EXITED_CMD_MODE);
+//          Kernel::isrRaiseEvent(nu_event);
+//        }
+//      }
+//    }
+//    else {
+//      //Kernel::raiseEvent(MANUVR_MSG_BT_CONNECTION_GAINED, nullptr);
+//      // Should watch GPIO2 for this.
+//    }
+  }
+  inst->_last_gpio_5_event = ms;
+
+  #ifdef __MANUVR_DEBUG
+    if (inst->getVerbosity() > 6) {
+      StringBuilder _log;
+      _log.concatf("BT GPIO 5: %lu.\n", ms);
+      Kernel::log(&_log);
+    }
+  #endif
+}
 
 
 
@@ -55,7 +105,7 @@ extern void bt_gpio_5_proxy();
 extern "C" {
   StringBuilder _tx_buf;  // TODO: Should be a class member. Tired...
 
-  static volatile unsigned char _rx_buf[MAX_UART_STR_LEN];
+  static volatile unsigned char _rx_buf[RN_MAX_UART_STR_LEN];
   static volatile uint8_t _rx_buf_len = 0;
 
   uint32_t read_millis_0 = 0;
@@ -68,7 +118,7 @@ extern "C" {
   */
   void USART2_IRQHandler() {
     if((__HAL_UART_GET_IT(&huart2, UART_IT_RXNE) != RESET) && (__HAL_UART_GET_IT_SOURCE(&huart2, UART_IT_RXNE) != RESET)) {
-      _rx_buf[_rx_buf_len++ % MAX_UART_STR_LEN] = (uint8_t) huart2.Instance->RDR;
+      _rx_buf[_rx_buf_len++ % RN_MAX_UART_STR_LEN] = (uint8_t) huart2.Instance->RDR;
       // END SPLICE FROM HAL DRIVER
       ((RN4677*) RNBase::getInstance())->rx_wakeup();
       /* Clear RXNE interrupt flag */
@@ -206,7 +256,7 @@ void RN4677::gpioSetup() {
   * -----------------------------------------------
   * 3     -      BT_LED_1
   */
-  if (-1 < _pins.led) setPinFxn(_pins.led, CHANGE, bt_gpio_5_proxy);
+  if (-1 < _pins.led) setPinFxn(_pins.led, CHANGE, bt_gpio_5);
 
   /* These Port D pins are inputs:
   *
@@ -454,6 +504,9 @@ void RN4677::printDebug(StringBuilder* output) {
   for (int i = 0; i < _rx_buf_len; i++) { output->concatf(" %02x", _rx_buf[i]); }
   output->concatf("\n-- read_millis_0:          %lu\n", read_millis_0);
   output->concatf("-- read_millis_1:          %lu\n", read_millis_1);
+  if (getVerbosity() > 5) {
+    output->concatf("-- last_gpio5              %u\n\n", _last_gpio_5_event);
+  }
   output->concatf("-- Module mode:            %s\n", RN4677Pins::getModuleModeString(_pins.getModuleMode()));
   output->concatf("--\t p05: %s \t p31: %s\n", (readPin(_pins.p05) ? "hi" : "lo"), (readPin(_pins.p31) ? "hi" : "lo"));
   output->concatf("--\t p32: %s \t p33: %s\n", (readPin(_pins.p32) ? "hi" : "lo"), (readPin(_pins.p33) ? "hi" : "lo"));

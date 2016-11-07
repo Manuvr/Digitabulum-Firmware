@@ -218,12 +218,14 @@ class RN4677 : public RNBase {
 
 
   private:
+    unsigned long _last_gpio_5_event = 0;
     RN4677Pins _pins;
 
     // TODO: Migrate into flags member somewhere else.
     bool _module_power = true;
     bool _module_sleep = false;
 
+    static void bt_gpio_5();
 };
 
 

@@ -60,16 +60,14 @@ const MessageTypeDef rn_module_message_defs[] = {
 * Static members and initializers should be located here.
 *******************************************************************************/
 volatile RNBase* RNBase::INSTANCE = nullptr;
-volatile unsigned long RNBase::last_gpio_5_event = 0;
 BTQueuedOperation* RNBase::current_work_item = nullptr;
 
 BTQueuedOperation RNBase::__prealloc_pool[PREALLOCATED_BT_Q_OPS];
 
-uint32_t RNBase::prealloc_starves       = 0;
+uint32_t RNBase::_prealloc_starves      = 0;
 uint32_t RNBase::_heap_instantiations   = 0;
 uint32_t RNBase::_heap_frees            = 0;
-uint32_t RNBase::rejected_host_messages = 0;
-uint32_t RNBase::queue_floods           = 0;
+uint32_t RNBase::_queue_floods          = 0;
 
 
 PriorityQueue<BTQueuedOperation*> RNBase::preallocated;     // Messages that we've allocated ahead of time.
@@ -80,7 +78,7 @@ BTQueuedOperation* RNBase::fetchPreallocation() {
 
   if (0 == preallocated.size()) {
     // We have exhausted our preallocated measurements. Note it.
-    prealloc_starves++;
+    _prealloc_starves++;
     return_value = new BTQueuedOperation();
     _heap_instantiations++;
   }
@@ -144,11 +142,6 @@ void RNBase::start_lockout(uint32_t milliseconds) {
   _er_set_flag(RNBASE_FLAG_LOCK_OUT);
 }
 
-
-
-void bt_gpio_5_proxy() {
-  RNBase::bt_gpio_5(millis());
-}
 
 
 /*******************************************************************************
@@ -284,9 +277,7 @@ int8_t RNBase::reset() {
   _er_clear_flag(RNBASE_FLAG_CMD_PEND | RNBASE_FLAG_AUTOCONN);
 
   //connected(0 != HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_10));
-  queue_floods      = 0;
-
-  tx_buf.clear();
+  _queue_floods = 0;
 
   // Used to disassert the reset line.  TODO: Need a cleaner way to accomplish this...
   ManuvrMsg* event = Kernel::returnEvent(MANUVR_MSG_BT_EXIT_RESET);
@@ -462,9 +453,9 @@ void RNBase::setAutoconnect(bool autocon) {
 
 
 
-/****************************************************************************************************
+/*******************************************************************************
 * Asynchronous support fxns
-****************************************************************************************************/
+*******************************************************************************/
 
 /*
 * This gets called to service queue events.
@@ -622,7 +613,7 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
         #ifdef __MANUVR_DEBUG
           if (getVerbosity() > 5) Kernel::log("Dropping BT send. Queue too large.\n");
         #endif
-        queue_floods++;
+        _queue_floods++;
         reclaimPreallocation(nu);
       }
       break;
@@ -757,67 +748,8 @@ size_t RNBase::feed_rx_buffer(unsigned char *nu, size_t len) {
 
 
 
-/*
-*
-*/
-int8_t RNBase::sendBuffer(StringBuilder* _to_send) {
-  if (nullptr == _to_send) return -1;
-  #ifdef __MANUVR_DEBUG
-    if (getVerbosity() > 3) local_log.concatf("We about to print %d bytes to the host.\n", _to_send->length());
-    flushLocalLog();
-  #endif
-  printToHost(_to_send);
-  return 0;
-}
-
-
-
 volatile void RNBase::isr_bt_queue_ready() {
   ((RNBase*)INSTANCE)->read_abort_event.fireNow();
-}
-
-
-
-volatile void RNBase::bt_gpio_5(unsigned long ms) {
-//  if (nullptr == INSTANCE) return;
-//
-//  if (last_gpio_5_event != 0) {
-//    unsigned long delta = wrap_accounted_delta(ms, last_gpio_5_event);
-//    if (delta < 500) {
-//      // Probably the 10Hz signal. Means we are in command mode.
-//      if (INSTANCE != nullptr) {
-//        if (!((RNBase*) INSTANCE)->_er_flag(RNBASE_FLAG_CMD_MODE)) {
-//          ((RNBase*) INSTANCE)->_er_set_flag(RNBASE_FLAG_CMD_MODE);
-//          ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_CMD_PEND);
-//          ManuvrMsg *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_ENTERED_CMD_MODE);
-//          Kernel::isrRaiseEvent(nu_event);
-//        }
-//      }
-//    }
-//    else if (delta < 3500) {
-//      // Probably the 1Hz signal. Means we are discoverable and waiting for connection.
-//      if (INSTANCE != nullptr) {
-//        if (((RNBase*) INSTANCE)->_er_flag(RNBASE_FLAG_CMD_MODE)) {
-//          ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_CMD_MODE | RNBASE_FLAG_CMD_PEND | RNBASE_FLAG_LOCK_OUT);
-//          ManuvrMsg *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_EXITED_CMD_MODE);
-//          Kernel::isrRaiseEvent(nu_event);
-//        }
-//      }
-//    }
-//    else {
-//      //Kernel::raiseEvent(MANUVR_MSG_BT_CONNECTION_GAINED, nullptr);
-//      // Should watch GPIO2 for this.
-//    }
-//  }
-  last_gpio_5_event = ms;
-
-  #ifdef __MANUVR_DEBUG
-    if (((EventReceiver*) INSTANCE)->getVerbosity() > 6) {
-      StringBuilder _log;
-      _log.concatf("BT GPIO 5: %lu.\n", ms);
-      Kernel::log(&_log);
-    }
-  #endif
 }
 
 
@@ -856,7 +788,7 @@ int8_t RNBase::attached() {
     platform.kernel()->addSchedule(&read_abort_event);
 
     gpioSetup();
-    //force_9600_mode(false);   // Init the UART.
+    force_9600_mode(false);   // Init the UART.
     return 1;
   }
   return 0;
@@ -933,11 +865,10 @@ void RNBase::printQueue(StringBuilder* temp) {
 */
 void RNBase::printDebug(StringBuilder* temp) {
   ManuvrXport::printDebug(temp);
-  temp->concatf("-- queue_floods            %u\n--\n", (unsigned long) rejected_host_messages);
-
-  temp->concatf("-- __prealloc_pool addres: 0x%08x\n", (uint32_t) __prealloc_pool);
+  //temp->concatf("-- __prealloc_pool addres: 0x%08x\n", (uint32_t) __prealloc_pool);
   temp->concatf("-- prealloc depth:         %d\n", preallocated.size());
-  temp->concatf("-- queue_floods:           %u\n", (unsigned long) queue_floods);
+  temp->concatf("-- prealloc_starves:       %u\n", _prealloc_starves);
+  temp->concatf("-- queue_floods:           %u\n", (unsigned long) _queue_floods);
   temp->concatf("-- _heap_instantiations:   %u\n", (unsigned long) _heap_instantiations);
   temp->concatf("-- _heap_frees:            %u\n--\n", (unsigned long) _heap_frees);
 
@@ -946,9 +877,6 @@ void RNBase::printDebug(StringBuilder* temp) {
   temp->concatf("-- command mode (pend)     %s\n", (_er_flag(RNBASE_FLAG_CMD_PEND) ? "yes" : "no"));
   temp->concatf("-- command mode            %s\n", (_er_flag(RNBASE_FLAG_CMD_MODE) ? "yes" : "no"));
   temp->concatf("-- autoconnect             %s\n", (_er_flag(RNBASE_FLAG_AUTOCONN) ? "yes" : "no"));
-  if (getVerbosity() > 5) {
-    temp->concatf("-- last_gpio5              %u\n\n", last_gpio_5_event);
-  }
 }
 
 

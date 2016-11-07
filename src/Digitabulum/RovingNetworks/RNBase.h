@@ -45,6 +45,7 @@ TODO: This class is in SORE need of the following things:
 #define MANUVR_MSG_BT_ENTERED_CMD_MODE  0x1005 // The module entered command mode.
 #define MANUVR_MSG_BT_EXITED_CMD_MODE   0x1006 // The module exited command mode.
 
+#define RN_MAX_UART_STR_LEN 64
 
 // Bluetooth Modes
 #define RNBASE_MODE_COMMAND       "$$$"
@@ -93,7 +94,7 @@ TODO: This class is in SORE need of the following things:
 
 // Resting memory load parameters.
 #define PREALLOCATED_BT_Q_OPS    4    // How many data-carriers should we preallocate?
-#define RNBASE_MAX_BT_Q_DEPTH    5    //
+#define RNBASE_MAX_BT_Q_DEPTH    6    //
 
 
 /*
@@ -175,12 +176,10 @@ class RNBase : public ManuvrXport {
 
 
     static BTQueuedOperation* current_work_item;
-    volatile static unsigned long last_gpio_5_event;
 
     // Volatile statics that serve as ISRs...
     volatile static void irqServiceBT_data_receive(unsigned char* str, uint8_t len);
     volatile static void isr_bt_queue_ready();
-    volatile static void bt_gpio_5(unsigned long);
 
     static inline RNBase* getInstance() { return (RNBase*)INSTANCE; };
 
@@ -192,8 +191,6 @@ class RNBase : public ManuvrXport {
 
     int8_t idleService();
     size_t feed_rx_buffer(unsigned char*, size_t len);   // Append to the class receive buffer.
-    void process_connection_change(bool conn);
-    virtual int8_t sendBuffer(StringBuilder*);
 
     void printQueue(StringBuilder*);
 
@@ -210,10 +207,6 @@ class RNBase : public ManuvrXport {
     * These are used as convenience overrides for distinguishing
     *   between destinations (module or counterparty)
     */
-    inline void printToHost(char* str) {
-      insert_into_work_queue(BusOpcode::TX, new StringBuilder(str));
-    };
-
     inline void printToHost(StringBuilder* str) {
       insert_into_work_queue(BusOpcode::TX, str);
     };
@@ -225,10 +218,9 @@ class RNBase : public ManuvrXport {
     /* Members concerned with the work queue and keeping messages atomic. */
     PriorityQueue<BTQueuedOperation*> work_queue;
 
-    StringBuilder tx_buf;     // A scratchpad for this class.
-
     uint32_t insert_into_work_queue(BusOpcode opcode, StringBuilder* data);
     int8_t burn_or_recycle_current();   // Called during connection turbulence to handle the queued item.
+    void process_connection_change(bool conn);
 
     //int8_t init_dma(uint8_t* buf, unsigned int len);
     void start_lockout(uint32_t milliseconds);   // Hold communication with the RN for so many ms.
@@ -245,15 +237,11 @@ class RNBase : public ManuvrXport {
     int8_t exitCommandMode();     // Convenience fxn for exiting command mode.
 
 
-
     volatile static RNBase* INSTANCE;
 
-    static uint32_t rejected_host_messages;
-
     // Prealloc starvation counters...
-    static uint32_t prealloc_starves;
-    static uint32_t queue_floods;
-
+    static uint32_t _prealloc_starves;
+    static uint32_t _queue_floods;
     static uint32_t _heap_instantiations;
     static uint32_t _heap_frees;
 
