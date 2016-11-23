@@ -68,7 +68,6 @@ BTQueuedOperation::~BTQueuedOperation() {
 
 
 void BTQueuedOperation::wipe() {
-  //completed  = false;
   xfer_state = XferState::UNDEF;
   xfer_fault = XferFault::NONE;
   opcode     = BusOpcode::UNDEF;

@@ -117,14 +117,14 @@ enum class State {
 
 
 
-/****************************************************************************************************
-* Common members of the class...                                                                    *
-****************************************************************************************************/
+/*******************************************************************************
+* Common members of the class...                                               *
+*******************************************************************************/
 
 /**
 * The hardware driver for the LSM9DSx.
-* This class is purely for abstraction, and is never instatntiated. It is only intended to hold
-*   functions and members common to a single device package.
+* This class is purely for abstraction, and is never instatntiated. It is only
+*   intended to hold functions and members common to a single device package.
 */
 class LSM9DSx_Common : public BusOpCallback {
   public:

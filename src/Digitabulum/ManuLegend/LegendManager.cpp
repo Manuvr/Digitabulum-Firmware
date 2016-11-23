@@ -142,7 +142,6 @@ LegendManager::LegendManager() : EventReceiver() {
   reflection_gyr.y = 1;
   reflection_gyr.z = -1;
 
-
   _preformed_read_a.shouldReap(false);
   _preformed_read_a.devRegisterAdvance(true);
   _preformed_read_a.set_opcode(BusOpcode::RX);
@@ -253,17 +252,13 @@ IIU* LegendManager::fetchIIU(uint8_t idx) {
 
 
 int8_t LegendManager::init_iiu(uint8_t idx) {
-  iius[idx].init();
-  return 0;
+  return (idx > 16) ? -1 : iius[idx].init();
 }
 
 
 /* Read the given IMU. */
 int8_t LegendManager::refreshIMU(uint8_t idx) {
-  if (idx > 16) return -1;
-
-  iius[idx].readSensor();
-  return 0;
+  return (idx > 16) ? -1 : iius[idx].readSensor();
 }
 
 
@@ -423,10 +418,12 @@ void LegendManager::printDebug(StringBuilder *output) {
 
   if (getVerbosity() > 3) {
     output->concatf("--- MAX_DATASET_SIZE    %u\n",    (unsigned long) LEGEND_MGR_MAX_DATASET_SIZE);
-  }
-  if (getVerbosity() > 5) {
-    event_legend_frame_ready.printDebug(output);
-    event_iiu_read.printDebug(output);
+    #if defined(__MANUVR_DEBUG)
+      if (getVerbosity() > 5) {
+        event_legend_frame_ready.printDebug(output);
+        event_iiu_read.printDebug(output);
+      }
+    #endif
   }
 
   output->concatf("--- prealloc starves    %u\n--- minimum_prealloc    %u\n", (unsigned long) prealloc_starves, (unsigned long) minimum_prealloc_level);
@@ -671,7 +668,9 @@ int8_t LegendManager::callback_proc(ManuvrMsg* event) {
     default:
       if (getVerbosity() > 5) {
         local_log.concat("LegendManager::callback_proc(): Default case.\n");
-        event->printDebug(&local_log);
+        #if defined(__MANUVR_DEBUG)
+          event->printDebug(&local_log);
+        #endif
         Kernel::log(&local_log);
       }
       break;
@@ -1173,47 +1172,57 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     case 'd':
-      if (255 == temp_byte) {
-        event_legend_frame_ready.fireNow();  // Fire a single frame transmission.
-        local_log.concat("We are manually firing the IMU frame broadcasts schedule.\n");
-      }
-      else if (254 == temp_byte) {
-        event_legend_frame_ready.enableSchedule(true);  // Enable the periodic read.
-        local_log.concat("Enabled frame broadcasts.\n");
-      }
-      else if (253 == temp_byte) {
-        event_legend_frame_ready.printDebug(&local_log);
-      }
-      else if (252 == temp_byte) {
-        send_map_event();
-        local_log.concat("We are manually firing the IMU frame broadcasts schedule.\n");
-      }
-      else if (temp_byte) {
-        event_legend_frame_ready.alterSchedulePeriod(temp_byte*10);
-        local_log.concatf("Set periodic frame broadcast to once every %dms.\n", temp_byte*10);
-      }
-      else {
-        event_legend_frame_ready.enableSchedule(false);  // Disable the periodic read.
-        local_log.concat("Disabled frame broadcasts.\n");
+      switch (temp_byte) {
+        case 255:
+          event_legend_frame_ready.fireNow();  // Fire a single frame transmission.
+          local_log.concat("We are manually firing the IMU frame broadcasts schedule.\n");
+          break;
+        case 254:
+          event_legend_frame_ready.enableSchedule(true);  // Enable the periodic read.
+          local_log.concat("Enabled frame broadcasts.\n");
+          break;
+        #if defined(__MANUVR_DEBUG)
+          case 253:
+            event_legend_frame_ready.printDebug(&local_log);
+            break;
+        #endif
+        case 252:
+          send_map_event();
+          local_log.concat("We are manually firing the IMU frame broadcasts schedule.\n");
+          break;
+        default:
+          if (temp_byte) {
+            event_legend_frame_ready.alterSchedulePeriod(temp_byte*10);
+            local_log.concatf("Set periodic frame broadcast to once every %dms.\n", temp_byte*10);
+          }
+          else {
+            event_legend_frame_ready.enableSchedule(false);  // Disable the periodic read.
+            local_log.concat("Disabled frame broadcasts.\n");
+          }
+          break;
       }
       break;
 
     case 'f':
-      if (255 == temp_byte) {
-        event_iiu_read.fireNow();
-        local_log.concat("We are manually firing the IMU read schedule.\n");
-      }
-      else if (254 == temp_byte) {
-        event_iiu_read.enableSchedule(true);
-        local_log.concat("Enabled periodic readback.\n");
-      }
-      else if (temp_byte) {
-        event_iiu_read.alterSchedulePeriod(temp_byte*10);
-        local_log.concatf("Set periodic read schedule to once every %dms.\n", temp_byte*10);
-      }
-      else {
-        event_iiu_read.enableSchedule(false);  // Disable the periodic read.
-        local_log.concat("Disabled periodic readback.\n");
+      switch (temp_byte) {
+        case 255:
+          event_iiu_read.fireNow();
+          local_log.concat("We are manually firing the IMU read schedule.\n");
+          break;
+        case 254:
+          event_iiu_read.enableSchedule(true);
+          local_log.concat("Enabled periodic readback.\n");
+          break;
+        default:
+          if (temp_byte) {
+            event_iiu_read.alterSchedulePeriod(temp_byte*10);
+            local_log.concatf("Set periodic read schedule to once every %dms.\n", temp_byte*10);
+          }
+          else {
+            event_iiu_read.enableSchedule(false);  // Disable the periodic read.
+            local_log.concat("Disabled periodic readback.\n");
+          }
+          break;
       }
       break;
 

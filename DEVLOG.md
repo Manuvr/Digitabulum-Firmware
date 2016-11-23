@@ -97,6 +97,7 @@ I forgot why those linkages were ever there to begin with...
 
 _---J. Ian Lindsay_
 
+------
 
 ### 2016.10.23:
 
@@ -104,6 +105,7 @@ _---J. Ian Lindsay_
 
 _---J. Ian Lindsay_
 
+------
 
 ### 2016.10.31:
 
@@ -135,3 +137,24 @@ My god.... RNBase has bad smell. Three refactors died in there and were never cl
     283492    2800    9496  295788 Migrated gpio_5 fxns out of RNBase. Pruned cruft.
     283388    2800    9496  295684 Relocation of hardware-specifics.
     283236    2800    9496  295532 Cutting some needless string.
+
+_---J. Ian Lindsay_
+
+------
+
+### 2016.11.23:
+
+Given the pending manufacture of the digits, about to revisit some things in the IMU data pathways. First, some baselines...
+
+    274996    2800    9456  287252   46214  make
+    283220    2800    9496  295516   4825c  make DEBUG=1
+
+    make DEBUG=1
+    283220    2800    9496  295516   4825c  New baseline.
+    283220    2800    9496  295516   4825c  Rework of if-else chains into switch-case yields no difference.
+
+I very much dislike this arcane key-sequence console.
+
+It might be time to formally abandon the notion of individual IMUs being discrete bus entities, and allow the LegendManager class to be the intermediary (and memory store) for all IIU classes, which would do no allocation for these purposes.
+
+Feed the base pointer in for register space, and let the IMU class calculate appropriate offsets from the base given the IMU count supported. I won't delve into the chain of inference that leads me to this conclusion here, but doing this would have the consequence that all IMUs must be run at the same sample-rate. This might be a sane assumption anyhow.

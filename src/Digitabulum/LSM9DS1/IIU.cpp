@@ -581,7 +581,9 @@ void IIU::dumpPreformedElements(StringBuilder* output) {
   if (NULL == output) return;
   output->concat("\n-------------------------------------------------------\n--- IIU \n-------------------------------------------------------\n");
   output->concat("--- Quat-crunch event\n");
-  quat_crunch_event.printDebug(output);
+  #if defined(__MANUVR_DEBUG)
+    quat_crunch_event.printDebug(output);
+  #endif
 
   imu_m->dumpPreformedElements(output);
   output->concat("\n");
