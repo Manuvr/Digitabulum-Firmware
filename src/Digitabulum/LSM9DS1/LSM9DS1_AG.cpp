@@ -113,7 +113,7 @@ int8_t LSM9DS1_AG::collect_reading_acc() {
 
   Vector3<int16_t> reflection_vector_acc(LegendManager::reflection_acc.x, LegendManager::reflection_acc.y, LegendManager::reflection_acc.z);
 
-  if (cancel_error) {
+  if (cancel_error()) {
     x = ((((int16_t)regValue(LSM9DS1_A_DATA_X) - noise_floor_acc.x) * reflection_vector_acc.x) * scaler);
     y = ((((int16_t)regValue(LSM9DS1_A_DATA_Y) - noise_floor_acc.y) * reflection_vector_acc.y) * scaler);
     z = ((((int16_t)regValue(LSM9DS1_A_DATA_Z) - noise_floor_acc.z) * reflection_vector_acc.z) * scaler);
@@ -215,7 +215,7 @@ int8_t LSM9DS1_AG::collect_reading_gyr() {
 
   Vector3<int16_t> reflection_vector_gyr(LegendManager::reflection_gyr.x, LegendManager::reflection_gyr.y, LegendManager::reflection_gyr.z);
 
-  if (cancel_error) {
+  if (cancel_error()) {
     x = ((((int16_t)regValue(LSM9DS1_G_DATA_X)) - noise_floor_gyr.x) * reflection_vector_gyr.x * scaler);
     y = ((((int16_t)regValue(LSM9DS1_G_DATA_Y)) - noise_floor_gyr.y) * reflection_vector_gyr.y * scaler);
     z = ((((int16_t)regValue(LSM9DS1_G_DATA_Z)) - noise_floor_gyr.z) * reflection_vector_gyr.z * scaler);
@@ -239,7 +239,7 @@ int8_t LSM9DS1_AG::collect_reading_gyr() {
 int8_t LSM9DS1_AG::request_rescale_gyr(uint8_t nu_scale_idx) {
   if (nu_scale_idx < MAXIMUM_GAIN_INDEX_ACC) {
     if (scale_acc != nu_scale_idx) {
-      if (verbosity > 2) Kernel::log("request_rescale_gyr():\tRescaling Gyro.\n");
+      if (getVerbosity() > 2) Kernel::log("request_rescale_gyr():\tRescaling Gyro.\n");
       uint8_t temp8 = regValue(LSM9DS1_G_CTRL_REG1);
       temp8 =  (temp8 & 0xE7) | (nu_scale_idx << 3);
       return writeRegister(LSM9DS1_G_CTRL_REG1, temp8);
@@ -256,7 +256,7 @@ int8_t LSM9DS1_AG::request_rescale_gyr(uint8_t nu_scale_idx) {
 int8_t LSM9DS1_AG::set_sample_rate_gyr(uint8_t nu_srate_idx) {
   if (nu_srate_idx < MAXIMUM_RATE_INDEX_AG) {
     if (update_rate_acc != nu_srate_idx) {
-      if (verbosity > 2) Kernel::log("set_sample_rate_gyr():\t\n");
+      if (getVerbosity() > 2) Kernel::log("set_sample_rate_gyr():\t\n");
       uint8_t temp8 = regValue(LSM9DS1_G_CTRL_REG1);
       temp8 =  (temp8 & 0x1F) | (nu_srate_idx << 5);
       update_rate_gyr = nu_srate_idx;
@@ -308,58 +308,52 @@ int8_t LSM9DS1_AG::collect_reading_temperature() {
 /*
 ( This accelerometer has 49 registers (as we choose to carve them).
 */
-LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM ", address, _integrator) {
+LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common(address, LSM9DS1_AG_WHO_AM_I, LSM9DS1_G_INT_GEN_THS_X, LSM9DS1_G_INT_GEN_THS_Z, _integrator) {
   // First, we should define our registers....
   // 40 registers.
 
   // Now we should give them initial definitions. This is our chance to set default configs.
   // Any config which we want written during init() should have dirty set to true.
-  //reg_defs[LSM9DS1_AG_ACT_THS]         = DeviceRegister((bus_addr + 0x04), (uint8_t)  0x00, (register_pool +  0), false, false, true);
-  //reg_defs[LSM9DS1_AG_ACT_DUR]         = DeviceRegister((bus_addr + 0x05), (uint8_t)  0x00, (register_pool +  1), false, false, true);
-  //reg_defs[LSM9DS1_A_INT_GEN_CFG]      = DeviceRegister((bus_addr + 0x06), (uint8_t)  0x00, (register_pool +  2), false, false, true);
-  //reg_defs[LSM9DS1_A_INT_GEN_THS_X]    = DeviceRegister((bus_addr + 0x07), (uint8_t)  0x00, (register_pool +  3), false, false, true);
-  //reg_defs[LSM9DS1_A_INT_GEN_THS_Y]    = DeviceRegister((bus_addr + 0x08), (uint8_t)  0x00, (register_pool +  4), false, false, true);
-  //reg_defs[LSM9DS1_A_INT_GEN_THS_Z]    = DeviceRegister((bus_addr + 0x09), (uint8_t)  0x00, (register_pool +  5), false, false, true);
-  //reg_defs[LSM9DS1_A_INT_GEN_DURATION] = DeviceRegister((bus_addr + 0x0A), (uint8_t)  0x00, (register_pool +  6), false, false, true);
-  //reg_defs[LSM9DS1_G_REFERENCE]        = DeviceRegister((bus_addr + 0x0B), (uint8_t)  0x00, (register_pool +  7), false, false, true);
-  //reg_defs[LSM9DS1_AG_INT1_CTRL]       = DeviceRegister((bus_addr + 0x0C), (uint8_t)  0x00, (register_pool +  8), false, false, true);
-  //reg_defs[LSM9DS1_AG_INT2_CTRL]       = DeviceRegister((bus_addr + 0x0D), (uint8_t)  0x00, (register_pool +  9), false, false, true);
-  //reg_defs[LSM9DS1_AG_WHO_AM_I]        = DeviceRegister((bus_addr + 0x0F), (uint8_t)  0x00, (register_pool + 10), false, false, true);
-  //reg_defs[LSM9DS1_G_CTRL_REG1]        = DeviceRegister((bus_addr + 0x10), (uint8_t)  0x00, (register_pool + 11), false, false, true);
-  //reg_defs[LSM9DS1_G_CTRL_REG2]        = DeviceRegister((bus_addr + 0x11), (uint8_t)  0x00, (register_pool + 12), false, false, true);
-  //reg_defs[LSM9DS1_G_CTRL_REG3]        = DeviceRegister((bus_addr + 0x12), (uint8_t)  0x00, (register_pool + 13), false, false, true);
-  //reg_defs[LSM9DS1_G_ORIENT_CFG]       = DeviceRegister((bus_addr + 0x13), (uint8_t)  0x00, (register_pool + 14), false, false, true);
-  //reg_defs[LSM9DS1_G_INT_GEN_SRC]      = DeviceRegister((bus_addr + 0x14), (uint8_t)  0x00, (register_pool + 15), false, false, true);
-  //reg_defs[LSM9DS1_AG_DATA_TEMP]       = DeviceRegister((bus_addr + 0x15), (uint16_t) 0x00, (register_pool + 16), false, false, true);
-  //reg_defs[LSM9DS1_AG_STATUS_REG]      = DeviceRegister((bus_addr + 0x17), (uint8_t)  0x00, (register_pool + 18), false, false, true);
-  //reg_defs[LSM9DS1_G_DATA_X]           = DeviceRegister((bus_addr + 0x18), (uint16_t) 0x00, (register_pool + 19), false, false, true);
-  //reg_defs[LSM9DS1_G_DATA_Y]           = DeviceRegister((bus_addr + 0x1A), (uint16_t) 0x00, (register_pool + 21), false, false, true);
-  //reg_defs[LSM9DS1_G_DATA_Z]           = DeviceRegister((bus_addr + 0x1C), (uint16_t) 0x00, (register_pool + 23), false, false, true);
-  //reg_defs[LSM9DS1_AG_CTRL_REG4]       = DeviceRegister((bus_addr + 0x1E), (uint8_t)  0x38, (register_pool + 25), false, false, true);
-  //reg_defs[LSM9DS1_A_CTRL_REG5]        = DeviceRegister((bus_addr + 0x1F), (uint8_t)  0x38, (register_pool + 26), false, false, true);
-  //reg_defs[LSM9DS1_A_CTRL_REG6]        = DeviceRegister((bus_addr + 0x20), (uint8_t)  0x00, (register_pool + 27), false, false, true);
-  //reg_defs[LSM9DS1_A_CTRL_REG7]        = DeviceRegister((bus_addr + 0x21), (uint8_t)  0x00, (register_pool + 28), false, false, true);
-  //reg_defs[LSM9DS1_AG_CTRL_REG8]       = DeviceRegister((bus_addr + 0x22), (uint8_t)  0x04, (register_pool + 29), false, false, true);
-  //reg_defs[LSM9DS1_AG_CTRL_REG9]       = DeviceRegister((bus_addr + 0x23), (uint8_t)  0x00, (register_pool + 30), false, false, true);
-  //reg_defs[LSM9DS1_AG_CTRL_REG10]      = DeviceRegister((bus_addr + 0x24), (uint8_t)  0x00, (register_pool + 31), false, false, true);
-  //reg_defs[LSM9DS1_A_INT_GEN_SRC]      = DeviceRegister((bus_addr + 0x26), (uint8_t)  0x00, (register_pool + 32), false, false, true);
-  //reg_defs[LSM9DS1_AG_STATUS_REG_ALT]  = DeviceRegister((bus_addr + 0x27), (uint8_t)  0x00, (register_pool + 33), false, false, true);
-  //reg_defs[LSM9DS1_A_DATA_X]           = DeviceRegister((bus_addr + 0x28), (uint16_t) 0x00, (register_pool + 34), false, false, true);
-  //reg_defs[LSM9DS1_A_DATA_Y]           = DeviceRegister((bus_addr + 0x2A), (uint16_t) 0x00, (register_pool + 36), false, false, true);
-  //reg_defs[LSM9DS1_A_DATA_Z]           = DeviceRegister((bus_addr + 0x2C), (uint16_t) 0x00, (register_pool + 38), false, false, true);
-  //reg_defs[LSM9DS1_AG_FIFO_CTRL]       = DeviceRegister((bus_addr + 0x2E), (uint8_t)  0x00, (register_pool + 40), false, false, true);
-  //reg_defs[LSM9DS1_AG_FIFO_SRC]        = DeviceRegister((bus_addr + 0x2F), (uint8_t)  0x00, (register_pool + 41), false, false, true);
-  //reg_defs[LSM9DS1_G_INT_GEN_CFG]      = DeviceRegister((bus_addr + 0x30), (uint8_t)  0x00, (register_pool + 42), false, false, true);
-  //reg_defs[LSM9DS1_G_INT_GEN_THS_X]    = DeviceRegister((bus_addr + 0x31), (uint16_t) 0x00, (register_pool + 43), false, false, true);
-  //reg_defs[LSM9DS1_G_INT_GEN_THS_Y]    = DeviceRegister((bus_addr + 0x33), (uint16_t) 0x00, (register_pool + 45), false, false, true);
-  //reg_defs[LSM9DS1_G_INT_GEN_THS_Z]    = DeviceRegister((bus_addr + 0x35), (uint16_t) 0x00, (register_pool + 47), false, false, true);
-  //reg_defs[LSM9DS1_G_INT_GEN_DURATION] = DeviceRegister((bus_addr + 0x37), (uint8_t)  0x00, (register_pool + 49), false, false, true);
-
-
-  /* Certain register indicies serve a common purpose in the base class. Define those... */
-  idx_identity     = LSM9DS1_AG_WHO_AM_I;
-  idx_io_test_0    = LSM9DS1_G_INT_GEN_THS_X;
-  idx_io_test_1    = LSM9DS1_G_INT_GEN_THS_Z;
+  //reg_defs[LSM9DS1_AG_ACT_THS]         = DeviceRegister((BUS_ADDR + 0x04), (uint8_t)  0x00, (register_pool +  0), false, false, true);
+  //reg_defs[LSM9DS1_AG_ACT_DUR]         = DeviceRegister((BUS_ADDR + 0x05), (uint8_t)  0x00, (register_pool +  1), false, false, true);
+  //reg_defs[LSM9DS1_A_INT_GEN_CFG]      = DeviceRegister((BUS_ADDR + 0x06), (uint8_t)  0x00, (register_pool +  2), false, false, true);
+  //reg_defs[LSM9DS1_A_INT_GEN_THS_X]    = DeviceRegister((BUS_ADDR + 0x07), (uint8_t)  0x00, (register_pool +  3), false, false, true);
+  //reg_defs[LSM9DS1_A_INT_GEN_THS_Y]    = DeviceRegister((BUS_ADDR + 0x08), (uint8_t)  0x00, (register_pool +  4), false, false, true);
+  //reg_defs[LSM9DS1_A_INT_GEN_THS_Z]    = DeviceRegister((BUS_ADDR + 0x09), (uint8_t)  0x00, (register_pool +  5), false, false, true);
+  //reg_defs[LSM9DS1_A_INT_GEN_DURATION] = DeviceRegister((BUS_ADDR + 0x0A), (uint8_t)  0x00, (register_pool +  6), false, false, true);
+  //reg_defs[LSM9DS1_G_REFERENCE]        = DeviceRegister((BUS_ADDR + 0x0B), (uint8_t)  0x00, (register_pool +  7), false, false, true);
+  //reg_defs[LSM9DS1_AG_INT1_CTRL]       = DeviceRegister((BUS_ADDR + 0x0C), (uint8_t)  0x00, (register_pool +  8), false, false, true);
+  //reg_defs[LSM9DS1_AG_INT2_CTRL]       = DeviceRegister((BUS_ADDR + 0x0D), (uint8_t)  0x00, (register_pool +  9), false, false, true);
+  //reg_defs[LSM9DS1_AG_WHO_AM_I]        = DeviceRegister((BUS_ADDR + 0x0F), (uint8_t)  0x00, (register_pool + 10), false, false, true);
+  //reg_defs[LSM9DS1_G_CTRL_REG1]        = DeviceRegister((BUS_ADDR + 0x10), (uint8_t)  0x00, (register_pool + 11), false, false, true);
+  //reg_defs[LSM9DS1_G_CTRL_REG2]        = DeviceRegister((BUS_ADDR + 0x11), (uint8_t)  0x00, (register_pool + 12), false, false, true);
+  //reg_defs[LSM9DS1_G_CTRL_REG3]        = DeviceRegister((BUS_ADDR + 0x12), (uint8_t)  0x00, (register_pool + 13), false, false, true);
+  //reg_defs[LSM9DS1_G_ORIENT_CFG]       = DeviceRegister((BUS_ADDR + 0x13), (uint8_t)  0x00, (register_pool + 14), false, false, true);
+  //reg_defs[LSM9DS1_G_INT_GEN_SRC]      = DeviceRegister((BUS_ADDR + 0x14), (uint8_t)  0x00, (register_pool + 15), false, false, true);
+  //reg_defs[LSM9DS1_AG_DATA_TEMP]       = DeviceRegister((BUS_ADDR + 0x15), (uint16_t) 0x00, (register_pool + 16), false, false, true);
+  //reg_defs[LSM9DS1_AG_STATUS_REG]      = DeviceRegister((BUS_ADDR + 0x17), (uint8_t)  0x00, (register_pool + 18), false, false, true);
+  //reg_defs[LSM9DS1_G_DATA_X]           = DeviceRegister((BUS_ADDR + 0x18), (uint16_t) 0x00, (register_pool + 19), false, false, true);
+  //reg_defs[LSM9DS1_G_DATA_Y]           = DeviceRegister((BUS_ADDR + 0x1A), (uint16_t) 0x00, (register_pool + 21), false, false, true);
+  //reg_defs[LSM9DS1_G_DATA_Z]           = DeviceRegister((BUS_ADDR + 0x1C), (uint16_t) 0x00, (register_pool + 23), false, false, true);
+  //reg_defs[LSM9DS1_AG_CTRL_REG4]       = DeviceRegister((BUS_ADDR + 0x1E), (uint8_t)  0x38, (register_pool + 25), false, false, true);
+  //reg_defs[LSM9DS1_A_CTRL_REG5]        = DeviceRegister((BUS_ADDR + 0x1F), (uint8_t)  0x38, (register_pool + 26), false, false, true);
+  //reg_defs[LSM9DS1_A_CTRL_REG6]        = DeviceRegister((BUS_ADDR + 0x20), (uint8_t)  0x00, (register_pool + 27), false, false, true);
+  //reg_defs[LSM9DS1_A_CTRL_REG7]        = DeviceRegister((BUS_ADDR + 0x21), (uint8_t)  0x00, (register_pool + 28), false, false, true);
+  //reg_defs[LSM9DS1_AG_CTRL_REG8]       = DeviceRegister((BUS_ADDR + 0x22), (uint8_t)  0x04, (register_pool + 29), false, false, true);
+  //reg_defs[LSM9DS1_AG_CTRL_REG9]       = DeviceRegister((BUS_ADDR + 0x23), (uint8_t)  0x00, (register_pool + 30), false, false, true);
+  //reg_defs[LSM9DS1_AG_CTRL_REG10]      = DeviceRegister((BUS_ADDR + 0x24), (uint8_t)  0x00, (register_pool + 31), false, false, true);
+  //reg_defs[LSM9DS1_A_INT_GEN_SRC]      = DeviceRegister((BUS_ADDR + 0x26), (uint8_t)  0x00, (register_pool + 32), false, false, true);
+  //reg_defs[LSM9DS1_AG_STATUS_REG_ALT]  = DeviceRegister((BUS_ADDR + 0x27), (uint8_t)  0x00, (register_pool + 33), false, false, true);
+  //reg_defs[LSM9DS1_A_DATA_X]           = DeviceRegister((BUS_ADDR + 0x28), (uint16_t) 0x00, (register_pool + 34), false, false, true);
+  //reg_defs[LSM9DS1_A_DATA_Y]           = DeviceRegister((BUS_ADDR + 0x2A), (uint16_t) 0x00, (register_pool + 36), false, false, true);
+  //reg_defs[LSM9DS1_A_DATA_Z]           = DeviceRegister((BUS_ADDR + 0x2C), (uint16_t) 0x00, (register_pool + 38), false, false, true);
+  //reg_defs[LSM9DS1_AG_FIFO_CTRL]       = DeviceRegister((BUS_ADDR + 0x2E), (uint8_t)  0x00, (register_pool + 40), false, false, true);
+  //reg_defs[LSM9DS1_AG_FIFO_SRC]        = DeviceRegister((BUS_ADDR + 0x2F), (uint8_t)  0x00, (register_pool + 41), false, false, true);
+  //reg_defs[LSM9DS1_G_INT_GEN_CFG]      = DeviceRegister((BUS_ADDR + 0x30), (uint8_t)  0x00, (register_pool + 42), false, false, true);
+  //reg_defs[LSM9DS1_G_INT_GEN_THS_X]    = DeviceRegister((BUS_ADDR + 0x31), (uint16_t) 0x00, (register_pool + 43), false, false, true);
+  //reg_defs[LSM9DS1_G_INT_GEN_THS_Y]    = DeviceRegister((BUS_ADDR + 0x33), (uint16_t) 0x00, (register_pool + 45), false, false, true);
+  //reg_defs[LSM9DS1_G_INT_GEN_THS_Z]    = DeviceRegister((BUS_ADDR + 0x35), (uint16_t) 0x00, (register_pool + 47), false, false, true);
+  //reg_defs[LSM9DS1_G_INT_GEN_DURATION] = DeviceRegister((BUS_ADDR + 0x37), (uint8_t)  0x00, (register_pool + 49), false, false, true);
 
   // Preform our most commonly-used bus operations to minimize thrash and other kinds of overhead.
   preformed_busop_read_acc.shouldReap(false);
@@ -369,7 +363,7 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
   preformed_busop_read_acc.buf      = regPtr(LSM9DS1_A_DATA_X);
   preformed_busop_read_acc.buf_len  = 6;
   preformed_busop_read_acc.setParams(
-    bus_addr|0x80,
+    BUS_ADDR|0x80,
     preformed_busop_read_acc.buf_len,
     1,
     (LSM9DS1_A_DATA_X | 0x80)
@@ -382,7 +376,7 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
   preformed_busop_read_gyr.buf      = regPtr(LSM9DS1_G_DATA_X);
   preformed_busop_read_gyr.buf_len  = 6;
   preformed_busop_read_gyr.setParams(
-    bus_addr|0x80,
+    BUS_ADDR|0x80,
     preformed_busop_read_gyr.buf_len,
     1,
     (LSM9DS1_G_DATA_X | 0x80)
@@ -396,7 +390,7 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
   preformed_busop_irq_0.buf      = regPtr(LSM9DS1_G_INT_GEN_SRC);
   preformed_busop_irq_0.buf_len  = 22;
   preformed_busop_irq_0.setParams(
-    bus_addr|0x80,
+    BUS_ADDR|0x80,
     preformed_busop_irq_0.buf_len,
     1,
     (LSM9DS1_G_INT_GEN_SRC | 0x80)
@@ -409,7 +403,7 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
   preformed_busop_irq_1.buf      = regPtr(LSM9DS1_A_INT_GEN_SRC);
   preformed_busop_irq_1.buf_len  = 3;
   preformed_busop_irq_1.setParams(
-    bus_addr|0x80,
+    BUS_ADDR|0x80,
     preformed_busop_irq_1.buf_len,
     1,
     (LSM9DS1_A_INT_GEN_SRC | 0x80)
@@ -422,7 +416,7 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
   full_register_refresh.buf      = regPtr(LSM9DS1_AG_FIFO_CTRL);
   full_register_refresh.buf_len  = 18;
   full_register_refresh.setParams(
-    bus_addr|0x80,
+    BUS_ADDR|0x80,
     full_register_refresh.buf_len,
     1,
     (LSM9DS1_AG_FIFO_CTRL | 0x80)
@@ -430,14 +424,12 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common("XM "
 
   // Local class stuff...
   last_val_acc(0.0f, 0.0f, 0.0f);
-  autoscale_acc       = false;
   scale_acc           = 0;
   update_rate_acc     = 0;
   discards_remain_acc = 0;
   discards_total_acc  = 0;
 
   last_val_gyr(0.0f, 0.0f, 0.0f);
-  autoscale_gyr       = false;
   scale_gyr           = 0;
   update_rate_gyr     = 0;
   discards_remain_gyr = 0;
@@ -485,7 +477,7 @@ int8_t LSM9DS1_AG::readSensor(void) {
 * Reads every register in the sensor with maximum bus efficiency.
 */
 int8_t LSM9DS1_AG::bulk_refresh() {
-  if (verbosity > 3) Kernel::log("XM::bulk_refresh()\n");
+  if (getVerbosity() > 3) Kernel::log("XM::bulk_refresh()\n");
   if (!present()) {
     return readRegister((uint8_t) LSM9DS1_AG_WHO_AM_I);
   }
@@ -495,11 +487,11 @@ int8_t LSM9DS1_AG::bulk_refresh() {
       return LSM9DSx_Common::bulk_refresh();
     }
     else {
-      if (verbosity > 2) Kernel::log("\t Failed to fire preform irq_xm1\n");
+      if (getVerbosity() > 2) Kernel::log("\t Failed to fire preform irq_xm1\n");
     }
   }
   else {
-    if (verbosity > 2) Kernel::log("\t Failed to fire preform irq_xm0\n");
+    if (getVerbosity() > 2) Kernel::log("\t Failed to fire preform irq_xm0\n");
   }
 
   return -1;
@@ -528,7 +520,7 @@ int8_t LSM9DS1_AG::bulk_refresh() {
 int8_t LSM9DS1_AG::irq_0() {
   int8_t return_value = IMU_ERROR_NO_ERROR;
 
-  if (verbosity > 3) Kernel::log("XM::irq_0()\n");
+  if (getVerbosity() > 3) Kernel::log("XM::irq_0()\n");
   if (initComplete()) {
     if (!fire_preformed_bus_op(&preformed_busop_irq_0) ) {
       // Take corrective action.
@@ -540,7 +532,7 @@ int8_t LSM9DS1_AG::irq_0() {
 int8_t LSM9DS1_AG::irq_1() {
   int8_t return_value = IMU_ERROR_NO_ERROR;
 
-  if (verbosity > 3) Kernel::log("XM::irq_1()\n");
+  if (getVerbosity() > 3) Kernel::log("XM::irq_1()\n");
   if (initComplete()) {
     //readRegister((uint8_t) LSM9DS1_AG_STATUS_REG_M);
     //readRegister((uint8_t) LSM9DS1_AG_FIFO_SRC_REG);
@@ -554,13 +546,11 @@ int8_t LSM9DS1_AG::irq_1() {
 
 
 void LSM9DS1_AG::reset() {
-  autoscale_acc       = false;
   scale_acc           = 0;
   update_rate_acc     = 0;
   discards_remain_acc = 0;
   discards_total_acc  = 0;
 
-  autoscale_gyr       = false;
   scale_gyr           = 0;
   update_rate_gyr     = 0;
   discards_remain_gyr = 0;
@@ -618,7 +608,7 @@ uint8_t sample_rate_block_m[] = { 0b00000000, 0b00000000 };
 ****************************************************************************************************/
 
 int8_t LSM9DS1_AG::configure_sensor() {
-  if (verbosity > 3) Kernel::log("XM::configure_sensor()\n");
+  if (getVerbosity() > 3) Kernel::log("XM::configure_sensor()\n");
 
   writeRegister(LSM9DS1_M_CTRL_REG1,   (uint8_t*) &bulk_init_block_ag_0, 4);
   writeRegister(LSM9DS1_M_CTRL_REG5,   (uint8_t*) &bulk_init_block_ag_1, 6);
@@ -722,21 +712,21 @@ void LSM9DS1_AG::dumpDevRegs(StringBuilder *output) {
   if (NULL == output) return;
   LSM9DSx_Common::dumpDevRegs(output);
 
-  if (verbosity > 1) {
+  if (getVerbosity() > 1) {
     output->concatf("--- update_rate_acc     %3.0f Hz\n", (double) rate_settings_acc[update_rate_acc].hertz);
   }
-  if (verbosity > 2) {
+  if (getVerbosity() > 2) {
     output->concatf("--- scale_acc           +/-%d\n", error_map_acc[scale_acc].scale);
-    output->concatf("--- autoscale_acc       %s\n", (autoscale_acc ? "yes" : "no"));
+    output->concatf("--- autoscale_acc       %s\n", (autoscale_acc() ? "yes" : "no"));
     output->concatf("--- noise_floor_acc     (%d, %d, %d)\n", noise_floor_acc.x, noise_floor_acc.y, noise_floor_acc.z);
   }
 
-  if (verbosity > 1) {
+  if (getVerbosity() > 1) {
     output->concatf("--- update_rate_gyr     %3.0f Hz\n", (double) rate_settings_gyr[update_rate_gyr].hertz);
   }
-  if (verbosity > 2) {
+  if (getVerbosity() > 2) {
     output->concatf("--- scale_gyr           +/-%d\n", error_map_gyr[scale_gyr].scale);
-    output->concatf("--- autoscale_gyr       %s\n\n", (autoscale_gyr ? "yes" : "no"));
+    output->concatf("--- autoscale_gyr       %s\n\n", (autoscale_gyr() ? "yes" : "no"));
     output->concatf("--- noise_floor_gyr     (%d, %d, %d)\n", noise_floor_gyr.x, noise_floor_gyr.y, noise_floor_gyr.z);
   }
 }
@@ -780,7 +770,7 @@ int8_t LSM9DS1_AG::io_op_callback(BusOp* _op) {
 
   // There is zero chance this object will be a null pointer unless it was done on purpose.
   if (op->hasFault()) {
-    if (verbosity > 3) {
+    if (getVerbosity() > 3) {
       local_log.concat("~~~~~~~~LSM9DS1_AG::io_op_callback   (ERROR CASE -1)\n");
       op->printDebug(&local_log);
       Kernel::log(&local_log);
@@ -794,7 +784,7 @@ int8_t LSM9DS1_AG::io_op_callback(BusOp* _op) {
   unsigned int access_len = op->buf_len;  // The access length lets us know how many things changed.
   uint8_t access_idx = op->getTransferParam(3);
   unsigned int value = regValue(access_idx);
-  if (verbosity > 6) local_log.concatf("%s  XM::io_op_callback(0x%08x): value: %d \t access_idx  %d \t access_len: %d\n", op->getOpcodeString(), (uint32_t)((BusOpCallback*) this), value, access_idx, access_len);
+  if (getVerbosity() > 6) local_log.concatf("%s  XM::io_op_callback(0x%08x): value: %d \t access_idx  %d \t access_len: %d\n", op->getOpcodeString(), (uint32_t)((BusOpCallback*) this), value, access_idx, access_len);
 
   /* Our first choice is: Did we just finish a WRITE or a READ? */
   /* READ Case-offs */
@@ -803,12 +793,12 @@ int8_t LSM9DS1_AG::io_op_callback(BusOp* _op) {
       value = regValue(access_idx);
       access_len -= 1;   // Subtract the length.
 
-      if (verbosity > 3) {
+      if (getVerbosity() > 3) {
         local_log.concatf("\t XM R: access_idx  0x%02x   (0x%04x)\n", access_idx, (uint16_t) value);
       }
 
       if (initPending()) {
-        if (idx_io_test_1 == access_idx) {
+        if (IDX_T1 == access_idx) {
           if (integrity_check()) {
             set_state(State::STAGE_3);
             if (step_state()) {
@@ -947,14 +937,14 @@ int8_t LSM9DS1_AG::io_op_callback(BusOp* _op) {
         case LSM9DS1_G_INT_GEN_SRC:     /* The gyroscope interrupt status register. */
           if (value & 0x01) {                 // An interrupt was seen because we crossed a threshold we set.
             if (value & 0xE0) {               // Did we exceed our set threshold?
-              if (autoscale_gyr) request_rescale_gyr(scale_gyr+1);
+              if (autoscale_gyr()) request_rescale_gyr(scale_gyr+1);
             }
             else if (value & 0x1C) {          // Did we drop below our set threshold?
-              if (autoscale_gyr) request_rescale_gyr(scale_gyr-1);
+              if (autoscale_gyr()) request_rescale_gyr(scale_gyr-1);
             }
           }
           else if (value & 0x02) {            // We had a range overflow. Means we need to autoscale...
-            if (autoscale_gyr) request_rescale_gyr(scale_gyr+1);
+            if (autoscale_gyr()) request_rescale_gyr(scale_gyr+1);
           }
           break;
         // TODO: We need to implement these....
@@ -962,32 +952,32 @@ int8_t LSM9DS1_AG::io_op_callback(BusOp* _op) {
           if (value & 0x08) {                 // We have fresh data to fetch.
             if (!fire_preformed_bus_op(&preformed_busop_read_gyr) ) {
               // Take corrective action.
-              if (verbosity > 1) local_log.concat("\tFailed to fast-read gyr vector\n");
+              if (getVerbosity() > 1) local_log.concat("\tFailed to fast-read gyr vector\n");
             }
           }
           break;
 
         case LSM9DS1_AG_STATUS_REG_ALT:
-          if (verbosity > 5) local_log.concatf("\t LSM9DS1_AG_STATUS_REG_ALT: 0x%02x\n", (uint8_t) value);
+          if (getVerbosity() > 5) local_log.concatf("\t LSM9DS1_AG_STATUS_REG_ALT: 0x%02x\n", (uint8_t) value);
           break;
         case LSM9DS1_AG_FIFO_CTRL:
-          if (verbosity > 5) local_log.concatf("\t XM_FIFO Control: 0x%02x\n", (uint8_t) value);
+          if (getVerbosity() > 5) local_log.concatf("\t XM_FIFO Control: 0x%02x\n", (uint8_t) value);
           break;
         case LSM9DS1_G_CTRL_REG1:
-          if (verbosity > 5) local_log.concatf("\t LSM9DS1_G_CTRL_REG1: 0x%02x\n", (uint8_t) value);
+          if (getVerbosity() > 5) local_log.concatf("\t LSM9DS1_G_CTRL_REG1: 0x%02x\n", (uint8_t) value);
           if ((value >> 4) < MAXIMUM_RATE_INDEX_AG)  update_rate_acc = (value >> 4) & 0x0F;
           break;
         case LSM9DS1_AG_CTRL_REG4:
-          if (verbosity > 5) local_log.concatf("\t LSM9DS1_AG_CTRL_REG4: 0x%02x\n", (uint8_t) value);
+          if (getVerbosity() > 5) local_log.concatf("\t LSM9DS1_AG_CTRL_REG4: 0x%02x\n", (uint8_t) value);
           if (((value >> 3) & 0x07) < MAXIMUM_GAIN_INDEX_ACC)  scale_acc = (value >> 3) & 0x07;
           base_filter_param = (value >> 6) & 0x03;
           break;
         case LSM9DS1_A_CTRL_REG6:
-          if (verbosity > 5) local_log.concatf("\t LSM9DS1_A_CTRL_REG6: 0x%02x\n", (uint8_t) value);
+          if (getVerbosity() > 5) local_log.concatf("\t LSM9DS1_A_CTRL_REG6: 0x%02x\n", (uint8_t) value);
           if (((value >> 3) & 0x03) < MAXIMUM_GAIN_INDEX_GYR)  scale_gyr = (value >> 3) & 0x03;
           break;
         case LSM9DS1_AG_FIFO_SRC:     /* The FIFO status register. */
-          //if (verbosity > 5) local_log.concatf("\t XM FIFO Status: 0x%02x\n", (uint8_t) value);
+          //if (getVerbosity() > 5) local_log.concatf("\t XM FIFO Status: 0x%02x\n", (uint8_t) value);
           if (initComplete()) {
             *pending_samples = value & 0x1F;
             if (!(value & 0x20)) {              // If the FIFO watermark is set and the FIFO is not empty...
@@ -1001,7 +991,7 @@ int8_t LSM9DS1_AG::io_op_callback(BusOp* _op) {
                 case State::STAGE_3:
                   if (preformed_busop_read_acc.isIdle()) {
                     if (!fire_preformed_bus_op(&preformed_busop_read_acc) ) {
-                      if (verbosity > 2) local_log.concat("\tFailed to fast-read accel vector\n");
+                      if (getVerbosity() > 2) local_log.concat("\tFailed to fast-read accel vector\n");
                       error_condition = IMU_ERROR_BUS_INSERTION_FAILED;
                       if (getState() == State::STAGE_5) {
                         set_state(State::STAGE_4);
@@ -1032,9 +1022,9 @@ int8_t LSM9DS1_AG::io_op_callback(BusOp* _op) {
       if (op->devRegisterAdvance()) access_idx++;
     }
 
-    if (profile) {
+    if (profile()) {
       profiler_read_end = micros();
-      if (verbosity > 6) {
+      if (getVerbosity() > 6) {
         local_log.concatf("\t Operation took %uus\n", (unsigned long) profiler_read_end);
       }
     }
@@ -1047,7 +1037,7 @@ int8_t LSM9DS1_AG::io_op_callback(BusOp* _op) {
       value = regValue(access_idx);
       access_len -= 1;   // Subtract the length.
 
-      if (verbosity > 3) {
+      if (getVerbosity() > 3) {
         local_log.concatf("\t XM W: access_idx  0x%02x   (0x%04x)\n", access_idx, (uint16_t) value);
       }
 
@@ -1056,7 +1046,7 @@ int8_t LSM9DS1_AG::io_op_callback(BusOp* _op) {
       //reg_defs[access_idx].dirty = false;
 
       if (initPending()) {
-        if (idx_io_test_1 == access_idx) {
+        if (IDX_T1 == access_idx) {
         set_state(State::STAGE_2);
           if (step_state()) {
              //integrator->init();
@@ -1093,7 +1083,7 @@ int8_t LSM9DS1_AG::io_op_callback(BusOp* _op) {
 
 
         default:
-          if (verbosity > 5) local_log.concatf("\t XM Wrote an unimplemented register.\n");
+          if (getVerbosity() > 5) local_log.concatf("\t XM Wrote an unimplemented register.\n");
           break;
       }
       if (op->devRegisterAdvance()) access_idx++;

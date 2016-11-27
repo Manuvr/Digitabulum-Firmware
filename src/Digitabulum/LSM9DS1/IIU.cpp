@@ -422,8 +422,8 @@ int8_t IIU::readSensor(void) {
 bool IIU::enableProfiling(bool en) {
   if (enableProfiling() != en) {
     data_handling_flags = (en) ? (data_handling_flags | IIU_DATA_HANDLING_PROFILING) : (data_handling_flags & ~(IIU_DATA_HANDLING_PROFILING));
-    imu_m->profile  = en;
-    imu_ag->profile = en;
+    imu_m->profile(en);
+    imu_ag->profile(en);
   }
   return enableProfiling();
 }
@@ -432,7 +432,7 @@ bool IIU::enableProfiling(bool en) {
 bool IIU::nullGyroError(bool en) {
   if (nullGyroError() != en) {
     data_handling_flags = (en) ? (data_handling_flags | IIU_DATA_HANDLING_NULL_GYRO_ERROR) : (data_handling_flags & ~(IIU_DATA_HANDLING_NULL_GYRO_ERROR));
-    imu_m->cancel_error  = en;
+    imu_m->cancel_error(en);
   }
   return nullGyroError();
 }
@@ -445,7 +445,7 @@ bool IIU::nullifyGravity(bool en) {
       // This feature depends on quaternions.
       processQuats(true);
     }
-    //imu_ag->cancel_error = en;
+    //imu_ag->cancel_error(en);
   }
   return nullifyGravity();
 }
@@ -507,13 +507,13 @@ void IIU::setTemperature(float nu) {
 
 void IIU::enableAutoscale(uint8_t s_type, bool enabled) {
   if (s_type & IMU_FLAG_GYRO_DATA) {
-    imu_ag->autoscale_gyr = enabled;
+    imu_ag->autoscale_gyr(enabled);
   }
   if (s_type & IMU_FLAG_MAG_DATA) {
-    imu_m->autoscale_mag = enabled;
+    imu_m->autoscale_mag(enabled);
   }
   if (s_type & IMU_FLAG_ACCEL_DATA) {
-    imu_ag->autoscale_acc = enabled;
+    imu_ag->autoscale_acc(enabled);
   }
 }
 

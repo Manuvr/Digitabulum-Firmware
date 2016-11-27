@@ -72,6 +72,17 @@ class CPLDDriver;
 #define IMU_ERROR_REGISTER_UNDEFINED       10
 
 
+#define IMU_COMMON_FLAG_VERBOSITY_MASK 0x0007
+#define IMU_COMMON_FLAG_HW_WRITABLE    0x0008
+#define IMU_COMMON_FLAG_PROFILING      0x0010
+#define IMU_COMMON_FLAG_CANCEL_ERROR   0x0020
+#define IMU_COMMON_FLAG_AUTOSCALE_0    0x0040
+#define IMU_COMMON_FLAG_AUTOSCALE_1    0x0080
+#define IMU_COMMON_FLAG_MAG_POWERED    0x2000
+#define IMU_COMMON_FLAG_GYR_POWERED    0x4000
+#define IMU_COMMON_FLAG_ACC_POWERED    0x8000
+
+
 /*
 * In addition to the natural ADC error, the sensor accuracy worsens at these rates for
 * every degree C deviant of 25C...
@@ -105,14 +116,14 @@ class IIU;              // Forward declaration of the IIU class.
 * These are the sensor states.
 */
 enum class State {
-  STAGE_0,   // Undiscovered. Maybe absent.
-  STAGE_1,   // Discovered, but not init'd.
-  STAGE_2,   // Discovered and initiallized, but unknown register values.
-  STAGE_3,   // Fully initialized and sync'd. Un-calibrated.
-  STAGE_4,   // Calibrated and idle.
-  STAGE_5,   // Calibrated and reading.
-  FAULT,     // Fault.
-  UNDEF      // Not a state-machine value. A return code to simplifiy error-checks.
+  STAGE_0 = 0,  // Undiscovered. Maybe absent.
+  STAGE_1,      // Discovered, but not init'd.
+  STAGE_2,      // Discovered and initiallized, but unknown register values.
+  STAGE_3,      // Fully initialized and sync'd. Un-calibrated.
+  STAGE_4,      // Calibrated and idle.
+  STAGE_5,      // Calibrated and reading.
+  FAULT,        // Fault.
+  UNDEF         // Not a state-machine value. A return code to simplifiy error-checks.
 };
 
 
@@ -128,9 +139,6 @@ enum class State {
 */
 class LSM9DSx_Common : public BusOpCallback {
   public:
-    bool    profile       = false;
-    bool    cancel_error  = false;
-
     /* State-check functions. Inlined where practical. */
     inline State getState() {               return imu_state;                             }
     inline State desiredState() {           return desired_state;                         }
@@ -143,7 +151,11 @@ class LSM9DSx_Common : public BusOpCallback {
     inline bool idle() {                    return (State::STAGE_4 == getState());        }
     inline bool reading() {                 return (State::STAGE_5 == getState());        }
     inline bool desired_state_attained() {  return (getState() == desiredState());        }
-    inline void setVerbosity(int8_t _v) {   verbosity = _v;  };
+
+    inline bool profile() {         return _check_flags(IMU_COMMON_FLAG_PROFILING);     };
+    inline bool cancel_error() {    return _check_flags(IMU_COMMON_FLAG_CANCEL_ERROR);  };
+    inline void profile(bool x) {       _alter_flags(x, IMU_COMMON_FLAG_PROFILING);     };
+    inline void cancel_error(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_CANCEL_ERROR);  };
 
     int8_t setDesiredState(State);   // Used to set the state the OS wants the IMU class to acheive.
     void   write_test_bytes();
@@ -158,7 +170,6 @@ class LSM9DSx_Common : public BusOpCallback {
     virtual void dumpDevRegs(StringBuilder*);
     virtual void dumpPreformedElements(StringBuilder*);
 
-
     /* Overrides from the BusOpCallback interface */
     virtual int8_t io_op_callback(BusOp*) = 0;
     int8_t queue_io_job(BusOp*);         // Implemented here.
@@ -166,9 +177,15 @@ class LSM9DSx_Common : public BusOpCallback {
     /* Functions called by the IIU */
     virtual int8_t readSensor(void) =0;      // Call to poll the sensor's registers and take any appropriate action.
     //virtual int8_t enable(bool);             // Pass a boolean to turn the sensor on or off.
-
     //virtual int8_t set_base_filter_param(uint8_t nu_bw_idx) =0;
 
+    /* Inlines for the specialized flag duty of get/set class verbosity. */
+    inline uint8_t getVerbosity() {
+      return (_imu_flags & IMU_COMMON_FLAG_VERBOSITY_MASK);
+    };
+    inline void  setVerbosity(uint8_t nu) {
+      _imu_flags = (nu & IMU_COMMON_FLAG_VERBOSITY_MASK) | (_imu_flags & ~IMU_COMMON_FLAG_VERBOSITY_MASK);
+    };
 
     inline const char* getStateString() {    return getStateString(imu_state);        }
     inline const char* getErrorString() {    return getErrorString(error_condition);  }
@@ -180,18 +197,21 @@ class LSM9DSx_Common : public BusOpCallback {
 
 
   protected:
-    const char* imu_type;
-    IIU*      integrator       = NULL;  //
+    IIU* integrator = NULL;
+    const uint8_t IDX_T0;
+    const uint8_t IDX_T1;
+    const uint8_t BUS_ADDR;  // What is our address on the bus?
+    const uint8_t IDX_ID;
+
+    uint32_t  profiler_read_begin = 0;  // Profiling member.
+    uint32_t  profiler_read_end   = 0;  // Profiling member.
+    uint32_t  time_stamp_base  = 0;     // What time was it when we first started taking samples?
+    uint32_t  last_sample_time = 0;     // What time was it when we first started taking samples?
     uint32_t  sample_count     = 0;     // How many samples have we read since init?
-
-    State     imu_state        = State::STAGE_0;
-    State     desired_state    = State::STAGE_0;
-
     uint8_t*  pending_samples  = 0;     // How many samples are we expecting to arrive?
-    uint8_t   bus_addr         = 0;     // What is our address on the bus?
-    uint8_t   idx_identity     = 0;
-    uint8_t   idx_io_test_0    = 0;
-    uint8_t   idx_io_test_1    = 0;
+
+    uint16_t _imu_flags        = 1;     // Default verbosity of 1.
+
     uint8_t   io_test_val_0    = 0;     //
     uint8_t   io_test_val_1    = 0;     //
 
@@ -199,24 +219,18 @@ class LSM9DSx_Common : public BusOpCallback {
 
     uint8_t   sb_next_read     = 0;
     uint8_t   sb_next_write    = 0;
+    uint8_t   error_condition  = 0;
 
-    uint32_t  time_stamp_base  = 0;     // What time was it when we first started taking samples?
-    uint32_t  last_sample_time = 0;     // What time was it when we first started taking samples?
+    State     imu_state        = State::STAGE_0;
+    State     desired_state    = State::STAGE_0;
 
     SPIBusOp full_register_refresh;
-    uint8_t  error_condition   = 0;
 
-    int8_t  verbosity          = 1;
     StringBuilder local_log;
 
-    /* These members are for profiling various aspects of this IMU. */
-    uint32_t profiler_read_begin = 0;
-    uint32_t profiler_read_end   = 0;
-
-    bool hardware_writable = false;
 
 
-    LSM9DSx_Common(const char* t_str, uint8_t bus_address, IIU* _integrator);
+    LSM9DSx_Common(uint8_t, uint8_t, uint8_t, uint8_t, IIU*);
 
     /* These are higher-level fxns that are used as "macros" for specific patterns of */
     /*   register access. Common large-scale operations should go here.               */
@@ -239,12 +253,22 @@ class LSM9DSx_Common : public BusOpCallback {
     */
     inline void set_state(State nu) {     imu_state = nu;   }
 
+    /* Inlines for altering and reading the flags. */
+    inline void _alter_flags(bool en, uint16_t mask) {
+      _imu_flags = (en) ? (_imu_flags | mask) : (_imu_flags & ~mask);
+    };
+    inline bool _check_flags(uint16_t mask) {
+      return (mask == (_imu_flags & mask));
+    };
+
+
     int8_t identity_check();
     bool fire_preformed_bus_op(SPIBusOp* op);
     bool integrity_check();
 
     virtual bool is_setup_completed() =0;
     virtual int8_t configure_sensor() =0;
+    virtual const char* imu_type()    =0;
 
 
 

@@ -118,9 +118,10 @@ const char* LSM9DSx_Common::getStateString(State state) {
 * Should probably avoid putting things here that directly pertain to sensor functionality.
 ****************************************************************************************************/
 
-LSM9DSx_Common::LSM9DSx_Common(const char* t_str, uint8_t bus_address, IIU* _integrator) {
+LSM9DSx_Common::LSM9DSx_Common(uint8_t addr, uint8_t ident_idx, uint8_t idx_test_0, uint8_t idx_test_1, IIU* _integrator) :
+  IDX_T0(idx_test_0), IDX_T1(idx_test_1), BUS_ADDR(addr), IDX_ID(ident_idx)
+{
   integrator = _integrator;
-  imu_type   = t_str;
 }
 
 
@@ -136,7 +137,7 @@ int8_t LSM9DSx_Common::init() {
   desired_state      = State::STAGE_0;
   error_condition    = IMU_ERROR_NO_ERROR;
 
-  hardware_writable  = false;
+  _imu_flags = 1;
   sample_count       = 0;
   time_stamp_base    = 0;
   *pending_samples   = 0;
@@ -158,7 +159,7 @@ void LSM9DSx_Common::reset() {
 
 int8_t LSM9DSx_Common::identity_check() {
   if (present()) return IMU_ERROR_NO_ERROR;
-  return readRegister(idx_identity);
+  return readRegister(IDX_ID);
 }
 
 
@@ -172,8 +173,8 @@ void LSM9DSx_Common::write_test_bytes() {
   io_test_val_0 = (uint8_t) randomInt() % 128;
   io_test_val_1 = (uint8_t) randomInt() % 128;
 
-  writeRegister(idx_io_test_0, io_test_val_0);
-  writeRegister(idx_io_test_1, io_test_val_1);
+  writeRegister(IDX_T0, io_test_val_0);
+  writeRegister(IDX_T1, io_test_val_1);
 }
 
 
@@ -188,31 +189,31 @@ bool LSM9DSx_Common::integrity_check() {
 
   // If we are ain a state where we are reading the init values back, look for our test
   // values, and fail the init if they are not found.
-  if (io_test_val_0 == regValue(idx_io_test_0)) {
-    if (io_test_val_1 == regValue(idx_io_test_1)) {
+  if (io_test_val_0 == regValue(IDX_T0)) {
+    if (io_test_val_1 == regValue(IDX_T1)) {
         // We will call this successful init.
-        if (verbosity > 5) {
+        if (getVerbosity() > 5) {
           StringBuilder local_log;
           local_log.concat("Successful readback!");
           integrator->deposit_log(&local_log);
         }
         // Rewrite valid values to those registers if necessary.
         //writeDirtyRegisters();
-        hardware_writable = true;
+        _alter_flags(true, IMU_COMMON_FLAG_HW_WRITABLE);
         return true;
     }
     else {
-      if (verbosity > 2) {
+      if (getVerbosity() > 2) {
         StringBuilder local_log;
-        local_log.concatf("%s failed integrity check (index 0x%02x). Found 0x%02x. Expected 0x%02x.\n", imu_type, idx_io_test_1, regValue(idx_io_test_1), io_test_val_1);
+        local_log.concatf("%s failed integrity check (index 0x%02x). Found 0x%02x. Expected 0x%02x.\n", imu_type(), IDX_T1, regValue(IDX_T1), io_test_val_1);
         integrator->deposit_log(&local_log);
       }
     }
   }
   else {
-    if (verbosity > 2) {
+    if (getVerbosity() > 2) {
       StringBuilder local_log;
-      local_log.concatf("%s failed integrity check (index 0x%02x). Found 0x%02x. Expected 0x%02x.\n", imu_type, idx_io_test_0, regValue(idx_io_test_0), io_test_val_0);
+      local_log.concatf("%s failed integrity check (index 0x%02x). Found 0x%02x. Expected 0x%02x.\n", imu_type(), IDX_T0, regValue(IDX_T0), io_test_val_0);
       integrator->deposit_log(&local_log);
     }
   }
@@ -234,7 +235,7 @@ bool LSM9DSx_Common::integrity_check() {
 int8_t LSM9DSx_Common::setDesiredState(State nu) {
   if (present() && (nu < State::STAGE_1)) {
     // If we already know the sensor is there, why go back further than this?
-    local_log.concatf("%s Trying to move to a state lower than allowed.\n", imu_type);
+    local_log.concatf("%s Trying to move to a state lower than allowed.\n", imu_type());
     Kernel::log(&local_log);
     return -1;
   }
@@ -244,9 +245,9 @@ int8_t LSM9DSx_Common::setDesiredState(State nu) {
       // TODO
       // The IMU is not at equilibrium. It may be ok to change the desired stage as long as we don't have
       //   bus operations pending.
-      if (verbosity > 2) {
-        //local_log.concatf("%s tried to move to state %s while the IMU is off-balance (%s --> %s). Rejecting request.\n", imu_type, getStateString(nu), getStateString(), getStateString(desired_state));
-        local_log.concatf("%s tried to move to state %s while the IMU is off-balance (%s --> %s). We will allow this for now.\n", imu_type, getStateString(nu), getStateString(), getStateString(desired_state));
+      if (getVerbosity() > 2) {
+        //local_log.concatf("%s tried to move to state %s while the IMU is off-balance (%s --> %s). Rejecting request.\n", imu_type(), getStateString(nu), getStateString(), getStateString(desired_state));
+        local_log.concatf("%s tried to move to state %s while the IMU is off-balance (%s --> %s). We will allow this for now.\n", imu_type(), getStateString(nu), getStateString(), getStateString(desired_state));
         Kernel::log(&local_log);
       }
       //return -2;
@@ -269,8 +270,8 @@ bool LSM9DSx_Common::step_state() {
     if (error_condition) {
       // We shouldn't be changing states if there is an error condition.
       // Reset is the only way to exit the condition at present.
-      if (verbosity > 2) {
-        local_log.concatf("%s step_state() was called while we are in an error condition: %s\n", imu_type, getErrorString());
+      if (getVerbosity() > 2) {
+        local_log.concatf("%s step_state() was called while we are in an error condition: %s\n", imu_type(), getErrorString());
         Kernel::log(&local_log);
       }
       return true;
@@ -386,7 +387,7 @@ int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t le
       // ..does the device even have that many...
       #ifdef __MANUVR_DEBUG
       StringBuilder _log;
-      _log.concatf("SENSOR_ERROR_REG_NOT_DEFINED %d, LEN %d, idx = %d\n", bus_addr, len, reg_index);
+      _log.concatf("SENSOR_ERROR_REG_NOT_DEFINED %d, LEN %d, idx = %d\n", BUS_ADDR, len, reg_index);
       Kernel::log(&_log);
       #endif
       if (regExists(reg_index + len)) {  // TODO: Sketchy.... might be unnecessary.
@@ -397,7 +398,7 @@ int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t le
           if (regWritable(reg_index)) {
             #ifdef __MANUVR_DEBUG
               StringBuilder _log;
-              _log.concatf("IMU_ERROR_NOT_WRITABLE %d\n", bus_addr);
+              _log.concatf("IMU_ERROR_NOT_WRITABLE %d\n", BUS_ADDR);
               Kernel::log(&_log);
             #endif
             return IMU_ERROR_NOT_WRITABLE;
@@ -412,9 +413,9 @@ int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t le
     op->buf             = buf;
     op->buf_len         = len;
     op->callback        = (BusOpCallback*) this;
-    op->setParams(bus_addr, len, 1, first_byte);
+    op->setParams(BUS_ADDR, len, 1, first_byte);
 
-    if (profile) {
+    if (profile()) {
       op->profile(true);
     }
     ((CPLDDriver*)cpld)->queue_io_job(op);
@@ -459,9 +460,9 @@ int8_t LSM9DSx_Common::readRegister(uint8_t reg_index, uint8_t *buf, uint8_t len
   op->buf             = buf;
   op->buf_len         = len;
   op->callback        = (BusOpCallback*) this;
-  op->setParams(bus_addr|0x80, len, 1, first_byte);
+  op->setParams(BUS_ADDR|0x80, len, 1, first_byte);
 
-  if (profile) {
+  if (profile()) {
     op->profile(true);
   }
   ((CPLDDriver*)cpld)->queue_io_job(op);
@@ -544,7 +545,7 @@ uint8_t* LSM9DSx_Common::regPtr(uint8_t idx) {
 */
 bool LSM9DSx_Common::fire_preformed_bus_op(SPIBusOp* op) {
   if (reset_preformed_queue_item(op) ) {
-    if (profile) profiler_read_begin = micros();
+    if (profile()) profiler_read_begin = micros();
 
     if (0 != ((CPLDDriver*)cpld)->queue_io_job(op)) {
       return false;
@@ -577,7 +578,7 @@ bool LSM9DSx_Common::reset_preformed_queue_item(SPIBusOp* op) {
     case XferState::STOP:
     case XferState::COMPLETE:
     default:   // Functions like a primitive semaphore.
-      if (verbosity > 2) {
+      if (getVerbosity() > 2) {
         local_log.concatf("reset_preformed_queue_item() failed because it had state %s\n", op->getStateString());
         op->printDebug(&local_log);
         Kernel::log(&local_log);
@@ -607,9 +608,9 @@ void LSM9DSx_Common::dumpPreformedElements(StringBuilder *output) {
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
 void LSM9DSx_Common::dumpDevRegs(StringBuilder *output) {
-  output->concatf("\n-------------------------------------------------------\n--- IMU 0x%04x  %s ==>  %s \n-------------------------------------------------------\n", bus_addr, getStateString(imu_state), (desired_state_attained() ? "STABLE" : getStateString(desired_state)));
+  output->concatf("\n-------------------------------------------------------\n--- IMU 0x%04x  %s ==>  %s \n-------------------------------------------------------\n", BUS_ADDR, getStateString(imu_state), (desired_state_attained() ? "STABLE" : getStateString(desired_state)));
   output->concatf("--- sample_count        %d\n--- pending_samples     %d\n\n", sample_count, *pending_samples);
-  if (verbosity > 1) {
+  if (getVerbosity() > 1) {
     output->concatf("--- calibration smpls   %d\n", sb_next_write);
     output->concatf("--- Base filter param   %d\n", base_filter_param);
   }

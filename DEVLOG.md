@@ -158,3 +158,9 @@ I very much dislike this arcane key-sequence console.
 It might be time to formally abandon the notion of individual IMUs being discrete bus entities, and allow the LegendManager class to be the intermediary (and memory store) for all IIU classes, which would do no allocation for these purposes.
 
 Feed the base pointer in for register space, and let the IMU class calculate appropriate offsets from the base given the IMU count supported. I won't delve into the chain of inference that leads me to this conclusion here, but doing this would have the consequence that all IMUs must be run at the same sample-rate. This might be a sane assumption anyhow.
+
+    Reworking some basics in IIU/IMU classes....
+    283476    2800    9496  295772   4835c  Moved boolean members to flags.
+    283556    2800    9496  295852   483ac  Making some class members constant.
+    283492    2800    9496  295788   4836c  Alignment change to make gains evident.
+    283492    2800    9496  295788   4836c  More flag condensation.
