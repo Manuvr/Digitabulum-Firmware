@@ -407,7 +407,7 @@ int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t le
         first_byte |= 0x40;
     }
 
-    SPIBusOp* op = ((CPLDDriver*)cpld)->issue_spi_op_obj();
+    SPIBusOp* op = ((CPLDDriver*)cpld)->new_op();
     op->devRegisterAdvance(advance_regs);
     op->set_opcode(BusOpcode::TX);
     op->buf             = buf;
@@ -454,7 +454,7 @@ int8_t LSM9DSx_Common::readRegister(uint8_t reg_index, uint8_t *buf, uint8_t len
     first_byte |= 0x40;
   }
 
-  SPIBusOp* op = ((CPLDDriver*)cpld)->issue_spi_op_obj();
+  SPIBusOp* op = ((CPLDDriver*)cpld)->new_op();
   op->devRegisterAdvance(advance_regs);
   op->set_opcode(BusOpcode::RX);
   op->buf             = buf;

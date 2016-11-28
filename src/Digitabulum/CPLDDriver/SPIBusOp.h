@@ -140,9 +140,9 @@ class SPIBusOp : public BusOp {
 
 
   private:
-    uint8_t  xfer_params[4];   // The address transfer lengths, preamble, etc...
-    uint8_t  _param_len  = 0;  // The length of transfer parameters to send.
-    uint8_t  flags       = 0;  // No flags set.
+    uint8_t  xfer_params[4];  // The address transfer lengths, preamble, etc...
+    uint8_t  _param_len = 0;  // The length of transfer parameters to send.
+    uint8_t  flags      = 0;  // No flags set.
 
     int8_t init_dma();
 

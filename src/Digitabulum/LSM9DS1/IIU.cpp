@@ -48,7 +48,7 @@ Data from magnetometers and GPS devices is used to establish error-rates
 #include "ManuLegend/ManuLegend.h"
 
 
-Vector3<float> ZERO_VECTOR;
+const Vector3<float> ZERO_VECTOR;
 
 /****************************************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
@@ -269,7 +269,7 @@ int8_t IIU::pushMeasurement(uint8_t data_type, float x, float y, float z, float 
       Kernel::staticRaiseEvent(&quat_crunch_event);
     }
     InertialMeasurement* nu_measurement = LegendManager::fetchMeasurement(data_type);
-    nu_measurement->set(_ptr_gyr, ((!dirty_mag && cleanMagZero()) ? &ZERO_VECTOR : _ptr_mag), _ptr_acc, delta_t);
+    nu_measurement->set(_ptr_gyr, ((!dirty_mag && cleanMagZero()) ? (Vector3<float>*)&ZERO_VECTOR : _ptr_mag), _ptr_acc, delta_t);
     if (dirty_mag) dirty_mag = 0;
     dirty_acc = 0;
     dirty_gyr = 0;

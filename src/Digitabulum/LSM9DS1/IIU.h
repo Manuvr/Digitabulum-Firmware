@@ -85,6 +85,7 @@ class LSM9DSx_Common;   // Forward declaration of the LSM9DSx_Common class.
 * This is a big mess of pointers to our representations of the registers for a
 *   complete sensor. We do things like this because we need this space allocated
 *   contiguously.
+* This should be 107 bytes if allocated contiguously.
 */
 typedef struct {
   uint8_t* AG_ACT_THS;
@@ -144,6 +145,41 @@ typedef struct {
   uint8_t* M_INT_SRC;
   uint8_t* M_INT_TSH;           // 16-bit threshold register
 } IMURegisterPointers;
+
+
+
+/*
+* This class exist to encapsulate knowledge of address offsets in a giant pool
+*   of memory that represent only this IMU.
+*/
+class AGRegPntrs {
+  public:
+    AGRegPntrs(uint8_t* base) : _base0(base) {};
+
+  private:
+    const uint8_t* _base0;
+    const uint8_t* _base1;
+    const uint8_t* _base2;
+    const uint8_t* _base3;
+
+    const uint8_t* __ag_status;
+    const uint8_t* __fifo_levels;
+    const uint8_t* __temperatures;
+};
+
+/*
+* This class exist to encapsulate knowledge of address offsets in a giant pool
+*   of memory that represent only this IMU.
+*/
+class MagRegPntrs {
+  public:
+    MagRegPntrs(uint8_t* base) : _base(base) {};
+
+  private:
+    const uint8_t* _base;
+};
+
+
 
 
 /*

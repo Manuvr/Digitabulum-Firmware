@@ -353,14 +353,13 @@ class IIU;
 
 
 /* Codes that are specific to Digitabulum's CPLD and IMU apparatus. */
-  #define DIGITABULUM_MSG_IMU_LEGEND           0x0600 // No args? Asking for this legend. One arg: Legend provided.
   #define DIGITABULUM_MSG_IMU_IRQ_RAISED       0x0602 // IRQ asserted by CPLD.
-
+  #define DIGITABULUM_MSG_CPLD_RESET_COMPLETE  0x0607 // The CPLD reset is ready for disassertion.
+  #define DIGITABULUM_MSG_CPLD_RESET_CALLBACK  0x0608 // The CPLD reset is ready for disassertion.
+  #define DIGITABULUM_MSG_IMU_LEGEND           0x0600 // No args? Asking for this legend. One arg: Legend provided.
   #define DIGITABULUM_MSG_IMU_INIT             0x0604 //
   #define DIGITABULUM_MSG_IMU_READ             0x0605 // Signal to read a given set of IMUs.
   #define DIGITABULUM_MSG_IMU_MAP_STATE        0x0606
-  #define DIGITABULUM_MSG_CPLD_RESET_COMPLETE  0x0607 // The CPLD reset is ready for disassertion.
-  #define DIGITABULUM_MSG_CPLD_RESET_CALLBACK  0x0608 // The CPLD reset is ready for disassertion.
   #define DIGITABULUM_MSG_IMU_QUAT_CRUNCH      0x0609 // The given IMU has samples to grind into a quat.
   #define DIGITABULUM_MSG_IMU_TAP              0x060A // The given IMU experienced a tap.
   #define DIGITABULUM_MSG_IMU_DOUBLE_TAP       0x060B // The given IMU experienced a double tap.
@@ -433,14 +432,17 @@ class IIU;
 /*
 * The CPLD driver class.
 */
-class CPLDDriver : public EventReceiver, public BusOpCallback {
+class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
   public:
     CPLDDriver();
     ~CPLDDriver();       // Should never be called. Here for the sake of completeness.
 
-    /* Overrides from the SPICallback interface */
+    /* Overrides from the BusAdapter interface */
     int8_t io_op_callback(BusOp*);
     int8_t queue_io_job(BusOp*);
+    int8_t advance_work_queue();
+    SPIBusOp* new_op();
+    SPIBusOp* new_op(BusOpcode, BusOpCallback*);
 
     /* Overrides from EventReceiver */
     void printDebug(StringBuilder*);
@@ -452,10 +454,7 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     #endif  //MANUVR_CONSOLE_SUPPORT
 
     /* Members related to the work queue... */
-    int8_t advance_work_queue();
     inline void step_queues(){  Kernel::isrRaiseEvent(&event_spi_queue_ready); }
-    SPIBusOp* issue_spi_op_obj();
-    SPIBusOp* issue_spi_op_obj(BusOpcode, BusOpCallback*);
 
     /* Power vs performance */
     void     reset();                  // Causes the CPLD to be reset.
@@ -482,13 +481,9 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     uint8_t   cpld_wakeup_source = 0;         // WAKEUP mapping.
 
     /* SPI and work queue related members */
-    PriorityQueue<SPIBusOp*> work_queue;
     PriorityQueue<SPIBusOp*> callback_queue;
-    PriorityQueue<SPIBusOp*> preallocated;
     uint32_t bus_timeout_millis   = 5;        // How long to spend in IO_WAIT?
-    uint32_t preallocation_misses = 0;        // How many times have we starved the preallocation queue?
     uint32_t specificity_burden   = 0;        // How many queue items have new deleted?
-    uint16_t max_queue_depth      = 50;       // Debug
     uint8_t  spi_cb_per_event     = 3;        // Limit the number of callbacks processed per event.
 
     /* Inlines for deriving address and IRQ bit offsets from index. */

@@ -315,7 +315,7 @@ int main(void) {
   CPLDDriver _cpld;
   kernel->subscribe(&_cpld);
 
-  LegendManager _legend_manager;
+  LegendManager _legend_manager(&_cpld);
   kernel->subscribe(&_legend_manager);
 
   I2CAdapter i2c(1);

@@ -22,11 +22,6 @@ limitations under the License.
 
 #include "ManuLegend.h"
 
-extern "C" {
-  extern volatile CPLDDriver* cpld;
-}
-
-
 
 /*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
@@ -61,6 +56,42 @@ uint32_t LegendManager::prealloc_starves = 0;
 PriorityQueue<InertialMeasurement*>  LegendManager::preallocd_measurements;
 
 uint32_t LegendManager::minimum_prealloc_level = PREALLOCATED_IIU_MEASUREMENTS;
+
+/* ---------------------- */
+/*    Register memory     */
+/* ---------------------- */
+/* These are giant strips of DMA-capable memory that are used for raw frame
+     reads from the sensor package. Twice what we need for double-buffering. */
+Vector3<int16_t> LegendManager::__frame_buf_a[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
+Vector3<int16_t> LegendManager::__frame_buf_g[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
+Vector3<int16_t> LegendManager::__frame_buf_m[2 * LEGEND_DATASET_IIU_COUNT];  // Mag data
+/* More large stretches of DMA memory. These are for IIU register definitions.
+     Registers laid out this way cannot be multiply-accessed as more than single bytes
+     by their respective IIU classes because the memory is not contiguous. */
+int16_t LegendManager::__temperatures[LEGEND_DATASET_IIU_COUNT];
+uint8_t LegendManager::__fifo_ctrl[LEGEND_DATASET_IIU_COUNT];
+uint8_t LegendManager::__fifo_levels[LEGEND_DATASET_IIU_COUNT];  // The FIFO levels.
+uint8_t LegendManager::__ag_status[LEGEND_DATASET_IIU_COUNT];
+/* Identity registers. */
+uint8_t LegendManager::__ag_id[LEGEND_DATASET_IIU_COUNT];
+uint8_t LegendManager::__m_id[LEGEND_DATASET_IIU_COUNT];
+/* Accelerometer interrupt registers. */
+uint8_t LegendManager::_reg_block_ag_0[LEGEND_DATASET_IIU_COUNT * AG_BASE_0_SIZE];
+/* Gyroscope control registers. */
+uint8_t LegendManager::_reg_block_ag_1[LEGEND_DATASET_IIU_COUNT * AG_BASE_1_SIZE];
+/* Accelerometer control registers. */
+uint8_t LegendManager::_reg_block_ag_2[LEGEND_DATASET_IIU_COUNT * AG_BASE_2_SIZE];
+/* Gyroscope interrupt registers. */
+uint8_t LegendManager::_reg_block_ag_3[LEGEND_DATASET_IIU_COUNT * AG_BASE_3_SIZE];
+/* Magnetometer offset registers. */
+uint8_t LegendManager::_reg_block_m_0[LEGEND_DATASET_IIU_COUNT * M_BASE_0_SIZE];
+/* Magnetometer control registers. */
+uint8_t LegendManager::_reg_block_m_1[LEGEND_DATASET_IIU_COUNT * M_BASE_1_SIZE];
+/* Magnetometer interrupt registers. */
+uint8_t LegendManager::_reg_block_m_2[LEGEND_DATASET_IIU_COUNT * M_BASE_2_SIZE];
+/* ---------------------- */
+/* End of register memory */
+/* ---------------------- */
 
 
 
@@ -126,7 +157,9 @@ void LegendManager::reclaimMeasurement(InertialMeasurement* obj) {
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
-LegendManager::LegendManager() : EventReceiver() {
+LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver() {
+  _bus = (CPLDDriver*) bus;  // TODO: Make this cast unnecessary.
+
   setReceiverName("ManuMgmt");
   INSTANCE = this;
 
@@ -486,7 +519,7 @@ int8_t LegendManager::queue_io_job(BusOp* _op) {
   if (NULL == op->callback) {
     op->callback = (BusOpCallback*) this;
   }
-  return ((CPLDDriver*)cpld)->queue_io_job(op);
+  return _bus->queue_io_job(op);
 }
 
 

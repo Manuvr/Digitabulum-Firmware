@@ -345,7 +345,7 @@ const MessageTypeDef cpld_message_defs[] = {
 /**
 * Constructor. Also populates the global pointer reference.
 */
-CPLDDriver::CPLDDriver() : EventReceiver() {
+CPLDDriver::CPLDDriver() : EventReceiver(), BusAdapter(50) {
   setReceiverName("CPLDDriver");
 
   if (NULL == cpld) {
@@ -860,7 +860,7 @@ int8_t CPLDDriver::queue_io_job(BusOp* _op) {
       if (bus_timeout_millis) event_spi_timeout.delaySchedule(bus_timeout_millis);  // Punch the timeout schedule.
     }
     else {    // If there is something already in progress, queue up.
-      if (_er_flag(CPLD_FLAG_QUEUE_GUARD) && (max_queue_depth <= work_queue.size())) {
+      if (_er_flag(CPLD_FLAG_QUEUE_GUARD) && (MAX_Q_DEPTH <= work_queue.size())) {
         if (getVerbosity() > 3) Kernel::log("CPLDDriver::queue_io_job(): \t Bus queue at max size. Dropping transaction.\n");
         op->abort(XferFault::QUEUE_FLUSH);
         callback_queue.insertIfAbsent(op);
@@ -1061,12 +1061,12 @@ void CPLDDriver::purge_queued_work() {
 *
 * @return an SPIBusOp to be used. Only NULL if out-of-mem.
 */
-SPIBusOp* CPLDDriver::issue_spi_op_obj() {
+SPIBusOp* CPLDDriver::new_op() {
   SPIBusOp* return_value = preallocated.dequeue();
   if (NULL == return_value) {
-    preallocation_misses++;
+    _prealloc_misses++;
     return_value = new SPIBusOp();
-    //if (getVerbosity() > 5) Kernel::log("issue_spi_op_obj(): Fresh allocation!\n");
+    //if (getVerbosity() > 5) Kernel::log("new_op(): Fresh allocation!\n");
   }
   return return_value;
 }
@@ -1079,8 +1079,8 @@ SPIBusOp* CPLDDriver::issue_spi_op_obj() {
 * @param  _req  The device pointer that owns jobs we wish purged.
 * @return an SPIBusOp to be used. Only NULL if out-of-mem.
 */
-SPIBusOp* CPLDDriver::issue_spi_op_obj(BusOpcode _op, BusOpCallback* _req) {
-  SPIBusOp* return_value = issue_spi_op_obj();
+SPIBusOp* CPLDDriver::new_op(BusOpcode _op, BusOpCallback* _req) {
+  SPIBusOp* return_value = new_op();
   return_value->set_opcode(_op);
   return_value->callback = _req;
   return return_value;
@@ -1145,7 +1145,7 @@ void CPLDDriver::purge_stalled_job() {
 * @return 0 on success. Nonzero on failure.
 */
 int8_t CPLDDriver::readRegister(uint8_t reg_addr) {
-  SPIBusOp* temp = issue_spi_op_obj();
+  SPIBusOp* temp = new_op();
   temp->set_opcode(BusOpcode::RX);
   temp->setParams(reg_addr, 0);  // Set the READ bit...
   queue_io_job(temp);
@@ -1160,7 +1160,7 @@ int8_t CPLDDriver::readRegister(uint8_t reg_addr) {
 * @return 0 on success. Nonzero on failure.
 */
 int8_t CPLDDriver::writeRegister(uint8_t reg_addr, uint8_t val) {
-  SPIBusOp* temp = issue_spi_op_obj();
+  SPIBusOp* temp = new_op();
   temp->set_opcode(BusOpcode::TX);
   temp->setParams(reg_addr, val);
   queue_io_job(temp);
@@ -1400,7 +1400,7 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
 
     case 0x5050:
       {
-        SPIBusOp* op = issue_spi_op_obj();
+        SPIBusOp* op = new_op();
         op->set_opcode(BusOpcode::RX);
         op->setParams((active_imu_position | 0x80), 0x01, 0x02, 0x8F);
         op->setBuffer(__hack_buffer, 2);
@@ -1489,7 +1489,7 @@ void CPLDDriver::printDebug(StringBuilder *output) {
     output->concatf("-- spi_cb_per_event    %d\n--\n",   spi_cb_per_event);
   }
   output->concatf("-- prealloc queue size %d\n",     preallocated.size());
-  output->concatf("-- prealloc_misses     %u\n",     (unsigned long) preallocation_misses);
+  output->concatf("-- prealloc_misses     %u\n",     (unsigned long) _prealloc_misses);
   output->concatf("-- total_transfers     %u\n",     (unsigned long) SPIBusOp::total_transfers);
   output->concatf("-- failed_transfers    %u\n",     (unsigned long) SPIBusOp::failed_transfers);
   //output->concatf("-- specificity_burden  %u\n--\n", (unsigned long) specificity_burden);
@@ -1710,7 +1710,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       if (temp_byte < 0x22) {
         active_imu_position = temp_byte;
         for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
-        SPIBusOp* op = issue_spi_op_obj();
+        SPIBusOp* op = new_op();
         op->set_opcode(BusOpcode::RX);
         op->setParams((temp_byte | 0x80), 0x01, 0x01, 0x8F);
         op->setBuffer(__hack_buffer, (*(str) == 'C' ? 5 : 1));
@@ -1724,7 +1724,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
     case 'n':    // Many bytes for a given address...
       if (temp_byte < 35) {
         for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
-        SPIBusOp* op = issue_spi_op_obj(BusOpcode::RX, this);
+        SPIBusOp* op = new_op(BusOpcode::RX, this);
         op->setParams((active_imu_position | 0x80), temp_byte, 0x01, 0x8F);
         op->setBuffer(__hack_buffer, temp_byte);
         queue_io_job((BusOp*) op);
@@ -1737,7 +1737,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
     case 'N':    // Single byte for a multiple access...
       if (temp_byte < 35) {
         for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
-        SPIBusOp* op = issue_spi_op_obj(BusOpcode::RX, this);
+        SPIBusOp* op = new_op(BusOpcode::RX, this);
         op->setParams((active_imu_position | 0x80), 0x01, temp_byte, 0x8F);
         op->setBuffer(__hack_buffer, temp_byte);
         queue_io_job((BusOp*) op);

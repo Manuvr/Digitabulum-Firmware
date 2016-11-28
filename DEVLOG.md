@@ -164,3 +164,7 @@ Feed the base pointer in for register space, and let the IMU class calculate app
     283556    2800    9496  295852   483ac  Making some class members constant.
     283492    2800    9496  295788   4836c  Alignment change to make gains evident.
     283492    2800    9496  295788   4836c  More flag condensation.
+    283540    2800    9496  295836   4839c  CPLD conversion to BusAdapter.
+    283476    2800   11072  297348   48984  Static allocation of IMU register memory.
+
+_---J. Ian Lindsay_
