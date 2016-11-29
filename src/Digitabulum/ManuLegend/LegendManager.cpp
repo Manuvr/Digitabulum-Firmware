@@ -1291,3 +1291,16 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
   flushLocalLog();
 }
 #endif  //MANUVR_CONSOLE_SUPPORT
+
+
+
+
+
+/*******************************************************************************
+* LegendManager is doing too much.
+*******************************************************************************/
+
+int8_t LegendManager::read_identities() {
+  SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
+  return queue_io_job(op);
+}

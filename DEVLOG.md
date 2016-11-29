@@ -168,3 +168,11 @@ Feed the base pointer in for register space, and let the IMU class calculate app
     283476    2800   11072  297348   48984  Static allocation of IMU register memory.
 
 _---J. Ian Lindsay_
+
+------
+
+### 2016.11.28:
+
+The CPLD driver is now fully separated from the concerns of IMUs. It is a general bus adapter.
+
+Re-wrote some IIU lookup functions as inlines. They were not referenced anywhere, so they may disappear completely. Now that the drivers don't have to deal with the heterogeneous bus topology that r0 exhibited, the drivers can more cleanly carved into functional units.

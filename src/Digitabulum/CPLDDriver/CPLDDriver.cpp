@@ -23,8 +23,6 @@ limitations under the License.
 #include <stm32f7xx_hal_dma.h>
 #include <stm32f7xx_hal_def.h>
 #include "CPLDDriver.h"
-#include "../LSM9DS1/IIU.h"
-#include "../ManuLegend/ManuLegend.h"
 
 /*
 * The HAL library does not break this out, and it doesn't support double-buffer.
@@ -1241,47 +1239,6 @@ uint8_t CPLDDriver::getCPLDVersion() {
 /*******************************************************************************
 * This is where IMU-related functions live.                                    *
 *******************************************************************************/
-/**
-* Given an address, find the associated IIU.
-*
-* @param  test_addr The address to query.
-* @return A pointer to the IIU responsible for the given address.
-*/
-IIU* CPLDDriver::fetch_iiu_by_bus_addr(uint8_t test_addr) {
-  if (CPLD_REG_IMU_D5_D_M < test_addr) {
-    // Too big. Not an IMU address.
-    return NULL;
-  }
-  else if (CPLD_REG_IMU_D5_D_I < test_addr) {
-    // Magnetic aspect.
-    return LegendManager::getInstance()->fetchIIU(test_addr - CPLD_REG_IMU_D5_D_I);
-  }
-  else {
-    // Inertial aspect. Bus address and index are equal.
-    return LegendManager::getInstance()->fetchIIU(test_addr);
-  }
-}
-
-/**
-* Given an address, find the associated IIU.
-*
-* @param  test_addr The address to query.
-* @return An index to the IIU responsible for the given address.
-*/
-int8_t CPLDDriver::fetch_iiu_index_by_bus_addr(uint8_t test_addr) {
-  if (CPLD_REG_IMU_D5_D_M < test_addr) {
-    // Too big. Not an IMU address.
-    return -1;
-  }
-  else if (CPLD_REG_IMU_D5_D_I < test_addr) {
-    // Magnetic aspect.
-    return (test_addr - CPLD_REG_IMU_D5_D_I);
-  }
-  else {
-    // Inertial aspect. Bus address and index are equal.
-    return test_addr;
-  }
-}
 
 /**
 *

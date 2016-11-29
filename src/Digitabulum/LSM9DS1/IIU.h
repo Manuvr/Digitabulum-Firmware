@@ -154,17 +154,18 @@ typedef struct {
 */
 class AGRegPntrs {
   public:
-    AGRegPntrs(uint8_t* base) : _base0(base) {};
+    AGRegPntrs(uint8_t* b0, uint8_t* b1, uint8_t* b2, uint8_t* b3) :
+      _base0(b0), _base1(b1), _base2(b2), _base3(b3) {};
 
   private:
-    const uint8_t* _base0;
-    const uint8_t* _base1;
-    const uint8_t* _base2;
-    const uint8_t* _base3;
+    uint8_t* _base0;
+    uint8_t* _base1;
+    uint8_t* _base2;
+    uint8_t* _base3;
 
-    const uint8_t* __ag_status;
-    const uint8_t* __fifo_levels;
-    const uint8_t* __temperatures;
+    uint8_t* __ag_status;
+    uint8_t* __fifo_levels;
+    uint8_t* __temperatures;
 };
 
 /*

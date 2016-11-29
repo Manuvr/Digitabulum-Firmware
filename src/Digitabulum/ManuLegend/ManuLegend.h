@@ -356,11 +356,39 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     int8_t send_map_event();
 
     int8_t init_iiu(uint8_t idx);
+    int8_t read_identities();
 
     int8_t refreshIMU();           // Calling causes the IMU to be read into its corresponding object.
     int8_t refreshIMU(uint8_t);    // Calling causes the IMU to be read into its corresponding object.
 
     int8_t reconfigure_data_map();    // Calling causes a pointer dance that reconfigures the data we send to the host.
+
+
+    /* Inlines for deriving address and IRQ bit offsets from index. */
+    // Address of the inertial half of the LSM9DS1.
+    inline uint8_t _intertial_addr(int idx) {   return ((idx % 17) + 0x00);   };
+    // Address of the magnetic half of the LSM9DS1.
+    inline uint8_t _magnetic_addr(int idx) {    return ((idx % 17) + 0x11);   };
+
+    /**
+    * Given an address, find the associated IIU.
+    *
+    * @param  test_addr The address to query.
+    * @return A pointer to the IIU responsible for the given address.
+    */
+    inline IIU* fetch_iiu_by_bus_addr(uint8_t addr) {
+      return (CPLD_REG_IMU_D5_D_M < addr) ? NULL : fetchIIU(addr % CPLD_REG_IMU_D5_D_I);
+    };
+
+    /**
+    * Given an address, find the associated IIU.
+    *
+    * @param  test_addr The address to query.
+    * @return An index to the IIU responsible for the given address.
+    */
+    inline int8_t _iiu_idx_from_addr(uint8_t addr) {
+      return (CPLD_REG_IMU_D5_D_M < addr) ? -1 : (addr % CPLD_REG_IMU_D5_D_I);
+    };
 
 
     static LegendManager *INSTANCE;

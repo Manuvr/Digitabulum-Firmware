@@ -332,9 +332,6 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #include <stm32f7xx_hal.h>
 
 
-class LSM9DS1_Common;
-class IIU;
-
 #define CPLD_SPI_MAX_QUEUE_PRINT 3     // How many SPI queue items should we print for debug?
 #define PREALLOCATED_SPI_JOBS    10    // How many SPI queue items should we have on-tap?
 
@@ -352,10 +349,8 @@ class IIU;
 #define CPLD_FLAG_DEN_AG_STATE 0x80    // DEN_AG state.
 
 
-/* Codes that are specific to Digitabulum's CPLD and IMU apparatus. */
+/* Event codes that are specific to Digitabulum's IMU apparatus. */
   #define DIGITABULUM_MSG_IMU_IRQ_RAISED       0x0602 // IRQ asserted by CPLD.
-  #define DIGITABULUM_MSG_CPLD_RESET_COMPLETE  0x0607 // The CPLD reset is ready for disassertion.
-  #define DIGITABULUM_MSG_CPLD_RESET_CALLBACK  0x0608 // The CPLD reset is ready for disassertion.
   #define DIGITABULUM_MSG_IMU_LEGEND           0x0600 // No args? Asking for this legend. One arg: Legend provided.
   #define DIGITABULUM_MSG_IMU_INIT             0x0604 //
   #define DIGITABULUM_MSG_IMU_READ             0x0605 // Signal to read a given set of IMUs.
@@ -364,26 +359,28 @@ class IIU;
   #define DIGITABULUM_MSG_IMU_TAP              0x060A // The given IMU experienced a tap.
   #define DIGITABULUM_MSG_IMU_DOUBLE_TAP       0x060B // The given IMU experienced a double tap.
 
-  // SPI
-  #define DIGITABULUM_MSG_SPI_QUEUE_READY      0x0230 // There is a new job in the SPI bus queue.
-  #define DIGITABULUM_MSG_SPI_CB_QUEUE_READY   0x0231 // There is something ready in the callback queue.
+/* Event codes for Digitabulum's CPLD. */
+#define DIGITABULUM_MSG_SPI_QUEUE_READY      0x0230 // There is a new job in the SPI bus queue.
+#define DIGITABULUM_MSG_SPI_CB_QUEUE_READY   0x0231 // There is something ready in the callback queue.
+#define DIGITABULUM_MSG_CPLD_RESET_COMPLETE  0x0607 // The CPLD reset is ready for disassertion.
+#define DIGITABULUM_MSG_CPLD_RESET_CALLBACK  0x0608 // The CPLD reset is ready for disassertion.
 
 
 /* CPLD register map ***************************************/
 #define CPLD_REG_IMU_DM_P_I    0x00  // |
-#define CPLD_REG_IMU_DM_D_I    0x01  // | These are pseudo registers. If the first byte in an SPI transaction is equal
-#define CPLD_REG_IMU_D1_P_I    0x02  // |   to one of these values, the corresponding IMU will be selected, and its bus
-#define CPLD_REG_IMU_D1_I_I    0x03  // |   connected to the CPU's SPI. Every bus operation that targets an individual
-#define CPLD_REG_IMU_D1_D_I    0x04  // |   IMU must be immediately preceeded by one of these bytes.
-#define CPLD_REG_IMU_D2_P_I    0x05  // |
-#define CPLD_REG_IMU_D2_I_I    0x06  // | The resulting bus connection will be retained until the CPU-facing ~CS line
-#define CPLD_REG_IMU_D2_D_I    0x07  // |   goes high.
-#define CPLD_REG_IMU_D3_P_I    0x08  // |
-#define CPLD_REG_IMU_D3_I_I    0x09  // |
+#define CPLD_REG_IMU_DM_D_I    0x01  // | These are pseudo registers.
+#define CPLD_REG_IMU_D1_P_I    0x02  // | If the first byte in an SPI
+#define CPLD_REG_IMU_D1_I_I    0x03  // |   transaction is equal to one of these
+#define CPLD_REG_IMU_D1_D_I    0x04  // |   values, the corresponding IMU will
+#define CPLD_REG_IMU_D2_P_I    0x05  // |   be selected, and its bus connected
+#define CPLD_REG_IMU_D2_I_I    0x06  // |   to the CPU's SPI. Each bus operation
+#define CPLD_REG_IMU_D2_D_I    0x07  // |   that targets an individual IMU must
+#define CPLD_REG_IMU_D3_P_I    0x08  // |   be immediately preceeded by one of
+#define CPLD_REG_IMU_D3_I_I    0x09  // |   these bytes.
 #define CPLD_REG_IMU_D3_D_I    0x0A  // |
-#define CPLD_REG_IMU_D4_P_I    0x0B  // |
-#define CPLD_REG_IMU_D4_I_I    0x0C  // |
-#define CPLD_REG_IMU_D4_D_I    0x0D  // |
+#define CPLD_REG_IMU_D4_P_I    0x0B  // | The resulting bus connection will be
+#define CPLD_REG_IMU_D4_I_I    0x0C  // |   retained until the CPU-facing ~CS
+#define CPLD_REG_IMU_D4_D_I    0x0D  // |   line goes high.
 #define CPLD_REG_IMU_D5_P_I    0x0E  // |
 #define CPLD_REG_IMU_D5_I_I    0x0F  // |
 #define CPLD_REG_IMU_D5_D_I    0x10  // |
@@ -426,7 +423,6 @@ class IIU;
 #define CPLD_CONF_BIT_GPIO_0     0x20  // Set GPIO_0 source
 #define CPLD_CONF_BIT_GPIO_1     0x40  // Set GPIO_1 state
 #define CPLD_CONF_BIT_DEN_AG_0   0x80  // Set The MC IMU DEN_AG pin
-
 
 
 /*
@@ -475,10 +471,10 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     ManuvrMsg _periodic_debug;
 
     /* Register representations. */
-    uint8_t   cpld_version       = 0;         // If zero, than the CPLD has not been initialized.
-    uint8_t   cpld_conf_value    = 0;         // Configuration.
-    uint8_t   forsaken_digits    = 0;         // Forsaken digits.
-    uint8_t   cpld_wakeup_source = 0;         // WAKEUP mapping.
+    uint8_t   cpld_version       = 0;  // CPLD version byte.
+    uint8_t   cpld_conf_value    = 0;  // Configuration.
+    uint8_t   forsaken_digits    = 0;  // Forsaken digits.
+    uint8_t   cpld_wakeup_source = 0;  // WAKEUP mapping.
 
     /* SPI and work queue related members */
     PriorityQueue<SPIBusOp*> callback_queue;
@@ -486,11 +482,6 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     uint32_t specificity_burden   = 0;        // How many queue items have new deleted?
     uint8_t  spi_cb_per_event     = 3;        // Limit the number of callbacks processed per event.
 
-    /* Inlines for deriving address and IRQ bit offsets from index. */
-    // Address of the inertial half of the LSM9DS1.
-    inline uint8_t _intertial_addr(int idx) {   return ((idx % 17) + 0x00);   };
-    // Address of the magnetic half of the LSM9DS1.
-    inline uint8_t _magnetic_addr(int idx) {    return ((idx % 17) + 0x11);   };
     // These values represent where in the IRQ buffer this IIU's bits lie.
     inline uint8_t _irq_offset_byte(int idx) {  return (idx >> 1);            };
     inline uint8_t _irq_offset_bit(int idx) {   return (idx << 2);            };
@@ -519,9 +510,6 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     void _process_conf_update(uint8_t nu);
 
     int8_t iiu_group_irq();
-
-    IIU* fetch_iiu_by_bus_addr(uint8_t);
-    int8_t fetch_iiu_index_by_bus_addr(uint8_t);
 
 
     static SPIBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
