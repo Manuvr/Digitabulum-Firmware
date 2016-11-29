@@ -198,10 +198,12 @@ class LSM9DSx_Common : public BusOpCallback {
 
   protected:
     IIU* integrator = NULL;
-    const uint8_t IDX_T0;
-    const uint8_t IDX_T1;
-    const uint8_t BUS_ADDR;  // What is our address on the bus?
-    const uint8_t IDX_ID;
+
+    uint8_t BUS_ADDR;  // What is our address on the bus? TODO: const
+    // TODO: r1 simplified things a great deal. All these members can probably DIAF.
+    uint8_t IDX_T0; // TODO: Ought to be const if here at all.
+    uint8_t IDX_T1; // TODO: Ought to be const if here at all.
+    uint8_t IDX_ID; // TODO: Ought to be const if here at all.
 
     uint32_t  profiler_read_begin = 0;  // Profiling member.
     uint32_t  profiler_read_end   = 0;  // Profiling member.
@@ -229,8 +231,7 @@ class LSM9DSx_Common : public BusOpCallback {
     StringBuilder local_log;
 
 
-
-    LSM9DSx_Common(uint8_t, uint8_t, uint8_t, uint8_t, IIU*);
+    LSM9DSx_Common();
 
     /* These are higher-level fxns that are used as "macros" for specific patterns of */
     /*   register access. Common large-scale operations should go here.               */

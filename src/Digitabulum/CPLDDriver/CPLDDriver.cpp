@@ -268,6 +268,11 @@ void cpld_wakeup_isr(){
 *
 * Static members and initializers should be located here.
 *******************************************************************************/
+/* Register representations. */
+uint8_t CPLDDriver::cpld_version       = 0;  // CPLD version byte.
+uint8_t CPLDDriver::cpld_conf_value    = 0;  // Configuration.
+uint8_t CPLDDriver::forsaken_digits    = 0;  // Forsaken digits.
+uint8_t CPLDDriver::cpld_wakeup_source = 0;  // WAKEUP mapping.
 
 SPIBusOp  CPLDDriver::preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];
 SPIBusOp* CPLDDriver::current_queue_item = NULL;
@@ -312,21 +317,20 @@ const unsigned char MSG_ARGS_IMU_MAP_STATE[] = {
 
 const MessageTypeDef cpld_message_defs[] = {
   /* These are messages specific to Digitabulum. */
-  {  DIGITABULUM_MSG_IMU_IRQ_RAISED       , 0x0000,               "IMU_IRQ_RAISED"     , ManuvrMsg::MSG_ARGS_NONE }, // IRQ asserted by CPLD.
-  {  DIGITABULUM_MSG_IMU_READ             , 0x0000,               "IMU_READ"           , MSG_ARGS_IMU_READ },  // IMU read request. Argument is the ID.
-  {  DIGITABULUM_MSG_IMU_MAP_STATE        , MSG_FLAG_EXPORTABLE,  "IMU_MAP_STATE"      , MSG_ARGS_IMU_MAP_STATE }, //
-  {  DIGITABULUM_MSG_IMU_INIT             , MSG_FLAG_EXPORTABLE,  "IMU_INIT"           , ManuvrMsg::MSG_ARGS_NONE }, // Signal to build the IMUs.
+  {  DIGITABULUM_MSG_IMU_IRQ_RAISED       , 0x0000,               "IMU_IRQ_RAISED" , ManuvrMsg::MSG_ARGS_NONE }, // IRQ asserted by CPLD.
+  {  DIGITABULUM_MSG_IMU_READ             , 0x0000,               "IMU_READ"       , MSG_ARGS_IMU_READ },  // IMU read request. Argument is the ID.
+  {  DIGITABULUM_MSG_IMU_QUAT_CRUNCH      , 0x0000,               "IMU_QUAT_CRUNCH", ManuvrMsg::MSG_ARGS_NONE }, //
+  {  DIGITABULUM_MSG_IMU_MAP_STATE        , MSG_FLAG_EXPORTABLE,  "IMU_MAP_STATE"  , MSG_ARGS_IMU_MAP_STATE }, //
+  {  DIGITABULUM_MSG_IMU_INIT             , MSG_FLAG_EXPORTABLE,  "IMU_INIT"       , ManuvrMsg::MSG_ARGS_NONE }, // Signal to build the IMUs.
+  {  DIGITABULUM_MSG_IMU_LEGEND           , MSG_FLAG_EXPORTABLE,  "IMU_LEGEND"     , MSG_ARGS_IMU_LEGEND }, // No args? Asking for this legend. Many args: Legend provided.
+  {  DIGITABULUM_MSG_IMU_TAP              , MSG_FLAG_EXPORTABLE,  "IMU_TAP"        , ManuvrMsg::MSG_ARGS_NONE }, // IMU id and optional threshold.
+  {  DIGITABULUM_MSG_IMU_DOUBLE_TAP       , MSG_FLAG_EXPORTABLE,  "IMU_DBL_TAP"    , ManuvrMsg::MSG_ARGS_NONE }, // IMU id and optional threshold.
 
-  {  DIGITABULUM_MSG_CPLD_RESET_COMPLETE  , 0x0000,               "CPLD_RST_COMPLETE"  , ManuvrMsg::MSG_ARGS_NONE }, //
-  {  DIGITABULUM_MSG_CPLD_RESET_CALLBACK  , 0x0000,               "CPLD_RST_CALLBACK"  , ManuvrMsg::MSG_ARGS_NONE }, //
-  {  DIGITABULUM_MSG_IMU_LEGEND           , MSG_FLAG_EXPORTABLE,  "IMU_LEGEND"         , MSG_ARGS_IMU_LEGEND }, // No args? Asking for this legend. Many args: Legend provided.
-
-  {  DIGITABULUM_MSG_IMU_QUAT_CRUNCH      , 0x0000,               "IMU_QUAT_CRUNCH"    , ManuvrMsg::MSG_ARGS_NONE }, //
-  {  DIGITABULUM_MSG_IMU_TAP              , MSG_FLAG_EXPORTABLE,  "IMU_TAP"            , ManuvrMsg::MSG_ARGS_NONE }, // IMU id and optional threshold.
-  {  DIGITABULUM_MSG_IMU_DOUBLE_TAP       , MSG_FLAG_EXPORTABLE,  "IMU_DOUBLE_TAP"     , ManuvrMsg::MSG_ARGS_NONE }, // IMU id and optional threshold.
-
-  {  DIGITABULUM_MSG_SPI_QUEUE_READY      , 0x0000,               "SPI_Q_RDY"          , ManuvrMsg::MSG_ARGS_NONE }, //
-  {  DIGITABULUM_MSG_SPI_CB_QUEUE_READY   , 0x0000,               "SPICB_RDY"          , ManuvrMsg::MSG_ARGS_NONE }, //
+  {  DIGITABULUM_MSG_CPLD_DIGIT_DROP      , 0x0000,               "DIGIT_DROP"     , ManuvrMsg::MSG_ARGS_NONE }, //
+  {  DIGITABULUM_MSG_CPLD_RESET_COMPLETE  , 0x0000,               "CPLD_RST_CMPLTE", ManuvrMsg::MSG_ARGS_NONE }, //
+  {  DIGITABULUM_MSG_CPLD_RESET_CALLBACK  , 0x0000,               "CPLD_RST_CB"    , ManuvrMsg::MSG_ARGS_NONE }, //
+  {  DIGITABULUM_MSG_SPI_QUEUE_READY      , 0x0000,               "SPI_Q_RDY"      , ManuvrMsg::MSG_ARGS_NONE }, //
+  {  DIGITABULUM_MSG_SPI_CB_QUEUE_READY   , 0x0000,               "SPICB_RDY"      , ManuvrMsg::MSG_ARGS_NONE }, //
 };
 
 
@@ -396,7 +400,7 @@ CPLDDriver::~CPLDDriver() {
 * Setup GPIO pins and their bindings to on-chip peripherals, if required.
 */
 void CPLDDriver::gpioSetup() {
-  GPIO_InitTypeDef GPIO_InitStruct;
+  //GPIO_InitTypeDef GPIO_InitStruct;
 
   /* These Port B pins are push-pull outputs:
   *
@@ -405,12 +409,16 @@ void CPLDDriver::gpioSetup() {
   * 9     0      ~CPLD Reset
   * 14    0      SPI2_MISO  (SPI2 is slave and Rx-only)
   */
-  GPIO_InitStruct.Pin        = GPIO_PIN_9 | GPIO_PIN_14;
-  GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9|GPIO_PIN_14, GPIO_PIN_RESET);
+  //GPIO_InitStruct.Pin        = GPIO_PIN_9 | GPIO_PIN_14;
+  //GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_PP;
+  //GPIO_InitStruct.Pull       = GPIO_NOPULL;
+  //GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
+  //HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9|GPIO_PIN_14, GPIO_PIN_RESET);
+  gpioDefine(25, OUTPUT);
+  setPin(25, false);
+  gpioDefine(30, OUTPUT);
+  setPin(30, false);
 
   /* These Port C pins are inputs with a wakeup ISR attached to
   *    the rising-edge.
@@ -437,12 +445,8 @@ void CPLDDriver::gpioSetup() {
   * -----------------------------------------------
   * 2     1      DEN_AG_CARPALS
   */
-  GPIO_InitStruct.Pin   = GPIO_PIN_2;
-  GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull  = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
+  gpioDefine(33, OUTPUT);
+  setPin(33, true);
 }
 
 
@@ -1587,7 +1591,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
-    case '+':
+    case '&':
       local_log.concatf("Advanced CPLD SPI work queue.\n");
       Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
       break;
@@ -1627,10 +1631,16 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       setCPLDConfig(CPLD_CONF_BIT_PWR_CONSRV, (*(str) == ':'));
       break;
 
-    case '-':
     case '_':
-      local_log.concatf("%s CPLD_DEN_AG_0.\n", (*(str) == '_' ? "Clearing" : "Setting"));
-      setCPLDConfig(CPLD_CONF_BIT_DEN_AG_0, (*(str) == '-'));
+    case '-':
+      local_log.concatf("enableCarpalAG(%s)\n", (*(str) == '-' ? "true" : "false"));
+      enableCarpalAG(*(str) == '-');
+      break;
+
+    case '+':
+    case '=':
+      local_log.concatf("enableMetacarpalAG(%s)\n", (*(str) == '+' ? "true" : "false"));
+      enableMetacarpalAG(*(str) == '+');
       break;
 
     case '[':

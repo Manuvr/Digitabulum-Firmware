@@ -155,7 +155,14 @@ int8_t LSM9DS1_M::set_sample_rate_mag(uint8_t nu_srate_idx) {
 * Constructors/destructors, class initialization functions and so-forth...
 ****************************************************************************************************/
 
-LSM9DS1_M::LSM9DS1_M(uint8_t address, IIU* _integrator) : LSM9DSx_Common(address, LSM9DS1_M_WHO_AM_I, LSM9DS1_M_OFFSET_X, LSM9DS1_M_OFFSET_Y, _integrator) {
+LSM9DS1_M::LSM9DS1_M() : LSM9DSx_Common() {
+}
+
+LSM9DS1_M::~LSM9DS1_M() {
+}
+
+
+void LSM9DS1_M::class_init(uint8_t address, IIU* _integrator) {
   // First, we should define our registers....
   // 16 registers. 23 bytes
 
@@ -214,14 +221,14 @@ LSM9DS1_M::LSM9DS1_M(uint8_t address, IIU* _integrator) : LSM9DSx_Common(address
   discards_remain_mag = 0;
   discards_total_mag  = 0;
 
-  // Superclass stuff...
+  integrator = _integrator;
+  BUS_ADDR = address;
+  IDX_T0 = LSM9DS1_M_OFFSET_X;
+  IDX_T1 = LSM9DS1_M_OFFSET_Y;
+  IDX_ID = LSM9DS1_M_WHO_AM_I;
   init();
 }
 
-
-
-LSM9DS1_M::~LSM9DS1_M(void) {
-}
 
 
 

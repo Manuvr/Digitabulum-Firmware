@@ -176,3 +176,11 @@ _---J. Ian Lindsay_
 The CPLD driver is now fully separated from the concerns of IMUs. It is a general bus adapter.
 
 Re-wrote some IIU lookup functions as inlines. They were not referenced anywhere, so they may disappear completely. Now that the drivers don't have to deal with the heterogeneous bus topology that r0 exhibited, the drivers can more cleanly carved into functional units.
+
+    283508    2800   11080  297388   489ac  Rounding out some CPLD function defs.
+    283700    2800   35760  322260   4ead4  Temporarilly made IIU class static to see mem impact.
+
+And there we have it... All IMU/IIU driver classes are now stack-defined and will not burden the heap.
+Turning in for the night.
+
+_---J. Ian Lindsay_

@@ -247,7 +247,7 @@ class IIU {
 
     IIU();
     ~IIU();
-
+    void class_init(uint8_t idx);
 
     int8_t init();
     int8_t readSensor();
@@ -285,7 +285,6 @@ class IIU {
     void deposit_log(StringBuilder*);
 
     /* These are meant to be called from a Legend. */
-    void setPositionAndAddress(uint8_t nu_pos, uint8_t imu_addr, uint8_t mag_addr);
     void setOperatingState(uint8_t);
     void printLastFrame(StringBuilder *output);
     void dumpPreformedElements(StringBuilder*);
@@ -411,8 +410,8 @@ class IIU {
     }
 
 
-    inline void setAccelBaseFiler(uint8_t nu) {  if (imu_ag) imu_ag->set_base_filter_param_acc(nu);  };
-    inline void setGyroBaseFiler(uint8_t nu) {   if (imu_ag) imu_ag->set_base_filter_param_gyr(nu);  };
+    inline void setAccelBaseFiler(uint8_t nu) {  imu_ag.set_base_filter_param_acc(nu);  };
+    inline void setGyroBaseFiler(uint8_t nu) {   imu_ag.set_base_filter_param_gyr(nu);  };
 
 
     /*
@@ -452,8 +451,8 @@ class IIU {
     uint32_t dirty_gyr = 0;
     uint32_t dirty_mag = 0;
 
-    LSM9DS1_AG* imu_ag = NULL;
-    LSM9DS1_M*  imu_m = NULL;
+    LSM9DS1_AG imu_ag;
+    LSM9DS1_M imu_m;
 
     /* Pointers to our exported data. These should all point to a pool in the LegendManager
          that instantiated us. See that header file for more information. */

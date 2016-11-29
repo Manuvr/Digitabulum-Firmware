@@ -84,8 +84,10 @@ limitations under the License.
 */
 class LSM9DS1_AG : public LSM9DSx_Common {
   public:
-    LSM9DS1_AG(uint8_t bus_addr, IIU* _integrator);
-    ~LSM9DS1_AG(void);
+    LSM9DS1_AG();
+    ~LSM9DS1_AG();
+
+    void class_init(uint8_t bus_addr, IIU* _integrator);
 
     /* Specific to this class */
     inline bool autoscale_acc() {   return _check_flags(IMU_COMMON_FLAG_AUTOSCALE_0);   };

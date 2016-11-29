@@ -308,7 +308,16 @@ int8_t LSM9DS1_AG::collect_reading_temperature() {
 /*
 ( This accelerometer has 49 registers (as we choose to carve them).
 */
-LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common(address, LSM9DS1_AG_WHO_AM_I, LSM9DS1_G_INT_GEN_THS_X, LSM9DS1_G_INT_GEN_THS_Z, _integrator) {
+LSM9DS1_AG::LSM9DS1_AG() : LSM9DSx_Common() {
+}
+
+
+LSM9DS1_AG::~LSM9DS1_AG() {
+  // This class will never be torn down.
+}
+
+
+void LSM9DS1_AG::class_init(uint8_t address, IIU* _integrator) {
   // First, we should define our registers....
   // 40 registers.
 
@@ -435,15 +444,14 @@ LSM9DS1_AG::LSM9DS1_AG(uint8_t address, IIU* _integrator) : LSM9DSx_Common(addre
   discards_remain_gyr = 0;
   discards_total_gyr  = 0;
 
-  // Superclass stuff...
+
+  integrator = _integrator;
+  BUS_ADDR = address;
+  IDX_T0 = LSM9DS1_G_INT_GEN_THS_X;
+  IDX_T1 = LSM9DS1_G_INT_GEN_THS_Z;
+  IDX_ID = LSM9DS1_AG_WHO_AM_I;
   init();
 }
-
-
-LSM9DS1_AG::~LSM9DS1_AG(void) {
-  // This class will never be torn down.
-}
-
 
 
 /****************************************************************************************************

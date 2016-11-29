@@ -332,7 +332,7 @@ class LegendManager : public EventReceiver, public BusOpCallback {
   private:
     CPLDDriver* _bus = NULL;   // This is the gateway to the hardware.
 
-    IIU iius[LEGEND_DATASET_IIU_COUNT];  // This is the chirality-invarient list of IIUs.
+    static IIU iius[LEGEND_DATASET_IIU_COUNT];  // This is the chirality-invarient list of IIUs.
 
     ManuLegend* operating_legend = NULL;
     /* This is the dataset that we export. */
@@ -357,6 +357,7 @@ class LegendManager : public EventReceiver, public BusOpCallback {
 
     int8_t init_iiu(uint8_t idx);
     int8_t read_identities();
+    int8_t read_fifo_depth();
 
     int8_t refreshIMU();           // Calling causes the IMU to be read into its corresponding object.
     int8_t refreshIMU(uint8_t);    // Calling causes the IMU to be read into its corresponding object.
@@ -429,8 +430,7 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     static uint8_t __ag_status[LEGEND_DATASET_IIU_COUNT];
 
     /* Identity registers. */
-    static uint8_t __ag_id[LEGEND_DATASET_IIU_COUNT];
-    static uint8_t __m_id[LEGEND_DATASET_IIU_COUNT];
+    static uint8_t _imu_ids[2 * LEGEND_DATASET_IIU_COUNT];
 
     /* Accelerometer interrupt registers. */
     static uint8_t _reg_block_ag_0[LEGEND_DATASET_IIU_COUNT * AG_BASE_0_SIZE];

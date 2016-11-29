@@ -33,6 +33,8 @@ limitations under the License.
 *
 * Static members and initializers should be located here.
 *******************************************************************************/
+IIU LegendManager::iius[LEGEND_DATASET_IIU_COUNT];
+
 SPIBusOp LegendManager::_preformed_read_a;
 SPIBusOp LegendManager::_preformed_read_g;
 SPIBusOp LegendManager::_preformed_read_m;
@@ -73,8 +75,7 @@ uint8_t LegendManager::__fifo_ctrl[LEGEND_DATASET_IIU_COUNT];
 uint8_t LegendManager::__fifo_levels[LEGEND_DATASET_IIU_COUNT];  // The FIFO levels.
 uint8_t LegendManager::__ag_status[LEGEND_DATASET_IIU_COUNT];
 /* Identity registers. */
-uint8_t LegendManager::__ag_id[LEGEND_DATASET_IIU_COUNT];
-uint8_t LegendManager::__m_id[LEGEND_DATASET_IIU_COUNT];
+uint8_t LegendManager::_imu_ids[2 * LEGEND_DATASET_IIU_COUNT];
 /* Accelerometer interrupt registers. */
 uint8_t LegendManager::_reg_block_ag_0[LEGEND_DATASET_IIU_COUNT * AG_BASE_0_SIZE];
 /* Gyroscope control registers. */
@@ -347,7 +348,7 @@ int8_t LegendManager::reconfigure_data_map() {
   uint16_t accumulated_offset = LEGEND_DATASET_GLOBAL_SIZE;
   for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
     // Configure the IIU...
-    iius[i].setPositionAndAddress(i, i, i+0x11);
+    iius[i].class_init(i);
 
     /* Assign the ManuLegend specification to the IIU class, thereby giving the IIU class its pointers. */
 
@@ -1301,6 +1302,27 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
 *******************************************************************************/
 
 int8_t LegendManager::read_identities() {
+  // Zero the space so we ensure no false positives.
+  bzero(&_imu_ids[0], (2 * LEGEND_DATASET_IIU_COUNT));
+
+  // First the inertial aspect.
   SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
+  op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
+  op->setBuffer(&_imu_ids[0], LEGEND_DATASET_IIU_COUNT);
+  if (0 == queue_io_job(op)) {
+    // Now for the magnetic aspect.
+    op = _bus->new_op(BusOpcode::RX, this);
+    op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
+    op->setBuffer(&_imu_ids[LEGEND_DATASET_IIU_COUNT], LEGEND_DATASET_IIU_COUNT);
+    return queue_io_job(op);
+  }
+}
+
+
+
+int8_t LegendManager::read_fifo_depth() {
+  SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
+  op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
+  op->setBuffer(&_imu_ids[0], LEGEND_DATASET_IIU_COUNT);
   return queue_io_job(op);
 }

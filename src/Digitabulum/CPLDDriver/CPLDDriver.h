@@ -364,6 +364,7 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #define DIGITABULUM_MSG_SPI_CB_QUEUE_READY   0x0231 // There is something ready in the callback queue.
 #define DIGITABULUM_MSG_CPLD_RESET_COMPLETE  0x0607 // The CPLD reset is ready for disassertion.
 #define DIGITABULUM_MSG_CPLD_RESET_CALLBACK  0x0608 // The CPLD reset is ready for disassertion.
+#define DIGITABULUM_MSG_CPLD_DIGIT_DROP      0x0609 // A digit was lost.
 
 
 /* CPLD register map ***************************************/
@@ -449,16 +450,24 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
       void procDirectDebugInstruction(StringBuilder*);
     #endif  //MANUVR_CONSOLE_SUPPORT
 
-    /* Members related to the work queue... */
-    inline void step_queues(){  Kernel::isrRaiseEvent(&event_spi_queue_ready); }
-
-    /* Power vs performance */
+    /* High-level hardware control and discovery. */
     void     reset();                  // Causes the CPLD to be reset.
     uint8_t  getCPLDVersion();         // Read the version code in the CPLD.
+    inline bool digitExists(uint8_t x) {   return false;   };   // TODO: When digits arrive.
+    inline int8_t digitSleep(uint8_t x) {  return 0;       };   // TODO: When digits arrive.
+
+    /* The wrist-moun */
+    inline void enableCarpalAG(bool x) {     setPin(33, x);                             };
+    inline void enableMetacarpalAG(bool x) { setCPLDConfig(CPLD_CONF_BIT_DEN_AG_0, x);  };
+
+    /* Power vs performance */
     int      setCPLDClkFreq(int);      // Set the CPLD external clock frequency.
     inline int8_t setWakeupSignal(uint8_t _val) {
       return writeRegister(CPLD_REG_WAKEUP_IRQ, _val | 0x80);
     };
+
+    /* Members related to the work queue... */
+    inline void step_queues(){  Kernel::isrRaiseEvent(&event_spi_queue_ready); }
 
     static SPIBusOp* current_queue_item;
 
@@ -470,21 +479,16 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     ManuvrMsg event_spi_timeout;
     ManuvrMsg _periodic_debug;
 
-    /* Register representations. */
-    uint8_t   cpld_version       = 0;  // CPLD version byte.
-    uint8_t   cpld_conf_value    = 0;  // Configuration.
-    uint8_t   forsaken_digits    = 0;  // Forsaken digits.
-    uint8_t   cpld_wakeup_source = 0;  // WAKEUP mapping.
-
-    /* SPI and work queue related members */
+    /* List of pending callbacks for bus transactions. */
     PriorityQueue<SPIBusOp*> callback_queue;
-    uint32_t bus_timeout_millis   = 5;        // How long to spend in IO_WAIT?
-    uint32_t specificity_burden   = 0;        // How many queue items have new deleted?
-    uint8_t  spi_cb_per_event     = 3;        // Limit the number of callbacks processed per event.
+    uint32_t  bus_timeout_millis = 5;  // How long to spend in IO_WAIT?
+    uint32_t  specificity_burden = 0;  // How many queue items have been deleted?
+    uint8_t   spi_cb_per_event   = 3;  // Limit the number of callbacks processed per event.
+    uint16_t  _digit_flags       = 0;  // Digit sleep state tracking flags.
 
-    // These values represent where in the IRQ buffer this IIU's bits lie.
-    inline uint8_t _irq_offset_byte(int idx) {  return (idx >> 1);            };
-    inline uint8_t _irq_offset_bit(int idx) {   return (idx << 2);            };
+    /* These values represent where in the IRQ buffer this IIU's bits lie. */
+    inline uint8_t _irq_offset_byte(int idx) {  return (idx >> 1);     };
+    inline uint8_t _irq_offset_bit(int idx) {   return (idx << 2);     };
 
     int8_t readRegister(uint8_t reg_addr);
     int8_t writeRegister(uint8_t reg_addr, uint8_t val);
@@ -513,6 +517,12 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
 
 
     static SPIBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
+
+    /* Register representations. */
+    static uint8_t cpld_version;        // CPLD version byte.
+    static uint8_t cpld_conf_value;     // Configuration.
+    static uint8_t forsaken_digits;     // Forsaken digits.
+    static uint8_t cpld_wakeup_source;  // WAKEUP mapping.
 };
 
 #endif

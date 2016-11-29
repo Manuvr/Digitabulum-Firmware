@@ -117,13 +117,16 @@ const char* LSM9DSx_Common::getStateString(State state) {
 * This amounts to mostly register access.
 * Should probably avoid putting things here that directly pertain to sensor functionality.
 ****************************************************************************************************/
+//TODO: I'll work back up to this once it isn't in the way.
+//LSM9DSx_Common::LSM9DSx_Common(uint8_t addr, uint8_t ident_idx, uint8_t idx_test_0, uint8_t idx_test_1, IIU* _integrator) :
+//  IDX_T0(idx_test_0), IDX_T1(idx_test_1), BUS_ADDR(addr), IDX_ID(ident_idx)
+//{
+//  integrator = _integrator;
+//  init();
+//}
 
-LSM9DSx_Common::LSM9DSx_Common(uint8_t addr, uint8_t ident_idx, uint8_t idx_test_0, uint8_t idx_test_1, IIU* _integrator) :
-  IDX_T0(idx_test_0), IDX_T1(idx_test_1), BUS_ADDR(addr), IDX_ID(ident_idx)
-{
-  integrator = _integrator;
+LSM9DSx_Common::LSM9DSx_Common() {
 }
-
 
 
 /**
