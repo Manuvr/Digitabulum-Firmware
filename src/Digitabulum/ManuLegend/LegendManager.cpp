@@ -33,7 +33,9 @@ limitations under the License.
 *
 * Static members and initializers should be located here.
 *******************************************************************************/
-IIU LegendManager::iius[LEGEND_DATASET_IIU_COUNT];
+IIU LegendManager::iius[LEGEND_DATASET_IIU_COUNT];  // TODO: Shouldn't be static.
+InertialMeasurement LegendManager::__prealloc[PREALLOCATED_IIU_MEASUREMENTS];
+// TODO: These shouldn't be static.
 
 SPIBusOp LegendManager::_preformed_read_a;
 SPIBusOp LegendManager::_preformed_read_g;
@@ -108,7 +110,7 @@ InertialMeasurement* LegendManager::fetchMeasurement(uint8_t type_code) {
   }
   else {
     return_value = preallocd_measurements.dequeue();
-    minimum_prealloc_level = std::min((uint32_t) preallocd_measurements.size(), minimum_prealloc_level);
+    minimum_prealloc_level = strict_min((uint32_t) preallocd_measurements.size(), minimum_prealloc_level);
   }
   return return_value;
 }
@@ -264,7 +266,7 @@ LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver() {
 
 
 
-/* This should probably never bee called. */
+/* This should probably never be called. */
 LegendManager::~LegendManager() {
   while (active_legends.hasNext()) active_legends.remove();
 }

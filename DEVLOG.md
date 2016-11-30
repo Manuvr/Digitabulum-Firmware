@@ -184,3 +184,5 @@ And there we have it... All IMU/IIU driver classes are now stack-defined and wil
 Turning in for the night.
 
 _---J. Ian Lindsay_
+
+    283572    2800   42960  329332   50674  Moved InertialMeasurement queue to static for a bit.

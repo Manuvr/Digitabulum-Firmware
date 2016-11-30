@@ -332,13 +332,14 @@ class LegendManager : public EventReceiver, public BusOpCallback {
   private:
     CPLDDriver* _bus = NULL;   // This is the gateway to the hardware.
 
+    // TODO: These shouldn't be static.
     static IIU iius[LEGEND_DATASET_IIU_COUNT];  // This is the chirality-invarient list of IIUs.
+    static InertialMeasurement __prealloc[PREALLOCATED_IIU_MEASUREMENTS];
 
     ManuLegend* operating_legend = NULL;
     /* This is the dataset that we export. */
     uint8_t __dataset[LEGEND_MGR_MAX_DATASET_SIZE];
 
-    InertialMeasurement __prealloc[PREALLOCATED_IIU_MEASUREMENTS];
 
     // Used to direct data that we don't want in the legend until data-selection-by-NULL is implemented
     //   in the IIU class.
