@@ -31,6 +31,7 @@ export AS      = $(TOOLCHAIN)/arm-none-eabi-as
 export CP      = $(TOOLCHAIN)/arm-none-eabi-objcopy
 export OD      = $(TOOLCHAIN)/arm-none-eabi-objdump
 export SZ      = $(TOOLCHAIN)/arm-none-eabi-size
+export GDB     = $(TOOLCHAIN)/arm-none-eabi-gdb
 export MAKE    = $(shell which make)
 
 
@@ -148,6 +149,11 @@ MANUVR_OPTIONS += -D__MANUVR_EVENT_PROFILER
 #CPP_FLAGS += -fstack-usage
 endif
 
+ifeq ($(DISCO),1)
+# In this case, we will be doing hardware debugging on the F7 discovery.
+# So we should add source files and options to reflect this.
+
+endif
 
 ###########################################################################
 # exports, consolidation....

@@ -327,10 +327,6 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #include "SPIBusOp.h"
 #include <Platform/Platform.h>
 
-#include <stm32f7xx_hal_gpio.h>
-#include <stm32f7xx_hal_spi.h>
-#include <stm32f7xx_hal.h>
-
 
 #define CPLD_SPI_MAX_QUEUE_PRINT 3     // How many SPI queue items should we print for debug?
 #define PREALLOCATED_SPI_JOBS    10    // How many SPI queue items should we have on-tap?

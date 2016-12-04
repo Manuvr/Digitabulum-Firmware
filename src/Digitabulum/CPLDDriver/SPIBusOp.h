@@ -28,7 +28,6 @@ This is the class that is used to keep bus operations on the SPI atomic.
   #include <Drivers/BusQueue/BusQueue.h>
   #include <DataStructures/StringBuilder.h>
   #include <Drivers/DeviceWithRegisters/DeviceRegister.h>
-  #include <stm32f7xx_hal_dma.h>
 
   /*
   * These flags are hosted by the member in the BusOp class.

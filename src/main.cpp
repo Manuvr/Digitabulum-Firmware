@@ -23,6 +23,9 @@ limitations under the License.
          ._|
 
 Intended target is an STM32F7.
+
+Alternate targets:
+  EMU:   Firmware emulation and memory debugging under linux.
 */
 
 #include <Kernel.h>
