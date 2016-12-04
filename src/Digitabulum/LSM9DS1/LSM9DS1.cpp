@@ -143,7 +143,9 @@ int8_t LSM9DSx_Common::init() {
   _imu_flags = 1;
   sample_count       = 0;
   time_stamp_base    = 0;
-  *pending_samples   = 0;
+  if (pending_samples) {
+    *pending_samples = 0;
+  }
   return IMU_ERROR_NO_ERROR;
 }
 

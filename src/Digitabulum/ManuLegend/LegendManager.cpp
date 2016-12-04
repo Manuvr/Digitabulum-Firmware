@@ -134,9 +134,9 @@ InertialMeasurement* LegendManager::fetchMeasurement(uint8_t type_code) {
 * @param InertialMeasurement* obj is the pointer to the object to be reclaimed.
 */
 void LegendManager::reclaimMeasurement(InertialMeasurement* obj) {
-  unsigned int obj_addr = ((uint32_t) obj);
-  unsigned int pre_min  = ((uint32_t) INSTANCE->__prealloc);
-  unsigned int pre_max  = pre_min + (sizeof(InertialMeasurement) * PREALLOCATED_IIU_MEASUREMENTS);
+  uintptr_t obj_addr = ((uintptr_t) obj);
+  uintptr_t pre_min  = ((uintptr_t) INSTANCE->__prealloc);
+  uintptr_t pre_max  = pre_min + (sizeof(InertialMeasurement) * PREALLOCATED_IIU_MEASUREMENTS);
 
   if ((obj_addr < pre_max) && (obj_addr >= pre_min)) {
     // If we are in this block, it means obj was preallocated. wipe and reclaim it.
@@ -433,10 +433,10 @@ void LegendManager::printDebug(StringBuilder *output) {
   }
 
   if (getVerbosity() > 3) {
-    output->concatf("--- __dataset location  0x%08x\n", (uint32_t) __dataset);
-    output->concatf("--- __prealloc location 0x%08x\n", (uint32_t) __prealloc);
-    output->concatf("--- __IIU location      0x%08x\n", (uint32_t) iius);
-    output->concatf("--- INSTANCE location   0x%08x\n---\n", (uint32_t) INSTANCE);
+    output->concatf("--- __dataset location  %p\n", (uintptr_t) __dataset);
+    output->concatf("--- __prealloc location %p\n", (uintptr_t) __prealloc);
+    output->concatf("--- __IIU location      %p\n", (uintptr_t) iius);
+    output->concatf("--- INSTANCE location   %p\n---\n", (uintptr_t) INSTANCE);
   }
 
   float grav_consensus = 0.0;
@@ -877,7 +877,7 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'i':
       if (1 == temp_byte) {
-        local_log.concatf("The IIU preallocated measurements are stored at 0x%08x.\n", (uint32_t) __prealloc);
+        local_log.concatf("The IIU preallocated measurements are stored at %p.\n", (uintptr_t) __prealloc);
       }
       else if (2 == temp_byte) {
         if (operating_legend) {
@@ -1318,6 +1318,7 @@ int8_t LegendManager::read_identities() {
     op->setBuffer(&_imu_ids[LEGEND_DATASET_IIU_COUNT], LEGEND_DATASET_IIU_COUNT);
     return queue_io_job(op);
   }
+  return -1;
 }
 
 

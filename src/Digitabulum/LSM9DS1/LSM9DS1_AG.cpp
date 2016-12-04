@@ -792,7 +792,7 @@ int8_t LSM9DS1_AG::io_op_callback(BusOp* _op) {
   unsigned int access_len = op->buf_len;  // The access length lets us know how many things changed.
   uint8_t access_idx = op->getTransferParam(3);
   unsigned int value = regValue(access_idx);
-  if (getVerbosity() > 6) local_log.concatf("%s  XM::io_op_callback(0x%08x): value: %d \t access_idx  %d \t access_len: %d\n", op->getOpcodeString(), (uint32_t)((BusOpCallback*) this), value, access_idx, access_len);
+  if (getVerbosity() > 6) local_log.concatf("%s  XM::io_op_callback(%p): value: %d \t access_idx  %d \t access_len: %d\n", op->getOpcodeString(), (uintptr_t)((BusOpCallback*) this), value, access_idx, access_len);
 
   /* Our first choice is: Did we just finish a WRITE or a READ? */
   /* READ Case-offs */

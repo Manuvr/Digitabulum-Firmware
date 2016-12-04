@@ -32,8 +32,8 @@ export MAKE    = $(shell which make)
 ###########################################################################
 # Includes, flags, and linker directives...
 ###########################################################################
-CPP_FLAGS    = -fno-rtti -fno-exceptions -m32
-CFLAGS       = -Wall
+CPP_FLAGS    = -fno-rtti -fno-exceptions
+CFLAGS       = -Wall #-m32
 LIBS         = -lc -lm -lpthread -lmanuvr
 
 INCLUDES    = -iquote. -iquotesrc/

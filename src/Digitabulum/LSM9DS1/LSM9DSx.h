@@ -205,12 +205,12 @@ class LSM9DSx_Common : public BusOpCallback {
     uint8_t IDX_T1; // TODO: Ought to be const if here at all.
     uint8_t IDX_ID; // TODO: Ought to be const if here at all.
 
-    uint32_t  profiler_read_begin = 0;  // Profiling member.
-    uint32_t  profiler_read_end   = 0;  // Profiling member.
-    uint32_t  time_stamp_base  = 0;     // What time was it when we first started taking samples?
-    uint32_t  last_sample_time = 0;     // What time was it when we first started taking samples?
-    uint32_t  sample_count     = 0;     // How many samples have we read since init?
-    uint8_t*  pending_samples  = 0;     // How many samples are we expecting to arrive?
+    uint32_t  profiler_read_begin = 0;    // Profiling member.
+    uint32_t  profiler_read_end   = 0;    // Profiling member.
+    uint32_t  time_stamp_base  = 0;       // What time was it when we first started taking samples?
+    uint32_t  last_sample_time = 0;       // What time was it when we first started taking samples?
+    uint32_t  sample_count     = 0;       // How many samples have we read since init?
+    uint8_t*  pending_samples  = nullptr; // How many samples are we expecting to arrive?
 
     uint16_t _imu_flags        = 1;     // Default verbosity of 1.
 
