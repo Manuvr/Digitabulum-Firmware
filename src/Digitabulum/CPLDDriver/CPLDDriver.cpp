@@ -206,10 +206,10 @@ CPLDDriver::CPLDDriver() : EventReceiver(), BusAdapter(50) {
   event_spi_callback_ready.specific_target = (EventReceiver*) this;
   event_spi_callback_ready.priority(5);
 
-  event_spi_queue_ready.repurpose(DIGITABULUM_MSG_SPI_QUEUE_READY, (EventReceiver*) this);
-  event_spi_queue_ready.incRefs();
-  event_spi_queue_ready.specific_target    = (EventReceiver*) this;
-  event_spi_queue_ready.priority(5);
+  SPIBusOp::event_spi_queue_ready.repurpose(DIGITABULUM_MSG_SPI_QUEUE_READY, (EventReceiver*) this);
+  SPIBusOp::event_spi_queue_ready.incRefs();
+  SPIBusOp::event_spi_queue_ready.specific_target    = (EventReceiver*) this;
+  SPIBusOp::event_spi_queue_ready.priority(5);
 
   // Mark all of our preallocated SPI jobs as "No Reap" and pass them into the prealloc queue.
   for (uint8_t i = 0; i < PREALLOCATED_SPI_JOBS; i++) {
@@ -518,7 +518,7 @@ int8_t CPLDDriver::advance_work_queue() {
     if (NULL != current_queue_item) {
       if (current_queue_item->begin()) {
         if (getVerbosity() > 2) local_log.concatf("advance_work_queue() tried to clobber an existing transfer on the pick-up.\n");
-        Kernel::staticRaiseEvent(&event_spi_queue_ready);  // Bypass our method. Jump right to the target.
+        Kernel::staticRaiseEvent(&SPIBusOp::event_spi_queue_ready);  // Bypass our method. Jump right to the target.
       }
       return_value++;
     }
@@ -656,7 +656,6 @@ void CPLDDriver::purge_stalled_job() {
     current_queue_item = NULL;
   }
 }
-
 
 
 /*******************************************************************************

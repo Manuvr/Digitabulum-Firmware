@@ -463,15 +463,11 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
       return writeRegister(CPLD_REG_WAKEUP_IRQ, _val | 0x80);
     };
 
-    /* Members related to the work queue... */
-    inline void step_queues(){  Kernel::isrRaiseEvent(&event_spi_queue_ready); }
-
     static SPIBusOp* current_queue_item;
 
 
 
   private:
-    ManuvrMsg event_spi_queue_ready;
     ManuvrMsg event_spi_callback_ready;
     ManuvrMsg event_spi_timeout;
     ManuvrMsg _periodic_debug;

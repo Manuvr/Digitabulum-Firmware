@@ -37,6 +37,13 @@ extern "C" {
   DMA_HandleTypeDef _spi2_dma;
   DMA_HandleTypeDef _dma_r;  // SPI1
   DMA_HandleTypeDef _dma_w;  // SPI1
+
+  /*
+  * Notated like a const, but should NOT be a const, because we use this as a DMA read sink as well
+  *   as a sort of /dev/zero. This never contains any meaningful data.
+  */
+  static uint32_t STATIC_ZERO = 0;
+  static uint32_t STATIC_SINK = 0;
 }
 
 /*
@@ -521,6 +528,70 @@ extern "C" {
       }
     }
   }
+
+
+  /**
+  * DMA ISR. Rx
+  */
+  void DMA2_Stream2_IRQHandler() {
+    Kernel::log("DMA2_Stream2_IRQHandler()\n");
+    DMA_Base_Registers* regs = (DMA_Base_Registers*)_dma_r.StreamBaseAddress;
+    int streamIndex = _dma_r.StreamIndex;
+    /* Transfer Error Interrupt management */
+    if ((regs->ISR & (DMA_FLAG_TEIF0_4 << streamIndex)) != RESET) {
+      if(__HAL_DMA_GET_IT_SOURCE(&_dma_r, DMA_IT_TE) != RESET) {
+        /* Disable the transfer error interrupt */
+        __HAL_DMA_DISABLE_IT(&_dma_r, DMA_IT_TE);
+        /* Clear the transfer error flag */
+        regs->IFCR = DMA_FLAG_TEIF0_4 << streamIndex;
+        /* Update error code */
+        _dma_r.ErrorCode |= HAL_DMA_ERROR_TE;
+        /* Change the DMA state */
+        _dma_r.State = HAL_DMA_STATE_ERROR;
+        Kernel::log("DMA2_Stream2 Error (Transfer)\n");
+      }
+    }
+    /* FIFO Error Interrupt management */
+    if ((regs->ISR & (DMA_FLAG_FEIF0_4 << streamIndex)) != RESET) {
+      if(__HAL_DMA_GET_IT_SOURCE(&_dma_r, DMA_IT_FE) != RESET) {
+        /* Disable the FIFO Error interrupt */
+        __HAL_DMA_DISABLE_IT(&_dma_r, DMA_IT_FE);
+        /* Clear the FIFO error flag */
+        regs->IFCR = DMA_FLAG_FEIF0_4 << streamIndex;
+        /* Update error code */
+        _dma_r.ErrorCode |= HAL_DMA_ERROR_FE;
+        /* Change the DMA state */
+        _dma_r.State = HAL_DMA_STATE_ERROR;
+        Kernel::log("DMA2_Stream2 Error (FIFO)\n");
+      }
+    }
+    /* Transfer Complete Interrupt management */
+    if ((regs->ISR & (DMA_FLAG_TCIF0_4 << streamIndex)) != RESET) {
+      Kernel::log("DMA2_Stream2 TC\n");
+      if(__HAL_DMA_GET_IT_SOURCE(&_dma_r, DMA_IT_TC) != RESET) {
+        /* Clear the transfer complete flag */
+        regs->IFCR = DMA_FLAG_TCIF0_4 << streamIndex;
+      }
+      /* Update error code */
+      _dma_r.ErrorCode |= HAL_DMA_ERROR_NONE;
+      /* Change the DMA state */
+      _dma_r.State = HAL_DMA_STATE_READY_MEM0;
+      __HAL_DMA_DISABLE(&_dma_r);
+      if (NULL != CPLDDriver::current_queue_item) {
+        CPLDDriver::current_queue_item->advance_operation(0, 0);
+      }
+    }
+  }
+
+
+  /*
+  * DMA ISR. Tx
+  */
+  void DMA2_Stream3_IRQHandler(void) {
+    Kernel::log("DMA2_Stream3_IRQHandler()\n");
+    __HAL_DMA_DISABLE_IT(&_dma_r, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+    __HAL_DMA_DISABLE_IT(&_dma_w, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+  }
 }
 
 
@@ -556,4 +627,139 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
   output->concatf("-- hspi1.RxXferCount:  0x%04x\n", hspi1.RxXferCount);
   output->concatf("-- hspi1.TxXferCount:  0x%04x\n", hspi1.TxXferCount);
   output->concatf("-- __hack_buffer       0x%08x\n--\n", __hack_buffer);
+  output->concatf("-- _dma_r State      0x%04x\n", _dma_r.State);
+  output->concatf("-- _dma_r->CR        0x%08x\n", DMA2_Stream2->CR);
+  output->concatf("-- _dma_r->FCR       0x%08x\n", DMA2_Stream2->FCR);
+  output->concatf("-- _dma_r->NDTR      0x%08x\n", DMA2_Stream2->NDTR);
 }
+
+
+
+
+
+
+/**
+* Used to disable the DMA IRQs at the NVIC.
+*
+* @param bool enable the interrupts?
+*/
+void SPIBusOp::enableSPI_DMA(bool enable) {
+  if (enable) {
+    NVIC_EnableIRQ(DMA2_Stream2_IRQn);
+    NVIC_EnableIRQ(DMA2_Stream3_IRQn);
+  }
+  else {
+    NVIC_DisableIRQ(DMA2_Stream2_IRQn);
+    NVIC_DisableIRQ(DMA2_Stream3_IRQn);
+  }
+}
+
+
+// Useful trick to mask warnings that the compiler raises, but which we know are
+//   intentional.
+//   http://stackoverflow.com/questions/3378560/how-to-disable-gcc-warnings-for-a-few-lines-of-code
+//   https://gcc.gnu.org/onlinedocs/gcc/Diagnostic-Pragmas.html
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+
+/**
+* Calling this member will cause the bus operation to be started.
+*
+* @return 0 on success, or non-zero on failure.
+*/
+int8_t SPIBusOp::begin() {
+  //time_began    = micros();
+  if (0 == _param_len) {
+    // Obvious invalidity. We must have at least one transfer parameter.
+    abort(XferFault::BAD_PARAM);
+    return -1;
+  }
+
+  if (SPI1->SR & SPI_FLAG_BSY) {
+    Kernel::log("SPI op aborted before taking bus control.\n");
+    abort(XferFault::BUS_BUSY);
+    return -1;
+  }
+
+  set_state(XferState::INITIATE);  // Indicate that we now have bus control.
+
+  if ((opcode == BusOpcode::TX) || (2 < _param_len)) {
+    set_state((0 == buf_len) ? XferState::TX_WAIT : XferState::ADDR);
+    //__HAL_SPI_ENABLE_IT(&hspi1, (SPI_IT_TXE));
+    HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*) &STATIC_SINK, _param_len);
+  }
+  else {
+    set_state((0 == buf_len) ? XferState::RX_WAIT : XferState::ADDR);
+    // We can afford to read two bytes into the same space as our xfer_params...
+    HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*)(xfer_params + 2), 2);
+  }
+
+  return 0;
+}
+
+
+/**
+* Called from the ISR to advance this operation on the bus.
+* Stay brief. We are in an ISR.
+*
+* @return 0 on success. Non-zero on failure.
+*/
+int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
+  //debug_log.concatf("advance_op(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
+  //Kernel::log(&debug_log);
+
+  /* These are our transfer-size-invariant cases. */
+  switch (xfer_state) {
+    case XferState::COMPLETE:
+      abort(XferFault::HUNG_IRQ);
+      return 0;
+
+    case XferState::TX_WAIT:
+    case XferState::RX_WAIT:
+      markComplete();
+      return 0;
+
+    case XferState::FAULT:
+      return 0;
+
+    case XferState::QUEUED:
+    case XferState::ADDR:
+      if (buf_len > 0) {
+        // We have 4 bytes to throw away from the params transfer.
+        uint16_t tmpreg = hspi1.Instance->DR;
+        tmpreg = hspi1.Instance->DR;
+        if (opcode == BusOpcode::TX) {
+          set_state(XferState::TX_WAIT);
+          HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) buf, buf_len);
+        }
+        else {
+          set_state(XferState::RX_WAIT);
+          HAL_SPI_Receive_DMA(&hspi1, buf, buf_len);
+          //HAL_NVIC_DisableIRQ(SPI1_IRQn);
+          //HAL_DMA_Init(&_dma_r);
+          //_dma_r.State = HAL_DMA_STATE_BUSY;
+          //__HAL_DMA_DISABLE(&_dma_r);
+          //DMA2_Stream2->PAR   = (uint32_t) &hspi1.Instance->DR;
+          //DMA2_Stream2->M0AR  = (uint32_t) buf;
+          //DMA2_Stream2->NDTR  = buf_len;
+          //DMA2_Stream2->CR   &= ~((uint32_t) (DMA_SxCR_DBM | DMA_SxCR_CT));
+          //DMA2_Stream2->CR   |= (uint32_t) (DMA_IT_TC | DMA_IT_TE | DMA_IT_DME);
+          //DMA2_Stream2->FCR  |= (uint32_t) DMA_IT_FE;
+          //__HAL_DMA_ENABLE(&_dma_r);
+          //__HAL_SPI_ENABLE(&hspi1);
+        }
+      }
+      return 0;
+    case XferState::STOP:
+    case XferState::UNDEF:
+
+    /* Below are the states that we shouldn't be in at this point... */
+    case XferState::INITIATE:
+    case XferState::IDLE:
+      abort(XferFault::ILLEGAL_STATE);
+      return 0;
+  }
+
+  return -1;
+}
+#pragma GCC diagnostic pop

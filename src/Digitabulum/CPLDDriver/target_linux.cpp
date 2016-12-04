@@ -99,3 +99,110 @@ void CPLDDriver::externalOscillator(bool on) {
 */
 void CPLDDriver::printHardwareState(StringBuilder *output) {
 }
+
+
+
+
+
+/**
+* Used to disable the DMA IRQs at the NVIC.
+*
+* @param bool enable the interrupts?
+*/
+void SPIBusOp::enableSPI_DMA(bool enable) {
+  if (enable) {
+  }
+  else {
+  }
+}
+
+
+// Useful trick to mask warnings that the compiler raises, but which we know are
+//   intentional.
+//   http://stackoverflow.com/questions/3378560/how-to-disable-gcc-warnings-for-a-few-lines-of-code
+//   https://gcc.gnu.org/onlinedocs/gcc/Diagnostic-Pragmas.html
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+
+/**
+* Calling this member will cause the bus operation to be started.
+*
+* @return 0 on success, or non-zero on failure.
+*/
+int8_t SPIBusOp::begin() {
+  //time_began    = micros();
+  if (0 == _param_len) {
+    // Obvious invalidity. We must have at least one transfer parameter.
+    abort(XferFault::BAD_PARAM);
+    return -1;
+  }
+
+  set_state(XferState::INITIATE);  // Indicate that we now have bus control.
+
+  if ((opcode == BusOpcode::TX) || (2 < _param_len)) {
+    set_state((0 == buf_len) ? XferState::TX_WAIT : XferState::ADDR);
+    //__HAL_SPI_ENABLE_IT(&hspi1, (SPI_IT_TXE));
+    //HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*) &STATIC_SINK, _param_len);
+  }
+  else {
+    set_state((0 == buf_len) ? XferState::RX_WAIT : XferState::ADDR);
+    // We can afford to read two bytes into the same space as our xfer_params...
+    //HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*)(xfer_params + 2), 2);
+  }
+
+  return 0;
+}
+
+
+/**
+* Called from the ISR to advance this operation on the bus.
+* Stay brief. We are in an ISR.
+*
+* @return 0 on success. Non-zero on failure.
+*/
+int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
+  //debug_log.concatf("advance_op(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
+  //Kernel::log(&debug_log);
+
+  /* These are our transfer-size-invariant cases. */
+  switch (xfer_state) {
+    case XferState::COMPLETE:
+      abort(XferFault::HUNG_IRQ);
+      return 0;
+
+    case XferState::TX_WAIT:
+    case XferState::RX_WAIT:
+      markComplete();
+      return 0;
+
+    case XferState::FAULT:
+      return 0;
+
+    case XferState::QUEUED:
+    case XferState::ADDR:
+      if (buf_len > 0) {
+        // We have 4 bytes to throw away from the params transfer.
+        //uint16_t tmpreg = 0;
+        if (opcode == BusOpcode::TX) {
+          set_state(XferState::TX_WAIT);
+          //HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) buf, buf_len);
+        }
+        else {
+          set_state(XferState::RX_WAIT);
+          //HAL_SPI_Receive_DMA(&hspi1, buf, buf_len);
+        }
+      }
+      return 0;
+    case XferState::STOP:
+    case XferState::UNDEF:
+
+    /* Below are the states that we shouldn't be in at this point... */
+    case XferState::INITIATE:
+    case XferState::IDLE:
+      abort(XferFault::ILLEGAL_STATE);
+      return 0;
+  }
+
+  return -1;
+}
+#pragma GCC diagnostic pop

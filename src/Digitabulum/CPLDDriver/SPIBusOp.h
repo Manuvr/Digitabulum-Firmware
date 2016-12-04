@@ -28,6 +28,7 @@ This is the class that is used to keep bus operations on the SPI atomic.
   #include <Drivers/BusQueue/BusQueue.h>
   #include <DataStructures/StringBuilder.h>
   #include <Drivers/DeviceWithRegisters/DeviceRegister.h>
+  #include <Kernel.h>
 
   /*
   * These flags are hosted by the member in the BusOp class.
@@ -136,6 +137,7 @@ class SPIBusOp : public BusOp {
     static uint32_t  total_transfers;
     static uint32_t  failed_transfers;
     static uint16_t  spi_wait_timeout;   // In microseconds. Per-byte.
+    static ManuvrMsg event_spi_queue_ready;
 
 
   private:
@@ -145,6 +147,8 @@ class SPIBusOp : public BusOp {
 
     int8_t init_dma();
 
+    /* Members related to the work queue... */
+    inline void step_queues(){  Kernel::isrRaiseEvent(&event_spi_queue_ready); }
 
     static void enableSPI_DMA(bool enable);
 };
