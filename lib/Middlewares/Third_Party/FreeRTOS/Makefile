@@ -1,4 +1,4 @@
-vpath %.c src
+vpath %.c Source
 
 # Includes
 INCLUDES  = -I../Core/cmsis -I../Core/stm32 -I../../../Drivers/CMSIS/Device/ST/STM32F7xx/Include
@@ -7,7 +7,11 @@ INCLUDES += -I../../../Drivers/CMSIS/Include -ISource/CMSIS_RTOS -ISource/includ
 INCLUDES += -ISource/portable/GCC/ARM_CM7/r0p1/
 
 # Sources
-SRCS = timers.c tasks.c queue.c list.c event_groups.c croutine.c
+SRCS  = Source/timers.c Source/tasks.c Source/queue.c
+SRCS += Source/list.c Source/event_groups.c Source/croutine.c
+SRCS += Source/CMSIS_RTOS/cmsis_os.c
+SRCS += Source/portable/GCC/ARM_CM7/r0p1/port.c
+SRCS += Source/portable/MemMang/heap_4.c
 
 OBJS = $(SRCS:.c=.o)
 LIBNAME = libfreertos.a
@@ -18,9 +22,6 @@ all: $(LIBNAME)
 	$(CC) $(CFLAGS) $(INCLUDES) -nostdlib -c -o $@ $^
 
 $(LIBNAME): $(OBJS)
-	$(CC) $(CFLAGS) $(INCLUDES) -c -o cmsis_os.o Source/CMSIS_RTOS/cmsis_os.c
-	$(CC) $(CFLAGS) $(INCLUDES) -c -o port.o Source/portable/GCC/ARM_CM7/r0p1/port.c
-	$(CC) $(CFLAGS) $(INCLUDES) -c -o heap.o Source/portable/MemMang/heap_4.c
 	$(AR) -r $(OUTPUT_PATH)/$@ $(OBJS)
 
 clean:

@@ -55,11 +55,11 @@ INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/CMSIS/Include
 INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/USB_Device/Class/CDC/Inc
 INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/USB_Device/Core/Inc
 INCLUDES   += -I$(BUILD_ROOT)/src/Digitabulum
-INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS
-INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/include
-INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1
-INCLUDES   += -Ilib/Middlewares/Third_Party/FatFs/src
-INCLUDES   += -Ilib/Middlewares/Third_Party/FatFs/src/drivers
+INCLUDES   += -I$(BUILD_ROOT)/lib/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS
+INCLUDES   += -I$(BUILD_ROOT)/lib/Middlewares/Third_Party/FreeRTOS/Source/include
+INCLUDES   += -I$(BUILD_ROOT)/lib/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1
+INCLUDES   += -I$(BUILD_ROOT)/lib/Middlewares/Third_Party/FatFs/src
+INCLUDES   += -I$(BUILD_ROOT)/lib/Middlewares/Third_Party/FatFs/src/drivers
 
 # Describing the target arch....
 #MCUFLAGS  = -DHSE_VALUE=$(EXT_CLK_RATE)

@@ -300,7 +300,9 @@ int main(void) {
   MX_TIM2_Init();
 
   /* Call init function for freertos objects (in freertos.c) */
-  //MX_FREERTOS_Init();
+  #if defined (__MANUVR_FREERTOS)
+    MX_FREERTOS_Init();
+  #endif
 
   /* Start scheduler */
   //osKernelStart();
