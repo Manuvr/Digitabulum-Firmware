@@ -55,7 +55,7 @@ Alternate targets:
 /* This global makes this source file read better. */
 Kernel* kernel = nullptr;
 
-TIM_HandleTypeDef htim2;  // This is the timer for the CPLD clock.
+TIM_HandleTypeDef htim2;  // This is the timer for the IR LED and haptic strap.
 
 
 volatile void _hack_sadvance() {
@@ -64,9 +64,9 @@ volatile void _hack_sadvance() {
 
 
 /* Function prototypes -----------------------------------------------*/
-void SystemClock_Config(void);
-void MX_FREERTOS_Init(void);
-void unused_gpio(void);
+void SystemClock_Config();
+void MX_FREERTOS_Init();
+void unused_gpio();
 
 
 void HAL_MspInit() {
@@ -74,7 +74,8 @@ void HAL_MspInit() {
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 }
 
-void MX_TIM2_Init(void) {
+
+void MX_TIM2_Init() {
   TIM_ClockConfigTypeDef sClockSourceConfig;
   TIM_MasterConfigTypeDef sMasterConfig;
   TIM_OC_InitTypeDef sConfigOC;
@@ -90,7 +91,6 @@ void MX_TIM2_Init(void) {
   HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig);
 
   HAL_TIM_PWM_Init(&htim2);
-
   HAL_TIM_OC_Init(&htim2);
 
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
@@ -233,20 +233,6 @@ void unused_gpio() {
 
 
 void system_setup() {
-  GPIO_InitTypeDef GPIO_InitStruct;
-
-  /* These Port B pins are push-pull outputs:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 0     0      ~External OSC Enable
-  */
-  GPIO_InitStruct.Pin        = GPIO_PIN_0;
-  GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
   SCB_EnableICache();       /* Enable I-Cache */
   SCB_EnableDCache();       /* Enable D-Cache */
 
@@ -261,7 +247,7 @@ void system_setup() {
 /****************************************************************************************************
 * Clock-tree config...                                                                              *
 ****************************************************************************************************/
-void SystemClock_Config(void) {
+void SystemClock_Config() {
   RCC_OscInitTypeDef RCC_OscInitStruct;
   RCC_ClkInitTypeDef RCC_ClkInitStruct;
   RCC_PeriphCLKInitTypeDef PeriphClkInitStruct;
@@ -269,30 +255,35 @@ void SystemClock_Config(void) {
   __HAL_RCC_PWR_CLK_ENABLE();  // Or this?  __PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
+  /* These Port C pins are push-pull outputs:
+  *
+  * #  Default   Purpose
+  * -----------------------------------------------
+  * 0     0      ~External OSC Enable
+  */
+  gpioDefine(32, OUTPUT);
+
   #if defined(RUN_WITH_HSE)
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
+    setPin(32, true);  // EXT OSC enabled.
 
     RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
     RCC_OscInitStruct.HSEState = RCC_HSE_ON;
     RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
 
-    /* Digitabulum's 24MHz OSC... */
-    #if HSE_VALUE == 24000000
-      RCC_OscInitStruct.PLL.PLLM = 24;
-    #endif
+    /* Digitabulum:       24MHz OSC... */
+    /* STM32F7-Discovery: 25MHz OSC... */
+    RCC_OscInitStruct.PLL.PLLM = HSE_VALUE / 1000000;
 
-    /* STM32F7-Discovery. 25MHz OSC... */
-    #if HSE_VALUE == 25000000
-      RCC_OscInitStruct.PLL.PLLM = 25;
-    #endif
   #elif defined(RUN_WITH_HSI)
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
+    setPin(32, false);  // EXT OSC disabled.
 
     RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
     RCC_OscInitStruct.HSIState = RCC_HSI_ON;
     RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
 
     RCC_OscInitStruct.PLL.PLLM = 16;
+  #else
+    #error "You must specify which oscillator to start with."
   #endif
   //RCC_OscInitStruct.PLL.PLLN = 432;   // 216MHz
   RCC_OscInitStruct.PLL.PLLN = 400;   // 200MHz
@@ -306,7 +297,6 @@ void SystemClock_Config(void) {
   if(HAL_PWREx_ActivateOverDrive() != HAL_OK) {
     while(1) { ; }
   }
-
 
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
@@ -357,20 +347,10 @@ void SystemClock_Config(void) {
 void assert_failed(uint8_t* file, uint32_t line) {
   /* User can add his own implementation to report the file name and line number,
     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-  while (1) {
-  }
+  while(1) { ; }
 }
 #endif
 
-
-
-/*******************************************************************************
-* Functions that just print things.                                            *
-*******************************************************************************/
-// TODO: This is a kludge until proper fxn ptrs can be passed into the Console.
-void printHelp() {
-  Kernel::log("Help would ordinarily be displayed here.\n");
-}
 
 
 /****************************************************************************************************
@@ -378,7 +358,7 @@ void printHelp() {
 * TODO: We should sort-out what can be in CCM and what cannot be, and after we've allocated all the *
 *         I/O buffers, switch over to CCM for our execution stacks.                                 *                                                                                 *
 ****************************************************************************************************/
-int main(void) {
+int main() {
   system_setup();   // Need to setup clocks and CPU...
 
   unused_gpio();    // We don't use all the GPIO on this platform.
