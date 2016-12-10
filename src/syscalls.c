@@ -30,8 +30,8 @@ int _open(const char *name, int flags, int mode) {    return -1;  }
  Transfer control to a new process. Minimal implementation (for a system without processes):
  */
 int _execve(char *name, char **argv, char **env) {
-    errno = ENOMEM;
-    return -1;
+  errno = ENOMEM;
+  return -1;
 }
 
 /*
@@ -39,8 +39,8 @@ int _execve(char *name, char **argv, char **env) {
  Create a new process. Minimal implementation (for a system without processes):
 */
 int _fork() {
-    errno = EAGAIN;
-    return -1;
+  errno = EAGAIN;
+  return -1;
 }
 
 int _read(int file, char *ptr, int len) {
@@ -94,7 +94,7 @@ caddr_t _sbrk(int incr) {
         heap_end = &_ebss;
     }
     prev_heap_end = heap_end;
-    
+
     register uint32_t stack;
     __asm volatile ("MRS %0, msp\n" : "=r" (stack) );
 
@@ -167,4 +167,3 @@ caddr_t _sbrk_r (struct _reent *r, int incr) {
 #ifdef __cplusplus
 }
 #endif
-

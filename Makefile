@@ -89,7 +89,7 @@ CFLAGS += -DENABLE_USB_VCP
 ###########################################################################
 # Source file definitions...
 ###########################################################################
-SOURCES_C     = src/syscalls.c src/gpio.c
+SOURCES_C     = src/syscalls.c
 SOURCES_C    += src/fatfs.c
 SOURCES_C    += src/stm32f7xx_it.c
 SOURCES_C    += src/system_stm32f7xx.c
