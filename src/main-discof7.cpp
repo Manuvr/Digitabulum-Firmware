@@ -23,39 +23,35 @@ limitations under the License.
          ._|
 
 Intended target is an STM32F7.
-
-Alternate targets:
-  EMU:   Firmware emulation and memory debugging under linux.
 */
 
 #include <Kernel.h>
 #include <Platform/Platform.h>
-#include <Drivers/i2c-adapter/i2c-adapter.h>
-#include <Drivers/ADP8866/ADP8866.h>
+//#include <Drivers/i2c-adapter/i2c-adapter.h>
+//#include <Drivers/ADP8866/ADP8866.h>
 #include <XenoSession/Console/ManuvrConsole.h>
 
 #include "Digitabulum/USB/STM32F7USB.h"
-#include "Digitabulum/CPLDDriver/CPLDDriver.h"
-#include "Digitabulum/RovingNetworks/RN4677/RN4677.h"
-#include "Digitabulum/ManuLegend/ManuLegend.h"
-#include "Digitabulum/IREmitter/IREmitter.h"
-#include "Digitabulum/HapticStrap/HapticStrap.h"
+//#include "Digitabulum/CPLDDriver/CPLDDriver.h"
+//#include "Digitabulum/RovingNetworks/RN4677/RN4677.h"
+//#include "Digitabulum/ManuLegend/ManuLegend.h"
+//#include "Digitabulum/IREmitter/IREmitter.h"
+//#include "Digitabulum/HapticStrap/HapticStrap.h"
 #include "Digitabulum/SDCard/SDCard.h"
-#include "Digitabulum/DigitabulumPMU/DigitabulumPMU.h"
+//#include "Digitabulum/DigitabulumPMU/DigitabulumPMU.h"
 
 #ifdef __cplusplus
   extern "C" {
 #endif
 
 #include "stm32f7xx_hal.h"
+#include "tm_stm32_i2c.h"
 #include "cmsis_os.h"
 #include "fatfs.h"
 
 
 /* This global makes this source file read better. */
 Kernel* kernel = nullptr;
-
-TIM_HandleTypeDef htim2;  // This is the timer for the IR LED and haptic strap.
 
 
 volatile void _hack_sadvance() {
@@ -72,77 +68,6 @@ void unused_gpio();
 void HAL_MspInit() {
   HAL_NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4);
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
-}
-
-
-void MX_TIM2_Init() {
-  TIM_ClockConfigTypeDef sClockSourceConfig;
-  TIM_MasterConfigTypeDef sMasterConfig;
-  TIM_OC_InitTypeDef sConfigOC;
-
-  htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 0;
-  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 0;
-  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  HAL_TIM_Base_Init(&htim2);
-
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig);
-
-  HAL_TIM_PWM_Init(&htim2);
-  HAL_TIM_OC_Init(&htim2);
-
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig);
-
-  sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 0;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1);
-
-  sConfigOC.OCMode = TIM_OCMODE_TIMING;
-  HAL_TIM_OC_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_3);
-
-  HAL_TIM_OC_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_4);
-}
-
-void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* htim_base) {
-  GPIO_InitTypeDef GPIO_InitStruct;
-  if(htim_base->Instance==TIM2) {
-    /* Peripheral clock enable */
-    __TIM2_CLK_ENABLE();
-
-    /**TIM2 GPIO Configuration
-    PA15     ------> TIM2_CH1
-    PB10     ------> TIM2_CH3
-    PB11     ------> TIM2_CH4
-    */
-    // GPIO for haptic vibrators...
-    GPIO_InitStruct.Pin = GPIO_PIN_10 | GPIO_PIN_11;
-    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
-    GPIO_InitStruct.Alternate = GPIO_AF1_TIM2;
-    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-  }
-}
-
-void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* htim_base) {
-  if(htim_base->Instance==TIM2) {
-    /* Peripheral clock disable */
-    __TIM2_CLK_DISABLE();
-
-    /**TIM2 GPIO Configuration
-    PA15     ------> TIM2_CH1
-    PB10     ------> TIM2_CH3
-    PB11     ------> TIM2_CH4
-    */
-    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_15);
-    HAL_GPIO_DeInit(GPIOB, GPIO_PIN_10|GPIO_PIN_11);
-  }
 }
 
 
@@ -243,7 +168,6 @@ void system_setup() {
   HAL_Init();
 
   unused_gpio();    // We don't use all the GPIO on this platform.
-  MX_TIM2_Init();
 
   /* Call init function for freertos objects (in freertos.c) */
   #if defined (__MANUVR_FREERTOS)
@@ -269,10 +193,10 @@ void SystemClock_Config() {
   * -----------------------------------------------
   * 0     0      ~External OSC Enable
   */
-  gpioDefine(32, OUTPUT);
+  //gpioDefine(32, OUTPUT);
 
   #if defined(RUN_WITH_HSE)
-    setPin(32, true);  // EXT OSC enabled.
+    //setPin(32, true);  // EXT OSC enabled.
 
     RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
     RCC_OscInitStruct.HSEState = RCC_HSE_ON;
@@ -283,7 +207,7 @@ void SystemClock_Config() {
     RCC_OscInitStruct.PLL.PLLM = HSE_VALUE / 1000000;
 
   #elif defined(RUN_WITH_HSI)
-    setPin(32, false);  // EXT OSC disabled.
+    //setPin(32, false);  // EXT OSC disabled.
 
     RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
     RCC_OscInitStruct.HSIState = RCC_HSI_ON;
@@ -382,61 +306,35 @@ int main() {
   platform.platformPreInit();
   kernel = platform.kernel();
 
-  CPLDDriver _cpld;
-  kernel->subscribe(&_cpld);
+  //CPLDDriver _cpld;
+  //kernel->subscribe(&_cpld);
 
-  LegendManager _legend_manager(&_cpld);
-  kernel->subscribe(&_legend_manager);
+  //LegendManager _legend_manager(&_cpld);
+  //kernel->subscribe(&_legend_manager);
 
-  I2CAdapter i2c(1);
-  kernel->subscribe(&i2c);
+  //I2CAdapter i2c(1);
+  //kernel->subscribe(&i2c);
 
   // Pins 58 and 63 are the reset and IRQ pin, respectively.
   // This is translated to pins 10 and 13 on PortD.
-  ADP8866 leds(58, 63, 0x27);
-  i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
-  kernel->subscribe((EventReceiver*) &leds);
+  //ADP8866 leds(58, 63, 0x27);
+  //i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
+  //kernel->subscribe((EventReceiver*) &leds);
 
-  INA219 ina219(0x4A);
-  i2c.addSlaveDevice(&ina219);
-
-
-  RN4677Pins rn_pins;  // TODO: Still not happy about this. Needless stack burn. Const.
-  rn_pins.reset = 68;
-  rn_pins.ean   = 69; // WO, SystemConf. Pull-down.
-  rn_pins.p24   = 70; // WO, SystemConf. Pull-up.
-
-  rn_pins.sbt   = 51; // WO, SW_BTN
-  rn_pins.swu   = 36; // WO, software wake-up.
-
-  rn_pins.p20   = 21; // WO, SystemConf. Pull-up.
-
-  rn_pins.p04   = 18; // RO, Status 0
-  rn_pins.p15   = 19; // RO, Status 1
-  rn_pins.led   = 35; // RO, LED State
-
-  rn_pins.p05   = 54; // Configurable.
-  rn_pins.p31   = 67; //
-  rn_pins.p32   = 66; //
-  rn_pins.p33   = 65; //
-  rn_pins.p34   = 64; //
-  rn_pins.p37   = 24; //
-
-  RN4677 bt(&rn_pins);
-  kernel->subscribe((EventReceiver*) &bt);
-
+  //INA219 ina219(0x4A);
+  //i2c.addSlaveDevice(&ina219);
 
   SDCard sd;
   kernel->subscribe((EventReceiver*) &sd);
 
-  IREmitter ir;
-  kernel->subscribe((EventReceiver*) &ir);
+  //IREmitter ir;
+  //kernel->subscribe((EventReceiver*) &ir);
 
-  HapticStrap strap;
-  kernel->subscribe((EventReceiver*) &strap);
+  //HapticStrap strap;
+  //kernel->subscribe((EventReceiver*) &strap);
 
-  PMU pmu(&ina219);
-  kernel->subscribe((EventReceiver*) &pmu);
+  //PMU pmu(&ina219);
+  //kernel->subscribe((EventReceiver*) &pmu);
 
   platform.bootstrap();
 
@@ -446,6 +344,8 @@ int main() {
   ManuvrConsole _console((BufferPipe*) &_console_patch);
   kernel->subscribe((EventReceiver*) &_console);
   kernel->subscribe((EventReceiver*) &_console_patch);
+
+  TM_I2C_Init(I2C1, TM_I2C_PinsPack_2, 100000);
 
   platform.forsakeMain();
   return 0;

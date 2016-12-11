@@ -67,7 +67,8 @@ SRCS += stm32f7xx_ll_fmc.c
 SRCS += stm32f7xx_ll_sdmmc.c
 SRCS += stm32f7xx_ll_usb.c
 
-
+SRCS += tm_stm32_i2c.c
+	
 ifeq ($(ENABLE_USB_VCP),)
 	#LOCAL_FLAGS += -DUSB_USE_FS -DUSB_USE_HS -DUSB_USE_DEVICE
 	LOCAL_FLAGS += -DUSB_USE_FS -DUSB_USE_HS -DUSB_USE_DEVICE -DHAL_PCD_MODULE_ENABLED

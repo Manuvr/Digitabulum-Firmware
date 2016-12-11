@@ -94,8 +94,7 @@ SOURCES_C    += src/fatfs.c
 SOURCES_C    += src/stm32f7xx_it.c
 SOURCES_C    += src/system_stm32f7xx.c
 
-SOURCES_CPP   = src/main.cpp
-SOURCES_CPP  += src/Digitabulum/CPLDDriver/CPLDDriver.cpp
+SOURCES_CPP   = src/Digitabulum/CPLDDriver/CPLDDriver.cpp
 SOURCES_CPP  += src/Digitabulum/CPLDDriver/SPIBusOp.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/IIU.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp
@@ -152,7 +151,12 @@ endif
 ifeq ($(DISCO),1)
 # In this case, we will be doing hardware debugging on the F7 discovery.
 # So we should add source files and options to reflect this.
-
+DIGITABULUM_BOARD = DISCOF7
+SOURCES_CPP  += src/main-discof7.cpp
+CFLAGS += -DSTM32F7xx
+else
+DIGITABULUM_BOARD = R1
+SOURCES_CPP  += src/main.cpp
 endif
 
 ###########################################################################
@@ -161,7 +165,7 @@ endif
 OBJS = $(SOURCES_C:.c=.o)
 
 # Merge our choices and export them to the downstream Makefiles...
-CFLAGS += $(MANUVR_OPTIONS) $(OPTIMIZATION) $(INCLUDES)
+CFLAGS += $(MANUVR_OPTIONS) $(OPTIMIZATION) $(INCLUDES) -D$(DIGITABULUM_BOARD)
 
 export STM32F746xx
 export MANUVR_PLATFORM = STM32F7
@@ -180,6 +184,10 @@ vpath %.a $(OUTPUT_PATH)
 .PHONY: all
 
 all: $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
+	@echo '======================================================'
+	@echo 'Built binary for board:'
+	@echo $(DIGITABULUM_BOARD)
+	@echo '======================================================'
 	$(SZ) $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 
 %.o : %.c
