@@ -20,21 +20,7 @@ limitations under the License.
 
 */
 
-#include <stm32f7xx_hal_dma.h>
-#include <stm32f7xx_hal_def.h>
 #include "CPLDDriver.h"
-#include "../LSM9DS1/IIU.h"
-#include "../ManuLegend/ManuLegend.h"
-
-/*
-* The HAL library does not break this out, and it doesn't support double-buffer.
-* Replicated definition from stm32f7xx_hal_dma.c
-*/
-typedef struct {
-  __IO uint32_t ISR;       /*!< DMA interrupt status register */
-  __IO uint32_t Reserved0;
-  __IO uint32_t IFCR;      /*!< DMA interrupt flag clear register */
-} DMA_Base_Registers;
 
 
 /*******************************************************************************
@@ -67,155 +53,6 @@ ManuvrMsg _irq_data_arrival;
 uint8_t __hack_buffer[34];
 uint8_t active_imu_position = 0;
 
-
-extern "C" {
-  TIM_HandleTypeDef htim1;
-  SPI_HandleTypeDef hspi1;
-  SPI_HandleTypeDef hspi2;
-  DMA_HandleTypeDef _spi2_dma;
-  DMA_HandleTypeDef _dma_r;  // SPI1
-  DMA_HandleTypeDef _dma_w;  // SPI1
-
-
-  /**
-  * DMA ISR. This DMA stream is responsible for..
-  * 1) signaling the software that the IRQ aggregator have delivered us a new
-  *      set of signals.
-  * 2) Maintaining the buffer index so that software reads the correct buffer.
-  */
-  void DMA1_Stream3_IRQHandler() {
-    DMA_Base_Registers* regs = (DMA_Base_Registers*)_spi2_dma.StreamBaseAddress;
-    int streamIndex = _spi2_dma.StreamIndex;
-
-    /* Transfer Error Interrupt management */
-    if ((regs->ISR & (DMA_FLAG_TEIF0_4 << streamIndex)) != RESET) {
-      if(__HAL_DMA_GET_IT_SOURCE(&_spi2_dma, DMA_IT_TE) != RESET) {
-        /* Disable the transfer error interrupt */
-        __HAL_DMA_DISABLE_IT(&_spi2_dma, DMA_IT_TE);
-        /* Clear the transfer error flag */
-        regs->IFCR = DMA_FLAG_TEIF0_4 << streamIndex;
-        /* Update error code */
-        _spi2_dma.ErrorCode |= HAL_DMA_ERROR_TE;
-        /* Change the DMA state */
-        _spi2_dma.State = HAL_DMA_STATE_ERROR;
-        Kernel::log("DMA1_Stream3 Error (Transfer)\n");
-      }
-    }
-    /* FIFO Error Interrupt management */
-    if ((regs->ISR & (DMA_FLAG_FEIF0_4 << streamIndex)) != RESET) {
-      if(__HAL_DMA_GET_IT_SOURCE(&_spi2_dma, DMA_IT_FE) != RESET) {
-        /* Disable the FIFO Error interrupt */
-        __HAL_DMA_DISABLE_IT(&_spi2_dma, DMA_IT_FE);
-        /* Clear the FIFO error flag */
-        regs->IFCR = DMA_FLAG_FEIF0_4 << streamIndex;
-        /* Update error code */
-        _spi2_dma.ErrorCode |= HAL_DMA_ERROR_FE;
-        /* Change the DMA state */
-        _spi2_dma.State = HAL_DMA_STATE_ERROR;
-        Kernel::log("DMA1_Stream3 Error (FIFO)\n");
-      }
-    }
-    /* Transfer Complete Interrupt management */
-    if ((regs->ISR & (DMA_FLAG_TCIF0_4 << streamIndex)) != RESET) {
-      if(__HAL_DMA_GET_IT_SOURCE(&_spi2_dma, DMA_IT_TC) != RESET) {
-        /* Clear the transfer complete flag */
-        regs->IFCR = DMA_FLAG_TCIF0_4 << streamIndex;
-      }
-
-      /* Update error code */
-      _spi2_dma.ErrorCode |= HAL_DMA_ERROR_NONE;
-
-      if((DMA1_Stream3->CR & (uint32_t)(DMA_SxCR_DBM)) != 0) {
-        uint8_t* completed_buf;
-        uint8_t* previous_buf;
-        if((DMA1_Stream3->CR & DMA_SxCR_CT) == 0) {
-          _irq_data_ptr = (uint8_t*) _irq_data_1;  // The consumer of this buffer should start here.
-          completed_buf = (uint8_t*) _irq_data_0;
-          previous_buf  = (uint8_t*) _irq_data_1;
-          //Kernel::log("DMA1_Stream3 Circular Bank 0\n");
-          _spi2_dma.State = HAL_DMA_STATE_READY_MEM0;
-        }
-        else {
-          _irq_data_ptr = (uint8_t*) _irq_data_0;  // The consumer of this buffer should start here.
-          completed_buf = (uint8_t*) _irq_data_1;
-          previous_buf  = (uint8_t*) _irq_data_0;
-          //Kernel::log("DMA1_Stream3 Circular Bank 1\n");
-          _spi2_dma.State = HAL_DMA_STATE_READY_MEM1;
-        }
-
-        *(uint32_t*)(_irq_diff + 0) = *(uint32_t*)(previous_buf + 0) ^ *(uint32_t*)(completed_buf + 0);
-        *(uint32_t*)(_irq_diff + 4) = *(uint32_t*)(previous_buf + 4) ^ *(uint32_t*)(completed_buf + 4);
-        *(uint16_t*)(_irq_diff + 8) = *(uint16_t*)(previous_buf + 8) ^ *(uint16_t*)(completed_buf + 8);
-      }
-      else {
-        ///* Change the DMA state */
-        //_spi2_dma.State = HAL_DMA_STATE_READY_MEM0;
-        //__HAL_DMA_DISABLE(&_spi2_dma);
-        //if (_irq_data_ptr == _irq_data_0) {
-        //  _irq_data_ptr = _irq_data_1;  // The consumer of this buffer should start here.
-        //  DMA1_Stream3->M0AR  = (uint32_t)_irq_data_0;
-        //  Kernel::log("DMA1_Stream3 Bank 0\n");
-        //}
-        //else {
-        //  _irq_data_ptr = _irq_data_0;  // The consumer of this buffer should start here.
-        //  DMA1_Stream3->M0AR  = (uint32_t)_irq_data_1;
-        //  Kernel::log("DMA1_Stream3 Bank 1\n");
-        //}
-        //DMA1_Stream3->CR   &= (uint32_t)(~DMA_SxCR_DBM);
-        //DMA1_Stream3->PAR   = (uint32_t)&SPI2->DR;
-        //DMA1_Stream3->NDTR  = 10;
-        //DMA1_Stream3->CR  |= DMA_IT_TC | DMA_IT_TE | DMA_IT_DME;
-        //DMA1_Stream3->FCR |= DMA_IT_FE;
-        //__HAL_DMA_ENABLE(&_spi2_dma);
-      }
-      Kernel::isrRaiseEvent(&_irq_data_arrival);
-    }
-  }
-
-  /*
-  * SPI1 ISR.
-  * TODO: Take full responsibility for this ISR. Do not rely on HAL driver.
-  */
-  void SPI1_IRQHandler() {
-    HAL_SPI_IRQHandler(&hspi1);
-  }
-
-
-  void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
-    if (hspi == &hspi1) {
-      if (NULL != CPLDDriver::current_queue_item) {
-        CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
-      }
-    }
-  }
-
-
-  void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
-    if (hspi == &hspi1) {
-      if (NULL != CPLDDriver::current_queue_item) {
-        CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
-      }
-    }
-  }
-
-
-  void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi){
-    if (hspi == &hspi1) {
-      if (NULL != CPLDDriver::current_queue_item) {
-        CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
-      }
-    }
-  }
-
-
-  void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi){
-    if (hspi == &hspi1) {
-      if (NULL != CPLDDriver::current_queue_item) {
-        CPLDDriver::current_queue_item->abort(XferFault::BUS_FAULT);
-      }
-    }
-  }
-}
 
 /**
 * Used to abort a hung transfer.
@@ -259,6 +96,12 @@ void cpld_wakeup_isr(){
 }
 
 
+// TODO: Textual inclusion of source files is super ugly...
+#if defined(STM32F746xx)
+  #include "target_stm32f746.cpp"
+#elif defined(__MANUVR_LINUX)
+  #include "target_linux.cpp"
+#endif
 
 /*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
@@ -270,13 +113,14 @@ void cpld_wakeup_isr(){
 *
 * Static members and initializers should be located here.
 *******************************************************************************/
+/* Register representations. */
+uint8_t CPLDDriver::cpld_version       = 0;  // CPLD version byte.
+uint8_t CPLDDriver::cpld_conf_value    = 0;  // Configuration.
+uint8_t CPLDDriver::forsaken_digits    = 0;  // Forsaken digits.
+uint8_t CPLDDriver::cpld_wakeup_source = 0;  // WAKEUP mapping.
 
 SPIBusOp  CPLDDriver::preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];
 SPIBusOp* CPLDDriver::current_queue_item = NULL;
-
-const unsigned char MSG_ARGS_U8_FLOAT[] = {
-  UINT8_FM, FLOAT_FM, 0
-};
 
 const unsigned char MSG_ARGS_IMU_READ[] = {
   UINT8_FM, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM, 0  // IMU id and a collection of readings.
@@ -318,21 +162,20 @@ const unsigned char MSG_ARGS_IMU_MAP_STATE[] = {
 
 const MessageTypeDef cpld_message_defs[] = {
   /* These are messages specific to Digitabulum. */
-  {  DIGITABULUM_MSG_IMU_IRQ_RAISED       , 0x0000,               "IMU_IRQ_RAISED"     , ManuvrMsg::MSG_ARGS_NONE }, // IRQ asserted by CPLD.
-  {  DIGITABULUM_MSG_IMU_READ             , 0x0000,               "IMU_READ"           , MSG_ARGS_IMU_READ },  // IMU read request. Argument is the ID.
-  {  DIGITABULUM_MSG_IMU_MAP_STATE        , MSG_FLAG_EXPORTABLE,  "IMU_MAP_STATE"      , MSG_ARGS_IMU_MAP_STATE }, //
-  {  DIGITABULUM_MSG_IMU_INIT             , MSG_FLAG_EXPORTABLE,  "IMU_INIT"           , ManuvrMsg::MSG_ARGS_NONE }, // Signal to build the IMUs.
+  {  DIGITABULUM_MSG_IMU_IRQ_RAISED       , 0x0000,               "IMU_IRQ_RAISED" , ManuvrMsg::MSG_ARGS_NONE }, // IRQ asserted by CPLD.
+  {  DIGITABULUM_MSG_IMU_READ             , 0x0000,               "IMU_READ"       , MSG_ARGS_IMU_READ },  // IMU read request. Argument is the ID.
+  {  DIGITABULUM_MSG_IMU_QUAT_CRUNCH      , 0x0000,               "IMU_QUAT_CRUNCH", ManuvrMsg::MSG_ARGS_NONE }, //
+  {  DIGITABULUM_MSG_IMU_MAP_STATE        , MSG_FLAG_EXPORTABLE,  "IMU_MAP_STATE"  , MSG_ARGS_IMU_MAP_STATE }, //
+  {  DIGITABULUM_MSG_IMU_INIT             , MSG_FLAG_EXPORTABLE,  "IMU_INIT"       , ManuvrMsg::MSG_ARGS_NONE }, // Signal to build the IMUs.
+  {  DIGITABULUM_MSG_IMU_LEGEND           , MSG_FLAG_EXPORTABLE,  "IMU_LEGEND"     , MSG_ARGS_IMU_LEGEND }, // No args? Asking for this legend. Many args: Legend provided.
+  {  DIGITABULUM_MSG_IMU_TAP              , MSG_FLAG_EXPORTABLE,  "IMU_TAP"        , ManuvrMsg::MSG_ARGS_NONE }, // IMU id and optional threshold.
+  {  DIGITABULUM_MSG_IMU_DOUBLE_TAP       , MSG_FLAG_EXPORTABLE,  "IMU_DBL_TAP"    , ManuvrMsg::MSG_ARGS_NONE }, // IMU id and optional threshold.
 
-  {  DIGITABULUM_MSG_CPLD_RESET_COMPLETE  , 0x0000,               "CPLD_RST_COMPLETE"  , ManuvrMsg::MSG_ARGS_NONE }, //
-  {  DIGITABULUM_MSG_CPLD_RESET_CALLBACK  , 0x0000,               "CPLD_RST_CALLBACK"  , ManuvrMsg::MSG_ARGS_NONE }, //
-  {  DIGITABULUM_MSG_IMU_LEGEND           , MSG_FLAG_EXPORTABLE,  "IMU_LEGEND"         , MSG_ARGS_IMU_LEGEND }, // No args? Asking for this legend. Many args: Legend provided.
-
-  {  DIGITABULUM_MSG_IMU_QUAT_CRUNCH      , 0x0000,               "IMU_QUAT_CRUNCH"    , ManuvrMsg::MSG_ARGS_NONE }, //
-  {  DIGITABULUM_MSG_IMU_TAP              , MSG_FLAG_EXPORTABLE,  "IMU_TAP"            , MSG_ARGS_U8_FLOAT }, // IMU id and optional threshold.
-  {  DIGITABULUM_MSG_IMU_DOUBLE_TAP       , MSG_FLAG_EXPORTABLE,  "IMU_DOUBLE_TAP"     , MSG_ARGS_U8_FLOAT }, // IMU id and optional threshold.
-
-  {  DIGITABULUM_MSG_SPI_QUEUE_READY      , 0x0000,               "SPI_Q_RDY"          , ManuvrMsg::MSG_ARGS_NONE }, //
-  {  DIGITABULUM_MSG_SPI_CB_QUEUE_READY   , 0x0000,               "SPICB_RDY"          , ManuvrMsg::MSG_ARGS_NONE }, //
+  {  DIGITABULUM_MSG_CPLD_DIGIT_DROP      , 0x0000,               "DIGIT_DROP"     , ManuvrMsg::MSG_ARGS_NONE }, //
+  {  DIGITABULUM_MSG_CPLD_RESET_COMPLETE  , 0x0000,               "CPLD_RST_CMPLTE", ManuvrMsg::MSG_ARGS_NONE }, //
+  {  DIGITABULUM_MSG_CPLD_RESET_CALLBACK  , 0x0000,               "CPLD_RST_CB"    , ManuvrMsg::MSG_ARGS_NONE }, //
+  {  DIGITABULUM_MSG_SPI_QUEUE_READY      , 0x0000,               "SPI_Q_RDY"      , ManuvrMsg::MSG_ARGS_NONE }, //
+  {  DIGITABULUM_MSG_SPI_CB_QUEUE_READY   , 0x0000,               "SPICB_RDY"      , ManuvrMsg::MSG_ARGS_NONE }, //
 };
 
 
@@ -349,7 +192,7 @@ const MessageTypeDef cpld_message_defs[] = {
 /**
 * Constructor. Also populates the global pointer reference.
 */
-CPLDDriver::CPLDDriver() : EventReceiver() {
+CPLDDriver::CPLDDriver() : EventReceiver(), BusAdapter(50) {
   setReceiverName("CPLDDriver");
 
   if (NULL == cpld) {
@@ -359,14 +202,14 @@ CPLDDriver::CPLDDriver() : EventReceiver() {
 
   // Build some pre-formed Events.
   event_spi_callback_ready.repurpose(DIGITABULUM_MSG_SPI_CB_QUEUE_READY, (EventReceiver*) this);
-  event_spi_callback_ready.isManaged(true);
+  event_spi_callback_ready.incRefs();
   event_spi_callback_ready.specific_target = (EventReceiver*) this;
-  event_spi_callback_ready.priority        = 5;
+  event_spi_callback_ready.priority(5);
 
-  event_spi_queue_ready.repurpose(DIGITABULUM_MSG_SPI_QUEUE_READY, (EventReceiver*) this);
-  event_spi_queue_ready.isManaged(true);
-  event_spi_queue_ready.specific_target    = (EventReceiver*) this;
-  event_spi_queue_ready.priority           = 5;
+  SPIBusOp::event_spi_queue_ready.repurpose(DIGITABULUM_MSG_SPI_QUEUE_READY, (EventReceiver*) this);
+  SPIBusOp::event_spi_queue_ready.incRefs();
+  SPIBusOp::event_spi_queue_ready.specific_target    = (EventReceiver*) this;
+  SPIBusOp::event_spi_queue_ready.priority(5);
 
   // Mark all of our preallocated SPI jobs as "No Reap" and pass them into the prealloc queue.
   for (uint8_t i = 0; i < PREALLOCATED_SPI_JOBS; i++) {
@@ -385,329 +228,6 @@ CPLDDriver::CPLDDriver() : EventReceiver() {
 *   needlessly. But we keep it here in commentary in case it is needed later.
 */
 CPLDDriver::~CPLDDriver() {
-  //HAL_GPIO_DeInit(GPIOA, GPIO_PIN_4|GPIO_PIN_6|GPIO_PIN_5|GPIO_PIN_7);
-  //HAL_GPIO_DeInit(GPIOB, GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15);
-
-  //__TIM1_CLK_DISABLE();
-  //HAL_GPIO_DeInit(GPIOA, GPIO_PIN_8);
-
-  //HAL_SPI_DeInit(&hspi1);
-  //HAL_SPI_DeInit(&hspi2);
-  //__HAL_RCC_SPI1_CLK_DISABLE();
-  //__HAL_RCC_SPI2_CLK_DISABLE();
-}
-
-
-/**
-* Setup GPIO pins and their bindings to on-chip peripherals, if required.
-*/
-void CPLDDriver::gpioSetup() {
-  GPIO_InitTypeDef GPIO_InitStruct;
-
-  /* These Port B pins are push-pull outputs:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 9     0      ~CPLD Reset
-  * 14    0      SPI2_MISO  (SPI2 is slave and Rx-only)
-  */
-  GPIO_InitStruct.Pin        = GPIO_PIN_9 | GPIO_PIN_14;
-  GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9|GPIO_PIN_14, GPIO_PIN_RESET);
-
-  /* These Port C pins are inputs with a wakeup ISR attached to
-  *    the rising-edge.
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 13    0      IRQ_WAKEUP
-  */
-  setPinFxn(45, FALLING, cpld_wakeup_isr);
-
-  /* These Port E pins are inputs:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 11    0      CPLD_GPIO_0
-  * 14    0      CPLD_GPIO_1
-  */
-  //setPinFxn(75, CHANGE, cpld_gpio_isr_0);
-  setPinFxn(78, CHANGE, cpld_gpio_isr_1);
-
-  /* These Port C pins are push-pull outputs:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 2     1      DEN_AG_CARPALS
-  */
-  GPIO_InitStruct.Pin   = GPIO_PIN_2;
-  GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull  = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
-}
-
-
-/**
-* Init the timer to provide the CPLD with an external clock. This clock is the
-*   most-flexible, and we use it by default.
-*/
-bool CPLDDriver::_set_timer_base(uint16_t _period) {
-  htim1.Instance               = TIM1;
-  htim1.Init.Prescaler         = 0;
-  htim1.Init.CounterMode       = TIM_COUNTERMODE_UP;
-  htim1.Init.Period            = _period;
-  htim1.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
-  htim1.Init.RepetitionCounter = 0;  // TODO: Move this to 8 to reduce power?
-  return (HAL_OK == HAL_TIM_Base_Init(&htim1));
-}
-
-
-/**
-* Init the timer to provide the CPLD with an external clock. This clock is the
-*   most-flexible, and we use it by default.
-*/
-void CPLDDriver::init_ext_clk() {
-  __TIM1_CLK_ENABLE();
-  GPIO_InitTypeDef GPIO_InitStruct;
-
-  /* These Port A pins are outputs at the discretion of the timer:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 8     1      CPLD_EXT_CLK
-  */
-  GPIO_InitStruct.Pin        = GPIO_PIN_8;
-  GPIO_InitStruct.Mode       = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  GPIO_InitStruct.Speed      = GPIO_SPEED_HIGH;
-  GPIO_InitStruct.Alternate  = GPIO_AF1_TIM1;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  _set_timer_base(0xFFF0);  // Make the clock real slow until we need it.
-
-  TIM_ClockConfigTypeDef sClockSourceConfig;
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig);
-  HAL_TIM_OC_Init(&htim1);
-
-  TIM_MasterConfigTypeDef sMasterConfig;
-  sMasterConfig.MasterOutputTrigger  = TIM_TRGO_RESET;
-  sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
-  sMasterConfig.MasterSlaveMode      = TIM_MASTERSLAVEMODE_DISABLE;
-  HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig);
-
-  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig;
-  sBreakDeadTimeConfig.OffStateRunMode  = TIM_OSSR_DISABLE;
-  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
-  sBreakDeadTimeConfig.LockLevel        = TIM_LOCKLEVEL_OFF;
-  sBreakDeadTimeConfig.DeadTime         = 0;
-  sBreakDeadTimeConfig.BreakState       = TIM_BREAK_DISABLE;
-  sBreakDeadTimeConfig.BreakPolarity    = TIM_BREAKPOLARITY_HIGH;
-  sBreakDeadTimeConfig.BreakFilter      = 0;
-  sBreakDeadTimeConfig.Break2State      = TIM_BREAK2_DISABLE;
-  sBreakDeadTimeConfig.Break2Polarity   = TIM_BREAK2POLARITY_HIGH;
-  sBreakDeadTimeConfig.Break2Filter     = 0;
-  sBreakDeadTimeConfig.AutomaticOutput  = TIM_AUTOMATICOUTPUT_DISABLE;
-  HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig);
-
-  TIM_OC_InitTypeDef sConfigOC;
-  sConfigOC.OCMode       = TIM_OCMODE_TOGGLE;
-  sConfigOC.Pulse        = 0;
-  sConfigOC.OCPolarity   = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCNPolarity  = TIM_OCNPOLARITY_HIGH;
-  sConfigOC.OCFastMode   = TIM_OCFAST_DISABLE;
-  sConfigOC.OCIdleState  = TIM_OCIDLESTATE_SET;
-  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_SET;
-  HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1);
-}
-
-/**
-* Init of SPI peripheral 1. This is broken out because we might be bringing it
-*   up and down in a single runtime for debug reasons.
-*
-* @param  cpol  Clock polartiy
-* @param  cpha  Clock phase
-*/
-void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
-  GPIO_InitTypeDef GPIO_InitStruct;
-  uint8_t cpol_mode = (cpol) ? SPI_POLARITY_HIGH : SPI_POLARITY_LOW;
-  uint8_t cpha_mode = (cpha) ? SPI_PHASE_2EDGE : SPI_PHASE_1EDGE;
-
-  HAL_NVIC_DisableIRQ(SPI1_IRQn);
-
-  if (_er_flag(CPLD_FLAG_SPI1_READY)) {
-    _er_clear_flag(CPLD_FLAG_SPI1_READY);
-    __HAL_SPI_DISABLE(&hspi1);
-  }
-  else {
-    __HAL_RCC_SPI1_CLK_ENABLE();
-    __HAL_RCC_DMA2_CLK_ENABLE();
-  }
-
-  /* These Port A pins are associated with the SPI1 peripheral:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 4   SPI1_CS
-  * 5   SPI1_CLK
-  * 6   SPI1_MISO
-  * 7   SPI1_MOSI
-  */
-  GPIO_InitStruct.Pin       = GPIO_PIN_6|GPIO_PIN_5|GPIO_PIN_7;
-  GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull      = GPIO_NOPULL;
-  GPIO_InitStruct.Speed     = GPIO_SPEED_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  GPIO_InitStruct.Pin  = GPIO_PIN_4;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  _dma_r.Instance                  = DMA2_Stream2;
-  _dma_r.Init.Channel              = DMA_CHANNEL_3;
-  _dma_r.Init.Direction            = DMA_PERIPH_TO_MEMORY;   // Receive
-  _dma_r.Init.PeriphInc            = DMA_PINC_DISABLE;
-  _dma_r.Init.MemInc               = DMA_MINC_ENABLE;
-  _dma_r.Init.PeriphDataAlignment  = DMA_PDATAALIGN_BYTE;
-  _dma_r.Init.MemDataAlignment     = DMA_MDATAALIGN_BYTE;
-  _dma_r.Init.Mode                 = DMA_NORMAL;
-  _dma_r.Init.Priority             = DMA_PRIORITY_LOW;
-  _dma_r.Init.FIFOMode             = DMA_FIFOMODE_DISABLE;  // Required for differnt access-widths.
-  _dma_r.Init.FIFOThreshold        = DMA_FIFO_THRESHOLD_FULL;
-  _dma_r.Init.MemBurst             = DMA_MBURST_SINGLE;
-  _dma_r.Init.PeriphBurst          = DMA_PBURST_SINGLE;
-  HAL_DMA_Init(&_dma_r);
-  HAL_NVIC_EnableIRQ(DMA2_Stream2_IRQn);
-
-  _dma_w.Instance                 = DMA2_Stream3;
-  _dma_w.Init.Channel             = DMA_CHANNEL_3;
-  _dma_w.Init.Direction           = DMA_MEMORY_TO_PERIPH;   // Transmit
-  _dma_w.Init.PeriphInc           = DMA_PINC_DISABLE;
-  _dma_w.Init.MemInc              = DMA_MINC_ENABLE;
-  _dma_w.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-  _dma_w.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
-  _dma_w.Init.Mode                = DMA_NORMAL;
-  _dma_w.Init.Priority            = DMA_PRIORITY_HIGH;
-  _dma_w.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;  // Required for differnt access-widths.
-  _dma_w.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
-  _dma_w.Init.MemBurst            = DMA_MBURST_SINGLE;
-  _dma_w.Init.PeriphBurst         = DMA_PBURST_SINGLE;
-  HAL_DMA_Init(&_dma_w);
-
-  hspi1.Instance            = SPI1;
-  hspi1.hdmarx              = &_dma_r;
-  hspi1.hdmatx              = &_dma_w;
-  hspi1.Init.Mode           = SPI_MODE_SLAVE;
-  hspi1.Init.Direction      = SPI_DIRECTION_2LINES;
-  hspi1.Init.NSS            = SPI_NSS_HARD_INPUT;
-  hspi1.Init.DataSize       = SPI_DATASIZE_8BIT;
-  hspi1.Init.CLKPolarity    = cpol_mode;
-  hspi1.Init.CLKPhase       = cpha_mode;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
-  hspi1.Init.FirstBit       = SPI_FIRSTBIT_MSB;
-  hspi1.Init.TIMode         = SPI_TIMODE_DISABLED;
-  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
-  hspi1.Init.CRCPolynomial  = 7;
-  hspi1.Init.CRCLength      = SPI_CRC_LENGTH_DATASIZE;
-  hspi1.Init.NSSPMode       = SPI_NSS_PULSE_DISABLED;
-  _er_set_flag(CPLD_FLAG_SPI1_READY, (HAL_OK == HAL_SPI_Init(&hspi1)));
-
-  HAL_NVIC_EnableIRQ(SPI1_IRQn);
-}
-
-
-/**
-* Init of SPI peripheral 1. This is broken out because we might be bringing it
-*   up and down in a single runtime for debug reasons.
-*
-* @param  cpol  Clock polartiy
-* @param  cpha  Clock phase
-*/
-void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
-  GPIO_InitTypeDef GPIO_InitStruct;
-  uint8_t cpol_mode = (cpol) ? SPI_POLARITY_HIGH : SPI_POLARITY_LOW;
-  uint8_t cpha_mode = (cpha) ? SPI_PHASE_2EDGE : SPI_PHASE_1EDGE;
-
-  HAL_NVIC_DisableIRQ(DMA1_Stream3_IRQn);
-
-  if (_er_flag(CPLD_FLAG_SPI2_READY)) {
-    _er_clear_flag(CPLD_FLAG_SPI2_READY);
-  }
-  else {
-    __HAL_RCC_SPI2_CLK_ENABLE();
-    __HAL_RCC_DMA1_CLK_ENABLE();
-  }
-
-  /* These Port B pins are associated with the SPI2 peripheral:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 12  SPI2_CS
-  * 13  SPI2_CLK
-  * 15  SPI2_MOSI
-  */
-  GPIO_InitStruct.Pin       = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_15;
-  GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull      = GPIO_NOPULL;
-  GPIO_InitStruct.Speed     = GPIO_SPEED_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF5_SPI2;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  hspi2.Instance            = SPI2;
-  hspi2.Init.Mode           = SPI_MODE_SLAVE;
-  hspi2.Init.Direction      = SPI_DIRECTION_2LINES_RXONLY;
-  hspi2.Init.NSS            = SPI_NSS_HARD_INPUT;
-  hspi2.Init.DataSize       = SPI_DATASIZE_8BIT;  // TODO: Is this OK with half-word DMA?
-  hspi2.Init.CLKPolarity    = cpol_mode;
-  hspi2.Init.CLKPhase       = cpha_mode;
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
-  hspi2.Init.FirstBit       = SPI_FIRSTBIT_MSB;
-  hspi2.Init.TIMode         = SPI_TIMODE_DISABLED;
-  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
-  hspi2.Init.CRCPolynomial  = 7;
-  hspi2.Init.CRCLength      = SPI_CRC_LENGTH_DATASIZE;
-  hspi2.Init.NSSPMode       = SPI_NSS_PULSE_DISABLED;
-  _er_set_flag(CPLD_FLAG_SPI2_READY, (HAL_OK == HAL_SPI_Init(&hspi2)));
-
-  SPI2->CR2 &= ~(SPI_CR2_LDMARX);  // Even byte count, always.
-  SPI2->CR1 |= SPI_CR1_SPE;
-
-  // We handle SPI2 in this class. Setup the DMA members.
-  _spi2_dma.Instance                 = DMA1_Stream3;
-  _spi2_dma.Init.Channel             = DMA_CHANNEL_0;
-  _spi2_dma.Init.Direction           = DMA_PERIPH_TO_MEMORY;   // Receive
-  _spi2_dma.Init.PeriphInc           = DMA_PINC_DISABLE;
-  _spi2_dma.Init.MemInc              = DMA_MINC_ENABLE;
-  _spi2_dma.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-  _spi2_dma.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
-  _spi2_dma.Init.Mode                = DMA_CIRCULAR;
-  _spi2_dma.Init.Priority            = DMA_PRIORITY_LOW;
-  _spi2_dma.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;  // Required for differnt access-widths.
-  _spi2_dma.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
-  _spi2_dma.Init.MemBurst            = DMA_MBURST_SINGLE;
-  _spi2_dma.Init.PeriphBurst         = DMA_PBURST_SINGLE;
-  HAL_DMA_Init(&_spi2_dma);
-  HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
-
-  /* Configure DMA for the IRQ aggregator. */
-  _spi2_dma.State = HAL_DMA_STATE_BUSY;
-  __HAL_DMA_DISABLE(&_spi2_dma);
-  DMA1_Stream3->NDTR  = 10;
-  DMA1_Stream3->PAR   = (uint32_t)&SPI2->DR;
-  DMA1_Stream3->M0AR  = (uint32_t)_irq_data_1;
-  DMA1_Stream3->M1AR  = (uint32_t)_irq_data_0;
-  DMA1_Stream3->CR  |= (uint32_t) (DMA_SxCR_DBM | DMA_SxCR_CT);
-  DMA1_Stream3->CR  |= (uint32_t) (DMA_IT_TC | DMA_IT_TE | DMA_IT_DME);
-  DMA1_Stream3->FCR |= (uint32_t) DMA_IT_FE;
-  __HAL_DMA_ENABLE(&_spi2_dma);
-
-  SPI2->CR2 |= SPI_CR2_RXDMAEN;   // Let'ir rip. Should now manage itself.
 }
 
 
@@ -718,7 +238,7 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
 *   make them seizure.
 */
 void CPLDDriver::reset() {
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);  // Drive the reset pin low...
+  setPin(25, false);  // Drive the reset pin low...
   externalOscillator(true);    // Turn on the default oscillator...
   cpld_conf_value    = 0x00;   // Set our register representations to their
   cpld_version       = 0x00;   //   default values.
@@ -864,7 +384,7 @@ int8_t CPLDDriver::queue_io_job(BusOp* _op) {
       if (bus_timeout_millis) event_spi_timeout.delaySchedule(bus_timeout_millis);  // Punch the timeout schedule.
     }
     else {    // If there is something already in progress, queue up.
-      if (_er_flag(CPLD_FLAG_QUEUE_GUARD) && (max_queue_depth <= work_queue.size())) {
+      if (_er_flag(CPLD_FLAG_QUEUE_GUARD) && (MAX_Q_DEPTH <= work_queue.size())) {
         if (getVerbosity() > 3) Kernel::log("CPLDDriver::queue_io_job(): \t Bus queue at max size. Dropping transaction.\n");
         op->abort(XferFault::QUEUE_FLUSH);
         callback_queue.insertIfAbsent(op);
@@ -944,7 +464,8 @@ int8_t CPLDDriver::advance_work_queue() {
   timeout_punch = false;
   if (current_queue_item != NULL) {
     switch (current_queue_item->get_state()) {
-       case XferState::IO_WAIT:
+       case XferState::TX_WAIT:
+       case XferState::RX_WAIT:
          if (current_queue_item->hasFault()) {
            if (getVerbosity() > 3) local_log.concat("CPLDDriver::advance_work_queue():\t Failed at IO_WAIT.\n");
          }
@@ -962,7 +483,7 @@ int8_t CPLDDriver::advance_work_queue() {
        case XferState::INITIATE:
          switch (current_queue_item->begin()) {
            case 0:     // Nominal outcome. Transfer started with no problens...
-             HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
+             setPin(30, true);
              break;
            case -1:    // Bus appears to be in-use. State did not change.
              // Re-throw queue_ready event and try again later.
@@ -997,7 +518,7 @@ int8_t CPLDDriver::advance_work_queue() {
     if (NULL != current_queue_item) {
       if (current_queue_item->begin()) {
         if (getVerbosity() > 2) local_log.concatf("advance_work_queue() tried to clobber an existing transfer on the pick-up.\n");
-        Kernel::staticRaiseEvent(&event_spi_queue_ready);  // Bypass our method. Jump right to the target.
+        Kernel::staticRaiseEvent(&SPIBusOp::event_spi_queue_ready);  // Bypass our method. Jump right to the target.
       }
       return_value++;
     }
@@ -1064,12 +585,12 @@ void CPLDDriver::purge_queued_work() {
 *
 * @return an SPIBusOp to be used. Only NULL if out-of-mem.
 */
-SPIBusOp* CPLDDriver::issue_spi_op_obj() {
+SPIBusOp* CPLDDriver::new_op() {
   SPIBusOp* return_value = preallocated.dequeue();
   if (NULL == return_value) {
-    preallocation_misses++;
+    _prealloc_misses++;
     return_value = new SPIBusOp();
-    //if (getVerbosity() > 5) Kernel::log("issue_spi_op_obj(): Fresh allocation!\n");
+    //if (getVerbosity() > 5) Kernel::log("new_op(): Fresh allocation!\n");
   }
   return return_value;
 }
@@ -1082,8 +603,8 @@ SPIBusOp* CPLDDriver::issue_spi_op_obj() {
 * @param  _req  The device pointer that owns jobs we wish purged.
 * @return an SPIBusOp to be used. Only NULL if out-of-mem.
 */
-SPIBusOp* CPLDDriver::issue_spi_op_obj(BusOpcode _op, BusOpCallback* _req) {
-  SPIBusOp* return_value = issue_spi_op_obj();
+SPIBusOp* CPLDDriver::new_op(BusOpcode _op, BusOpCallback* _req) {
+  SPIBusOp* return_value = new_op();
   return_value->set_opcode(_op);
   return_value->callback = _req;
   return return_value;
@@ -1137,7 +658,6 @@ void CPLDDriver::purge_stalled_job() {
 }
 
 
-
 /*******************************************************************************
 * CPLD register manipulation and integral hardware functions.                  *
 *******************************************************************************/
@@ -1148,7 +668,7 @@ void CPLDDriver::purge_stalled_job() {
 * @return 0 on success. Nonzero on failure.
 */
 int8_t CPLDDriver::readRegister(uint8_t reg_addr) {
-  SPIBusOp* temp = issue_spi_op_obj();
+  SPIBusOp* temp = new_op();
   temp->set_opcode(BusOpcode::RX);
   temp->setParams(reg_addr, 0);  // Set the READ bit...
   queue_io_job(temp);
@@ -1163,7 +683,7 @@ int8_t CPLDDriver::readRegister(uint8_t reg_addr) {
 * @return 0 on success. Nonzero on failure.
 */
 int8_t CPLDDriver::writeRegister(uint8_t reg_addr, uint8_t val) {
-  SPIBusOp* temp = issue_spi_op_obj();
+  SPIBusOp* temp = new_op();
   temp->set_opcode(BusOpcode::TX);
   temp->setParams(reg_addr, val);
   queue_io_job(temp);
@@ -1180,22 +700,6 @@ int CPLDDriver::setCPLDClkFreq(int _period) {
   return (_set_timer_base((uint16_t) _period) ? 1 : 0);
 }
 
-/**
-* Pass 'true' to enable the CPLD osciallator. False to disable it.
-* This oscillator being enabled is a precondition for various other features
-*   in the CPLD, so we keep track of the state in this class.
-*
-* @param  on  Should the osciallator be enabled?
-*/
-void CPLDDriver::externalOscillator(bool on) {
-  _er_set_flag(CPLD_FLAG_EXT_OSC, on);
-  if (on) {
-    HAL_TIM_OC_Start(&htim1, TIM_CHANNEL_1);
-  }
-  else {
-    HAL_TIM_OC_Stop(&htim1, TIM_CHANNEL_1);
-  }
-}
 
 /**
 * The CPLD has an internal oscillator that can continue running if we put the
@@ -1244,47 +748,6 @@ uint8_t CPLDDriver::getCPLDVersion() {
 /*******************************************************************************
 * This is where IMU-related functions live.                                    *
 *******************************************************************************/
-/**
-* Given an address, find the associated IIU.
-*
-* @param  test_addr The address to query.
-* @return A pointer to the IIU responsible for the given address.
-*/
-IIU* CPLDDriver::fetch_iiu_by_bus_addr(uint8_t test_addr) {
-  if (CPLD_REG_IMU_D5_D_M < test_addr) {
-    // Too big. Not an IMU address.
-    return NULL;
-  }
-  else if (CPLD_REG_IMU_D5_D_I < test_addr) {
-    // Magnetic aspect.
-    return LegendManager::getInstance()->fetchIIU(test_addr - CPLD_REG_IMU_D5_D_I);
-  }
-  else {
-    // Inertial aspect. Bus address and index are equal.
-    return LegendManager::getInstance()->fetchIIU(test_addr);
-  }
-}
-
-/**
-* Given an address, find the associated IIU.
-*
-* @param  test_addr The address to query.
-* @return An index to the IIU responsible for the given address.
-*/
-int8_t CPLDDriver::fetch_iiu_index_by_bus_addr(uint8_t test_addr) {
-  if (CPLD_REG_IMU_D5_D_M < test_addr) {
-    // Too big. Not an IMU address.
-    return -1;
-  }
-  else if (CPLD_REG_IMU_D5_D_I < test_addr) {
-    // Magnetic aspect.
-    return (test_addr - CPLD_REG_IMU_D5_D_I);
-  }
-  else {
-    // Inertial aspect. Bus address and index are equal.
-    return test_addr;
-  }
-}
 
 /**
 *
@@ -1320,37 +783,38 @@ int8_t CPLDDriver::iiu_group_irq() {
 * @return 0 on no action, 1 on action, -1 on failure.
 */
 int8_t CPLDDriver::attached() {
-  EventReceiver::attached();
+  if (EventReceiver::attached()) {
+    _irq_data_arrival.repurpose(DIGITABULUM_MSG_IMU_IRQ_RAISED, (EventReceiver*) this);
+    _irq_data_arrival.incRefs();
+    _irq_data_arrival.specific_target = (EventReceiver*) this;
+    _irq_data_arrival.priority(2);
 
-  _irq_data_arrival.repurpose(DIGITABULUM_MSG_IMU_IRQ_RAISED, (EventReceiver*) this);
-  _irq_data_arrival.isManaged(true);
-  _irq_data_arrival.specific_target = (EventReceiver*) this;
-  _irq_data_arrival.priority        = 2;
+    _periodic_debug.repurpose(0x5080, (EventReceiver*) this);
+    _periodic_debug.incRefs();
+    _periodic_debug.specific_target = (EventReceiver*) this;
+    _periodic_debug.priority(1);
+    _periodic_debug.alterSchedulePeriod(100);
+    _periodic_debug.alterScheduleRecurrence(-1);
+    _periodic_debug.autoClear(false);
+    _periodic_debug.enableSchedule(false);
 
-  _periodic_debug.repurpose(0x5080, (EventReceiver*) this);
-  _periodic_debug.isManaged(true);
-  _periodic_debug.specific_target = (EventReceiver*) this;
-  _periodic_debug.priority        = 1;
-  _periodic_debug.alterSchedulePeriod(100);
-  _periodic_debug.alterScheduleRecurrence(-1);
-  _periodic_debug.autoClear(false);
-  _periodic_debug.enableSchedule(false);
+    //platform.kernel()->addSchedule(&event_spi_timeout);
+    platform.kernel()->addSchedule(&_periodic_debug);
 
-  //platform.kernel()->addSchedule(&event_spi_timeout);
-  platform.kernel()->addSchedule(&_periodic_debug);
+    gpioSetup();
+    init_ext_clk();
 
-  gpioSetup();
-  init_ext_clk();
+    init_spi(1, 0);   // CPOL=1, CPHA=0, HW-driven
+    init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
 
-  init_spi(1, 0);   // CPOL=1, CPHA=0, HW-driven
-  init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
+    // An SPI transfer might hang (very unlikely). This will un-hang it.
+    event_spi_timeout.alterSchedule(bus_timeout_millis, -1, false, callback_spi_timeout);
+    event_spi_timeout.incRefs();
 
-  // An SPI transfer might hang (very unlikely). This will un-hang it.
-  event_spi_timeout.alterSchedule(bus_timeout_millis, -1, false, callback_spi_timeout);
-  event_spi_timeout.isManaged(true);
-
-  reset();
-  return 1;
+    reset();
+    return 1;
+  }
+  return 0;
 }
 
 
@@ -1371,7 +835,7 @@ int8_t CPLDDriver::attached() {
 int8_t CPLDDriver::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
-  int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
+  int8_t return_value = (0 == event->refCount()) ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
 
   /* Some class-specific set of conditionals below this line. */
   switch (event->eventCode()) {
@@ -1402,7 +866,7 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
 
     case 0x5050:
       {
-        SPIBusOp* op = issue_spi_op_obj();
+        SPIBusOp* op = new_op();
         op->set_opcode(BusOpcode::RX);
         op->setParams((active_imu_position | 0x80), 0x01, 0x02, 0x8F);
         op->setBuffer(__hack_buffer, 2);
@@ -1423,7 +887,7 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
       return_value = 1;
       break;
     case DIGITABULUM_MSG_CPLD_RESET_CALLBACK:
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);
+      setPin(25, true);
       //if (getVerbosity() > 4) local_log.concat("CPLD reset.\n");
       return_value = 1;
       //getCPLDVersion();
@@ -1439,7 +903,7 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
 
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄         ▄  ▄▄▄▄▄▄▄▄▄▄▄
 * ▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░▌       ▐░▌▐░░░░░░░░░░░▌
 * ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌▐░█▀▀▀▀▀▀▀▀▀
@@ -1451,9 +915,7 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
 * ▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄█░▌
 * ▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
 *  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀
-*
-* Code in here only exists for as long as it takes to debug something. Don't write against these.
-****************************************************************************************************/
+*******************************************************************************/
 
 /**
 * Debug support method. This fxn is only present in debug builds.
@@ -1479,21 +941,16 @@ void CPLDDriver::printDebug(StringBuilder *output) {
 
   output->concatf("--\n-- CPLD_GPIO (0/1)     %s / %s\n--\n",       (readPin(75) ? "hi":"lo"), (readPin(78) ? "hi":"lo"));
 
-  output->concatf("-- SPI1 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI1_READY)?"on":"OFF"));
-  output->concatf("-- hspi1.State:        0x%08x\n", (unsigned long) hspi1.State);
-  output->concatf("-- hspi1.ErrorCode:    0x%08x\n", (unsigned long) hspi1.ErrorCode);
-  output->concatf("-- hspi1.TxXferCount:  0x%04x\n", hspi1.TxXferCount);
-  output->concatf("-- hspi1.RxXferCount:  0x%04x\n", hspi1.RxXferCount);
-  output->concatf("-- __hack_buffer       0x%08x\n--\n", __hack_buffer);
+  printHardwareState(output);
 
-  //if (getVerbosity() > 2) {
-  //  output->concatf("-- Guarding queue      %s\n",       (_er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no"));
-  //  output->concatf("-- spi_cb_per_event    %d\n--\n",   spi_cb_per_event);
-  //}
-  //output->concatf("-- prealloc queue size %d\n",     preallocated.size());
-  //output->concatf("-- prealloc_misses     %u\n",     (unsigned long) preallocation_misses);
-  //output->concatf("-- total_transfers     %u\n",     (unsigned long) SPIBusOp::total_transfers);
-  //output->concatf("-- failed_transfers    %u\n",     (unsigned long) SPIBusOp::failed_transfers);
+  if (getVerbosity() > 2) {
+    output->concatf("-- Guarding queue      %s\n",       (_er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no"));
+    output->concatf("-- spi_cb_per_event    %d\n--\n",   spi_cb_per_event);
+  }
+  output->concatf("-- prealloc queue size %d\n",     preallocated.size());
+  output->concatf("-- prealloc_misses     %u\n",     (unsigned long) _prealloc_misses);
+  output->concatf("-- total_transfers     %u\n",     (unsigned long) SPIBusOp::total_transfers);
+  output->concatf("-- failed_transfers    %u\n",     (unsigned long) SPIBusOp::failed_transfers);
   //output->concatf("-- specificity_burden  %u\n--\n", (unsigned long) specificity_burden);
 
   //output->concatf("-- bus queue depth:    %d\n-- callback q depth    %d\n\n", work_queue.size(), callback_queue.size());
@@ -1596,8 +1053,8 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       local_log.concatf("CPLD servicing IRQs?  %s\n", _er_flag(CPLD_FLAG_SVC_IRQS)?"yes":"no");
       break;
 
-    case 'o':        // CPLD internal oscillator. 1 to engage.
-    case 'O':        // CPLD external oscillator. 1 to engage.
+    case 'o':        // CPLD internal oscillator.
+    case 'O':        // CPLD external oscillator.
       local_log.concatf(
         "%sabling CPLD %sternal oscillator...\n",
         (temp_byte ? "En" : "Dis"),
@@ -1632,7 +1089,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
-    case '+':
+    case '&':
       local_log.concatf("Advanced CPLD SPI work queue.\n");
       Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
       break;
@@ -1672,10 +1129,16 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       setCPLDConfig(CPLD_CONF_BIT_PWR_CONSRV, (*(str) == ':'));
       break;
 
-    case '-':
     case '_':
-      local_log.concatf("%s CPLD_DEN_AG_0.\n", (*(str) == '_' ? "Clearing" : "Setting"));
-      setCPLDConfig(CPLD_CONF_BIT_DEN_AG_0, (*(str) == '-'));
+    case '-':
+      local_log.concatf("enableCarpalAG(%s)\n", (*(str) == '-' ? "true" : "false"));
+      enableCarpalAG(*(str) == '-');
+      break;
+
+    case '+':
+    case '=':
+      local_log.concatf("enableMetacarpalAG(%s)\n", (*(str) == '+' ? "true" : "false"));
+      enableMetacarpalAG(*(str) == '+');
       break;
 
     case '[':
@@ -1703,16 +1166,12 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       local_log.concatf("%s periodic reader.\n", (*(str) == 'z' ? "Stopping" : "Starting"));
       break;
 
-    case 'x':
-      local_log.concatf("SPI2 data register: 0x%02x\n", SPI2->DR);
-      break;
-
     case 'C':    // Individual IMU access tests...
     case 'c':    // Individual IMU access tests...
       if (temp_byte < 0x22) {
         active_imu_position = temp_byte;
         for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
-        SPIBusOp* op = issue_spi_op_obj();
+        SPIBusOp* op = new_op();
         op->set_opcode(BusOpcode::RX);
         op->setParams((temp_byte | 0x80), 0x01, 0x01, 0x8F);
         op->setBuffer(__hack_buffer, (*(str) == 'C' ? 5 : 1));
@@ -1726,7 +1185,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
     case 'n':    // Many bytes for a given address...
       if (temp_byte < 35) {
         for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
-        SPIBusOp* op = issue_spi_op_obj(BusOpcode::RX, this);
+        SPIBusOp* op = new_op(BusOpcode::RX, this);
         op->setParams((active_imu_position | 0x80), temp_byte, 0x01, 0x8F);
         op->setBuffer(__hack_buffer, temp_byte);
         queue_io_job((BusOp*) op);
@@ -1739,7 +1198,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
     case 'N':    // Single byte for a multiple access...
       if (temp_byte < 35) {
         for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
-        SPIBusOp* op = issue_spi_op_obj(BusOpcode::RX, this);
+        SPIBusOp* op = new_op(BusOpcode::RX, this);
         op->setParams((active_imu_position | 0x80), 0x01, temp_byte, 0x8F);
         op->setBuffer(__hack_buffer, temp_byte);
         queue_io_job((BusOp*) op);

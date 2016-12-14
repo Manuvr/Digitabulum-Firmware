@@ -33,21 +33,10 @@ class RNBase;
 /*
 * This is the class that represents an item in the work queue.
 */
-class BTQueuedOperation {
-
+class BTQueuedOperation : public BusOp {
   public:
     StringBuilder data;       // Might need a raw buffer on the way to DMA...
-    BusOpcode  opcode;        // What is the nature of this work-queue item?
-
-    uint8_t*  tx_buf = NULL;
-    uint32_t  tx_len = 0;
     int       txn_id;          // How are we going to keep track of this item?
-
-    uint16_t  xenomsg_id = 0;
-
-    bool      completed;       // Can this buffer be reaped?
-    bool      initiated;       // Is this item fresh or is it waiting on a reply?
-
 
     BTQueuedOperation();
     BTQueuedOperation(BusOpcode nu_op);
@@ -65,28 +54,17 @@ class BTQueuedOperation {
     int8_t begin();
 
     /* Call to mark something completed that may not be. */
-    int8_t abort();
+    int8_t abort(XferFault);
 
     /* Call to mark complete and follow the nominal message path. */
-    int8_t mark_complete();
+    int8_t markComplete();
 
     void wipe();
 
     void printDebug(StringBuilder *);
 
-    static void buildDMAMembers();
-
 
   private:
-    /*
-    * This is actually the function that does the work of sending things to
-    *   the counterparty. It is to be the last stop for a buffer prior to being fed
-    *   to USART2's DMA channel.
-    */
-    int8_t init_dma();
-
-
-    static void enable_DMA_IRQ(bool);
 };
 
 

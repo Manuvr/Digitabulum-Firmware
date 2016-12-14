@@ -41,8 +41,12 @@ volatile static unsigned long _stat2_change_time = 0;
 volatile static unsigned int  _stat1_prior_delta = 0;
 volatile static unsigned int  _stat2_prior_delta = 0;
 
-
 volatile PMU* PMU::INSTANCE = NULL;
+
+const MessageTypeDef pmu_message_defs[] = {
+  {  DIGITABULUM_MSG_PMU_READ,   0x0000,    "PMU_READ"    , ManuvrMsg::MSG_ARGS_NONE }, //
+};
+
 
 int PMU::pmu_cpu_clock_rate(CPUFreqSetting _setting) {
   switch (_setting) {
@@ -71,6 +75,7 @@ const char* PMU::getChargeStateString(ChargeState code) {
 }
 
 
+
 /*******************************************************************************
 *   ___ _              ___      _ _              _      _
 *  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
@@ -82,15 +87,28 @@ const char* PMU::getChargeStateString(ChargeState code) {
 
 PMU::PMU(INA219* _cv_sense) : EventReceiver() {
   setReceiverName("PMU");
-  INSTANCE   = this;
+  if (nullptr == INSTANCE) {
+    INSTANCE   = this;
+    ManuvrMsg::registerMessages(pmu_message_defs, sizeof(pmu_message_defs) / sizeof(MessageTypeDef));
+  }
   _cpu_clock = CPUFreqSetting::CPU_CLK_UNDEF;
   _stat1_pin = 16;
   _stat2_pin = 17;
   _ina219 = _cv_sense;
+
+  _periodic_pmu_read.repurpose(DIGITABULUM_MSG_PMU_READ, (EventReceiver*) this);
+  _periodic_pmu_read.incRefs();
+  _periodic_pmu_read.specific_target = (EventReceiver*) this;
+  _periodic_pmu_read.priority(1);
+  _periodic_pmu_read.alterSchedulePeriod(100);
+  _periodic_pmu_read.alterScheduleRecurrence(-1);
+  _periodic_pmu_read.autoClear(false);
+  _periodic_pmu_read.enableSchedule(false);
 }
 
 
 PMU::~PMU() {
+  platform.kernel()->removeSchedule(&_periodic_pmu_read);
 }
 
 
@@ -209,9 +227,13 @@ void PMU::set_stat2_delta(unsigned int nu) {
 * @return 0 on no action, 1 on action, -1 on failure.
 */
 int8_t PMU::attached() {
-  EventReceiver::attached();   // Call up to get scheduler ref and class init.
-  gpioSetup();
-  cpu_scale(1);
+  if (EventReceiver::attached()) {
+    gpioSetup();
+    cpu_scale(1);
+    platform.kernel()->addSchedule(&_periodic_pmu_read);
+    _ina219->init();
+    return 1;
+  }
   return 0;
 }
 
@@ -254,7 +276,7 @@ void PMU::printDebug(StringBuilder* output) {
 int8_t PMU::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
-  int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
+  int8_t return_value = (0 == event->refCount()) ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
 
   /* Some class-specific set of conditionals below this line. */
   switch (event->eventCode()) {
@@ -270,6 +292,13 @@ int8_t PMU::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
 
   switch (active_event->eventCode()) {
+    case DIGITABULUM_MSG_PMU_READ:
+      if (_ina219->isDirty()) {
+        _ina219->isDirty();
+      }
+      _ina219->readSensor();
+      return_value++;
+      break;
     default:
       return_value += EventReceiver::notify(active_event);
       break;
@@ -308,6 +337,12 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
     case 'p':
     case 'P':
       // Start or stop the periodic sensor read.
+      if (temp_int) {
+        _periodic_pmu_read.alterSchedulePeriod(temp_int * 10);
+        local_log.concatf("_periodic_pmu_read set to %d ms period.\n", (temp_int * 10));
+      }
+      _periodic_pmu_read.enableSchedule(*(str) == 'P');
+      local_log.concatf("%s _periodic_pmu_read.\n", (*(str) == 'p' ? "Stopping" : "Starting"));
       break;
 
     case 'e':

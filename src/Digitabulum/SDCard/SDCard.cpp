@@ -431,8 +431,10 @@ void SDCard::gpioSetup() {
 * @return 0 on no action, 1 on action, -1 on failure.
 */
 int8_t SDCard::attached() {
-  EventReceiver::attached();
-  gpioSetup();
+  if (EventReceiver::attached()) {
+    gpioSetup();
+    return 1;
+  }
   return 0;
 }
 
@@ -467,7 +469,7 @@ void SDCard::printDebug(StringBuilder *output) {
 int8_t SDCard::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
-  int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
+  int8_t return_value = (0 == event->refCount()) ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
 
   /* Some class-specific set of conditionals below this line. */
   switch (event->eventCode()) {

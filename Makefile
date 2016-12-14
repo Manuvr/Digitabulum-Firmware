@@ -31,6 +31,7 @@ export AS      = $(TOOLCHAIN)/arm-none-eabi-as
 export CP      = $(TOOLCHAIN)/arm-none-eabi-objcopy
 export OD      = $(TOOLCHAIN)/arm-none-eabi-objdump
 export SZ      = $(TOOLCHAIN)/arm-none-eabi-size
+export GDB     = $(TOOLCHAIN)/arm-none-eabi-gdb
 export MAKE    = $(shell which make)
 
 
@@ -54,11 +55,11 @@ INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/CMSIS/Include
 INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/USB_Device/Class/CDC/Inc
 INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/USB_Device/Core/Inc
 INCLUDES   += -I$(BUILD_ROOT)/src/Digitabulum
-INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS
-INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/include
-INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1
-INCLUDES   += -Ilib/Middlewares/Third_Party/FatFs/src
-INCLUDES   += -Ilib/Middlewares/Third_Party/FatFs/src/drivers
+INCLUDES   += -I$(BUILD_ROOT)/lib/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS
+INCLUDES   += -I$(BUILD_ROOT)/lib/Middlewares/Third_Party/FreeRTOS/Source/include
+INCLUDES   += -I$(BUILD_ROOT)/lib/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1
+INCLUDES   += -I$(BUILD_ROOT)/lib/Middlewares/Third_Party/FatFs/src
+INCLUDES   += -I$(BUILD_ROOT)/lib/Middlewares/Third_Party/FatFs/src/drivers
 
 # Describing the target arch....
 #MCUFLAGS  = -DHSE_VALUE=$(EXT_CLK_RATE)
@@ -88,13 +89,12 @@ CFLAGS += -DENABLE_USB_VCP
 ###########################################################################
 # Source file definitions...
 ###########################################################################
-SOURCES_C     = src/syscalls.c src/gpio.c
+SOURCES_C     = src/syscalls.c
 SOURCES_C    += src/fatfs.c
 SOURCES_C    += src/stm32f7xx_it.c
 SOURCES_C    += src/system_stm32f7xx.c
 
-SOURCES_CPP   = src/main.cpp
-SOURCES_CPP  += src/Digitabulum/CPLDDriver/CPLDDriver.cpp
+SOURCES_CPP   = src/Digitabulum/CPLDDriver/CPLDDriver.cpp
 SOURCES_CPP  += src/Digitabulum/CPLDDriver/SPIBusOp.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/IIU.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp
@@ -120,6 +120,7 @@ SOURCES_CPP  += src/Digitabulum/DigitabulumPMU/DigitabulumPMU.cpp
 MANUVR_OPTIONS += -DMANUVR_OVER_THE_WIRE
 MANUVR_OPTIONS += -DMANUVR_CBOR
 MANUVR_OPTIONS += -DMANUVR_CONSOLE_SUPPORT
+MANUVR_OPTIONS += -DMANUVR_SUPPORT_I2C
 
 # Options that build for certain threading models (if any).
 ifeq ($(THREADS),1)
@@ -147,6 +148,16 @@ MANUVR_OPTIONS += -D__MANUVR_EVENT_PROFILER
 #CPP_FLAGS += -fstack-usage
 endif
 
+ifeq ($(DISCO),1)
+# In this case, we will be doing hardware debugging on the F7 discovery.
+# So we should add source files and options to reflect this.
+DIGITABULUM_BOARD = DISCOF7
+SOURCES_CPP  += src/main-discof7.cpp
+CFLAGS += -DSTM32F7xx
+else
+DIGITABULUM_BOARD = R1
+SOURCES_CPP  += src/main.cpp
+endif
 
 ###########################################################################
 # exports, consolidation....
@@ -154,7 +165,7 @@ endif
 OBJS = $(SOURCES_C:.c=.o)
 
 # Merge our choices and export them to the downstream Makefiles...
-CFLAGS += $(MANUVR_OPTIONS) $(OPTIMIZATION) $(INCLUDES)
+CFLAGS += $(MANUVR_OPTIONS) $(OPTIMIZATION) $(INCLUDES) -D$(DIGITABULUM_BOARD)
 
 export STM32F746xx
 export MANUVR_PLATFORM = STM32F7
@@ -173,6 +184,10 @@ vpath %.a $(OUTPUT_PATH)
 .PHONY: all
 
 all: $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
+	@echo '======================================================'
+	@echo 'Built binary for board:'
+	@echo $(DIGITABULUM_BOARD)
+	@echo '======================================================'
 	$(SZ) $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf
 
 %.o : %.c

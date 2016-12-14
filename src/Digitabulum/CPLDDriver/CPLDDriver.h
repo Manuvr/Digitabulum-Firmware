@@ -327,13 +327,6 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #include "SPIBusOp.h"
 #include <Platform/Platform.h>
 
-#include <stm32f7xx_hal_gpio.h>
-#include <stm32f7xx_hal_spi.h>
-#include <stm32f7xx_hal.h>
-
-
-class LSM9DS1_Common;
-class IIU;
 
 #define CPLD_SPI_MAX_QUEUE_PRINT 3     // How many SPI queue items should we print for debug?
 #define PREALLOCATED_SPI_JOBS    10    // How many SPI queue items should we have on-tap?
@@ -352,39 +345,39 @@ class IIU;
 #define CPLD_FLAG_DEN_AG_STATE 0x80    // DEN_AG state.
 
 
-/* Codes that are specific to Digitabulum's CPLD and IMU apparatus. */
-  #define DIGITABULUM_MSG_IMU_LEGEND           0x0600 // No args? Asking for this legend. One arg: Legend provided.
+/* Event codes that are specific to Digitabulum's IMU apparatus. */
   #define DIGITABULUM_MSG_IMU_IRQ_RAISED       0x0602 // IRQ asserted by CPLD.
-
+  #define DIGITABULUM_MSG_IMU_LEGEND           0x0600 // No args? Asking for this legend. One arg: Legend provided.
   #define DIGITABULUM_MSG_IMU_INIT             0x0604 //
   #define DIGITABULUM_MSG_IMU_READ             0x0605 // Signal to read a given set of IMUs.
   #define DIGITABULUM_MSG_IMU_MAP_STATE        0x0606
-  #define DIGITABULUM_MSG_CPLD_RESET_COMPLETE  0x0607 // The CPLD reset is ready for disassertion.
-  #define DIGITABULUM_MSG_CPLD_RESET_CALLBACK  0x0608 // The CPLD reset is ready for disassertion.
   #define DIGITABULUM_MSG_IMU_QUAT_CRUNCH      0x0609 // The given IMU has samples to grind into a quat.
   #define DIGITABULUM_MSG_IMU_TAP              0x060A // The given IMU experienced a tap.
   #define DIGITABULUM_MSG_IMU_DOUBLE_TAP       0x060B // The given IMU experienced a double tap.
 
-  // SPI
-  #define DIGITABULUM_MSG_SPI_QUEUE_READY      0x0230 // There is a new job in the SPI bus queue.
-  #define DIGITABULUM_MSG_SPI_CB_QUEUE_READY   0x0231 // There is something ready in the callback queue.
+/* Event codes for Digitabulum's CPLD. */
+#define DIGITABULUM_MSG_SPI_QUEUE_READY      0x0230 // There is a new job in the SPI bus queue.
+#define DIGITABULUM_MSG_SPI_CB_QUEUE_READY   0x0231 // There is something ready in the callback queue.
+#define DIGITABULUM_MSG_CPLD_RESET_COMPLETE  0x0607 // The CPLD reset is ready for disassertion.
+#define DIGITABULUM_MSG_CPLD_RESET_CALLBACK  0x0608 // The CPLD reset is ready for disassertion.
+#define DIGITABULUM_MSG_CPLD_DIGIT_DROP      0x0609 // A digit was lost.
 
 
 /* CPLD register map ***************************************/
 #define CPLD_REG_IMU_DM_P_I    0x00  // |
-#define CPLD_REG_IMU_DM_D_I    0x01  // | These are pseudo registers. If the first byte in an SPI transaction is equal
-#define CPLD_REG_IMU_D1_P_I    0x02  // |   to one of these values, the corresponding IMU will be selected, and its bus
-#define CPLD_REG_IMU_D1_I_I    0x03  // |   connected to the CPU's SPI. Every bus operation that targets an individual
-#define CPLD_REG_IMU_D1_D_I    0x04  // |   IMU must be immediately preceeded by one of these bytes.
-#define CPLD_REG_IMU_D2_P_I    0x05  // |
-#define CPLD_REG_IMU_D2_I_I    0x06  // | The resulting bus connection will be retained until the CPU-facing ~CS line
-#define CPLD_REG_IMU_D2_D_I    0x07  // |   goes high.
-#define CPLD_REG_IMU_D3_P_I    0x08  // |
-#define CPLD_REG_IMU_D3_I_I    0x09  // |
+#define CPLD_REG_IMU_DM_D_I    0x01  // | These are pseudo registers.
+#define CPLD_REG_IMU_D1_P_I    0x02  // | If the first byte in an SPI
+#define CPLD_REG_IMU_D1_I_I    0x03  // |   transaction is equal to one of these
+#define CPLD_REG_IMU_D1_D_I    0x04  // |   values, the corresponding IMU will
+#define CPLD_REG_IMU_D2_P_I    0x05  // |   be selected, and its bus connected
+#define CPLD_REG_IMU_D2_I_I    0x06  // |   to the CPU's SPI. Each bus operation
+#define CPLD_REG_IMU_D2_D_I    0x07  // |   that targets an individual IMU must
+#define CPLD_REG_IMU_D3_P_I    0x08  // |   be immediately preceeded by one of
+#define CPLD_REG_IMU_D3_I_I    0x09  // |   these bytes.
 #define CPLD_REG_IMU_D3_D_I    0x0A  // |
-#define CPLD_REG_IMU_D4_P_I    0x0B  // |
-#define CPLD_REG_IMU_D4_I_I    0x0C  // |
-#define CPLD_REG_IMU_D4_D_I    0x0D  // |
+#define CPLD_REG_IMU_D4_P_I    0x0B  // | The resulting bus connection will be
+#define CPLD_REG_IMU_D4_I_I    0x0C  // |   retained until the CPU-facing ~CS
+#define CPLD_REG_IMU_D4_D_I    0x0D  // |   line goes high.
 #define CPLD_REG_IMU_D5_P_I    0x0E  // |
 #define CPLD_REG_IMU_D5_I_I    0x0F  // |
 #define CPLD_REG_IMU_D5_D_I    0x10  // |
@@ -429,36 +422,42 @@ class IIU;
 #define CPLD_CONF_BIT_DEN_AG_0   0x80  // Set The MC IMU DEN_AG pin
 
 
-
 /*
 * The CPLD driver class.
 */
-class CPLDDriver : public EventReceiver, public BusOpCallback {
+class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
   public:
     CPLDDriver();
     ~CPLDDriver();       // Should never be called. Here for the sake of completeness.
 
-    /* Overrides from the SPICallback interface */
+    /* Overrides from the BusAdapter interface */
     int8_t io_op_callback(BusOp*);
     int8_t queue_io_job(BusOp*);
+    int8_t advance_work_queue();
+    SPIBusOp* new_op();
+    SPIBusOp* new_op(BusOpcode, BusOpCallback*);
 
     /* Overrides from EventReceiver */
     void printDebug(StringBuilder*);
     int8_t notify(ManuvrMsg*);
     int8_t callback_proc(ManuvrMsg*);
+    int8_t attached();      // This is called from the base notify().
     #if defined(MANUVR_CONSOLE_SUPPORT)
       void procDirectDebugInstruction(StringBuilder*);
+      void printHardwareState(StringBuilder*);
     #endif  //MANUVR_CONSOLE_SUPPORT
 
-    /* Members related to the work queue... */
-    int8_t advance_work_queue();
-    inline void step_queues(){  Kernel::isrRaiseEvent(&event_spi_queue_ready); }
-    SPIBusOp* issue_spi_op_obj();
-    SPIBusOp* issue_spi_op_obj(BusOpcode, BusOpCallback*);
-
-    /* Power vs performance */
+    /* High-level hardware control and discovery. */
     void     reset();                  // Causes the CPLD to be reset.
     uint8_t  getCPLDVersion();         // Read the version code in the CPLD.
+    inline bool digitExists(uint8_t x) {   return false;   };   // TODO: When digits arrive.
+    inline int8_t digitSleep(uint8_t x) {  return 0;       };   // TODO: When digits arrive.
+
+    /* The wrist-moun */
+    inline void enableCarpalAG(bool x) {     setPin(33, x);                             };
+    inline void enableMetacarpalAG(bool x) { setCPLDConfig(CPLD_CONF_BIT_DEN_AG_0, x);  };
+
+    /* Power vs performance */
     int      setCPLDClkFreq(int);      // Set the CPLD external clock frequency.
     inline int8_t setWakeupSignal(uint8_t _val) {
       return writeRegister(CPLD_REG_WAKEUP_IRQ, _val | 0x80);
@@ -467,41 +466,24 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
     static SPIBusOp* current_queue_item;
 
 
-  protected:
-    int8_t attached();      // This is called from the base notify().
-
 
   private:
-    ManuvrMsg event_spi_queue_ready;
     ManuvrMsg event_spi_callback_ready;
     ManuvrMsg event_spi_timeout;
     ManuvrMsg _periodic_debug;
 
-    /* Register representations. */
-    uint8_t   cpld_version       = 0;         // If zero, than the CPLD has not been initialized.
-    uint8_t   cpld_conf_value    = 0;         // Configuration.
-    uint8_t   forsaken_digits    = 0;         // Forsaken digits.
-    uint8_t   cpld_wakeup_source = 0;         // WAKEUP mapping.
-
-    /* SPI and work queue related members */
-    PriorityQueue<SPIBusOp*> work_queue;
+    /* List of pending callbacks for bus transactions. */
     PriorityQueue<SPIBusOp*> callback_queue;
-    PriorityQueue<SPIBusOp*> preallocated;
-    uint32_t bus_timeout_millis   = 5;        // How long to spend in IO_WAIT?
-    uint32_t preallocation_misses = 0;        // How many times have we starved the preallocation queue?
-    uint32_t specificity_burden   = 0;        // How many queue items have new deleted?
-    uint16_t max_queue_depth      = 50;       // Debug
-    uint8_t  spi_cb_per_event     = 3;        // Limit the number of callbacks processed per event.
+    uint32_t  bus_timeout_millis = 5;  // How long to spend in IO_WAIT?
+    uint32_t  specificity_burden = 0;  // How many queue items have been deleted?
+    uint8_t   spi_cb_per_event   = 3;  // Limit the number of callbacks processed per event.
+    uint16_t  _digit_flags       = 0;  // Digit sleep state tracking flags.
 
-    /* Inlines for deriving address and IRQ bit offsets from index. */
-    // Address of the inertial half of the LSM9DS1.
-    inline uint8_t _intertial_addr(int idx) {   return ((idx % 17) + 0x00);   };
-    // Address of the magnetic half of the LSM9DS1.
-    inline uint8_t _magnetic_addr(int idx) {    return ((idx % 17) + 0x11);   };
-    // These values represent where in the IRQ buffer this IIU's bits lie.
-    inline uint8_t _irq_offset_byte(int idx) {  return (idx >> 1);            };
-    inline uint8_t _irq_offset_bit(int idx) {   return (idx << 2);            };
+    /* These values represent where in the IRQ buffer this IIU's bits lie. */
+    inline uint8_t _irq_offset_byte(int idx) {  return (idx >> 1);     };
+    inline uint8_t _irq_offset_bit(int idx) {   return (idx << 2);     };
 
+    void _deinit();
     int8_t readRegister(uint8_t reg_addr);
     int8_t writeRegister(uint8_t reg_addr, uint8_t val);
 
@@ -527,11 +509,14 @@ class CPLDDriver : public EventReceiver, public BusOpCallback {
 
     int8_t iiu_group_irq();
 
-    IIU* fetch_iiu_by_bus_addr(uint8_t);
-    int8_t fetch_iiu_index_by_bus_addr(uint8_t);
-
 
     static SPIBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
+
+    /* Register representations. */
+    static uint8_t cpld_version;        // CPLD version byte.
+    static uint8_t cpld_conf_value;     // Configuration.
+    static uint8_t forsaken_digits;     // Forsaken digits.
+    static uint8_t cpld_wakeup_source;  // WAKEUP mapping.
 };
 
 #endif

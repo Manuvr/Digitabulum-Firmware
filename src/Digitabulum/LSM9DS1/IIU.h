@@ -85,6 +85,7 @@ class LSM9DSx_Common;   // Forward declaration of the LSM9DSx_Common class.
 * This is a big mess of pointers to our representations of the registers for a
 *   complete sensor. We do things like this because we need this space allocated
 *   contiguously.
+* This should be 107 bytes if allocated contiguously.
 */
 typedef struct {
   uint8_t* AG_ACT_THS;
@@ -146,6 +147,42 @@ typedef struct {
 } IMURegisterPointers;
 
 
+
+/*
+* This class exist to encapsulate knowledge of address offsets in a giant pool
+*   of memory that represent only this IMU.
+*/
+class AGRegPntrs {
+  public:
+    AGRegPntrs(uint8_t* b0, uint8_t* b1, uint8_t* b2, uint8_t* b3) :
+      _base0(b0), _base1(b1), _base2(b2), _base3(b3) {};
+
+  private:
+    uint8_t* _base0;
+    uint8_t* _base1;
+    uint8_t* _base2;
+    uint8_t* _base3;
+
+    uint8_t* __ag_status;
+    uint8_t* __fifo_levels;
+    uint8_t* __temperatures;
+};
+
+/*
+* This class exist to encapsulate knowledge of address offsets in a giant pool
+*   of memory that represent only this IMU.
+*/
+class MagRegPntrs {
+  public:
+    MagRegPntrs(uint8_t* base) : _base(base) {};
+
+  private:
+    const uint8_t* _base;
+};
+
+
+
+
 /*
 * Sometimes we need to flag a sample to indicate that some important event happened.
 * We do this with bitwise flags so that we can use the same field to store many events.
@@ -190,7 +227,7 @@ typedef struct {
 #define IIU_DATA_HANDLING_NULLIFY_GRAVITY  0x80000000
 
 
-#define IIU_STANDARD_GRAVITY           9.80665f // This is Earth's gravity at sea-level, in m/s^2
+#define IIU_STANDARD_GRAVITY     9.80665f // This is Earth's gravity at sea-level, in m/s^2
 #define IIU_DEG_TO_RAD_SCALAR   (3.14159f / 180.0f)
 
 
@@ -210,7 +247,7 @@ class IIU {
 
     IIU();
     ~IIU();
-
+    void class_init(uint8_t idx);
 
     int8_t init();
     int8_t readSensor();
@@ -248,7 +285,6 @@ class IIU {
     void deposit_log(StringBuilder*);
 
     /* These are meant to be called from a Legend. */
-    void setPositionAndAddress(uint8_t nu_pos, uint8_t imu_addr, uint8_t mag_addr);
     void setOperatingState(uint8_t);
     void printLastFrame(StringBuilder *output);
     void dumpPreformedElements(StringBuilder*);
@@ -374,8 +410,8 @@ class IIU {
     }
 
 
-    inline void setAccelBaseFiler(uint8_t nu) {  if (imu_ag) imu_ag->set_base_filter_param_acc(nu);  };
-    inline void setGyroBaseFiler(uint8_t nu) {   if (imu_ag) imu_ag->set_base_filter_param_gyr(nu);  };
+    inline void setAccelBaseFiler(uint8_t nu) {  imu_ag.set_base_filter_param_acc(nu);  };
+    inline void setGyroBaseFiler(uint8_t nu) {   imu_ag.set_base_filter_param_gyr(nu);  };
 
 
     /*
@@ -415,8 +451,8 @@ class IIU {
     uint32_t dirty_gyr = 0;
     uint32_t dirty_mag = 0;
 
-    LSM9DS1_AG* imu_ag = NULL;
-    LSM9DS1_M*  imu_m = NULL;
+    LSM9DS1_AG imu_ag;
+    LSM9DS1_M imu_m;
 
     /* Pointers to our exported data. These should all point to a pool in the LegendManager
          that instantiated us. See that header file for more information. */

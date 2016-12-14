@@ -48,7 +48,7 @@ Data from magnetometers and GPS devices is used to establish error-rates
 #include "ManuLegend/ManuLegend.h"
 
 
-Vector3<float> ZERO_VECTOR;
+const Vector3<float> ZERO_VECTOR;
 
 /****************************************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
@@ -78,13 +78,11 @@ IIU::~IIU() {
   }
 }
 
-
-void IIU::setPositionAndAddress(uint8_t nu_pos, uint8_t imu_addr, uint8_t mag_addr) {
-  pos_id = nu_pos;
-
-  imu_m  = new LSM9DS1_M(mag_addr, this);     // An IMU.
-  imu_ag = new LSM9DS1_AG(imu_addr, this);    // An IMU.
-
+void IIU::class_init(uint8_t idx) {
+  pos_id = idx;
+  imu_ag.class_init(CPLD_REG_IMU_DM_P_I + idx, this);    // Inertial aspect.
+  imu_m.class_init(CPLD_REG_IMU_DM_P_M + idx, this);     // Magnetic aspect.
+  //TODO: Refugees from setPositionAndAddress(uint8_t nu_pos).
   if (quat_crunch_event.argCount() > 0) {
     quat_crunch_event.clearArgs();
   }
@@ -98,9 +96,11 @@ void IIU::setPositionAndAddress(uint8_t nu_pos, uint8_t imu_addr, uint8_t mag_ad
   /* Setup our pre-formed quat crunch event. */
   quat_crunch_event.repurpose(DIGITABULUM_MSG_IMU_QUAT_CRUNCH, (EventReceiver*) LegendManager::getInstance());
   quat_crunch_event.specific_target = (EventReceiver*) LegendManager::getInstance();
-  quat_crunch_event.isManaged(true);
-  //quat_crunch_event.priority        = 4;
+  quat_crunch_event.incRefs();
+  //quat_crunch_event.priority(4);
   quat_crunch_event.addArg((uint8_t) pos_id);
+
+  //TODO: End of Refugees from setPositionAndAddress(uint8_t nu_pos).
 }
 
 
@@ -111,27 +111,28 @@ void IIU::setPositionAndAddress(uint8_t nu_pos, uint8_t imu_addr, uint8_t mag_ad
 */
 int8_t IIU::init() {
   int8_t return_value = 0;
-  if (!imu_ag->initComplete()) {
+
+  if (!imu_ag.initComplete()) {
     return_value = -1;
   }
-  else if (!imu_m->initComplete()) {
+  else if (!imu_m.initComplete()) {
     return_value = -1;
   }
 
-  if (! imu_m->present()) {
-    imu_m->setDesiredState(State::STAGE_1);
+  if (! imu_m.present()) {
+    imu_m.setDesiredState(State::STAGE_1);
   }
 
-  if (! imu_ag->present()) {
-    imu_ag->setDesiredState(State::STAGE_1);
+  if (! imu_ag.present()) {
+    imu_ag.setDesiredState(State::STAGE_1);
   }
   return return_value;
 }
 
 
 void IIU::reset() {
-  imu_m->reset();
-  imu_ag->reset();
+  imu_m.reset();
+  imu_ag.reset();
   delta_t   = 0;
   dirty_mag = 0;
   dirty_acc = 0;
@@ -162,14 +163,14 @@ void IIU::reset() {
 
 
 void IIU::sync() {
-  imu_ag->bulk_refresh();
-  imu_m->bulk_refresh();
+  imu_ag.bulk_refresh();
+  imu_m.bulk_refresh();
 }
 
 
 void IIU::setOperatingState(uint8_t nu) {
-  imu_m->setDesiredState(LSM9DSx_Common::getStateByIndex(nu));
-  imu_ag->setDesiredState(LSM9DSx_Common::getStateByIndex(nu));
+  imu_m.setDesiredState(LSM9DSx_Common::getStateByIndex(nu));
+  imu_ag.setDesiredState(LSM9DSx_Common::getStateByIndex(nu));
 }
 
 
@@ -269,7 +270,7 @@ int8_t IIU::pushMeasurement(uint8_t data_type, float x, float y, float z, float 
       Kernel::staticRaiseEvent(&quat_crunch_event);
     }
     InertialMeasurement* nu_measurement = LegendManager::fetchMeasurement(data_type);
-    nu_measurement->set(_ptr_gyr, ((!dirty_mag && cleanMagZero()) ? &ZERO_VECTOR : _ptr_mag), _ptr_acc, delta_t);
+    nu_measurement->set(_ptr_gyr, ((!dirty_mag && cleanMagZero()) ? (Vector3<float>*)&ZERO_VECTOR : _ptr_mag), _ptr_acc, delta_t);
     if (dirty_mag) dirty_mag = 0;
     dirty_acc = 0;
     dirty_gyr = 0;
@@ -299,18 +300,10 @@ int8_t IIU::state_change_notice(LSM9DSx_Common* imu_ptr, State p_state, State c_
 
 
 
-void IIU::assign_legend_pointers(void* a,
-                                 void* g,
-                                 void* m,
-                                 void* v,
-                                 void* n_g,
-                                 void* pos,
-                                 void* q,
-                                 void* t,
-                                 void* sc_acc,
-                                 void* sc_gyr,
-                                 void* sc_mag,
-                                 void* sc_temp)
+void IIU::assign_legend_pointers(void* a, void* g, void* m,
+                                 void* v, void* n_g, void* pos,
+                                 void* q, void* t, void* sc_acc,
+                                 void* sc_gyr, void* sc_mag, void* sc_temp)
 {
   legend_writable(false);
   _ptr_acc          = (Vector3<float>*) a;
@@ -355,33 +348,33 @@ void IIU::setSampleRateProfile(uint8_t profile_idx) {
   switch (profile_idx) {
     case 0:
       delta_t = 0.0f;
-      imu_ag->set_sample_rate_acc(0);
-      imu_ag->set_sample_rate_gyr(0);
-      imu_m->set_sample_rate_mag(0);
+      imu_ag.set_sample_rate_acc(0);
+      imu_ag.set_sample_rate_gyr(0);
+      imu_m.set_sample_rate_mag(0);
       break;
     case 1:
       delta_t = 0.0f;
-      imu_ag->set_sample_rate_acc(1);
-      imu_ag->set_sample_rate_gyr(1);
-      imu_m->set_sample_rate_mag(1);
+      imu_ag.set_sample_rate_acc(1);
+      imu_ag.set_sample_rate_gyr(1);
+      imu_m.set_sample_rate_mag(1);
       break;
     case 2:
       delta_t = 0.0f;
-      imu_ag->set_sample_rate_acc(6);
-      imu_ag->set_sample_rate_gyr(2);
-      imu_m->set_sample_rate_mag(5);
+      imu_ag.set_sample_rate_acc(6);
+      imu_ag.set_sample_rate_gyr(2);
+      imu_m.set_sample_rate_mag(5);
       break;
     case 3:
       delta_t = 0.0f;
-      imu_ag->set_sample_rate_acc(8);
-      imu_ag->set_sample_rate_gyr(3);
-      imu_m->set_sample_rate_mag(5);
+      imu_ag.set_sample_rate_acc(8);
+      imu_ag.set_sample_rate_gyr(3);
+      imu_m.set_sample_rate_mag(5);
       break;
     case 4:
       delta_t = 0.0f;
-      imu_ag->set_sample_rate_acc(10);
-      imu_ag->set_sample_rate_gyr(4);
-      imu_m->set_sample_rate_mag(6);
+      imu_ag.set_sample_rate_acc(10);
+      imu_ag.set_sample_rate_gyr(4);
+      imu_m.set_sample_rate_mag(6);
       break;
     default:
       break;
@@ -405,23 +398,23 @@ int8_t IIU::getParameter(uint16_t reg, int len, uint8_t*) {
 
 
 bool IIU::state_pass_through(uint8_t nu) {
-  imu_m->setDesiredState(LSM9DSx_Common::getStateByIndex(nu));
-  imu_ag->setDesiredState(LSM9DSx_Common::getStateByIndex(nu));
+  imu_m.setDesiredState(LSM9DSx_Common::getStateByIndex(nu));
+  imu_ag.setDesiredState(LSM9DSx_Common::getStateByIndex(nu));
 
-  return (imu_m->desired_state_attained() & imu_ag->desired_state_attained());
+  return (imu_m.desired_state_attained() & imu_ag.desired_state_attained());
 }
 
 
 
 int8_t IIU::readSensor(void) {
-  if (State::STAGE_3 <= imu_m->getState()) {
-    imu_m->setDesiredState(State::STAGE_5);
-    imu_m->readSensor();
+  if (State::STAGE_3 <= imu_m.getState()) {
+    imu_m.setDesiredState(State::STAGE_5);
+    imu_m.readSensor();
   }
 
-  if (State::STAGE_3 <= imu_ag->getState()) {
-    imu_ag->setDesiredState(State::STAGE_5);
-    imu_ag->readSensor();
+  if (State::STAGE_3 <= imu_ag.getState()) {
+    imu_ag.setDesiredState(State::STAGE_5);
+    imu_ag.readSensor();
   }
   return 0;
 }
@@ -430,8 +423,8 @@ int8_t IIU::readSensor(void) {
 bool IIU::enableProfiling(bool en) {
   if (enableProfiling() != en) {
     data_handling_flags = (en) ? (data_handling_flags | IIU_DATA_HANDLING_PROFILING) : (data_handling_flags & ~(IIU_DATA_HANDLING_PROFILING));
-    imu_m->profile  = en;
-    imu_ag->profile = en;
+    imu_m.profile(en);
+    imu_ag.profile(en);
   }
   return enableProfiling();
 }
@@ -440,7 +433,7 @@ bool IIU::enableProfiling(bool en) {
 bool IIU::nullGyroError(bool en) {
   if (nullGyroError() != en) {
     data_handling_flags = (en) ? (data_handling_flags | IIU_DATA_HANDLING_NULL_GYRO_ERROR) : (data_handling_flags & ~(IIU_DATA_HANDLING_NULL_GYRO_ERROR));
-    imu_m->cancel_error  = en;
+    imu_m.cancel_error(en);
   }
   return nullGyroError();
 }
@@ -453,7 +446,7 @@ bool IIU::nullifyGravity(bool en) {
       // This feature depends on quaternions.
       processQuats(true);
     }
-    //imu_ag->cancel_error = en;
+    //imu_ag.cancel_error(en);
   }
   return nullifyGravity();
 }
@@ -482,7 +475,7 @@ void IIU::deposit_log(StringBuilder* _log) {
       event->addArg((uint8_t) pos_id);  // We must cast this, because it is *really* an int8.
       event->setOriginator(LegendManager::getInstance());
       Kernel::staticRaiseEvent(event);
-      //return ((NULL == imu_ag) ? -1 : imu_ag->irq_0());
+      //return imu_ag.irq_0();
       return 0;
     }
 
@@ -492,7 +485,7 @@ void IIU::deposit_log(StringBuilder* _log) {
         local_log.concatf("IIU %d \t irq_ag1\n", pos_id);
         Kernel::log(&local_log);
       }
-      return ((NULL == imu_ag) ? -1 : imu_ag->irq_1());
+      return imu_ag.irq_1();
     }
 
     int8_t IIU::irq_m() {
@@ -501,7 +494,7 @@ void IIU::deposit_log(StringBuilder* _log) {
         local_log.concatf("IIU %d \t irq_m\n", pos_id);
         Kernel::log(&local_log);
       }
-      return ((NULL == imu_m) ? -1 : imu_m->irq());
+      return imu_m.irq();
     }
 
 
@@ -515,21 +508,21 @@ void IIU::setTemperature(float nu) {
 
 void IIU::enableAutoscale(uint8_t s_type, bool enabled) {
   if (s_type & IMU_FLAG_GYRO_DATA) {
-    imu_ag->autoscale_gyr = enabled;
+    imu_ag.autoscale_gyr(enabled);
   }
   if (s_type & IMU_FLAG_MAG_DATA) {
-    imu_m->autoscale_mag = enabled;
+    imu_m.autoscale_mag(enabled);
   }
   if (s_type & IMU_FLAG_ACCEL_DATA) {
-    imu_ag->autoscale_acc = enabled;
+    imu_ag.autoscale_acc(enabled);
   }
 }
 
 
 
 void IIU::setVerbosity(int8_t nu) {
-  imu_m->setVerbosity(nu);
-  imu_ag->setVerbosity(nu);
+  imu_m.setVerbosity(nu);
+  imu_ag.setVerbosity(nu);
   verbosity = nu;
 }
 
@@ -567,20 +560,20 @@ void IIU::printDebug(StringBuilder* output) {
 
   output->concatf("--- IRQ hits: \t xm_1: %u \t xm_2: %u \t gyr_1: %u \n", irq_count_1, irq_count_2, irq_count_m);
   if (verbosity > 0) {
-    imu_m->dumpDevRegs(output);
+    imu_m.dumpDevRegs(output);
     output->concat("\n");
-    imu_ag->dumpDevRegs(output);
+    imu_ag.dumpDevRegs(output);
   }
   output->concat("\n\n");
 }
 
 
 void IIU::printBrief(StringBuilder* output) {
-  if (imu_m->initComplete() && imu_ag->initComplete()) {
+  if (imu_m.initComplete() && imu_ag.initComplete()) {
     output->concatf("%8u acc  %8u gyr  %8u mag  %8u temp\n", (unsigned long) *(_ptr_s_count_acc), (unsigned long) *(_ptr_s_count_gyr), (unsigned long) *(_ptr_s_count_mag), (unsigned long) *(_ptr_s_count_temp));
   }
   else {
-    output->concatf("XM state: %s  \t  G state: %s\n", imu_ag->getStateString(), imu_m->getStateString());
+    output->concatf("XM state: %s  \t  G state: %s\n", imu_ag.getStateString(), imu_m.getStateString());
   }
 }
 
@@ -589,11 +582,13 @@ void IIU::dumpPreformedElements(StringBuilder* output) {
   if (NULL == output) return;
   output->concat("\n-------------------------------------------------------\n--- IIU \n-------------------------------------------------------\n");
   output->concat("--- Quat-crunch event\n");
-  quat_crunch_event.printDebug(output);
+  #if defined(__MANUVR_DEBUG)
+    quat_crunch_event.printDebug(output);
+  #endif
 
-  imu_m->dumpPreformedElements(output);
+  imu_m.dumpPreformedElements(output);
   output->concat("\n");
-  imu_ag->dumpPreformedElements(output);
+  imu_ag.dumpPreformedElements(output);
   output->concat("\n\n");
 }
 

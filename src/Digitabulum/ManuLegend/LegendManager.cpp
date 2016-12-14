@@ -22,11 +22,6 @@ limitations under the License.
 
 #include "ManuLegend.h"
 
-extern "C" {
-  extern volatile CPLDDriver* cpld;
-}
-
-
 
 /*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
@@ -38,6 +33,10 @@ extern "C" {
 *
 * Static members and initializers should be located here.
 *******************************************************************************/
+IIU LegendManager::iius[LEGEND_DATASET_IIU_COUNT];  // TODO: Shouldn't be static.
+InertialMeasurement LegendManager::__prealloc[PREALLOCATED_IIU_MEASUREMENTS];
+// TODO: These shouldn't be static.
+
 SPIBusOp LegendManager::_preformed_read_a;
 SPIBusOp LegendManager::_preformed_read_g;
 SPIBusOp LegendManager::_preformed_read_m;
@@ -62,6 +61,41 @@ PriorityQueue<InertialMeasurement*>  LegendManager::preallocd_measurements;
 
 uint32_t LegendManager::minimum_prealloc_level = PREALLOCATED_IIU_MEASUREMENTS;
 
+/* ---------------------- */
+/*    Register memory     */
+/* ---------------------- */
+/* These are giant strips of DMA-capable memory that are used for raw frame
+     reads from the sensor package. Twice what we need for double-buffering. */
+Vector3<int16_t> LegendManager::__frame_buf_a[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
+Vector3<int16_t> LegendManager::__frame_buf_g[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
+Vector3<int16_t> LegendManager::__frame_buf_m[2 * LEGEND_DATASET_IIU_COUNT];  // Mag data
+/* More large stretches of DMA memory. These are for IIU register definitions.
+     Registers laid out this way cannot be multiply-accessed as more than single bytes
+     by their respective IIU classes because the memory is not contiguous. */
+int16_t LegendManager::__temperatures[LEGEND_DATASET_IIU_COUNT];
+uint8_t LegendManager::__fifo_ctrl[LEGEND_DATASET_IIU_COUNT];
+uint8_t LegendManager::__fifo_levels[LEGEND_DATASET_IIU_COUNT];  // The FIFO levels.
+uint8_t LegendManager::__ag_status[LEGEND_DATASET_IIU_COUNT];
+/* Identity registers. */
+uint8_t LegendManager::_imu_ids[2 * LEGEND_DATASET_IIU_COUNT];
+/* Accelerometer interrupt registers. */
+uint8_t LegendManager::_reg_block_ag_0[LEGEND_DATASET_IIU_COUNT * AG_BASE_0_SIZE];
+/* Gyroscope control registers. */
+uint8_t LegendManager::_reg_block_ag_1[LEGEND_DATASET_IIU_COUNT * AG_BASE_1_SIZE];
+/* Accelerometer control registers. */
+uint8_t LegendManager::_reg_block_ag_2[LEGEND_DATASET_IIU_COUNT * AG_BASE_2_SIZE];
+/* Gyroscope interrupt registers. */
+uint8_t LegendManager::_reg_block_ag_3[LEGEND_DATASET_IIU_COUNT * AG_BASE_3_SIZE];
+/* Magnetometer offset registers. */
+uint8_t LegendManager::_reg_block_m_0[LEGEND_DATASET_IIU_COUNT * M_BASE_0_SIZE];
+/* Magnetometer control registers. */
+uint8_t LegendManager::_reg_block_m_1[LEGEND_DATASET_IIU_COUNT * M_BASE_1_SIZE];
+/* Magnetometer interrupt registers. */
+uint8_t LegendManager::_reg_block_m_2[LEGEND_DATASET_IIU_COUNT * M_BASE_2_SIZE];
+/* ---------------------- */
+/* End of register memory */
+/* ---------------------- */
+
 
 
 InertialMeasurement* LegendManager::fetchMeasurement(uint8_t type_code) {
@@ -76,7 +110,7 @@ InertialMeasurement* LegendManager::fetchMeasurement(uint8_t type_code) {
   }
   else {
     return_value = preallocd_measurements.dequeue();
-    minimum_prealloc_level = std::min((uint32_t) preallocd_measurements.size(), minimum_prealloc_level);
+    minimum_prealloc_level = strict_min((uint32_t) preallocd_measurements.size(), minimum_prealloc_level);
   }
   return return_value;
 }
@@ -100,9 +134,9 @@ InertialMeasurement* LegendManager::fetchMeasurement(uint8_t type_code) {
 * @param InertialMeasurement* obj is the pointer to the object to be reclaimed.
 */
 void LegendManager::reclaimMeasurement(InertialMeasurement* obj) {
-  unsigned int obj_addr = ((uint32_t) obj);
-  unsigned int pre_min  = ((uint32_t) INSTANCE->__prealloc);
-  unsigned int pre_max  = pre_min + (sizeof(InertialMeasurement) * PREALLOCATED_IIU_MEASUREMENTS);
+  uintptr_t obj_addr = ((uintptr_t) obj);
+  uintptr_t pre_min  = ((uintptr_t) INSTANCE->__prealloc);
+  uintptr_t pre_max  = pre_min + (sizeof(InertialMeasurement) * PREALLOCATED_IIU_MEASUREMENTS);
 
   if ((obj_addr < pre_max) && (obj_addr >= pre_min)) {
     // If we are in this block, it means obj was preallocated. wipe and reclaim it.
@@ -126,7 +160,9 @@ void LegendManager::reclaimMeasurement(InertialMeasurement* obj) {
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
-LegendManager::LegendManager() : EventReceiver() {
+LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver() {
+  _bus = (CPLDDriver*) bus;  // TODO: Make this cast unnecessary.
+
   setReceiverName("ManuMgmt");
   INSTANCE = this;
 
@@ -141,7 +177,6 @@ LegendManager::LegendManager() : EventReceiver() {
   reflection_gyr.x = -1;
   reflection_gyr.y = 1;
   reflection_gyr.z = -1;
-
 
   _preformed_read_a.shouldReap(false);
   _preformed_read_a.devRegisterAdvance(true);
@@ -231,7 +266,7 @@ LegendManager::LegendManager() : EventReceiver() {
 
 
 
-/* This should probably never bee called. */
+/* This should probably never be called. */
 LegendManager::~LegendManager() {
   while (active_legends.hasNext()) active_legends.remove();
 }
@@ -253,17 +288,13 @@ IIU* LegendManager::fetchIIU(uint8_t idx) {
 
 
 int8_t LegendManager::init_iiu(uint8_t idx) {
-  iius[idx].init();
-  return 0;
+  return (idx > 16) ? -1 : iius[idx].init();
 }
 
 
 /* Read the given IMU. */
 int8_t LegendManager::refreshIMU(uint8_t idx) {
-  if (idx > 16) return -1;
-
-  iius[idx].readSensor();
-  return 0;
+  return (idx > 16) ? -1 : iius[idx].readSensor();
 }
 
 
@@ -319,7 +350,7 @@ int8_t LegendManager::reconfigure_data_map() {
   uint16_t accumulated_offset = LEGEND_DATASET_GLOBAL_SIZE;
   for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
     // Configure the IIU...
-    iius[i].setPositionAndAddress(i, i, i+0x11);
+    iius[i].class_init(i);
 
     /* Assign the ManuLegend specification to the IIU class, thereby giving the IIU class its pointers. */
 
@@ -380,7 +411,7 @@ int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
     nu_legend->formLegendString(legend_string);
     ManuvrMsg* legend_broadcast     = Kernel::returnEvent(DIGITABULUM_MSG_IMU_LEGEND);
     legend_broadcast->specific_target = nu_legend->owner;
-    legend_broadcast->priority        = EVENT_PRIORITY_LOWEST + 1;
+    legend_broadcast->priority(EVENT_PRIORITY_LOWEST + 1);
     legend_broadcast->setOriginator((EventReceiver*) this);
     legend_broadcast->addArg(legend_string)->reapValue(true);
 
@@ -401,12 +432,11 @@ void LegendManager::printDebug(StringBuilder *output) {
     // Print just the aggregate sample count and return.
   }
 
-
   if (getVerbosity() > 3) {
-    output->concatf("--- __dataset location  0x%08x\n", (uint32_t) __dataset);
-    output->concatf("--- __prealloc location 0x%08x\n", (uint32_t) __prealloc);
-    output->concatf("--- __IIU location      0x%08x\n", (uint32_t) iius);
-    output->concatf("--- INSTANCE location   0x%08x\n---\n", (uint32_t) INSTANCE);
+    output->concatf("--- __dataset location  %p\n", (uintptr_t) __dataset);
+    output->concatf("--- __prealloc location %p\n", (uintptr_t) __prealloc);
+    output->concatf("--- __IIU location      %p\n", (uintptr_t) iius);
+    output->concatf("--- INSTANCE location   %p\n---\n", (uintptr_t) INSTANCE);
   }
 
   float grav_consensus = 0.0;
@@ -424,10 +454,12 @@ void LegendManager::printDebug(StringBuilder *output) {
 
   if (getVerbosity() > 3) {
     output->concatf("--- MAX_DATASET_SIZE    %u\n",    (unsigned long) LEGEND_MGR_MAX_DATASET_SIZE);
-  }
-  if (getVerbosity() > 5) {
-    event_legend_frame_ready.printDebug(output);
-    event_iiu_read.printDebug(output);
+    #if defined(__MANUVR_DEBUG)
+      if (getVerbosity() > 5) {
+        event_legend_frame_ready.printDebug(output);
+        event_iiu_read.printDebug(output);
+      }
+    #endif
   }
 
   output->concatf("--- prealloc starves    %u\n--- minimum_prealloc    %u\n", (unsigned long) prealloc_starves, (unsigned long) minimum_prealloc_level);
@@ -454,10 +486,9 @@ uint32_t LegendManager::totalSamples() {
 
 
 
-
-/****************************************************************************************************
-* Overrides from the SPI apparatus...                                                               *
-****************************************************************************************************/
+/*******************************************************************************
+* Overrides from the SPI apparatus...                                          *
+*******************************************************************************/
 
 /*
 * When a bus operation completes, it is passed back to the class that created it.
@@ -491,7 +522,7 @@ int8_t LegendManager::queue_io_job(BusOp* _op) {
   if (NULL == op->callback) {
     op->callback = (BusOpCallback*) this;
   }
-  return ((CPLDDriver*)cpld)->queue_io_job(op);
+  return _bus->queue_io_job(op);
 }
 
 
@@ -517,44 +548,41 @@ int8_t LegendManager::queue_io_job(BusOp* _op) {
 * @return 0 on no action, 1 on action, -1 on failure.
 */
 int8_t LegendManager::attached() {
-  EventReceiver::attached();
+  if (EventReceiver::attached()) {
+    /* Get ready for a silly pointer dance....
+    *  This is an argument-heavy event, and we will be using it ALOT. So we build the Event arguments
+    *    once, and then change the data at the location being pointed at, and not the pointers in the
+    *    arguments. Technically, we could make this even faster by addingg a new type for Vector3<float>**,
+    *    but this will be a serious undertaking. We should ultimately implement ** types with a flag, not
+    *    a type_code.
+    *    Bassnectar - 04. You &amp; Me ft. W. Darling.mp3
+    *    Knife Party - 04. EDM Trend Machine.mp3
+    *    Bassnectar - 04 - Boomerang.mp3
+    *    Bassnectar - 01. F.U.N..mp3
+    *    ---J. Ian Lindsay   Thu Apr 09 04:04:41 MST 2015
+    */
+    event_iiu_read.repurpose(DIGITABULUM_MSG_IMU_READ, (EventReceiver*) this);
+    event_iiu_read.incRefs();
+    event_iiu_read.specific_target = (EventReceiver*) this;
+    event_iiu_read.priority(EVENT_PRIORITY_LOWEST);
+    event_iiu_read.alterSchedulePeriod(20);
+    event_iiu_read.alterScheduleRecurrence(-1);
+    event_iiu_read.autoClear(false);
+    event_iiu_read.enableSchedule(false);
 
-  /* Get ready for a silly pointer dance....
-  *  This is an argument-heavy event, and we will be using it ALOT. So we build the Event arguments
-  *    once, and then change the data at the location being pointed at, and not the pointers in the
-  *    arguments. Technically, we could make this even faster by addingg a new type for Vector3<float>**,
-  *    but this will be a serious undertaking. We should ultimately implement ** types with a flag, not
-  *    a type_code.
-  *    Bassnectar - 04. You &amp; Me ft. W. Darling.mp3
-  *    Knife Party - 04. EDM Trend Machine.mp3
-  *    Bassnectar - 04 - Boomerang.mp3
-  *    Bassnectar - 01. F.U.N..mp3
-  *    ---J. Ian Lindsay   Thu Apr 09 04:04:41 MST 2015
-  */
-  event_iiu_read.repurpose(DIGITABULUM_MSG_IMU_READ, (EventReceiver*) this);
-  event_iiu_read.isManaged(true);
-  event_iiu_read.specific_target = (EventReceiver*) this;
-  event_iiu_read.priority        = EVENT_PRIORITY_LOWEST;
-  event_iiu_read.alterSchedulePeriod(20);
-  event_iiu_read.alterScheduleRecurrence(-1);
-  event_iiu_read.autoClear(false);
-  event_iiu_read.enableSchedule(false);
-
-  // Build some pre-formed Events.
-  event_legend_frame_ready.repurpose(DIGITABULUM_MSG_IMU_MAP_STATE, (EventReceiver*) this);
-  event_legend_frame_ready.isManaged(true);
-  event_legend_frame_ready.specific_target = NULL; //(EventReceiver*) this;
-  event_legend_frame_ready.priority        = EVENT_PRIORITY_LOWEST;
-  event_legend_frame_ready.alterSchedulePeriod(25);
-  event_legend_frame_ready.alterScheduleRecurrence(-1);
-  event_legend_frame_ready.autoClear(false);
-  event_legend_frame_ready.enableSchedule(false);
-
-  return 1;
+    // Build some pre-formed Events.
+    event_legend_frame_ready.repurpose(DIGITABULUM_MSG_IMU_MAP_STATE, (EventReceiver*) this);
+    event_legend_frame_ready.incRefs();
+    event_legend_frame_ready.specific_target = NULL; //(EventReceiver*) this;
+    event_legend_frame_ready.priority(EVENT_PRIORITY_LOWEST);
+    event_legend_frame_ready.alterSchedulePeriod(25);
+    event_legend_frame_ready.alterScheduleRecurrence(-1);
+    event_legend_frame_ready.autoClear(false);
+    event_legend_frame_ready.enableSchedule(false);
+    return 1;
+  }
+  return 0;
 }
-
-
-
 
 
 /**
@@ -574,7 +602,7 @@ int8_t LegendManager::attached() {
 int8_t LegendManager::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
-  int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
+  int8_t return_value = (0 == event->refCount()) ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
 
   /* Some class-specific set of conditionals below this line. */
   switch (event->eventCode()) {
@@ -676,7 +704,9 @@ int8_t LegendManager::callback_proc(ManuvrMsg* event) {
     default:
       if (getVerbosity() > 5) {
         local_log.concat("LegendManager::callback_proc(): Default case.\n");
-        event->printDebug(&local_log);
+        #if defined(__MANUVR_DEBUG)
+          event->printDebug(&local_log);
+        #endif
         Kernel::log(&local_log);
       }
       break;
@@ -706,7 +736,7 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
       {
         ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
         event->addArg((uint8_t) 4);  // Set the desired init stage.
-        event->priority = 0;
+        event->priority(0);
         raiseEvent(event);
       }
       event_iiu_read.delaySchedule(1000);  // Enable the periodic read after letting the dust settle.
@@ -718,7 +748,7 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
       for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
         ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
         event->addArg((uint8_t) 4);  // Set the desired init stage.
-        event->priority = 0;
+        event->priority(0);
         raiseEvent(event);
       }
       event_iiu_read.enableSchedule(false);    // Disable the periodic read.
@@ -806,7 +836,7 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
 
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄         ▄  ▄▄▄▄▄▄▄▄▄▄▄
 * ▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░▌       ▐░▌▐░░░░░░░░░░░▌
 * ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌▐░█▀▀▀▀▀▀▀▀▀
@@ -818,9 +848,7 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
 * ▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄█░▌
 * ▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
 *  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀
-*
-* Code in here only exists for as long as it takes to debug something. Don't write against these.
-****************************************************************************************************/
+*******************************************************************************/
 
 #if defined(MANUVR_CONSOLE_SUPPORT)
 void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
@@ -849,7 +877,7 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'i':
       if (1 == temp_byte) {
-        local_log.concatf("The IIU preallocated measurements are stored at 0x%08x.\n", (uint32_t) __prealloc);
+        local_log.concatf("The IIU preallocated measurements are stored at %p.\n", (uintptr_t) __prealloc);
       }
       else if (2 == temp_byte) {
         if (operating_legend) {
@@ -923,7 +951,7 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
       if ((temp_byte < 6) && (temp_byte >= 0)) {
         ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
         event->addArg((uint8_t) temp_byte);  // Set the desired init stage.
-        event->priority = 0;
+        event->priority(0);
         raiseEvent(event);
         local_log.concatf("Broadcasting IMU_INIT for stage %u...\n", temp_byte);
       }
@@ -1180,47 +1208,57 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     case 'd':
-      if (255 == temp_byte) {
-        event_legend_frame_ready.fireNow();  // Fire a single frame transmission.
-        local_log.concat("We are manually firing the IMU frame broadcasts schedule.\n");
-      }
-      else if (254 == temp_byte) {
-        event_legend_frame_ready.enableSchedule(true);  // Enable the periodic read.
-        local_log.concat("Enabled frame broadcasts.\n");
-      }
-      else if (253 == temp_byte) {
-        event_legend_frame_ready.printDebug(&local_log);
-      }
-      else if (252 == temp_byte) {
-        send_map_event();
-        local_log.concat("We are manually firing the IMU frame broadcasts schedule.\n");
-      }
-      else if (temp_byte) {
-        event_legend_frame_ready.alterSchedulePeriod(temp_byte*10);
-        local_log.concatf("Set periodic frame broadcast to once every %dms.\n", temp_byte*10);
-      }
-      else {
-        event_legend_frame_ready.enableSchedule(false);  // Disable the periodic read.
-        local_log.concat("Disabled frame broadcasts.\n");
+      switch (temp_byte) {
+        case 255:
+          event_legend_frame_ready.fireNow();  // Fire a single frame transmission.
+          local_log.concat("We are manually firing the IMU frame broadcasts schedule.\n");
+          break;
+        case 254:
+          event_legend_frame_ready.enableSchedule(true);  // Enable the periodic read.
+          local_log.concat("Enabled frame broadcasts.\n");
+          break;
+        #if defined(__MANUVR_DEBUG)
+          case 253:
+            event_legend_frame_ready.printDebug(&local_log);
+            break;
+        #endif
+        case 252:
+          send_map_event();
+          local_log.concat("We are manually firing the IMU frame broadcasts schedule.\n");
+          break;
+        default:
+          if (temp_byte) {
+            event_legend_frame_ready.alterSchedulePeriod(temp_byte*10);
+            local_log.concatf("Set periodic frame broadcast to once every %dms.\n", temp_byte*10);
+          }
+          else {
+            event_legend_frame_ready.enableSchedule(false);  // Disable the periodic read.
+            local_log.concat("Disabled frame broadcasts.\n");
+          }
+          break;
       }
       break;
 
     case 'f':
-      if (255 == temp_byte) {
-        event_iiu_read.fireNow();
-        local_log.concat("We are manually firing the IMU read schedule.\n");
-      }
-      else if (254 == temp_byte) {
-        event_iiu_read.enableSchedule(true);
-        local_log.concat("Enabled periodic readback.\n");
-      }
-      else if (temp_byte) {
-        event_iiu_read.alterSchedulePeriod(temp_byte*10);
-        local_log.concatf("Set periodic read schedule to once every %dms.\n", temp_byte*10);
-      }
-      else {
-        event_iiu_read.enableSchedule(false);  // Disable the periodic read.
-        local_log.concat("Disabled periodic readback.\n");
+      switch (temp_byte) {
+        case 255:
+          event_iiu_read.fireNow();
+          local_log.concat("We are manually firing the IMU read schedule.\n");
+          break;
+        case 254:
+          event_iiu_read.enableSchedule(true);
+          local_log.concat("Enabled periodic readback.\n");
+          break;
+        default:
+          if (temp_byte) {
+            event_iiu_read.alterSchedulePeriod(temp_byte*10);
+            local_log.concatf("Set periodic read schedule to once every %dms.\n", temp_byte*10);
+          }
+          else {
+            event_iiu_read.enableSchedule(false);  // Disable the periodic read.
+            local_log.concat("Disabled periodic readback.\n");
+          }
+          break;
       }
       break;
 
@@ -1256,3 +1294,38 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
   flushLocalLog();
 }
 #endif  //MANUVR_CONSOLE_SUPPORT
+
+
+
+
+
+/*******************************************************************************
+* LegendManager is doing too much.
+*******************************************************************************/
+
+int8_t LegendManager::read_identities() {
+  // Zero the space so we ensure no false positives.
+  bzero(&_imu_ids[0], (2 * LEGEND_DATASET_IIU_COUNT));
+
+  // First the inertial aspect.
+  SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
+  op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
+  op->setBuffer(&_imu_ids[0], LEGEND_DATASET_IIU_COUNT);
+  if (0 == queue_io_job(op)) {
+    // Now for the magnetic aspect.
+    op = _bus->new_op(BusOpcode::RX, this);
+    op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
+    op->setBuffer(&_imu_ids[LEGEND_DATASET_IIU_COUNT], LEGEND_DATASET_IIU_COUNT);
+    return queue_io_job(op);
+  }
+  return -1;
+}
+
+
+
+int8_t LegendManager::read_fifo_depth() {
+  SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
+  op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
+  op->setBuffer(&_imu_ids[0], LEGEND_DATASET_IIU_COUNT);
+  return queue_io_job(op);
+}

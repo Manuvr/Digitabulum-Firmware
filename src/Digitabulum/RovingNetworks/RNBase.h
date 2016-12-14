@@ -40,13 +40,17 @@ TODO: This class is in SORE need of the following things:
 #include <Transports/ManuvrXport.h>
 
 
-#define MANUVR_MSG_BT_EXIT_RESET     0x4295
+#define MANUVR_MSG_BT_EXIT_RESET        0x4295
+#define MANUVR_MSG_BT_EXPIRE_LOCKOUT    0x4296
+#define MANUVR_MSG_BT_ENTERED_CMD_MODE  0x1005 // The module entered command mode.
+#define MANUVR_MSG_BT_EXITED_CMD_MODE   0x1006 // The module exited command mode.
+
+#define RN_MAX_UART_STR_LEN 64
 
 // Bluetooth Modes
 #define RNBASE_MODE_COMMAND       "$$$"
 #define RNBASE_MODE_EXITCOMMAND   "---\r\n"
 #define RNBASE_MODE_SPP           "S~,0\r\n"
-#define RNBASE_MODE_HID           "S~,6\r\n"
 #define RNBASE_MODE_AUTOCONNECT   "SM,6\r\n"
 #define RNBASE_MODE_MANUCONNECT   "SM,4\r\n"
 #define RNBASE_MODE_STATUS        "SO,/#\r\n"
@@ -71,16 +75,18 @@ TODO: This class is in SORE need of the following things:
 #define RNBASE_CMD_GET_OUR_BT_ADDR  "GB\r\n"   // Gets our BT MAC.
 #define RNBASE_CMD_GET_CP_BT_ADDR   "GF\r\n"   // Gets the BT MAC of the currently connected device.
 #define RNBASE_CMD_GET_STOR_BT_ADDR "GR\r\n"   // Gets the BT MAC of the currently bound device.
-#define RNBASE_CMD_REBOOT         "R,1\r\n"
+#define RNBASE_CMD_REBOOT          "R,1\r\n"
 
 
 #define RNBASE_PROTO_SPP            "AW\r\n"
 
 // Responses that we might get back from the module.
 #define RNBASE_STATUS_ACK         "AOK\r\n"
-#define RNBASE_STATUS_CMD         "CMD\r\n"
+//#define RNBASE_STATUS_CMD         "CMD\r\n"
+#define RNBASE_STATUS_CMD         "CMD>\r\n"
 #define RNBASE_STATUS_END         "END\r\n"
-#define RNBASE_STATUS_REBOOT      "Reboot!\r\n"
+//#define RNBASE_STATUS_REBOOT      "Reboot!\r\n"
+#define RNBASE_STATUS_REBOOT      "%REBOOT%\r\n"
 
 
 // These are only relevant for debug.
@@ -88,7 +94,7 @@ TODO: This class is in SORE need of the following things:
 
 // Resting memory load parameters.
 #define PREALLOCATED_BT_Q_OPS    4    // How many data-carriers should we preallocate?
-#define RNBASE_MAX_BT_Q_DEPTH    5    //
+#define RNBASE_MAX_BT_Q_DEPTH    6    //
 
 
 /*
@@ -98,7 +104,7 @@ TODO: This class is in SORE need of the following things:
 #define RNBASE_FLAG_LOCK_OUT  0x01    // While this is true, don't interact with the RN.
 #define RNBASE_FLAG_CMD_MODE  0x02    // Set when the module is verified to be in command mode.
 #define RNBASE_FLAG_CMD_PEND  0x04    // Set when we are expecting the module to enter command mode.
-#define RNBASE_FLAG_AUTOCONN  0x08    // Should we connect whenever possible?
+#define RNBASE_FLAG_RESERVED2 0x08    //
 #define RNBASE_FLAG_REST_PEND 0x10    // Is a reset pending?
 #define RNBASE_FLAG_FORCE9600 0x20    // Are we forced into 9600 mode?
 #define RNBASE_FLAG_RESERVED0 0x40    //
@@ -115,6 +121,16 @@ TODO: This class is in SORE need of the following things:
 
 
 /*
+* Simple storage class for pin mappings and constraints. Each radio module is
+* likely to have a unique version of this class.
+*/
+class RNPins {
+  public:
+    int8_t reset = -1;
+};
+
+
+/*
 * This is the RN driver. It is an abstraction layer for the Microchip/RovingNetworks integrated
 *   bluetooth modules. This class contains pure-virtual members, and must be extended by a driver
 *   for a specific module (RN4677, RN4020, RN42HID, etc...).
@@ -127,7 +143,7 @@ TODO: This class is in SORE need of the following things:
 */
 class RNBase : public ManuvrXport {
   public:
-    RNBase(uint8_t _rst_pin);
+    RNBase(RNPins* pins);
     virtual ~RNBase();
 
     /* Override from BufferPipe. */
@@ -138,8 +154,8 @@ class RNBase : public ManuvrXport {
     //virtual int8_t disconnect();
     virtual int8_t listen();
     virtual int8_t reset();
-    bool   write_port(unsigned char* out, int out_len);
-    int8_t read_port();
+    virtual bool   write_port(unsigned char* out, int out_len);
+    virtual int8_t read_port();
 
     /* Overrides from EventReceiver */
     void printDebug(StringBuilder *);
@@ -160,34 +176,30 @@ class RNBase : public ManuvrXport {
 
 
     static BTQueuedOperation* current_work_item;
-    volatile static unsigned long last_gpio_5_event;
 
     // Volatile statics that serve as ISRs...
-    volatile static void irqServiceBT_data_activity(void);
     volatile static void irqServiceBT_data_receive(unsigned char* str, uint8_t len);
-    volatile static void usart2_character_rx(unsigned char c);
     volatile static void isr_bt_queue_ready();
-    volatile static void bt_gpio_5(unsigned long);
-
-    static void hostRxFlush();
-    static void expire_lockout();
 
     static inline RNBase* getInstance() { return (RNBase*)INSTANCE; };
 
 
   protected:
-    int configured_bitrate;   // The bitrate we have between the CPU and the RN.
+    uint32_t configured_bitrate;   // The bitrate we have between the CPU and the RN.
+    const char* _cmd_return_str = NULL;
+    const char* _cmd_exit_str   = NULL;
 
     int8_t idleService();
-    void feed_rx_buffer(unsigned char*, uint8_t len);   // Append to the class receive buffer.
-    virtual int8_t sendBuffer(StringBuilder*);
+    size_t feed_rx_buffer(unsigned char*, size_t len);   // Append to the class receive buffer.
+
+    void printQueue(StringBuilder*);
 
 
     virtual int8_t attached();      // This is called from the base notify().
 
     // Mandatory overrides.
     virtual void factoryReset(void)    =0;   // Perform the sequence that will factory-reset the RN.
-    virtual void gpioSetup();
+    virtual void gpioSetup()           =0;
     virtual void force_9600_mode(bool) =0;   // Call with 'true' to force the module into 9600bps.
     virtual void set_bitrate(int)      =0;   //
 
@@ -195,34 +207,26 @@ class RNBase : public ManuvrXport {
     * These are used as convenience overrides for distinguishing
     *   between destinations (module or counterparty)
     */
-    inline void printToHost(char* str) {
-      insert_into_work_queue(BusOpcode::TX, new StringBuilder(str));
-    };
-
     inline void printToHost(StringBuilder* str) {
       insert_into_work_queue(BusOpcode::TX, str);
     };
 
 
   private:
-    ManuvrMsg event_bt_queue_ready;
-
     uint8_t _reset_pin = 0;
 
     /* Members concerned with the work queue and keeping messages atomic. */
     PriorityQueue<BTQueuedOperation*> work_queue;
 
-    StringBuilder tx_buf;     // A scratchpad for this class.
-
     uint32_t insert_into_work_queue(BusOpcode opcode, StringBuilder* data);
     int8_t burn_or_recycle_current();   // Called during connection turbulence to handle the queued item.
+    void process_connection_change(bool conn);
 
     //int8_t init_dma(uint8_t* buf, unsigned int len);
     void start_lockout(uint32_t milliseconds);   // Hold communication with the RN for so many ms.
 
     /* Macros for RN radio states. */
     void master_mode(bool);       // Call with 'true' to switch the radio into master mode.
-    void setHIDMode(void);
     void setSPPMode(void);
     void setAutoconnect(bool);
 
@@ -232,15 +236,11 @@ class RNBase : public ManuvrXport {
     int8_t exitCommandMode();     // Convenience fxn for exiting command mode.
 
 
-
     volatile static RNBase* INSTANCE;
 
-    static uint32_t rejected_host_messages;
-
     // Prealloc starvation counters...
-    static uint32_t prealloc_starves;
-    static uint32_t queue_floods;
-
+    static uint32_t _prealloc_starves;
+    static uint32_t _queue_floods;
     static uint32_t _heap_instantiations;
     static uint32_t _heap_frees;
 
@@ -249,7 +249,6 @@ class RNBase : public ManuvrXport {
 
     static BTQueuedOperation* fetchPreallocation();
     static void reclaimPreallocation(BTQueuedOperation*);
-
 };
 
 #endif  //__RNBASE_H__

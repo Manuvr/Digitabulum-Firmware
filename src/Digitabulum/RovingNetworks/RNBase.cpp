@@ -19,23 +19,16 @@ limitations under the License.
 
 */
 
-#include <stm32f7xx_hal_dma.h>
+//#include <stm32f7xx_hal_dma.h>
 #include "RNBase.h"
 #include "XenoSession/XenoSession.h"
 #include <Drivers/BusQueue/BusQueue.h>
 
 
-#define MAX_UART_STR_LEN 255
-static volatile unsigned char uart2_received_string[MAX_UART_STR_LEN];
-static volatile uint8_t uart2_rec_cnt = 0;
-
-
-uint32_t read_millis_0 = 0;
-uint32_t read_millis_1 = 0;
-
 // Messages that are specific to Digitabulum.
 const MessageTypeDef rn_module_message_defs[] = {
-  {  MANUVR_MSG_BT_EXIT_RESET        , 0x000,                "RN_RESET"             , ManuvrMsg::MSG_ARGS_NONE }, //
+  {  MANUVR_MSG_BT_EXIT_RESET    , 0x0000,    "RN_RESET"    , ManuvrMsg::MSG_ARGS_NONE }, //
+  {  MANUVR_MSG_BT_EXPIRE_LOCKOUT, 0x0000,    "RN_LOCK_LIFT", ManuvrMsg::MSG_ARGS_NONE }, //
 };
 
 
@@ -48,11 +41,13 @@ const MessageTypeDef rn_module_message_defs[] = {
 * Interrupt service routine support functions. Everything in this block
 *   executes under an ISR. Keep it brief...
 *******************************************************************************/
-/*
-*
-*/
-void USART2_IRQHandler(void) {
-}
+
+#if defined(__BUILD_HAS_THREADS)
+  // Threaded platforms will need this to compensate for a loss of ISR.
+  extern void* xport_read_handler(void* active_xport);
+
+#endif
+
 
 /*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
@@ -64,17 +59,15 @@ void USART2_IRQHandler(void) {
 *
 * Static members and initializers should be located here.
 *******************************************************************************/
-volatile RNBase* RNBase::INSTANCE = NULL;
-volatile unsigned long RNBase::last_gpio_5_event = 0;
-BTQueuedOperation* RNBase::current_work_item = NULL;
+volatile RNBase* RNBase::INSTANCE = nullptr;
+BTQueuedOperation* RNBase::current_work_item = nullptr;
 
 BTQueuedOperation RNBase::__prealloc_pool[PREALLOCATED_BT_Q_OPS];
 
-uint32_t RNBase::prealloc_starves       = 0;
+uint32_t RNBase::_prealloc_starves      = 0;
 uint32_t RNBase::_heap_instantiations   = 0;
 uint32_t RNBase::_heap_frees            = 0;
-uint32_t RNBase::rejected_host_messages = 0;
-uint32_t RNBase::queue_floods           = 0;
+uint32_t RNBase::_queue_floods          = 0;
 
 
 PriorityQueue<BTQueuedOperation*> RNBase::preallocated;     // Messages that we've allocated ahead of time.
@@ -85,7 +78,7 @@ BTQueuedOperation* RNBase::fetchPreallocation() {
 
   if (0 == preallocated.size()) {
     // We have exhausted our preallocated measurements. Note it.
-    prealloc_starves++;
+    _prealloc_starves++;
     return_value = new BTQueuedOperation();
     _heap_instantiations++;
   }
@@ -96,9 +89,8 @@ BTQueuedOperation* RNBase::fetchPreallocation() {
 }
 
 
-
 /**
-* Reclaims the given Measurement so its memory can be re-used.
+* Reclaims the given BTQueuedOperation so its memory can be re-used.
 *
 * At present, our criteria for preallocation is if the pointer address passed in
 *   falls within the range of our __prealloc array. I see nothing "non-portable"
@@ -132,43 +124,22 @@ void RNBase::reclaimPreallocation(BTQueuedOperation* obj) {
 }
 
 
-/****************************************************************************************************
+/*******************************************************************************
 * Contain callback soup here, pl0x...
-****************************************************************************************************/
-/* Static */
-void RNBase::expire_lockout() {
-  if (INSTANCE == NULL) return;
-
-  if (((EventReceiver*) INSTANCE)->getVerbosity() > 4) Kernel::log("oneshot_rn_reenable()\n");
-  ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_LOCK_OUT);
-  ((RNBase*) INSTANCE)->idleService();
-}
-
-/* Scheduler one-shot. Re-allows modules communication. */
-void oneshot_rn_reenable() {
-  RNBase::expire_lockout();
-}
+*******************************************************************************/
 
 /* Instance */
 void RNBase::start_lockout(uint32_t milliseconds) {
-  if (INSTANCE == NULL) return;
+  if (INSTANCE == nullptr) return;
 
-  // TODO: Need a cleaner way to accomplish this...
-  platform.kernel()->addSchedule(new ManuvrMsg(milliseconds,  0, true, oneshot_rn_reenable));
+  ManuvrMsg* bt_lo_expiry = Kernel::returnEvent(MANUVR_MSG_BT_EXPIRE_LOCKOUT);
+  bt_lo_expiry->specific_target = (EventReceiver*) this;
+  bt_lo_expiry->alterSchedulePeriod(milliseconds);
+  bt_lo_expiry->autoClear(true);
+  bt_lo_expiry->enableSchedule(true);
+  bt_lo_expiry->alterScheduleRecurrence(0);
+  platform.kernel()->addSchedule(bt_lo_expiry);
   _er_set_flag(RNBASE_FLAG_LOCK_OUT);
-}
-
-
-/* Scheduler one-shot. Flushes the RX queue. */
-void host_read_abort() {
-  if (0 == read_millis_0) {   // There is nothing in the buffer. Expire.
-    return;
-  }
-  uint32_t current_millis = millis();
-  if (CHARACTER_CHRONOLOGICAL_BREAK < wrap_accounted_delta(current_millis, read_millis_1)) {
-    RNBase::hostRxFlush();
-    read_millis_0 = 0;
-  }
 }
 
 
@@ -182,10 +153,11 @@ void host_read_abort() {
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 
-RNBase::RNBase(uint8_t rst_pin) : ManuvrXport() {
+RNBase::RNBase(RNPins* pins) : ManuvrXport() {
   setReceiverName("RNBase");
+  set_xport_state(MANUVR_XPORT_FLAG_STREAM_ORIENTED);
   //BTQueuedOperation::buildDMAMembers();
-  if (NULL == INSTANCE) {
+  if (nullptr == INSTANCE) {
     INSTANCE = this;
     ManuvrMsg::registerMessages(
       rn_module_message_defs,
@@ -193,7 +165,8 @@ RNBase::RNBase(uint8_t rst_pin) : ManuvrXport() {
     );
   }
 
-  _reset_pin = rst_pin;
+  _reset_pin = pins->reset;
+  setPin(_reset_pin, false);  // Park the module in reset state.
 
   /* Populate all the static preallocation slots for messages. */
   for (uint16_t i = 0; i < PREALLOCATED_BT_Q_OPS; i++) {
@@ -203,19 +176,9 @@ RNBase::RNBase(uint8_t rst_pin) : ManuvrXport() {
 
   // Clear all the flags.
   _er_clear_flag(RNBASE_FLAG_LOCK_OUT | RNBASE_FLAG_CMD_MODE);
-  _er_clear_flag(RNBASE_FLAG_CMD_PEND | RNBASE_FLAG_AUTOCONN);
+  _er_clear_flag(RNBASE_FLAG_CMD_PEND);
 
   //connected(GPIOB->IDR & GPIO_PIN_10);
-
-  //// Build some pre-formed Events.
-  //read_abort_event.repurpose(MANUVR_MSG_XPORT_QUEUE_RDY, (EventReceiver*) this);
-  //read_abort_event.isManaged(true);
-  //read_abort_event.specific_target = (EventReceiver*) this;
-  //read_abort_event.alterScheduleRecurrence(-1);
-  //read_abort_event.alterSchedulePeriod(CHARACTER_CHRONOLOGICAL_BREAK);
-  //read_abort_event.autoClear(false);
-  //read_abort_event.enableSchedule(false);
-  //platform.kernel()->addSchedule(&read_abort_event);
 }
 
 
@@ -224,16 +187,7 @@ RNBase::~RNBase() {
   // Should do?
   // Will never be torn down, I'd think.... Maybe in low power modes?
   // Serialize the essentials and pack up?
-  reset();           // we effectively park the module in reset state.
-}
-
-
-/**
-* Setup GPIO pins and their bindings to on-chip peripherals, if required.
-*/
-void RNBase::gpioSetup() {
-  gpioDefine(_reset_pin, OUTPUT_OD);
-  setPin(_reset_pin, false);
+  setPin(_reset_pin, false);  // Park the module in reset state.
 }
 
 
@@ -261,9 +215,7 @@ int8_t RNBase::toCounterparty(StringBuilder* buf, int8_t mm) {
           a) Did so with the intention that it never be free'd, or...
           b) Has a means of discovering when it is safe to free.  */
       {
-        StringBuilder *temp = new StringBuilder();
-        temp->concatHandoff(buf);
-        insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
+        insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, buf);
       }
       return mm;
 
@@ -272,9 +224,7 @@ int8_t RNBase::toCounterparty(StringBuilder* buf, int8_t mm) {
           caller will expect _us_ to manage this memory.  */
       // TODO: Freeing the buffer?
       {
-        StringBuilder *temp = new StringBuilder();
-        temp->concatHandoff(buf);
-        insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
+        insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, buf);
       }
       return mm;
 
@@ -318,25 +268,22 @@ int8_t RNBase::reset() {
   while (work_queue.hasNext()) {
     reclaimPreallocation(work_queue.dequeue());
   }
-  if (NULL != current_work_item) {
+  if (current_work_item) {
     reclaimPreallocation(current_work_item);
-    current_work_item = NULL;
+    current_work_item = nullptr;
   }
 
   _er_set_flag(RNBASE_FLAG_LOCK_OUT);
-  _er_clear_flag(RNBASE_FLAG_CMD_PEND | RNBASE_FLAG_AUTOCONN);
+  _er_clear_flag(RNBASE_FLAG_CMD_PEND);
 
-  connected(0 != HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_10));
-  queue_floods      = 0;
-
-  tx_buf.clear();
+  //connected(0 != HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_10));
+  _queue_floods = 0;
 
   // Used to disassert the reset line.  TODO: Need a cleaner way to accomplish this...
   ManuvrMsg* event = Kernel::returnEvent(MANUVR_MSG_BT_EXIT_RESET);
-  event->addArg((EventReceiver*) this);
   event->setOriginator((EventReceiver*) this);
   event->specific_target = (EventReceiver*) this;
-  event->alterScheduleRecurrence(0);
+  event->alterScheduleRecurrence(1);
   event->alterSchedulePeriod(510);
   event->autoClear(true);
   event->enableSchedule(true);
@@ -357,9 +304,9 @@ int8_t RNBase::read_port() {
 
 
 
-/****************************************************************************************************
+/*******************************************************************************
 * Command macros
-****************************************************************************************************/
+*******************************************************************************/
 
 /**
 * Send the given string to the module as a command.
@@ -367,15 +314,15 @@ int8_t RNBase::read_port() {
 * @param cmd  A pointer to the string to be sent to the module.
 */
 void RNBase::sendGeneralCommand(StringBuilder *cmd) {
-  enterCommandMode();
-  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, cmd);
-  exitCommandMode();
   #ifdef __MANUVR_DEBUG
     if (getVerbosity() > 5) {
-      local_log.concatf("Sent command %s.\n", cmd->string());
+      local_log.concatf("Sending command %s.\n", cmd->string());
       Kernel::log(&local_log);
     }
   #endif
+  enterCommandMode();
+  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, cmd);
+  exitCommandMode();
 }
 
 
@@ -385,30 +332,8 @@ void RNBase::sendGeneralCommand(StringBuilder *cmd) {
 * @param cmd  A pointer to the string to be sent to the module.
 */
 void RNBase::sendGeneralCommand(const char *cmd) {
-  enterCommandMode();
-  StringBuilder *temp = new StringBuilder(cmd);
-  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
-  exitCommandMode();
-  #ifdef __MANUVR_DEBUG
-    if (getVerbosity() > 5) {
-      local_log.concatf("Sent command %s.\n", cmd);
-      Kernel::log(&local_log);
-    }
-  #endif
-}
-
-
-/**
-* Put the module into HID mode. This setting persists across runtimes.
-*/
-void RNBase::setHIDMode(void) {
-  enterCommandMode();
-  StringBuilder *temp = new StringBuilder(RNBASE_MODE_HID);
-  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
-  exitCommandMode();
-  #ifdef __MANUVR_DEBUG
-    if (getVerbosity() > 5) Kernel::log("Tried to enter HID mode.\n");
-  #endif
+  StringBuilder temp(cmd);
+  sendGeneralCommand(&temp);
 }
 
 
@@ -416,10 +341,7 @@ void RNBase::setHIDMode(void) {
 * Put the module into SPP mode. This setting persists across runtimes.
 */
 void RNBase::setSPPMode(void) {
-  enterCommandMode();
-  StringBuilder *temp = new StringBuilder(RNBASE_PROTO_SPP);
-  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
-  exitCommandMode();
+  sendGeneralCommand(RNBASE_PROTO_SPP);
   #ifdef __MANUVR_DEBUG
     if (getVerbosity() > 5) Kernel::log("Tried to enter SPP mode.\n");
   #endif
@@ -432,18 +354,14 @@ void RNBase::setSPPMode(void) {
 * @param nu_name The desired name of the bluetooth device as seen by other devices.
 */
 void RNBase::setDevName(char *nu_name) {
-  enterCommandMode();
-  StringBuilder *temp = new StringBuilder(RNBASE_CMD_CHANGE_NAME);
+  StringBuilder temp(RNBASE_CMD_CHANGE_NAME);
   if (strlen(nu_name) > 20) {
     // Max length for this field is 20 bytes. Truncate if necessary.
     *(nu_name + 19) = 0;
   }
-  temp->concat(nu_name);
-  temp->concat("\r\n");
-  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
+  temp.concatf("%s\r\n", nu_name);
+  sendGeneralCommand(&temp);
   start_lockout(1100);
-  exitCommandMode();
-  //sendRebootCommand();
 }
 
 
@@ -452,11 +370,10 @@ void RNBase::setDevName(char *nu_name) {
 */
 void RNBase::sendRebootCommand(void) {
   enterCommandMode();
-  StringBuilder *temp = new StringBuilder(RNBASE_CMD_REBOOT);
-  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
+  StringBuilder temp(RNBASE_CMD_REBOOT);
+  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, &temp);
   start_lockout(3000);
 }
-
 
 
 /**
@@ -465,10 +382,11 @@ void RNBase::sendRebootCommand(void) {
 * @return 0 on success. Non-zero on failure.
 */
 int8_t RNBase::sendBreak() {
-    StringBuilder *temp = new StringBuilder("\r\n");
-    insert_into_work_queue(BusOpcode::TX_CMD, temp);
-    return 0;
+  StringBuilder temp("\r\n");
+  insert_into_work_queue(BusOpcode::TX_CMD, &temp);
+  return 0;
 }
+
 
 /**
 * Put the module into command mode.
@@ -476,10 +394,11 @@ int8_t RNBase::sendBreak() {
 * @return 0 on success. Non-zero on failure.
 */
 int8_t RNBase::enterCommandMode() {
-    StringBuilder *temp = new StringBuilder(RNBASE_MODE_COMMAND);
-    insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
-    //start_lockout(1100);
-    return 0;
+  StringBuilder temp(RNBASE_MODE_COMMAND);
+  insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, &temp);
+  _er_set_flag(RNBASE_FLAG_CMD_PEND, true);
+  //start_lockout(1100);
+  return 0;
 }
 
 
@@ -489,8 +408,8 @@ int8_t RNBase::enterCommandMode() {
 * @return 0 on success. Non-zero on failure.
 */
 int8_t RNBase::exitCommandMode() {
-    StringBuilder *temp = new StringBuilder(RNBASE_MODE_EXITCOMMAND);
-    insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
+    StringBuilder temp(RNBASE_MODE_EXITCOMMAND);
+    insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, &temp);
     start_lockout(1500);
     return 0;
 }
@@ -498,11 +417,11 @@ int8_t RNBase::exitCommandMode() {
 
 
 void RNBase::setAutoconnect(bool autocon) {
-  if (_er_flag(RNBASE_FLAG_AUTOCONN) ^ autocon) {
+  if (autoConnect() ^ autocon) {
+    autoConnect(autocon);
     enterCommandMode();
-    _er_set_flag(RNBASE_FLAG_CMD_PEND, autocon);
-    StringBuilder *temp = new StringBuilder(autocon ? RNBASE_MODE_AUTOCONNECT : RNBASE_MODE_MANUCONNECT);
-    insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, temp);
+    StringBuilder temp(autocon ? RNBASE_MODE_AUTOCONNECT : RNBASE_MODE_MANUCONNECT);
+    insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, &temp);
     #ifdef __MANUVR_DEBUG
     if (getVerbosity() > 4) {
       local_log.concatf("Autoconnect is now %sabled.", (autocon ? "en" : "dis"));
@@ -524,51 +443,51 @@ void RNBase::setAutoconnect(bool autocon) {
 
 
 
-/****************************************************************************************************
+/*******************************************************************************
 * Asynchronous support fxns
-****************************************************************************************************/
+*******************************************************************************/
 
 /*
 * This gets called to service queue events.
 */
-int8_t RNBase::idleService(void) {
+int8_t RNBase::idleService() {
+  read_port();
   /* Prepare to generate bugs....
   I normally wouldn't write something this way. The idea is to force an exit
   through one of the states. We don't know going into this call how many states
   we will traverse before our work is done.
   */
   while (true) {
-    if (current_work_item != NULL) {
-      if (current_work_item->completed) {   // Is it completed?
-        if (current_work_item->xenomsg_id) {
-          // If we have a xenomsg_id, we should tell the session that it completed.
+    if (current_work_item) {
+      if (current_work_item->isComplete()) {   // Is it completed?
+        if (BusOpcode::RX == current_work_item->get_opcode()) {
+          // This is meant for the session.
           if (haveFar()) {
-            //if (current_work_item->opcode) {
-              #ifdef __MANUVR_DEBUG
-                if (getVerbosity() > 4) Kernel::log("RNBase About to mark message complete.\n");
-              #endif
-              //session->markMessageComplete(current_work_item->xenomsg_id);
-            //}
+            #ifdef __MANUVR_DEBUG
+              if (getVerbosity() > 4) Kernel::log("RNBase sending RX to application...\n");
+            #endif
           }
         }
         reclaimPreallocation(current_work_item);
-        current_work_item = NULL;
+        current_work_item = nullptr;
       }
-      else if (current_work_item->initiated) {   // Is it initiated?
+      else if (current_work_item->inProgress()) {   // Is it initiated?
         // We'd probably be interfering with somehting if we do anything. So do nothing.
         return -2;
       }
       else if (!_er_flag(RNBASE_FLAG_LOCK_OUT)) {
         // If it isn't completed or initiated, and we aren't locked out, let's kick it off...
-        switch (current_work_item->opcode) {
+        switch (current_work_item->get_opcode()) {
           case BusOpcode::TX_CMD_WAIT_RX:
           case BusOpcode::TX_CMD:
-            _er_set_flag(RNBASE_FLAG_CMD_PEND, !_er_flag(RNBASE_FLAG_CMD_MODE));
+            //_er_set_flag(RNBASE_FLAG_CMD_PEND, !_er_flag(RNBASE_FLAG_CMD_MODE));
             current_work_item->begin();
+            write_port(current_work_item->buf, current_work_item->buf_len);
             break;
           case BusOpcode::TX:
             if (connected()) {
               current_work_item->begin();
+              write_port(current_work_item->buf, current_work_item->buf_len);
             }
             else {
               // Could have started a counterparty-bound message and didn't because: NO COUNTERPARTY
@@ -577,7 +496,7 @@ int8_t RNBase::idleService(void) {
             break;
           default:
             #ifdef __MANUVR_DEBUG
-              if (getVerbosity() > 1) Kernel::log("idleService(): We should not be here (initiation block).\n");
+              if (getVerbosity() > 1) Kernel::log("idleService(): We should not be here.\n");
             #endif
             break;
         }
@@ -589,11 +508,12 @@ int8_t RNBase::idleService(void) {
     }
     else {
       current_work_item = work_queue.dequeue();
-      if (NULL == current_work_item) {
+      if (nullptr == current_work_item) {
         return 0;  // Nothing more to process.
       }
     }
   }
+  return 0;
 }
 
 
@@ -606,10 +526,8 @@ int8_t RNBase::idleService(void) {
 */
 void RNBase::master_mode(bool force_master_mode) {
   if (force_master_mode) {
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
   }
   else {
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
   }
   reset();
 }
@@ -619,13 +537,14 @@ void RNBase::master_mode(bool force_master_mode) {
 // Return 0 indicates caller should burn or wait.
 // Return 1 indicates we recycled.
 int8_t RNBase::burn_or_recycle_current() {
-  if ((NULL != current_work_item) && (current_work_item->opcode == BusOpcode::TX)) {
+  if ((nullptr != current_work_item) && (current_work_item->get_opcode() == BusOpcode::TX)) {
     // If there is something in-process and it is meant for a counterparty....
-    if (! current_work_item->initiated) {
+    if (! current_work_item->inProgress()) {
       // If there is an un-initiated counterparty transaction waiting, displace it.
       // Re-queue with retry priority.
       work_queue.insert(current_work_item, RNBASE_RETRY_PRIORITY);
-      current_work_item = NULL;   // Let the downstream code do its job...
+      current_work_item->markQueued();
+      current_work_item = nullptr;   // Let the downstream code do its job...
       return 1;
     }
     else {
@@ -656,31 +575,35 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
         // Burn
       }
 
-      if ((NULL != current_work_item) && (current_work_item->opcode == BusOpcode::TX_CMD)) {
-        if (! current_work_item->initiated) {
+      if ((nullptr != current_work_item) && (current_work_item->get_opcode() == BusOpcode::TX_CMD)) {
+        if (! current_work_item->inProgress()) {
           // If there is an un-initiated counterparty transaction waiting, displace it.
           // Re-queue with retry priority.
           work_queue.insert(current_work_item, RNBASE_RETRY_PRIORITY);
-          current_work_item = NULL;   // Let the downstream code do its job...
+          current_work_item->markQueued();
+          current_work_item = nullptr;   // Let the downstream code do its job...
         }
       }
       priority = RNBASE_CMD_PRIORITY;
       work_queue.insert(nu, priority);
+      nu->markQueued();
       break;
     case BusOpcode::TX:
-      if (NULL == current_work_item) {
+      if (nullptr == current_work_item) {
         current_work_item = nu;
         current_work_item->begin();
+        write_port(current_work_item->buf, current_work_item->buf_len);
       }
       else if (work_queue.size() <= RNBASE_MAX_BT_Q_DEPTH) {
         work_queue.insert(nu, priority);
+        nu->markQueued();
       }
       else {
         return_value = 0;
         #ifdef __MANUVR_DEBUG
-          if (getVerbosity() > 3) Kernel::log("Dropping BT send. Queue too large.\n");
+          if (getVerbosity() > 5) Kernel::log("Dropping BT send. Queue flooded.\n");
         #endif
-        queue_floods++;
+        _queue_floods++;
         reclaimPreallocation(nu);
       }
       break;
@@ -689,75 +612,38 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
       Kernel::log("RNBase: Unknown opcode.\n");
       break;
   }
-  raiseEvent(&event_bt_queue_ready);
+  read_abort_event.fireNow();
 
   return return_value;
 }
 
 
-/**************************************************************************
-* Private class members...                                                *
-**************************************************************************/
+/*******************************************************************************
+* Private class members...                                                     *
+*******************************************************************************/
 
-
-/*
-* This is a static that gets called when we timeout the read operation.
-*/
-void RNBase::hostRxFlush(void) {
-  if (NULL == INSTANCE) return;
-
-  // TODO: Disable. Yuck... I hate the way this works....
-  ((RNBase*)INSTANCE)->read_abort_event.enableSchedule(false);
-
-  read_millis_0 = 0;
-
-  if (uart2_rec_cnt > 0) {
-    ((RNBase*)INSTANCE)->feed_rx_buffer((unsigned char*) uart2_received_string, uart2_rec_cnt);
+void RNBase::process_connection_change(bool conn) {
+  connected(conn);
+  if (!conn) {
     #ifdef __MANUVR_DEBUG
-      if (((EventReceiver*) INSTANCE)->getVerbosity() > 4) Kernel::log("Flushed bytes\n");
+      if (getVerbosity() > 3) Kernel::log("We lost connection...\n");
     #endif
-    uart2_rec_cnt = 0;
+    burn_or_recycle_current();
+    // Purge the queue.
+    for (int i = 0; i < work_queue.size(); i++) {
+      BTQueuedOperation* current = work_queue.dequeue();
+      if (BusOpcode::TX == current->get_opcode()) {
+        current->abort(XferFault::QUEUE_FLUSH);
+        reclaimPreallocation(current);
+      }
+      else {
+        work_queue.insert(current);
+        current->markQueued();
+      }
+    }
   }
   else {
-    //Kernel::log(__PRETTY_FUNCTION__, 6, "Flushed 0 bytes.");
-  }
-
-  if (INSTANCE->current_work_item != NULL) {
-    if (BusOpcode::TX_CMD_WAIT_RX == INSTANCE->current_work_item->opcode) {
-      INSTANCE->current_work_item->completed = true;
-    }
-    Kernel::isrRaiseEvent(&(((RNBase*)INSTANCE)->event_bt_queue_ready));
-  }
-}
-
-
-volatile void RNBase::usart2_character_rx(unsigned char c) {
-  if (uart2_rec_cnt == 0) {
-    // If this is our first character from the host since we last emptied
-    // the buffer, raise an event so that we can timeout the transmission.
-    read_millis_0 = millis();
-    read_millis_1 = read_millis_0;
-    ManuvrMsg *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_RX_BUF_NOT_EMPTY);
-    Kernel::isrRaiseEvent(nu_event);
-  }
-  uart2_received_string[uart2_rec_cnt++] = c;
-
-  if (NULL == INSTANCE) return;
-
-  if ((c == '\n') || (uart2_rec_cnt == MAX_UART_STR_LEN)) {
-    /* There is a good chance that the downstream call will result in a malloc() at
-    *    some point, and probably two or more fxn calls. So we buffer the received string
-    *    for a bit until either...
-    *  A) We fill our static buffer, or...
-    *  B) Our scheduler timeout expires, or...
-    *  C) We get a new line character, which may indicate that the host has finished sending.
-    *
-    * This will reduce memory fragmentation induced by StringBuilder, and keep friction low
-    *   for the ISR.
-    */
-    ((RNBase*)INSTANCE)->feed_rx_buffer((unsigned char*) uart2_received_string, uart2_rec_cnt);
-    read_millis_1 = millis();
-    uart2_rec_cnt = 0;
+    idleService();
   }
 }
 
@@ -770,143 +656,90 @@ volatile void RNBase::usart2_character_rx(unsigned char c) {
 * If the buffer contains a '\n', cut it off there and mark the active
 *   queue item 'complete'. Raise the idle service event, and put the remainder
 *   of the inbound buffer (after the '\n') into a new work-queue item.
-*
-* A pre-allocated StringBuilder object should be kept at the ready to prevent
-*   the need to allocate memory in the middle of an ISR. If that pre-allocated
-*   object is used, raise an idle flag so that the main loop allocates another
-*   when we aren't so busy.
-*
-* TODO: This all needs to be DMA driven. Until then, try and remember... you are in an ISR.
 */
-void RNBase::feed_rx_buffer(unsigned char *nu, uint8_t len) {
-  if (_er_flag(RNBASE_FLAG_CMD_MODE | RNBASE_FLAG_CMD_PEND)) {
-    BTQueuedOperation *local_work_item = (NULL != current_work_item) ? current_work_item : work_queue.get();
-    if (NULL != local_work_item) {
-        switch (local_work_item->opcode) {
-          case BusOpcode::TX_CMD_WAIT_RX:
-            // We make sure that we tell the class if we are expecting a change in this state.
-            _er_set_flag(RNBASE_FLAG_CMD_PEND, !_er_flag(RNBASE_FLAG_CMD_MODE));
-            local_work_item->data.concat(nu, len);
-            //output.concatf("Rx Local work item length: %d\n", local_work_item->data.length());
-            break;
-
-          case BusOpcode::TX_CMD:
-          case BusOpcode::TX:
-            #ifdef __MANUVR_DEBUG
-            if (getVerbosity() > 2) {
-              local_log.concat("Don't know what to do with data. In command_mode (or pending), but have wrong opcode for work_queue item.\n\t");
-              for (int i = 0; i < len; i++) {
-                local_log.concatf("0x%02x ", *(nu + i));
-              }
-              local_log.concat("\n\n");
-            }
-            #endif
-            break;
-          default:
-            #ifdef __MANUVR_DEBUG
-            if (getVerbosity() > 2) local_log.concat("RNBase: Unknown opcode.\n");
-            #endif
-            break;
+size_t RNBase::feed_rx_buffer(unsigned char *nu, size_t len) {
+  size_t remaining_len = len;
+  while (remaining_len > 0) {
+    if (_er_flag(RNBASE_FLAG_CMD_PEND)) {
+      // Reasoning... If the module is in RNBASE_FLAG_CMD_PEND, it can only be $$$.
+      if (current_work_item) {
+        if (BusOpcode::TX_CMD_WAIT_RX == current_work_item->get_opcode()) {
+          size_t temp_len = strict_min((uint32_t) strlen(_cmd_return_str), (uint32_t) remaining_len);
+          if ((remaining_len > temp_len) && (0 != memcmp(nu, _cmd_return_str, temp_len))) {
+            // This is the command prompt.
+            _er_set_flag(RNBASE_FLAG_CMD_PEND, false);
+            _er_set_flag(RNBASE_FLAG_CMD_MODE, true);
+            remaining_len -= temp_len;
+            current_work_item->markComplete();
+          }
         }
-    }
-    else {
-      #ifdef __MANUVR_DEBUG
-      if (getVerbosity() > 2) {
-        local_log.concatf("Don't know what to do with data. In command_mode (or pending), but have no work_queue item to feed.\n\t");
-        for (int i = 0; i < len; i++) {
-          local_log.concatf("0x%02x ", *(nu + i));
-        }
-        local_log.concat("\n\n");
       }
-      #endif
+
+      if (_er_flag(RNBASE_FLAG_CMD_PEND)) {
+        Kernel::log("RNBase: Something has gone bad wrong in feed_rx_buffer().\n");
+        return (len - remaining_len);
+      }
     }
+    else if (_er_flag(RNBASE_FLAG_CMD_MODE)) {
+      uint8_t* end_idx = (uint8_t*) memchr(nu, '\n', remaining_len);
+      if (nullptr == end_idx) {
+        return (len - remaining_len);
+      }
+      else {
+        remaining_len = end_idx - nu;
+      }
+
+      if (current_work_item) {
+        if (BusOpcode::TX_CMD_WAIT_RX == current_work_item->get_opcode()) {
+          size_t temp_len = strict_min((uint32_t) strlen(_cmd_exit_str), (uint32_t) remaining_len);
+          if ((remaining_len > temp_len) && (0 != memcmp(nu, _cmd_exit_str, temp_len))) {
+            _er_set_flag(RNBASE_FLAG_CMD_MODE, true);
+            remaining_len -= temp_len;
+            current_work_item->markComplete();
+          }
+        }
+        else {
+          #ifdef __MANUVR_DEBUG
+          if (getVerbosity() > 2) {
+            Kernel::log("RNBase: In command_mode (or pending), but have wrong opcode for work_queue item.\n\t");
+            for (size_t i = 0; i < remaining_len; i++) {
+              local_log.concatf("0x%02x ", *(nu + i));
+            }
+            local_log.concat("\n\n");
+          }
+          #endif
+          current_work_item->abort(XferFault::ILLEGAL_STATE);
+          return (len - remaining_len);
+        }
+      }
+      else {
+        #ifdef __MANUVR_DEBUG
+        // TODO: I have _never_ seen this happen.
+        if (getVerbosity() > 2) {
+          Kernel::log("Don't know what to do with data. In command_mode (or pending), but have no work_queue item to feed.\n\t");
+          for (size_t i = 0; i < remaining_len; i++) {
+            local_log.concatf("0x%02x ", *(nu + i));
+          }
+          local_log.concat("\n\n");
+        }
+        #endif
+        return (len - remaining_len);
+      }
+    }
+    else {   // This data must be meant for a session... (So we hope)
+      // TODO: This is the most-likely case. Promote to top.
+      BufferPipe::fromCounterparty(nu, remaining_len, MEM_MGMT_RESPONSIBLE_BEARER);
+      remaining_len = 0;
+    }
+    flushLocalLog();
   }
-  else {   // This data must be meant for a session... (So we hope)
-    BufferPipe::fromCounterparty(nu, len, MEM_MGMT_RESPONSIBLE_BEARER);
-  }
-
-  if (local_log.length() > 0) Kernel::log(&local_log);
+  return (len - remaining_len);
 }
 
-
-
-/*
-*
-*/
-int8_t RNBase::sendBuffer(StringBuilder* _to_send) {
-  if (NULL == _to_send) return -1;
-  #ifdef __MANUVR_DEBUG
-    if (getVerbosity() > 3) local_log.concatf("We about to print %d bytes to the host.\n", _to_send->length());
-  #endif
-  printToHost(_to_send);
-  return 0;
-}
-
-
-
-/*
-*
-*/
-volatile void RNBase::irqServiceBT_data_activity(void) {
-  if (NULL == INSTANCE) return;
-  // We aren't doing anything here yet.
-}
-
-/*
-* Accept a buffer dump from the UART2 ISR. Feed the RNBASE. This should ultimately be DMA.
-*/
-volatile void RNBase::irqServiceBT_data_receive(unsigned char* nu, uint8_t len) {
-  if (NULL == INSTANCE) return;
-  ((RNBase*) INSTANCE)->feed_rx_buffer(nu, len);
-}
 
 
 volatile void RNBase::isr_bt_queue_ready() {
-  Kernel::isrRaiseEvent(&(((RNBase*) INSTANCE)->event_bt_queue_ready));
-}
-
-
-
-volatile void RNBase::bt_gpio_5(unsigned long ms) {
-  if (NULL == INSTANCE) return;
-
-  if (last_gpio_5_event != 0) {
-    unsigned long delta = wrap_accounted_delta(ms, last_gpio_5_event);
-    if (delta < 500) {
-      // Probably the 10Hz signal. Means we are in command mode.
-      if (INSTANCE != NULL) {
-        if (!((RNBase*) INSTANCE)->_er_flag(RNBASE_FLAG_CMD_MODE)) {
-          ((RNBase*) INSTANCE)->_er_set_flag(RNBASE_FLAG_CMD_MODE);
-          ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_CMD_PEND);
-          ManuvrMsg *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_ENTERED_CMD_MODE);
-          Kernel::isrRaiseEvent(nu_event);
-        }
-      }
-    }
-    else if (delta < 3500) {
-      // Probably the 1Hz signal. Means we are discoverable and waiting for connection.
-      if (INSTANCE != NULL) {
-        if (((RNBase*) INSTANCE)->_er_flag(RNBASE_FLAG_CMD_MODE)) {
-          ((RNBase*) INSTANCE)->_er_clear_flag(RNBASE_FLAG_CMD_MODE | RNBASE_FLAG_CMD_PEND | RNBASE_FLAG_LOCK_OUT);
-          ManuvrMsg *nu_event = Kernel::returnEvent(MANUVR_MSG_BT_EXITED_CMD_MODE);
-          Kernel::isrRaiseEvent(nu_event);
-        }
-      }
-    }
-    else {
-      //Kernel::raiseEvent(MANUVR_MSG_BT_CONNECTION_GAINED, NULL);
-      // Should watch GPIO2 for this.
-    }
-  }
-  last_gpio_5_event = ms;
-
-  #ifdef __MANUVR_DEBUG
-    if (((EventReceiver*) INSTANCE)->getVerbosity() > 6) {
-      StringBuilder _log;
-      _log.concatf("BT GPIO 5: %lu.\n", ms);
-      Kernel::log(&_log);
-    }
-  #endif
+  ((RNBase*)INSTANCE)->read_abort_event.fireNow();
 }
 
 
@@ -930,18 +763,25 @@ volatile void RNBase::bt_gpio_5(unsigned long ms) {
 * @return 0 on no action, 1 on action, -1 on failure.
 */
 int8_t RNBase::attached() {
-  EventReceiver::attached();
+  if (EventReceiver::attached()) {
+    // Build some pre-formed Events.
+    read_abort_event.repurpose(MANUVR_MSG_XPORT_QUEUE_RDY, (EventReceiver*) this);
+    read_abort_event.incRefs();
+    read_abort_event.specific_target = (EventReceiver*) this;
+    read_abort_event.priority(2);
+    // Tolerate 30ms of latency on the line before flushing the buffer.
+    read_abort_event.alterSchedulePeriod(CHARACTER_CHRONOLOGICAL_BREAK);
+    read_abort_event.autoClear(false);
+    reset();
 
-  platform.kernel()->addSchedule(&read_abort_event);
+    read_abort_event.alterScheduleRecurrence(-1);
+    platform.kernel()->addSchedule(&read_abort_event);
 
-  event_bt_queue_ready.repurpose(MANUVR_MSG_BT_QUEUE_READY, (EventReceiver*) this);
-  event_bt_queue_ready.isManaged(true);
-  event_bt_queue_ready.specific_target = (EventReceiver*) this;
-
-  gpioSetup();
-  //force_9600_mode(false);   // Init the UART.
-
-  return 1;
+    gpioSetup();
+    force_9600_mode(false);   // Init the UART.
+    return 1;
+  }
+  return 0;
 }
 
 
@@ -962,10 +802,11 @@ int8_t RNBase::attached() {
 int8_t RNBase::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
-  int8_t return_value = event->kernelShouldReap() ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
+  int8_t return_value = (0 == event->refCount()) ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
 
   /* Some class-specific set of conditionals below this line. */
   switch (event->eventCode()) {
+    case MANUVR_MSG_BT_EXIT_RESET:
     case MANUVR_MSG_XPORT_SEND:
       event->clearArgs();
       break;
@@ -982,30 +823,11 @@ int8_t RNBase::callback_proc(ManuvrMsg* event) {
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
-void RNBase::printDebug(StringBuilder *temp) {
-  ManuvrXport::printDebug(temp);
-  temp->concatf("-- queue_floods            %u\n--\n", (unsigned long) rejected_host_messages);
+void RNBase::printQueue(StringBuilder* temp) {
+  BTQueuedOperation* q_item = nullptr;
 
-  temp->concatf("-- __prealloc_pool addres: 0x%08x\n", (uint32_t) __prealloc_pool);
-  temp->concatf("-- prealloc depth:         %d\n", preallocated.size());
-  temp->concatf("-- queue_floods:           %u\n", (unsigned long) queue_floods);
-  temp->concatf("-- _heap_instantiations:   %u\n", (unsigned long) _heap_instantiations);
-  temp->concatf("-- _heap_frees:            %u\n--\n", (unsigned long) _heap_frees);
-
-  temp->concatf("-- bitrate to module       %d\n", configured_bitrate);
-  temp->concatf("-- lockout_active          %s\n", (_er_flag(RNBASE_FLAG_LOCK_OUT) ? "yes" : "no"));
-  temp->concatf("-- command mode (pend)     %s\n", (_er_flag(RNBASE_FLAG_CMD_PEND) ? "yes" : "no"));
-  temp->concatf("-- command mode            %s\n", (_er_flag(RNBASE_FLAG_CMD_MODE) ? "yes" : "no"));
-  temp->concatf("-- autoconnect             %s\n", (_er_flag(RNBASE_FLAG_AUTOCONN) ? "yes" : "no"));
-  if (getVerbosity() > 5) {
-    temp->concatf("-- last_gpio5              %u\n", last_gpio_5_event);
-    temp->concatf("-- gpio5 state             %s\n\n", ((GPIOB->IDR & GPIO_PIN_10) ? "high" : "low"));
-  }
-
-  BTQueuedOperation* q_item = NULL;
-
-  if (NULL != current_work_item) {
-    temp->concat("\n-- In working slot:");
+  if (current_work_item) {
+    temp->concat("\n-- In working slot:\n");
     current_work_item->printDebug(temp);
   }
 
@@ -1016,6 +838,7 @@ void RNBase::printDebug(StringBuilder *temp) {
       for (int i = 0; i < q_read_count; i++) {
         q_item = work_queue.get(i);
         q_item->printDebug(temp);
+        temp->concat("\n");
       }
     }
     else {
@@ -1025,45 +848,35 @@ void RNBase::printDebug(StringBuilder *temp) {
 }
 
 
-//int8_t teardownSession() {
-//}
+/**
+* Debug support method. This fxn is only present in debug builds.
+*
+* @param   StringBuilder* The buffer into which this fxn should write its output.
+*/
+void RNBase::printDebug(StringBuilder* temp) {
+  ManuvrXport::printDebug(temp);
+  //temp->concatf("-- __prealloc_pool addres: 0x%08x\n", (uint32_t) __prealloc_pool);
+  temp->concatf("--\n-- depth:          %d\n", preallocated.size());
+  temp->concatf("-- starves:        %u\n", _prealloc_starves);
+  temp->concatf("-- queue_floods:   %u\n", (unsigned long) _queue_floods);
+  temp->concatf("-- _heap_allocs:   %u\n", (unsigned long) _heap_instantiations);
+  temp->concatf("-- _heap_frees:    %u\n--\n", (unsigned long) _heap_frees);
+
+  temp->concatf("-- bitrate:        %u\n", configured_bitrate);
+  temp->concatf("-- lockout_active: %s\n", (_er_flag(RNBASE_FLAG_LOCK_OUT) ? "yes" : "no"));
+
+  const char* cmd_mode_str;
+  if (_er_flag(RNBASE_FLAG_CMD_MODE))      cmd_mode_str = "CMD";
+  else if (_er_flag(RNBASE_FLAG_CMD_PEND)) cmd_mode_str = "CMD_PENDING";
+  else cmd_mode_str = "DATA";
+  temp->concatf("-- cmd mode:       %s\n", cmd_mode_str);
+}
+
 
 
 int8_t RNBase::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
   switch (active_event->eventCode()) {
-    case MANUVR_MSG_BT_RX_BUF_NOT_EMPTY:
-      // We just received something at the BT port. Start the timeout running...
-      read_abort_event.delaySchedule();
-      return_value++;
-      break;
-    case MANUVR_MSG_BT_CONNECTION_LOST:
-      connected(false);
-      #ifdef __MANUVR_DEBUG
-        if (getVerbosity() > 3) local_log.concat("We lost our bluetooth connection. About to tear down the session...\n");
-      #endif
-      burn_or_recycle_current();
-      // Purge the queue.
-      for (int i = 0; i < work_queue.size(); i++) {
-        BTQueuedOperation* current = work_queue.dequeue();
-        if (BusOpcode::TX == current->opcode) {
-          reclaimPreallocation(current);
-        }
-        else {
-          work_queue.insert(current);
-        }
-      }
-      return_value++;
-      break;
-
-    case MANUVR_MSG_BT_CONNECTION_GAINED:
-      connected(true);
-      return_value++;
-    case MANUVR_MSG_BT_ENTERED_CMD_MODE:
-      idleService();
-      return_value++;
-      break;
-
     case MANUVR_MSG_XPORT_SEND:
       {
         StringBuilder* temp_sb;
@@ -1088,8 +901,16 @@ int8_t RNBase::notify(ManuvrMsg* active_event) {
       return_value++;
       break;
 
+    case MANUVR_MSG_BT_EXPIRE_LOCKOUT:
+      if (getVerbosity() > 5) Kernel::log("RN lockout expired.\n");
+      _er_clear_flag(RNBASE_FLAG_LOCK_OUT);
+      idleService();
+      return_value++;
+      break;
+
+    case MANUVR_MSG_BT_ENTERED_CMD_MODE:
     case MANUVR_MSG_BT_EXITED_CMD_MODE:
-    case MANUVR_MSG_BT_QUEUE_READY:
+    case MANUVR_MSG_XPORT_QUEUE_RDY:
       idleService();
       return_value++;
       break;
@@ -1099,7 +920,7 @@ int8_t RNBase::notify(ManuvrMsg* active_event) {
       break;
   }
 
-  if (local_log.length() > 0) Kernel::log(&local_log);
+  flushLocalLog();
   return return_value;
 }
 
@@ -1114,37 +935,50 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
   }
 
   switch (*(str)) {
+    case 'i':        // Readback test
+      switch (temp_byte) {
+        case 1:
+          printQueue(&local_log);
+          break;
+        default:
+          printDebug(&local_log);
+          break;
+      }
+      break;
+
     case 'x':   // Purge the queue.
       while (work_queue.hasNext()) {
         reclaimPreallocation(work_queue.dequeue());
       }
-      if (NULL != current_work_item) {
+      if (current_work_item) {
         reclaimPreallocation(current_work_item);
-        current_work_item = NULL;
+        current_work_item = nullptr;
       }
       break;
+    case 'c':
+      local_log.concat("RNBase: enterCommandMode()\n");
+      enterCommandMode();
+      break;
+    case 'C':
+      local_log.concat("RNBase: exitCommandMode()\n");
+      exitCommandMode();
+      break;
+
+    case 'M':
     case 'm':
       {
         int tmp_str_len = strlen((char*) str+1);
         if (tmp_str_len > 0) {
           *((char*) str+tmp_str_len) = 0x00; // Careful... tricky...
           StringBuilder *temp = new StringBuilder((char*) str+1);
-          local_log.concatf("Sending \"%s\" to RN.\n", ((char*) str+1));
-          //temp->concat("\r\n");
-          printToHost(temp);
-        }
-      }
-      break;
-
-    case 'M':
-      {
-        int tmp_str_len = strlen((char*) str+1);
-        if (tmp_str_len > 0) {
-          *((char*) str+tmp_str_len) = 0x00; // Careful... tricky...
-          StringBuilder *temp = new StringBuilder((char*) str+1);
+          local_log.concatf("Sending to RN: (%s)\n\"%s\"\n", ('M' == *str ? "CMD" : "HOST"), ((char*) str+1));
           temp->concat("\r\n");
-          local_log.concatf("Sending command \"%s\" to RN.\n", temp->string());
-          sendGeneralCommand(temp);
+          if ('M' == *str) {
+            sendGeneralCommand(temp);
+          }
+          else {
+            printToHost(temp);
+          }
         }
       }
       break;
@@ -1157,10 +991,6 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
         case 1:   // Set module in SPP mode.
           setSPPMode();
           break;
-        case 2:   // Set module in HID mode.
-          setHIDMode();
-          break;
-
         case 3:   // Show firmware revision.
           sendGeneralCommand(RNBASE_CMD_GET_FIRMWARE_REV);
           break;
@@ -1184,7 +1014,7 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
           break;
 
         case 200:
-          setDevName((char*) "ManuDelIon");
+          setDevName((char*) "Digitabulum");
           break;
         default:
           break;

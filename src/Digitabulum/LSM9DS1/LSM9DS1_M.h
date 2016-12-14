@@ -54,12 +54,15 @@ limitations under the License.
 */
 class LSM9DS1_M : public LSM9DSx_Common {
   public:
-    bool    autoscale_mag    = false;  // Should the class autoscale?
+    LSM9DS1_M();
+    ~LSM9DS1_M();
 
-    LSM9DS1_M(uint8_t bus_addr, IIU* _integrator);
-    ~LSM9DS1_M(void);
+    void class_init(uint8_t bus_addr, IIU* _integrator);
 
     /* Specific to this class */
+    inline bool autoscale_mag() {   return _check_flags(IMU_COMMON_FLAG_AUTOSCALE_0);   };
+    inline void autoscale_mag(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_AUTOSCALE_0);  };
+
     int8_t irq();    // When an IRQ signal fires, find the cause and service it.
 
     int8_t request_rescale_mag(uint8_t nu_scale_idx);     // Call to rescale the sensor.
@@ -87,11 +90,11 @@ class LSM9DS1_M : public LSM9DSx_Common {
   protected:
     bool   is_setup_completed();
     int8_t configure_sensor();
+    const char* imu_type() {   return "MAG"; };
 
 
   private:
     Vector3<int16_t> sample_backlog_mag[32];
-    bool    power_to_mag         = false; // Sensor powered on?
 
     uint8_t scale_mag            = 0;     // What scale is the sensor operating at? This is an index.
     uint8_t update_rate_mag      = 0;     // Index to the update-rate array.
@@ -108,6 +111,8 @@ class LSM9DS1_M : public LSM9DSx_Common {
 
     //uint8_t cutoff_idx;                   // The sensor's onboard filter cutoff freq.
     //float cutoff;                         // The sensor's onboard filter cutoff freq.
+    inline bool power_to_mag() {   return _check_flags(IMU_COMMON_FLAG_MAG_POWERED);   };
+    inline void power_to_mag(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_MAG_POWERED);  };
 
     int8_t collect_reading_mag();
 

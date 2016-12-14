@@ -64,6 +64,8 @@ In Digitabulum, the shunt resistor is Yageo part number RL1210FR-070R2L. It is
 #define DIGITAB_PMU_FLAG_STAT1      0x01    // The state of STAT1.
 #define DIGITAB_PMU_FLAG_STAT2      0x02    // The state of STAT2.
 
+#define DIGITABULUM_MSG_PMU_READ    0x5233  //
+
 
 // Valid CPU frequencies.
 enum class CPUFreqSetting {

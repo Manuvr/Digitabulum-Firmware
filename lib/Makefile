@@ -2,10 +2,14 @@
 
 .PHONY: all
 
-all: $(LIBNAME)
+all: manuvr stm32f7
+
+manuvr:
+	$(MAKE) -C ManuvrOS
+
+stm32f7:
 	$(MAKE) -C Drivers
 	$(MAKE) -C Middlewares
-	$(MAKE) -C ManuvrOS
 
 clean:
 	rm -f $(OBJS)

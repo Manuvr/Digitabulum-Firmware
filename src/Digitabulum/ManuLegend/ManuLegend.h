@@ -41,8 +41,8 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #define __DIGITABULUM_LEGEND_H_
 
 #include <Kernel.h>
-#include "../CPLDDriver/CPLDDriver.h"
 #include "../LSM9DS1/IIU.h"
+#include "../CPLDDriver/CPLDDriver.h"
 
 
 #define  LEGEND_MGR_IIU_STATE_ABSENT         -1
@@ -67,6 +67,15 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #define  DATA_LEGEND_FLAGS_REPORT_SEQUENCE    0x0002   //
 #define  DATA_LEGEND_FLAGS_REPORT_DELTA_T     0x0004   //
 #define  DATA_LEGEND_FLAGS_REPORT_GLOBAL_POS  0x0008   //
+
+  #define DIGITABULUM_MSG_IMU_LEGEND           0x0600 // No args? Asking for this legend. One arg: Legend provided.
+  #define DIGITABULUM_MSG_IMU_INIT             0x0604 //
+  #define DIGITABULUM_MSG_IMU_READ             0x0605 // Signal to read a given set of IMUs.
+  #define DIGITABULUM_MSG_IMU_MAP_STATE        0x0606
+  #define DIGITABULUM_MSG_IMU_QUAT_CRUNCH      0x0609 // The given IMU has samples to grind into a quat.
+  #define DIGITABULUM_MSG_IMU_TAP              0x060A // The given IMU experienced a tap.
+  #define DIGITABULUM_MSG_IMU_DOUBLE_TAP       0x060B // The given IMU experienced a double tap.
+
 
 /*
 * Bitmask flags for IMU data that makes its way into the map. This is the ManuLegend spec.
@@ -178,6 +187,16 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #define LEGEND_MGR_MAX_DATASET_SIZE     LEGEND_DATASET_GLOBAL_SIZE + (LEGEND_DATASET_PER_IMU_SIZE * LEGEND_DATASET_IIU_COUNT)
 
 
+#define AG_BASE_0_SIZE      10
+#define AG_BASE_1_SIZE       5
+#define AG_BASE_2_SIZE       9
+#define AG_BASE_3_SIZE       8
+
+#define M_BASE_0_SIZE        6
+#define M_BASE_1_SIZE        6
+#define M_BASE_2_SIZE        4
+
+
 
 
 class ManuLegend {
@@ -272,7 +291,7 @@ class ManuLegend {
 */
 class LegendManager : public EventReceiver, public BusOpCallback {
   public:
-    LegendManager();
+    LegendManager(BusAdapter<SPIBusOp>*);
     ~LegendManager();
 
     /* Overrides from the SPICallback interface */
@@ -311,25 +330,16 @@ class LegendManager : public EventReceiver, public BusOpCallback {
 
 
   private:
-    IIU iius[LEGEND_DATASET_IIU_COUNT];  // This is the chirality-invarient list of IIUs.
+    CPLDDriver* _bus = NULL;   // This is the gateway to the hardware.
 
-    /* These are giant strips of DMA-capable memory that are used for raw frame
-         reads from the sensor package. Twice what we need for double-buffering. */
-    Vector3<int16_t> __frame_buf_a[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
-    Vector3<int16_t> __frame_buf_g[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
-    Vector3<int16_t> __frame_buf_m[2 * LEGEND_DATASET_IIU_COUNT];  // Mag data
-
-    /* More large stretches of DMA memory. These are for IIU register definitions.
-         Registers laid out this way cannot be accessed as more than single bytes
-         by their respective IIU classes because the memory is not contiguous. */
-    uint8_t __fifo_levels[LEGEND_DATASET_IIU_COUNT];  // The FIFO levels.
-
+    // TODO: These shouldn't be static.
+    static IIU iius[LEGEND_DATASET_IIU_COUNT];  // This is the chirality-invarient list of IIUs.
+    static InertialMeasurement __prealloc[PREALLOCATED_IIU_MEASUREMENTS];
 
     ManuLegend* operating_legend = NULL;
     /* This is the dataset that we export. */
     uint8_t __dataset[LEGEND_MGR_MAX_DATASET_SIZE];
 
-    InertialMeasurement __prealloc[PREALLOCATED_IIU_MEASUREMENTS];
 
     // Used to direct data that we don't want in the legend until data-selection-by-NULL is implemented
     //   in the IIU class.
@@ -347,11 +357,40 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     int8_t send_map_event();
 
     int8_t init_iiu(uint8_t idx);
+    int8_t read_identities();
+    int8_t read_fifo_depth();
 
     int8_t refreshIMU();           // Calling causes the IMU to be read into its corresponding object.
     int8_t refreshIMU(uint8_t);    // Calling causes the IMU to be read into its corresponding object.
 
     int8_t reconfigure_data_map();    // Calling causes a pointer dance that reconfigures the data we send to the host.
+
+
+    /* Inlines for deriving address and IRQ bit offsets from index. */
+    // Address of the inertial half of the LSM9DS1.
+    inline uint8_t _intertial_addr(int idx) {   return ((idx % 17) + 0x00);   };
+    // Address of the magnetic half of the LSM9DS1.
+    inline uint8_t _magnetic_addr(int idx) {    return ((idx % 17) + 0x11);   };
+
+    /**
+    * Given an address, find the associated IIU.
+    *
+    * @param  test_addr The address to query.
+    * @return A pointer to the IIU responsible for the given address.
+    */
+    inline IIU* fetch_iiu_by_bus_addr(uint8_t addr) {
+      return (CPLD_REG_IMU_D5_D_M < addr) ? NULL : fetchIIU(addr % CPLD_REG_IMU_D5_D_I);
+    };
+
+    /**
+    * Given an address, find the associated IIU.
+    *
+    * @param  test_addr The address to query.
+    * @return An index to the IIU responsible for the given address.
+    */
+    inline int8_t _iiu_idx_from_addr(uint8_t addr) {
+      return (CPLD_REG_IMU_D5_D_M < addr) ? -1 : (addr % CPLD_REG_IMU_D5_D_I);
+    };
 
 
     static LegendManager *INSTANCE;
@@ -360,6 +399,7 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     static SPIBusOp _preformed_read_a;
     static SPIBusOp _preformed_read_g;
     static SPIBusOp _preformed_read_m;
+    static SPIBusOp _preformed_read_temp;
     static SPIBusOp _preformed_fifo_read;
 
     // Prealloc starvation counters...
@@ -371,6 +411,51 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     static uint32_t minimum_prealloc_level;
 
     static PriorityQueue<InertialMeasurement*>  preallocd_measurements;
+
+    /* ---------------------- */
+    /*    Register memory     */
+    /* ---------------------- */
+
+    /* These are giant strips of DMA-capable memory that are used for raw frame
+         reads from the sensor package. Twice what we need for double-buffering. */
+    static Vector3<int16_t> __frame_buf_a[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
+    static Vector3<int16_t> __frame_buf_g[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
+    static Vector3<int16_t> __frame_buf_m[2 * LEGEND_DATASET_IIU_COUNT];  // Mag data
+
+    /* More large stretches of DMA memory. These are for IIU register definitions.
+         Registers laid out this way cannot be multiply-accessed as more than single bytes
+         by their respective IIU classes because the memory is not contiguous. */
+    static int16_t __temperatures[LEGEND_DATASET_IIU_COUNT];
+    static uint8_t __fifo_ctrl[LEGEND_DATASET_IIU_COUNT];
+    static uint8_t __fifo_levels[LEGEND_DATASET_IIU_COUNT];  // The FIFO levels.
+    static uint8_t __ag_status[LEGEND_DATASET_IIU_COUNT];
+
+    /* Identity registers. */
+    static uint8_t _imu_ids[2 * LEGEND_DATASET_IIU_COUNT];
+
+    /* Accelerometer interrupt registers. */
+    static uint8_t _reg_block_ag_0[LEGEND_DATASET_IIU_COUNT * AG_BASE_0_SIZE];
+
+    /* Gyroscope control registers. */
+    static uint8_t _reg_block_ag_1[LEGEND_DATASET_IIU_COUNT * AG_BASE_1_SIZE];
+
+    /* Accelerometer control registers. */
+    static uint8_t _reg_block_ag_2[LEGEND_DATASET_IIU_COUNT * AG_BASE_2_SIZE];
+
+    /* Gyroscope interrupt registers. */
+    static uint8_t _reg_block_ag_3[LEGEND_DATASET_IIU_COUNT * AG_BASE_3_SIZE];
+
+    /* Magnetometer offset registers. */
+    static uint8_t _reg_block_m_0[LEGEND_DATASET_IIU_COUNT * M_BASE_0_SIZE];
+
+    /* Magnetometer control registers. */
+    static uint8_t _reg_block_m_1[LEGEND_DATASET_IIU_COUNT * M_BASE_1_SIZE];
+
+    /* Magnetometer interrupt registers. */
+    static uint8_t _reg_block_m_2[LEGEND_DATASET_IIU_COUNT * M_BASE_2_SIZE];
+    /* ---------------------- */
+    /* End of register memory */
+    /* ---------------------- */
 };
 
 #endif

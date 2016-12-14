@@ -84,14 +84,17 @@ limitations under the License.
 */
 class LSM9DS1_AG : public LSM9DSx_Common {
   public:
-    bool    autoscale_acc    = false;  // Should the class autoscale?
-    bool    autoscale_gyr    = false;  // Should the class autoscale?
+    LSM9DS1_AG();
+    ~LSM9DS1_AG();
 
-    LSM9DS1_AG(uint8_t bus_addr, IIU* _integrator);
-    ~LSM9DS1_AG(void);
-
+    void class_init(uint8_t bus_addr, IIU* _integrator);
 
     /* Specific to this class */
+    inline bool autoscale_acc() {   return _check_flags(IMU_COMMON_FLAG_AUTOSCALE_0);   };
+    inline void autoscale_acc(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_AUTOSCALE_0);  };
+    inline bool autoscale_gyr() {   return _check_flags(IMU_COMMON_FLAG_AUTOSCALE_1);   };
+    inline void autoscale_gyr(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_AUTOSCALE_1);  };
+
     int8_t irq_0();    // When an IRQ signal fires, find the cause and service it.
     int8_t irq_1();    // When an IRQ signal fires, find the cause and service it.
 
@@ -127,14 +130,17 @@ class LSM9DS1_AG : public LSM9DSx_Common {
   protected:
     bool   is_setup_completed();
     int8_t configure_sensor();
+    inline const char* imu_type() {   return "AG ";   };
 
 
   private:
     Vector3<int16_t> sample_backlog_acc[32];
     Vector3<int16_t> sample_backlog_gyr[32];
 
-    bool    power_to_acc         = false;  // Sensor powered on?
-    bool    power_to_gyr         = false;  // Sensor powered on?
+    inline bool power_to_acc() {   return _check_flags(IMU_COMMON_FLAG_ACC_POWERED);   };
+    inline void power_to_acc(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_ACC_POWERED);  };
+    inline bool power_to_gyr() {   return _check_flags(IMU_COMMON_FLAG_GYR_POWERED);   };
+    inline void power_to_gyr(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_GYR_POWERED);  };
 
     uint8_t scale_acc            = 0;      // What scale is the sensor operating at? This is an index.
     uint8_t scale_gyr            = 0;      // What scale is the sensor operating at? This is an index.

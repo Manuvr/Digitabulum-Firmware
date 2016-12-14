@@ -96,3 +96,93 @@ _---J. Ian Lindsay_
 I forgot why those linkages were ever there to begin with...
 
 _---J. Ian Lindsay_
+
+------
+
+### 2016.10.23:
+
+    281816    2800    9664  294280   47d88   New baseline.
+
+_---J. Ian Lindsay_
+
+------
+
+### 2016.10.31:
+
+RN driver... Prior to member re-work to use a Pin object.
+
+    make DEBUG=1
+    281920    2800    9664  294384 Prior to member re-work to use a Pin object.
+    281984    2800    9664  294448 Following conversion.
+    281856    2800    9664  294320 Following conversion of gpioSetup()
+    281936    2800    9664  294400 GPIO treatment is now safe.
+    282064    2800    9664  294528 GPIO mapper completed and safe.
+    282600    2800    9664  295064 Power down and sleep support.
+
+### 2016.11.04:
+
+    283168    2800    9664  295632 New baseline after adding to PMU.
+    283388    2800    9700  295888 Building up support for the BT module.
+
+My god.... RNBase has bad smell. Three refactors died in there and were never cleaned out.
+
+    283564    2800    9716  296080 Can stand it no longer... About to cull...
+    283628    2800    9780  296208 My hasty class-merger actually compiled.
+    283436    2800    9780  296016 Cut the xenomgs_id field and delegated constructors.
+    283436    2800    9748  295984 Cut the redundant buffer members.
+    283436    2800    9732  295968 Cut the last remaining boolean member.
+    283316    2800    9732  295848 Cruft elimination. Memory management fixes.
+    283348    2800    9732  295880 Consolidating some inlines. Adding granularity to IO_WAIT.
+    283036    2800    9508  295344 Stripped some complexity from session notify().
+    283492    2800    9496  295788 Migrated gpio_5 fxns out of RNBase. Pruned cruft.
+    283388    2800    9496  295684 Relocation of hardware-specifics.
+    283236    2800    9496  295532 Cutting some needless string.
+
+_---J. Ian Lindsay_
+
+------
+
+### 2016.11.23:
+
+Given the pending manufacture of the digits, about to revisit some things in the IMU data pathways. First, some baselines...
+
+    274996    2800    9456  287252   46214  make
+    283220    2800    9496  295516   4825c  make DEBUG=1
+
+    make DEBUG=1
+    283220    2800    9496  295516   4825c  New baseline.
+    283220    2800    9496  295516   4825c  Rework of if-else chains into switch-case yields no difference.
+
+I very much dislike this arcane key-sequence console.
+
+It might be time to formally abandon the notion of individual IMUs being discrete bus entities, and allow the LegendManager class to be the intermediary (and memory store) for all IIU classes, which would do no allocation for these purposes.
+
+Feed the base pointer in for register space, and let the IMU class calculate appropriate offsets from the base given the IMU count supported. I won't delve into the chain of inference that leads me to this conclusion here, but doing this would have the consequence that all IMUs must be run at the same sample-rate. This might be a sane assumption anyhow.
+
+    Reworking some basics in IIU/IMU classes....
+    283476    2800    9496  295772   4835c  Moved boolean members to flags.
+    283556    2800    9496  295852   483ac  Making some class members constant.
+    283492    2800    9496  295788   4836c  Alignment change to make gains evident.
+    283492    2800    9496  295788   4836c  More flag condensation.
+    283540    2800    9496  295836   4839c  CPLD conversion to BusAdapter.
+    283476    2800   11072  297348   48984  Static allocation of IMU register memory.
+
+_---J. Ian Lindsay_
+
+------
+
+### 2016.11.28:
+
+The CPLD driver is now fully separated from the concerns of IMUs. It is a general bus adapter.
+
+Re-wrote some IIU lookup functions as inlines. They were not referenced anywhere, so they may disappear completely. Now that the drivers don't have to deal with the heterogeneous bus topology that r0 exhibited, the drivers can more cleanly carved into functional units.
+
+    283508    2800   11080  297388   489ac  Rounding out some CPLD function defs.
+    283700    2800   35760  322260   4ead4  Temporarilly made IIU class static to see mem impact.
+
+And there we have it... All IMU/IIU driver classes are now stack-defined and will not burden the heap.
+Turning in for the night.
+
+_---J. Ian Lindsay_
+
+    283572    2800   42960  329332   50674  Moved InertialMeasurement queue to static for a bit.

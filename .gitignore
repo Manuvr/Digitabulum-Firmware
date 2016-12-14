@@ -3,6 +3,7 @@
 .directory
 compiler
 build/
+emu/
 lib/ManuvrOS
 lib/telehash-c
 digitabulum.map
