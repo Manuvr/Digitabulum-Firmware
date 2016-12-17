@@ -773,7 +773,7 @@ void LSM9DS1_AG::dumpPreformedElements(StringBuilder *output) {
 *   we should act on data coming in.
 */
 int8_t LSM9DS1_AG::io_op_callback(BusOp* _op) {
-  SPIBusOp* op = (SPIBusOp*) _op;
+  CPLDBusOp* op = (CPLDBusOp*) _op;
   int8_t return_value = SPI_CALLBACK_NOMINAL;
 
   // There is zero chance this object will be a null pointer unless it was done on purpose.

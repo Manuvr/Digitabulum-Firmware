@@ -30,7 +30,7 @@ Alternate targets:
 
 #include <Kernel.h>
 #include <Platform/Platform.h>
-#include <Drivers/i2c-adapter/i2c-adapter.h>
+#include <Platform/Peripherals/I2C/I2CAdapter.h>
 #include <Drivers/ADP8866/ADP8866.h>
 #include <XenoSession/Console/ManuvrConsole.h>
 

@@ -1,5 +1,5 @@
 /*
-File:   SPIBusOp.cpp
+File:   CPLDBusOp.cpp
 Author: J. Ian Lindsay
 Date:   2014.07.01
 
@@ -21,7 +21,7 @@ limitations under the License.
 */
 
 
-#include "SPIBusOp.h"
+#include "CPLDBusOp.h"
 #include "CPLDDriver.h"
 
 
@@ -41,10 +41,10 @@ StringBuilder debug_log;   // TODO: Relocate this to a static member.
 *
 * Static members and initializers should be located here.
 *******************************************************************************/
-uint32_t SPIBusOp::total_transfers  = 0;  // How many total SPI transfers have we seen?
-uint32_t SPIBusOp::failed_transfers = 0;  // How many failed SPI transfers have we seen?
-uint16_t SPIBusOp::spi_wait_timeout = 20; // In microseconds. Per-byte.
-ManuvrMsg SPIBusOp::event_spi_queue_ready;
+uint32_t CPLDBusOp::total_transfers  = 0;  // How many total SPI transfers have we seen?
+uint32_t CPLDBusOp::failed_transfers = 0;  // How many failed SPI transfers have we seen?
+uint16_t CPLDBusOp::spi_wait_timeout = 20; // In microseconds. Per-byte.
+ManuvrMsg CPLDBusOp::event_spi_queue_ready;
 
 
 /*******************************************************************************
@@ -59,7 +59,7 @@ ManuvrMsg SPIBusOp::event_spi_queue_ready;
 /**
 * Vanilla constructor that calls wipe().
 */
-SPIBusOp::SPIBusOp() {
+CPLDBusOp::CPLDBusOp() {
   wipe();
 }
 
@@ -73,7 +73,7 @@ SPIBusOp::SPIBusOp() {
 * @param  len        The length of the transaction.
 * @param  requester  The object to be notified when the bus operation completes with success.
 */
-SPIBusOp::SPIBusOp(BusOpcode nu_op, BusOpCallback* requester) {
+CPLDBusOp::CPLDBusOp(BusOpcode nu_op, BusOpCallback* requester) {
   wipe();
   this->opcode = nu_op;
   callback     = requester;
@@ -87,7 +87,7 @@ SPIBusOp::SPIBusOp(BusOpcode nu_op, BusOpCallback* requester) {
 *
 * Moreover, sometimes instances of this class will be preallocated, and never torn down.
 */
-SPIBusOp::~SPIBusOp() {
+CPLDBusOp::~CPLDBusOp() {
   if (profile()) {
     debug_log.concat("Destroying an SPI job that was marked for profiling:\n");
     printDebug(&debug_log);
@@ -103,7 +103,7 @@ SPIBusOp::~SPIBusOp() {
 * @param  buf The transfer buffer.
 * @param  len The length of the buffer.
 */
-void SPIBusOp::setBuffer(uint8_t *buf, uint8_t len) {
+void CPLDBusOp::setBuffer(uint8_t *buf, uint8_t len) {
   this->buf     = buf;
   this->buf_len = len;
 }
@@ -117,7 +117,7 @@ void SPIBusOp::setBuffer(uint8_t *buf, uint8_t len) {
 * @param  _dev_count The third CPLD transfer parameter.
 * @param  _reg_addr  The fourth CPLD transfer parameter.
 */
-void SPIBusOp::setParams(uint8_t _dev_addr, uint8_t _xfer_len, uint8_t _dev_count, uint8_t _reg_addr) {
+void CPLDBusOp::setParams(uint8_t _dev_addr, uint8_t _xfer_len, uint8_t _dev_count, uint8_t _reg_addr) {
   _param_len     = 4;
   xfer_params[0] = _dev_addr;
   xfer_params[1] = _xfer_len;
@@ -132,7 +132,7 @@ void SPIBusOp::setParams(uint8_t _dev_addr, uint8_t _xfer_len, uint8_t _dev_coun
 * @param  _reg_addr The first CPLD transfer parameter.
 * @param  _val      The second CPLD transfer parameter.
 */
-void SPIBusOp::setParams(uint8_t _reg_addr, uint8_t _val) {
+void CPLDBusOp::setParams(uint8_t _reg_addr, uint8_t _val) {
   _param_len     = 2;
   xfer_params[0] = _reg_addr;
   xfer_params[1] = _val;
@@ -148,7 +148,7 @@ void SPIBusOp::setParams(uint8_t _reg_addr, uint8_t _val) {
 *
 * @return 0 on success, or non-zero on failure.
 */
-int8_t SPIBusOp::init_dma() {
+int8_t CPLDBusOp::init_dma() {
 //  if (HAL_DMA_GetState(&_dma_w) != HAL_DMA_STATE_RESET) __HAL_DMA_DISABLE(&_dma_w);
 //  if (HAL_DMA_GetState(&_dma_r) != HAL_DMA_STATE_RESET) __HAL_DMA_DISABLE(&_dma_r);
 //
@@ -200,7 +200,7 @@ int8_t SPIBusOp::init_dma() {
 * Wipes this bus operation so it can be reused.
 * Be careful not to blow away the flags that prevent us from being reaped.
 */
-void SPIBusOp::wipe() {
+void CPLDBusOp::wipe() {
   set_state(XferState::IDLE);
   // We need to preserve flags that deal with memory management.
   flags       = flags & (SPI_XFER_FLAG_NO_FREE | SPI_XFER_FLAG_PREALLOCATE_Q);
@@ -239,7 +239,7 @@ void SPIBusOp::wipe() {
 *
 * @return 0 on success. Non-zero on failure.
 */
-int8_t SPIBusOp::markComplete() {
+int8_t CPLDBusOp::markComplete() {
   if (has_bus_control() || (CPLDDriver::current_queue_item == this) ) {
     // If this job has bus control, we need to release the bus and tidy up IRQs.
     setPin(30, false);
@@ -268,8 +268,8 @@ int8_t SPIBusOp::markComplete() {
 * @param  cause A failure code to mark the operation with.
 * @return 0 on success. Non-zero on failure.
 */
-int8_t SPIBusOp::abort(XferFault cause) {
-  SPIBusOp::failed_transfers++;
+int8_t CPLDBusOp::abort(XferFault cause) {
+  CPLDBusOp::failed_transfers++;
   xfer_fault = cause;
   debug_log.concatf("SPI job aborted at state %s. Cause: %s.\n", getStateString(), getErrorString());
   printDebug(&debug_log);
@@ -290,7 +290,7 @@ int8_t SPIBusOp::abort(XferFault cause) {
 * @param  nu_reap_state Pass false to cause the bus manager to leave this object alone.
 * @return true if the bus manager class should free() this object. False otherwise.
 */
-bool SPIBusOp::shouldReap(bool nu_reap_state) {
+bool CPLDBusOp::shouldReap(bool nu_reap_state) {
   flags = (nu_reap_state) ? (flags & (uint8_t) ~SPI_XFER_FLAG_NO_FREE) : (flags | SPI_XFER_FLAG_NO_FREE);
   return ((flags & SPI_XFER_FLAG_NO_FREE) == 0);
 }
@@ -307,7 +307,7 @@ bool SPIBusOp::shouldReap(bool nu_reap_state) {
 * @param  nu_prealloc_state Pass true to inform the bus manager that this object was preallocated.
 * @return true if the bus manager class should return this object to its preallocation queue.
 */
-bool SPIBusOp::returnToPrealloc(bool nu_prealloc_state) {
+bool CPLDBusOp::returnToPrealloc(bool nu_prealloc_state) {
   flags = (!nu_prealloc_state) ? (flags & (uint8_t) ~SPI_XFER_FLAG_PREALLOCATE_Q) : (flags | SPI_XFER_FLAG_PREALLOCATE_Q);
   shouldReap(!nu_prealloc_state);
   return (flags & SPI_XFER_FLAG_PREALLOCATE_Q);
@@ -322,7 +322,7 @@ bool SPIBusOp::returnToPrealloc(bool nu_prealloc_state) {
 * @param  nu_reap_state Pass false to cause the bus manager to leave this object alone.
 * @return true if the bus manager class should free() this object. False otherwise.
 */
-bool SPIBusOp::devRegisterAdvance(bool _reg_advance) {
+bool CPLDBusOp::devRegisterAdvance(bool _reg_advance) {
   flags = (_reg_advance) ? (flags | SPI_XFER_FLAG_DEVICE_REG_INC) : (flags & (uint8_t) ~SPI_XFER_FLAG_DEVICE_REG_INC);
   return ((flags & SPI_XFER_FLAG_DEVICE_REG_INC) == 0);
 }
@@ -338,9 +338,9 @@ bool SPIBusOp::devRegisterAdvance(bool _reg_advance) {
 *
 * @param  StringBuilder* The buffer into which this fxn should write its output.
 */
-void SPIBusOp::printDebug(StringBuilder *output) {
+void CPLDBusOp::printDebug(StringBuilder *output) {
   if (NULL == output) return;
-  output->concatf("-----SPIBusOp %p (%s)------------\n", (uintptr_t) this, getOpcodeString());
+  output->concatf("-----CPLDBusOp %p (%s)------------\n", (uintptr_t) this, getOpcodeString());
   if (shouldReap())       output->concat("\t Will reap\n");
   if (returnToPrealloc()) output->concat("\t Returns to prealloc\n");
   output->concatf("\t xfer_state        %s\n\t err               %s\n", getStateString(), getErrorString());

@@ -324,7 +324,7 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #ifndef __CPLD_DRIVER_H__
 #define __CPLD_DRIVER_H__
 
-#include "SPIBusOp.h"
+#include "CPLDBusOp.h"
 #include <Platform/Platform.h>
 
 
@@ -425,7 +425,7 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 /*
 * The CPLD driver class.
 */
-class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
+class CPLDDriver : public EventReceiver, public BusAdapter<CPLDBusOp> {
   public:
     CPLDDriver();
     ~CPLDDriver();       // Should never be called. Here for the sake of completeness.
@@ -434,8 +434,8 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     int8_t io_op_callback(BusOp*);
     int8_t queue_io_job(BusOp*);
     int8_t advance_work_queue();
-    SPIBusOp* new_op();
-    SPIBusOp* new_op(BusOpcode, BusOpCallback*);
+    CPLDBusOp* new_op();
+    CPLDBusOp* new_op(BusOpcode, BusOpCallback*);
 
     /* Overrides from EventReceiver */
     void printDebug(StringBuilder*);
@@ -463,7 +463,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
       return writeRegister(CPLD_REG_WAKEUP_IRQ, _val | 0x80);
     };
 
-    static SPIBusOp* current_queue_item;
+    static CPLDBusOp* current_queue_item;
 
 
 
@@ -473,7 +473,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     ManuvrMsg _periodic_debug;
 
     /* List of pending callbacks for bus transactions. */
-    PriorityQueue<SPIBusOp*> callback_queue;
+    PriorityQueue<CPLDBusOp*> callback_queue;
     uint32_t  bus_timeout_millis = 5;  // How long to spend in IO_WAIT?
     uint32_t  specificity_burden = 0;  // How many queue items have been deleted?
     uint8_t   spi_cb_per_event   = 3;  // Limit the number of callbacks processed per event.
@@ -491,7 +491,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     void purge_queued_work_by_dev(BusOpCallback *dev);   // Flush the work queue by callback match
     void purge_stalled_job();     // TODO: Misnomer. Really purges the active job.
     int8_t service_callback_queue();
-    void reclaim_queue_item(SPIBusOp*);
+    void reclaim_queue_item(CPLDBusOp*);
 
     /* Setup and init fxns. */
     void gpioSetup();
@@ -510,7 +510,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     int8_t iiu_group_irq();
 
 
-    static SPIBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
+    static CPLDBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
 
     /* Register representations. */
     static uint8_t cpld_version;        // CPLD version byte.

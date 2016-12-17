@@ -1,5 +1,5 @@
 /*
-File:   SPIBusOp.h
+File:   CPLDBusOp.h
 Author: J. Ian Lindsay
 Date:   2014.07.01
 
@@ -49,16 +49,16 @@ This is the class that is used to keep bus operations on the SPI atomic.
 /*
 * This class represents a single transaction on the SPI bus.
 */
-class SPIBusOp : public BusOp {
+class CPLDBusOp : public BusOp {
   public:
     BusOpCallback* callback = NULL;  // Which class gets pinged when we've finished?
 
     //uint32_t time_began    = 0;   // This is the time when bus access begins.
     //uint32_t time_ended    = 0;   // This is the time when bus access stops (or is aborted).
 
-    SPIBusOp();
-    SPIBusOp(BusOpcode nu_op, BusOpCallback* requester);
-    ~SPIBusOp();
+    CPLDBusOp();
+    CPLDBusOp(BusOpcode nu_op, BusOpCallback* requester);
+    ~CPLDBusOp();
 
     /* Job control functions. */
     int8_t begin();

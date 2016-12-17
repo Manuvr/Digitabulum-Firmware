@@ -55,7 +55,7 @@ LDFLAGS += -L. -L$(OUTPUT_PATH)
 ###########################################################################
 SOURCES_CPP   = src/main-emu.cpp
 SOURCES_CPP  += src/Digitabulum/CPLDDriver/CPLDDriver.cpp
-SOURCES_CPP  += src/Digitabulum/CPLDDriver/SPIBusOp.cpp
+SOURCES_CPP  += src/Digitabulum/CPLDDriver/CPLDBusOp.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/IIU.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1_AG.cpp

@@ -291,7 +291,7 @@ class ManuLegend {
 */
 class LegendManager : public EventReceiver, public BusOpCallback {
   public:
-    LegendManager(BusAdapter<SPIBusOp>*);
+    LegendManager(BusAdapter<CPLDBusOp>*);
     ~LegendManager();
 
     /* Overrides from the SPICallback interface */
@@ -396,11 +396,11 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     static LegendManager *INSTANCE;
 
     // These are preformed bus operations that address multiple IMUs...
-    static SPIBusOp _preformed_read_a;
-    static SPIBusOp _preformed_read_g;
-    static SPIBusOp _preformed_read_m;
-    static SPIBusOp _preformed_read_temp;
-    static SPIBusOp _preformed_fifo_read;
+    static CPLDBusOp _preformed_read_a;
+    static CPLDBusOp _preformed_read_g;
+    static CPLDBusOp _preformed_read_m;
+    static CPLDBusOp _preformed_read_temp;
+    static CPLDBusOp _preformed_fifo_read;
 
     // Prealloc starvation counters...
     static uint32_t prealloc_starves;

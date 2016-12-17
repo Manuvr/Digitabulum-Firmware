@@ -366,7 +366,7 @@ int8_t LSM9DSx_Common::bulk_refresh() {
 */
 int8_t LSM9DSx_Common::queue_io_job(BusOp* _op) {
   if (NULL == _op) return -1;   // This should never happen.
-  SPIBusOp* op = (SPIBusOp*) _op;
+  CPLDBusOp* op = (CPLDBusOp*) _op;
   op->callback = (BusOpCallback*) this;         // Notify us of the results.
   return ((CPLDDriver*)cpld)->queue_io_job(op);     // Pass it to the CPLD for bus access.
 }
@@ -412,7 +412,7 @@ int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t le
         first_byte |= 0x40;
     }
 
-    SPIBusOp* op = ((CPLDDriver*)cpld)->new_op();
+    CPLDBusOp* op = ((CPLDDriver*)cpld)->new_op();
     op->devRegisterAdvance(advance_regs);
     op->set_opcode(BusOpcode::TX);
     op->buf             = buf;
@@ -459,7 +459,7 @@ int8_t LSM9DSx_Common::readRegister(uint8_t reg_index, uint8_t *buf, uint8_t len
     first_byte |= 0x40;
   }
 
-  SPIBusOp* op = ((CPLDDriver*)cpld)->new_op();
+  CPLDBusOp* op = ((CPLDDriver*)cpld)->new_op();
   op->devRegisterAdvance(advance_regs);
   op->set_opcode(BusOpcode::RX);
   op->buf             = buf;
@@ -548,7 +548,7 @@ uint8_t* LSM9DSx_Common::regPtr(uint8_t idx) {
 * @param  A pointer to the pre-formed bus operation that the class wishes dispatched.
 * @return true on success. False on failure.
 */
-bool LSM9DSx_Common::fire_preformed_bus_op(SPIBusOp* op) {
+bool LSM9DSx_Common::fire_preformed_bus_op(CPLDBusOp* op) {
   if (reset_preformed_queue_item(op) ) {
     if (profile()) profiler_read_begin = micros();
 
@@ -572,7 +572,7 @@ bool LSM9DSx_Common::fire_preformed_bus_op(SPIBusOp* op) {
 *
 * @return true on success. False on failure.
 */
-bool LSM9DSx_Common::reset_preformed_queue_item(SPIBusOp* op) {
+bool LSM9DSx_Common::reset_preformed_queue_item(CPLDBusOp* op) {
   switch (op->get_state()) {
     case XferState::IDLE:
       break;

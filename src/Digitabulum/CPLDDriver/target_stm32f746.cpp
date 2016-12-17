@@ -643,7 +643,7 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
 *
 * @param bool enable the interrupts?
 */
-void SPIBusOp::enableSPI_DMA(bool enable) {
+void CPLDBusOp::enableSPI_DMA(bool enable) {
   if (enable) {
     NVIC_EnableIRQ(DMA2_Stream2_IRQn);
     NVIC_EnableIRQ(DMA2_Stream3_IRQn);
@@ -667,7 +667,7 @@ void SPIBusOp::enableSPI_DMA(bool enable) {
 *
 * @return 0 on success, or non-zero on failure.
 */
-int8_t SPIBusOp::begin() {
+int8_t CPLDBusOp::begin() {
   //time_began    = micros();
   if (0 == _param_len) {
     // Obvious invalidity. We must have at least one transfer parameter.
@@ -704,7 +704,7 @@ int8_t SPIBusOp::begin() {
 *
 * @return 0 on success. Non-zero on failure.
 */
-int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
+int8_t CPLDBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
   //debug_log.concatf("advance_op(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
   //Kernel::log(&debug_log);
 
