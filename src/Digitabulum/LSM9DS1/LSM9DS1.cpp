@@ -365,7 +365,7 @@ int8_t LSM9DSx_Common::bulk_refresh() {
 *   before becoming folded into the SPI bus queue.
 */
 int8_t LSM9DSx_Common::queue_io_job(BusOp* _op) {
-  if (NULL == _op) return -1;   // This should never happen.
+  if (nullptr == _op) return -1;   // This should never happen.
   CPLDBusOp* op = (CPLDBusOp*) _op;
   op->callback = (BusOpCallback*) this;         // Notify us of the results.
   return ((CPLDDriver*)cpld)->queue_io_job(op);     // Pass it to the CPLD for bus access.

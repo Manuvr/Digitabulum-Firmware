@@ -346,7 +346,7 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
       break;
   }
 
-  if (local_log.length() > 0) Kernel::log(&local_log);
+  flushLocalLog();
   return SPI_CALLBACK_NOMINAL;
 }
 
@@ -447,7 +447,7 @@ int8_t CPLDDriver::service_callback_queue() {
     temp_op = callback_queue.dequeue();
   }
 
-  if (local_log.length() > 0) Kernel::log(&local_log);
+  flushLocalLog();
   return return_value;
 }
 
@@ -528,7 +528,7 @@ int8_t CPLDDriver::advance_work_queue() {
     }
   }
 
-  if (local_log.length() > 0) Kernel::log(&local_log);
+  flushLocalLog();
 
   return return_value;
 }
@@ -642,7 +642,7 @@ void CPLDDriver::reclaim_queue_item(CPLDBusOp* op) {
     op->set_state(XferState::IDLE);
   }
 
-  if (local_log.length() > 0) Kernel::log(&local_log);
+  flushLocalLog();
 }
 
 
@@ -758,7 +758,7 @@ int8_t CPLDDriver::iiu_group_irq() {
   int8_t return_value = 0;
   if (getVerbosity() > 2) local_log.concatf("CPLD iiu_group_irq: (0x%08x):  \n", 0);
 
-  if (local_log.length() > 0) Kernel::log(&local_log);
+  flushLocalLog();
   return return_value;
 }
 
