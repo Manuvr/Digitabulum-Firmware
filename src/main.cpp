@@ -37,7 +37,7 @@ Alternate targets:
 #include "Digitabulum/USB/STM32F7USB.h"
 #include "Digitabulum/CPLDDriver/CPLDDriver.h"
 #include "Digitabulum/RovingNetworks/RN4677/RN4677.h"
-#include "Digitabulum/ManuLegend/ManuLegend.h"
+#include "Digitabulum/ManuLegend/ManuManager.h"
 #include "Digitabulum/IREmitter/IREmitter.h"
 #include "Digitabulum/HapticStrap/HapticStrap.h"
 #include "Digitabulum/SDCard/SDCard.h"
@@ -361,6 +361,19 @@ void assert_failed(uint8_t* file, uint32_t line) {
 
 
 
+/*
+* Pin defs for this module.
+*/
+const CPLDPins cpld_pins(
+  25, // WO, SW_BTN
+  30, // AKA: SPI2_MISO
+  45, // CPLD's IRQ_WAKEUP pin
+  75, // GPIO
+  78, // GPIO
+  33 // The DEN_AG pin on the carpals IMU.
+);
+
+
 /****************************************************************************************************
 * Main function                                                                                     *
 * TODO: We should sort-out what can be in CCM and what cannot be, and after we've allocated all the *
@@ -382,7 +395,7 @@ int main() {
   platform.platformPreInit();
   kernel = platform.kernel();
 
-  CPLDDriver _cpld;
+  CPLDDriver _cpld(&cpld_pins);
   kernel->subscribe(&_cpld);
 
   LegendManager _legend_manager(&_cpld);

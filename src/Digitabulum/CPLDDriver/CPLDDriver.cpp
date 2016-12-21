@@ -33,7 +33,7 @@ limitations under the License.
 *   executes under an ISR. Keep it brief...
 *******************************************************************************/
 /* Access to CPLD driver from other classes. */
-volatile CPLDDriver* cpld = NULL;
+volatile CPLDDriver* cpld = nullptr;
 
 /* Used to minimize software burden incurred by timeout support. */
 volatile bool timeout_punch = false;
@@ -59,7 +59,7 @@ uint8_t active_imu_position = 0;
 */
 void callback_spi_timeout() {
   if (timeout_punch) {
-    if (((CPLDDriver*) cpld)->current_queue_item != NULL) {
+    if (((CPLDDriver*) cpld)->current_queue_item) {
       Kernel::log("callback_spi_timeout()\n");
       if (((CPLDDriver*) cpld)->current_queue_item->isComplete()) {
         ((CPLDDriver*) cpld)->advance_work_queue();
@@ -120,7 +120,7 @@ uint8_t CPLDDriver::forsaken_digits    = 0;  // Forsaken digits.
 uint8_t CPLDDriver::cpld_wakeup_source = 0;  // WAKEUP mapping.
 
 CPLDBusOp  CPLDDriver::preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];
-CPLDBusOp* CPLDDriver::current_queue_item = NULL;
+CPLDBusOp* CPLDDriver::current_queue_item = nullptr;
 
 const unsigned char MSG_ARGS_IMU_READ[] = {
   UINT8_FM, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM, 0  // IMU id and a collection of readings.
@@ -179,6 +179,18 @@ const MessageTypeDef cpld_message_defs[] = {
 };
 
 
+const char* CPLDDriver::digitStateToString(DigitState x) {
+  switch (x) {
+    case DigitState::ASLEEP:  return "ASLEEP";
+    case DigitState::ABSENT:  return "ABSENT";
+    case DigitState::AWAKE:   return "AWAKE";
+    case DigitState::UNKNOWN:
+    default:
+      break;
+  }
+  return "UNKNOWN";
+}
+
 
 /*******************************************************************************
 *   ___ _              ___      _ _              _      _
@@ -192,10 +204,11 @@ const MessageTypeDef cpld_message_defs[] = {
 /**
 * Constructor. Also populates the global pointer reference.
 */
-CPLDDriver::CPLDDriver() : EventReceiver(), BusAdapter(50) {
+CPLDDriver::CPLDDriver(const CPLDPins* p) : EventReceiver(), BusAdapter(50) {
   setReceiverName("CPLDDriver");
+  memcpy(&_pins, p, sizeof(CPLDPins));
 
-  if (NULL == cpld) {
+  if (nullptr == cpld) {
     cpld = this;
     ManuvrMsg::registerMessages(cpld_message_defs, sizeof(cpld_message_defs) / sizeof(MessageTypeDef));
   }
@@ -217,7 +230,7 @@ CPLDDriver::CPLDDriver() : EventReceiver(), BusAdapter(50) {
     preallocated.insert(&preallocated_bus_jobs[i]);
   }
 
-  current_queue_item = NULL;
+  current_queue_item = nullptr;
   _er_set_flag(CPLD_FLAG_QUEUE_IDLE);
 }
 
@@ -324,7 +337,7 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
         if (getVerbosity() > 3) local_log.concatf("CPLD r%d.\n", _version);
         if ((0 != _version) && (0xFF != _version)) {
           if (_version != cpld_version) {
-            Kernel::raiseEvent(DIGITABULUM_MSG_CPLD_RESET_COMPLETE, NULL);
+            Kernel::raiseEvent(DIGITABULUM_MSG_CPLD_RESET_COMPLETE, nullptr);
           }
         }
         else {
@@ -363,8 +376,8 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
 int8_t CPLDDriver::queue_io_job(BusOp* _op) {
   CPLDBusOp* op = (CPLDBusOp*) _op;
 
-  if (NULL != op) {
-    if (NULL == op->callback) {
+  if (op) {
+    if (nullptr == op->callback) {
       op->callback = (BusOpCallback*) this;
     }
 
@@ -377,7 +390,7 @@ int8_t CPLDDriver::queue_io_job(BusOp* _op) {
       return -4;
     }
 
-    if ((NULL == current_queue_item) && (work_queue.size() == 0)){
+    if ((nullptr == current_queue_item) && (work_queue.size() == 0)){
       // If the queue is empty, fire the operation now.
       current_queue_item = op;
       advance_work_queue();
@@ -417,10 +430,10 @@ int8_t CPLDDriver::service_callback_queue() {
   int8_t return_value = 0;
   CPLDBusOp* temp_op = callback_queue.dequeue();
 
-  while ((NULL != temp_op) && (return_value < spi_cb_per_event)) {
-  //if (NULL != temp_op) {
+  while ((nullptr != temp_op) && (return_value < spi_cb_per_event)) {
+  //if (nullptr != temp_op) {
     if (getVerbosity() > 6) temp_op->printDebug(&local_log);
-    if (NULL != temp_op->callback) {
+    if (nullptr != temp_op->callback) {
       int8_t cb_code = temp_op->callback->io_op_callback(temp_op);
       switch (cb_code) {
         case SPI_CALLBACK_RECYCLE:
@@ -462,7 +475,7 @@ int8_t CPLDDriver::advance_work_queue() {
   int8_t return_value = 0;
 
   timeout_punch = false;
-  if (current_queue_item != NULL) {
+  if (current_queue_item) {
     switch (current_queue_item->get_state()) {
        case XferState::TX_WAIT:
        case XferState::RX_WAIT:
@@ -475,7 +488,7 @@ int8_t CPLDDriver::advance_work_queue() {
          // No break on purpose.
        case XferState::COMPLETE:
          callback_queue.insert(current_queue_item);
-         current_queue_item = NULL;
+         current_queue_item = nullptr;
          if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
          break;
 
@@ -493,7 +506,7 @@ int8_t CPLDDriver::advance_work_queue() {
            case -2:    // Began the transfer, and it barffed... was aborted.
              if (getVerbosity() > 3) local_log.concat("CPLDDriver::advance_work_queue():\t Failed to begin transfer after starting.\n");
              callback_queue.insert(current_queue_item);
-             current_queue_item = NULL;
+             current_queue_item = nullptr;
              if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
              break;
          }
@@ -512,10 +525,10 @@ int8_t CPLDDriver::advance_work_queue() {
   }
 
 
-  if (current_queue_item == NULL) {
+  if (current_queue_item == nullptr) {
     current_queue_item = work_queue.dequeue();
     // Begin the bus operation.
-    if (NULL != current_queue_item) {
+    if (current_queue_item) {
       if (current_queue_item->begin()) {
         if (getVerbosity() > 2) local_log.concatf("advance_work_queue() tried to clobber an existing transfer on the pick-up.\n");
         Kernel::staticRaiseEvent(&CPLDBusOp::event_spi_queue_ready);  // Bypass our method. Jump right to the target.
@@ -541,8 +554,8 @@ int8_t CPLDDriver::advance_work_queue() {
 * @param  dev  The device pointer that owns jobs we wish purged.
 */
 void CPLDDriver::purge_queued_work_by_dev(BusOpCallback *dev) {
-  if (NULL == dev) return;
-  CPLDBusOp* current = NULL;
+  if (nullptr == dev) return;
+  CPLDBusOp* current = nullptr;
 
   if (work_queue.size() > 0) {
     int i = 0;
@@ -568,7 +581,7 @@ void CPLDDriver::purge_queued_work_by_dev(BusOpCallback *dev) {
 * Purges only the work_queue. Leaves the currently-executing job.
 */
 void CPLDDriver::purge_queued_work() {
-  CPLDBusOp* current = NULL;
+  CPLDBusOp* current = nullptr;
   while (work_queue.hasNext()) {
     current = work_queue.dequeue();
     current->abort(XferFault::QUEUE_FLUSH);
@@ -587,7 +600,7 @@ void CPLDDriver::purge_queued_work() {
 */
 CPLDBusOp* CPLDDriver::new_op() {
   CPLDBusOp* return_value = preallocated.dequeue();
-  if (NULL == return_value) {
+  if (nullptr == return_value) {
     _prealloc_misses++;
     return_value = new CPLDBusOp();
     //if (getVerbosity() > 5) Kernel::log("new_op(): Fresh allocation!\n");
@@ -650,10 +663,10 @@ void CPLDDriver::reclaim_queue_item(CPLDBusOp* op) {
 * Purges a stalled job from the active slot.
 */
 void CPLDDriver::purge_stalled_job() {
-  if (current_queue_item != NULL) {
+  if (current_queue_item) {
     current_queue_item->abort(XferFault::QUEUE_FLUSH);
     reclaim_queue_item(current_queue_item);
-    current_queue_item = NULL;
+    current_queue_item = nullptr;
   }
 }
 
@@ -743,6 +756,10 @@ uint8_t CPLDDriver::getCPLDVersion() {
   return cpld_version;
 }
 
+
+DigitState CPLDDriver::digitState(uint8_t x) {
+  return DigitState::UNKNOWN;
+}
 
 
 /*******************************************************************************
@@ -840,7 +857,7 @@ int8_t CPLDDriver::callback_proc(ManuvrMsg* event) {
   /* Some class-specific set of conditionals below this line. */
   switch (event->eventCode()) {
     case DIGITABULUM_MSG_SPI_QUEUE_READY:
-      return_value = ((work_queue.size() > 0) || (NULL != current_queue_item)) ? EVENT_CALLBACK_RETURN_RECYCLE : return_value;
+      return_value = ((work_queue.size() > 0) || (nullptr != current_queue_item)) ? EVENT_CALLBACK_RETURN_RECYCLE : return_value;
       break;
     case DIGITABULUM_MSG_SPI_CB_QUEUE_READY:
       return_value = (callback_queue.size() > 0) ? EVENT_CALLBACK_RETURN_RECYCLE : return_value;
@@ -923,7 +940,7 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
 void CPLDDriver::printDebug(StringBuilder *output) {
-  if (NULL == output) return;
+  if (nullptr == output) return;
 
   EventReceiver::printDebug(output);
   //if (getVerbosity() > 6) output->concatf("-- volatile *cpld      0x%08x\n--\n", cpld);
@@ -957,7 +974,7 @@ void CPLDDriver::printDebug(StringBuilder *output) {
 
 
   if (getVerbosity() > 3) {
-    if (current_queue_item != NULL) {
+    if (current_queue_item) {
       output->concat("\tCurrently being serviced:\n");
       current_queue_item->printDebug(output);
     }
@@ -995,6 +1012,24 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       switch (temp_byte) {
         case 1:
           getCPLDVersion();
+          break;
+        case 2:
+          local_log.concatf("---< CPLD Pin assignments >--------------\n");
+          local_log.concatf("-- reset        %d\n", _pins.reset);
+          local_log.concatf("-- tx_rdy       %d\n", _pins.tx_rdy);
+          local_log.concatf("-- irq          %d\n", _pins.irq);
+          local_log.concatf("-- gpio0        %d\n", _pins.gpio0);
+          local_log.concatf("-- gpio1        %d\n", _pins.gpio1);
+          local_log.concatf("-- den          %d\n\n", _pins.den);
+          break;
+        case 3:
+          local_log.concatf("---< Digit states >----------------------\n");
+          local_log.concatf("-- c/mc:  %s\n",   digitStateToString(digitState(0)));
+          local_log.concatf("-- 1:     %s\n",   digitStateToString(digitState(1)));
+          local_log.concatf("-- 2:     %s\n",   digitStateToString(digitState(2)));
+          local_log.concatf("-- 3:     %s\n",   digitStateToString(digitState(3)));
+          local_log.concatf("-- 4:     %s\n",   digitStateToString(digitState(4)));
+          local_log.concatf("-- 5:     %s\n\n", digitStateToString(digitState(5)));
           break;
         default:
           printDebug(&local_log);
@@ -1091,7 +1126,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
 
     case '&':
       local_log.concatf("Advanced CPLD SPI work queue.\n");
-      Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, NULL);   // Raise an event
+      Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, nullptr);   // Raise an event
       break;
 
     case '%':

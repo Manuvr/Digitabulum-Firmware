@@ -35,7 +35,7 @@ This is the firmware emulation test-bench.
 #include <Transports/ManuvrSocket/ManuvrTCP.h>
 #include <Transports/StandardIO/StandardIO.h>
 #include "Digitabulum/CPLDDriver/CPLDDriver.h"
-#include "Digitabulum/ManuLegend/ManuLegend.h"
+#include "Digitabulum/ManuLegend/ManuManager.h"
 
 /* This global makes this source file read better. */
 Kernel* kernel = nullptr;

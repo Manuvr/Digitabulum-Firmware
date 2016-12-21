@@ -21,7 +21,7 @@ limitations under the License.
 
 #include "LSM9DS1_AG.h"
 #include "IIU.h"
-#include "../ManuLegend/ManuLegend.h"
+#include "../ManuLegend/ManuManager.h"
 
 /****************************************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.

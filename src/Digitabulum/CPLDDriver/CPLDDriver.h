@@ -422,12 +422,45 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #define CPLD_CONF_BIT_DEN_AG_0   0x80  // Set The MC IMU DEN_AG pin
 
 
+
+/*
+* Pin defs for this module.
+*/
+class CPLDPins {
+  public:
+    CPLDPins() {};
+    CPLDPins(uint8_t r, uint8_t rdy, uint8_t irq, uint8_t g0, uint8_t g1, uint8_t den) {
+      reset  = r;
+      tx_rdy = rdy;
+      irq    = irq;
+      gpio0  = g0;
+      gpio1  = g1;
+      den    = den;
+    };
+
+    uint8_t reset;  // WO, SW_BTN
+    uint8_t tx_rdy; // AKA: SPI2_MISO
+    uint8_t irq;    // CPLD's IRQ_WAKEUP pin
+    uint8_t gpio0;  // GPIO
+    uint8_t gpio1;  // GPIO
+    uint8_t den;    // The DEN_AG pin on the carpals IMU.
+};
+
+
+enum class DigitState {
+  UNKNOWN  = 0,   // Interpretable as a bitmask...
+  ASLEEP   = 1,   // Bit 0: Digit present.
+  ABSENT   = 2,   // Bit 1: Digit awake.
+  AWAKE    = 3
+};
+
+
 /*
 * The CPLD driver class.
 */
 class CPLDDriver : public EventReceiver, public BusAdapter<CPLDBusOp> {
   public:
-    CPLDDriver();
+    CPLDDriver(const CPLDPins*);
     ~CPLDDriver();       // Should never be called. Here for the sake of completeness.
 
     /* Overrides from the BusAdapter interface */
@@ -452,6 +485,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<CPLDBusOp> {
     uint8_t  getCPLDVersion();         // Read the version code in the CPLD.
     inline bool digitExists(uint8_t x) {   return false;   };   // TODO: When digits arrive.
     inline int8_t digitSleep(uint8_t x) {  return 0;       };   // TODO: When digits arrive.
+    DigitState digitState(uint8_t);
 
     /* The wrist-moun */
     inline void enableCarpalAG(bool x) {     setPin(33, x);                             };
@@ -464,6 +498,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<CPLDBusOp> {
     };
 
     static CPLDBusOp* current_queue_item;
+    static const char* digitStateToString(DigitState);
 
 
 
@@ -471,6 +506,8 @@ class CPLDDriver : public EventReceiver, public BusAdapter<CPLDBusOp> {
     ManuvrMsg event_spi_callback_ready;
     ManuvrMsg event_spi_timeout;
     ManuvrMsg _periodic_debug;
+
+    CPLDPins _pins;
 
     /* List of pending callbacks for bus transactions. */
     PriorityQueue<CPLDBusOp*> callback_queue;

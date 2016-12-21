@@ -20,7 +20,7 @@ limitations under the License.
 
 */
 
-#include "ManuLegend.h"
+#include "ManuManager.h"
 
 
 /*******************************************************************************

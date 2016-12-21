@@ -34,7 +34,7 @@ Intended target is an STM32F7.
 #include "Digitabulum/USB/STM32F7USB.h"
 //#include "Digitabulum/CPLDDriver/CPLDDriver.h"
 //#include "Digitabulum/RovingNetworks/RN4677/RN4677.h"
-//#include "Digitabulum/ManuLegend/ManuLegend.h"
+//#include "Digitabulum/ManuLegend/ManuManager.h"
 //#include "Digitabulum/IREmitter/IREmitter.h"
 //#include "Digitabulum/HapticStrap/HapticStrap.h"
 #include "Digitabulum/SDCard/SDCard.h"
