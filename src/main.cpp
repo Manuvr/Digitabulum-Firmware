@@ -23,21 +23,18 @@ limitations under the License.
          ._|
 
 Intended target is an STM32F7.
-
-Alternate targets:
-  EMU:   Firmware emulation and memory debugging under linux.
 */
 
 #include <Kernel.h>
 #include <Platform/Platform.h>
-#include <Drivers/i2c-adapter/i2c-adapter.h>
+#include <Platform/Peripherals/I2C/I2CAdapter.h>
 #include <Drivers/ADP8866/ADP8866.h>
 #include <XenoSession/Console/ManuvrConsole.h>
 
 #include "Digitabulum/USB/STM32F7USB.h"
 #include "Digitabulum/CPLDDriver/CPLDDriver.h"
 #include "Digitabulum/RovingNetworks/RN4677/RN4677.h"
-#include "Digitabulum/ManuLegend/ManuLegend.h"
+#include "Digitabulum/ManuLegend/ManuManager.h"
 #include "Digitabulum/IREmitter/IREmitter.h"
 #include "Digitabulum/HapticStrap/HapticStrap.h"
 #include "Digitabulum/SDCard/SDCard.h"
@@ -361,6 +358,43 @@ void assert_failed(uint8_t* file, uint32_t line) {
 
 
 
+
+/*
+* Pin defs for this module.
+*
+* These Port B pins are push-pull outputs:
+* #  Default  r1  Purpose
+* -------------------------------------------------
+* 9     0     25  ~CPLD Reset
+* 14    0     30  SPI2_MISO  (SPI2 is slave and Rx-only)
+*
+* These Port C pins are inputs with a wakeup ISR attached to
+*    the rising-edge.
+* #  Default  r1  Purpose
+* ---------------------------------------------------
+* 13    0     45  IRQ_WAKEUP
+*
+* These Port E pins are inputs:
+* #  Default  r1  Purpose
+* ---------------------------------------------------
+* 11    0     75  CPLD_GPIO_0
+* 14    0     78  CPLD_GPIO_1
+*
+* These Port C pins are push-pull outputs:
+* #  Default  r1  Purpose
+* ---------------------------------------------------
+* 2     1     33  DEN_AG_CARPALS
+*/
+const CPLDPins cpld_pins(
+  25, // CPLD's reset pin
+  30, // AKA: SPI2_MISO
+  45, // CPLD's IRQ_WAKEUP pin
+  75, // GPIO
+  78, // GPIO
+  33 // The DEN_AG pin on the carpals IMU.
+);
+
+
 /****************************************************************************************************
 * Main function                                                                                     *
 * TODO: We should sort-out what can be in CCM and what cannot be, and after we've allocated all the *
@@ -382,13 +416,13 @@ int main() {
   platform.platformPreInit();
   kernel = platform.kernel();
 
-  CPLDDriver _cpld;
+  CPLDDriver _cpld(&cpld_pins);
   kernel->subscribe(&_cpld);
 
   LegendManager _legend_manager(&_cpld);
   kernel->subscribe(&_legend_manager);
 
-  I2CAdapter i2c(1);
+  I2CAdapter i2c(1, 23, 22);
   kernel->subscribe(&i2c);
 
   // Pins 58 and 63 are the reset and IRQ pin, respectively.

@@ -76,60 +76,6 @@ void CPLDDriver::_deinit() {
 
 
 /**
-* Setup GPIO pins and their bindings to on-chip peripherals, if required.
-*/
-void CPLDDriver::gpioSetup() {
-  //GPIO_InitTypeDef GPIO_InitStruct;
-
-  /* These Port B pins are push-pull outputs:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 9     0      ~CPLD Reset
-  * 14    0      SPI2_MISO  (SPI2 is slave and Rx-only)
-  */
-  //GPIO_InitStruct.Pin        = GPIO_PIN_9 | GPIO_PIN_14;
-  //GPIO_InitStruct.Mode       = GPIO_MODE_OUTPUT_PP;
-  //GPIO_InitStruct.Pull       = GPIO_NOPULL;
-  //GPIO_InitStruct.Speed      = GPIO_SPEED_LOW;
-  //HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-  //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9|GPIO_PIN_14, GPIO_PIN_RESET);
-  gpioDefine(25, OUTPUT);
-  setPin(25, false);
-  gpioDefine(30, OUTPUT);
-  setPin(30, false);
-
-  /* These Port C pins are inputs with a wakeup ISR attached to
-  *    the rising-edge.
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 13    0      IRQ_WAKEUP
-  */
-  setPinFxn(45, FALLING, cpld_wakeup_isr);
-
-  /* These Port E pins are inputs:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 11    0      CPLD_GPIO_0
-  * 14    0      CPLD_GPIO_1
-  */
-  //setPinFxn(75, CHANGE, cpld_gpio_isr_0);
-  setPinFxn(78, CHANGE, cpld_gpio_isr_1);
-
-  /* These Port C pins are push-pull outputs:
-  *
-  * #  Default   Purpose
-  * -----------------------------------------------
-  * 2     1      DEN_AG_CARPALS
-  */
-  gpioDefine(33, OUTPUT);
-  setPin(33, true);
-}
-
-
-/**
 * Init the timer to provide the CPLD with an external clock. This clock is the
 *   most-flexible, and we use it by default.
 */
@@ -643,7 +589,7 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
 *
 * @param bool enable the interrupts?
 */
-void SPIBusOp::enableSPI_DMA(bool enable) {
+void CPLDBusOp::enableSPI_DMA(bool enable) {
   if (enable) {
     NVIC_EnableIRQ(DMA2_Stream2_IRQn);
     NVIC_EnableIRQ(DMA2_Stream3_IRQn);
@@ -667,7 +613,7 @@ void SPIBusOp::enableSPI_DMA(bool enable) {
 *
 * @return 0 on success, or non-zero on failure.
 */
-int8_t SPIBusOp::begin() {
+int8_t CPLDBusOp::begin() {
   //time_began    = micros();
   if (0 == _param_len) {
     // Obvious invalidity. We must have at least one transfer parameter.
@@ -693,7 +639,7 @@ int8_t SPIBusOp::begin() {
     // We can afford to read two bytes into the same space as our xfer_params...
     HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*)(xfer_params + 2), 2);
   }
-
+  setPin(CPLDBusOp::cs_pin, true);
   return 0;
 }
 
@@ -704,7 +650,7 @@ int8_t SPIBusOp::begin() {
 *
 * @return 0 on success. Non-zero on failure.
 */
-int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
+int8_t CPLDBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
   //debug_log.concatf("advance_op(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
   //Kernel::log(&debug_log);
 

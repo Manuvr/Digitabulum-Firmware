@@ -102,8 +102,8 @@ class LSM9DS1_M : public LSM9DSx_Common {
     uint16_t discards_remain_mag = 0;     // If we know we need to discard samples...
     uint32_t discards_total_mag  = 0;     // Track how many discards we've ASKED for.
 
-    SPIBusOp preformed_busop_irq_mag;
-    SPIBusOp preformed_busop_read_mag;
+    CPLDBusOp preformed_busop_irq_mag;
+    CPLDBusOp preformed_busop_read_mag;
 
     Vector3<float> last_val_mag;
 

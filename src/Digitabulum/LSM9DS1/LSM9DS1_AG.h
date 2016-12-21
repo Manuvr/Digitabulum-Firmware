@@ -154,11 +154,11 @@ class LSM9DS1_AG : public LSM9DSx_Common {
     uint32_t discards_total_acc  = 0;      // Track how many discards we've ASKED for.
     uint32_t discards_total_gyr  = 0;      // Track how many discards we've ASKED for.
 
-    SPIBusOp preformed_busop_irq_0;
-    SPIBusOp preformed_busop_irq_1;
+    CPLDBusOp preformed_busop_irq_0;
+    CPLDBusOp preformed_busop_irq_1;
 
-    SPIBusOp preformed_busop_read_acc;
-    SPIBusOp preformed_busop_read_gyr;
+    CPLDBusOp preformed_busop_read_acc;
+    CPLDBusOp preformed_busop_read_gyr;
 
 
     Vector3<float> last_val_acc;

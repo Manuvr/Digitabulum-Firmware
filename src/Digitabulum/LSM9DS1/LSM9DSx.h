@@ -40,7 +40,7 @@ IMUs need to be aware of their own bus addresses so that bus access can be encap
 #define __LSM9DS1_COMMON_H
 
 #include <DataStructures/InertialMeasurement.h>
-#include "../CPLDDriver/SPIBusOp.h"
+#include "../CPLDDriver/CPLDBusOp.h"
 
 class CPLDDriver;
 
@@ -226,7 +226,7 @@ class LSM9DSx_Common : public BusOpCallback {
     State     imu_state        = State::STAGE_0;
     State     desired_state    = State::STAGE_0;
 
-    SPIBusOp full_register_refresh;
+    CPLDBusOp full_register_refresh;
 
     StringBuilder local_log;
 
@@ -264,7 +264,7 @@ class LSM9DSx_Common : public BusOpCallback {
 
 
     int8_t identity_check();
-    bool fire_preformed_bus_op(SPIBusOp* op);
+    bool fire_preformed_bus_op(CPLDBusOp* op);
     bool integrity_check();
 
     virtual bool is_setup_completed() =0;
@@ -274,7 +274,7 @@ class LSM9DSx_Common : public BusOpCallback {
 
 
   private:
-    bool reset_preformed_queue_item(SPIBusOp* op);
+    bool reset_preformed_queue_item(CPLDBusOp* op);
 
 };
 

@@ -65,7 +65,7 @@ INCLUDES   += -I$(BUILD_ROOT)/lib/Middlewares/Third_Party/FatFs/src/drivers
 #MCUFLAGS  = -DHSE_VALUE=$(EXT_CLK_RATE)
 #MCUFLAGS += -DRUN_WITH_HSE
 MCUFLAGS += -DRUN_WITH_HSI
-MCUFLAGS += -DSTM32F746xx -DARM_MATH_CM7
+MCUFLAGS += -DSTM32F746xx -DSTM32F7xx -DARM_MATH_CM7
 MCUFLAGS += -mlittle-endian -mthumb -mthumb-interwork -mcpu=$(MCU)
 MCUFLAGS += -fsingle-precision-constant -Wdouble-promotion
 MCUFLAGS += -mfpu=fpv5-sp-d16 -mfloat-abi=hard
@@ -95,7 +95,7 @@ SOURCES_C    += src/stm32f7xx_it.c
 SOURCES_C    += src/system_stm32f7xx.c
 
 SOURCES_CPP   = src/Digitabulum/CPLDDriver/CPLDDriver.cpp
-SOURCES_CPP  += src/Digitabulum/CPLDDriver/SPIBusOp.cpp
+SOURCES_CPP  += src/Digitabulum/CPLDDriver/CPLDBusOp.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/IIU.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1_AG.cpp
