@@ -23,9 +23,6 @@ limitations under the License.
          ._|
 
 Intended target is an STM32F7.
-
-Alternate targets:
-  EMU:   Firmware emulation and memory debugging under linux.
 */
 
 #include <Kernel.h>
@@ -361,11 +358,35 @@ void assert_failed(uint8_t* file, uint32_t line) {
 
 
 
+
 /*
 * Pin defs for this module.
+*
+* These Port B pins are push-pull outputs:
+* #  Default  r1  Purpose
+* -------------------------------------------------
+* 9     0     25  ~CPLD Reset
+* 14    0     30  SPI2_MISO  (SPI2 is slave and Rx-only)
+*
+* These Port C pins are inputs with a wakeup ISR attached to
+*    the rising-edge.
+* #  Default  r1  Purpose
+* ---------------------------------------------------
+* 13    0     45  IRQ_WAKEUP
+*
+* These Port E pins are inputs:
+* #  Default  r1  Purpose
+* ---------------------------------------------------
+* 11    0     75  CPLD_GPIO_0
+* 14    0     78  CPLD_GPIO_1
+*
+* These Port C pins are push-pull outputs:
+* #  Default  r1  Purpose
+* ---------------------------------------------------
+* 2     1     33  DEN_AG_CARPALS
 */
 const CPLDPins cpld_pins(
-  25, // WO, SW_BTN
+  25, // CPLD's reset pin
   30, // AKA: SPI2_MISO
   45, // CPLD's IRQ_WAKEUP pin
   75, // GPIO

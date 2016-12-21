@@ -32,13 +32,6 @@ void CPLDDriver::_deinit() {
 
 
 /**
-* Setup GPIO pins and their bindings to on-chip peripherals, if required.
-*/
-void CPLDDriver::gpioSetup() {
-}
-
-
-/**
 * Init the timer to provide the CPLD with an external clock. This clock is the
 *   most-flexible, and we use it by default.
 */

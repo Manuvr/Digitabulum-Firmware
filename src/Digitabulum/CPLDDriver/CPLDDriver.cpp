@@ -245,13 +245,42 @@ CPLDDriver::~CPLDDriver() {
 
 
 /**
+* Setup GPIO pins and their bindings to on-chip peripherals, if required.
+*/
+void CPLDDriver::gpioSetup() {
+  if (255 != _pins.reset) {
+    gpioDefine(_pins.reset, OUTPUT);
+    setPin(_pins.reset, false);  // Hold the CPLD in reset.
+  }
+  if (255 != _pins.tx_rdy) {
+    gpioDefine(_pins.tx_rdy, OUTPUT);
+    setPin(_pins.tx_rdy, false);
+    CPLDBusOp::cs_pin = _pins.tx_rdy;
+  }
+  if (255 != _pins.irq) {
+    setPinFxn(_pins.irq, FALLING, cpld_wakeup_isr);
+  }
+  if (255 != _pins.gpio0) {
+    //setPinFxn(_pins.gpio0, CHANGE, cpld_gpio_isr_0);
+  }
+  if (255 != _pins.gpio1) {
+    setPinFxn(_pins.gpio1, CHANGE, cpld_gpio_isr_1);
+  }
+  if (255 != _pins.den) {
+    gpioDefine(_pins.den, OUTPUT);
+    setPin(_pins.den, true);
+  }
+}
+
+
+/**
 * Resets the CPLD, and any registers within it.
 * Any host-controlled pins affecting CPLD config are not altered by this call,
 *   so it might be worth disabling some IRQs prior to doing something that might
 *   make them seizure.
 */
 void CPLDDriver::reset() {
-  setPin(25, false);  // Drive the reset pin low...
+  setPin(_pins.reset, false);  // Drive the reset pin low...
   externalOscillator(true);    // Turn on the default oscillator...
   cpld_conf_value    = 0x00;   // Set our register representations to their
   cpld_version       = 0x00;   //   default values.
@@ -496,7 +525,6 @@ int8_t CPLDDriver::advance_work_queue() {
        case XferState::INITIATE:
          switch (current_queue_item->begin()) {
            case 0:     // Nominal outcome. Transfer started with no problens...
-             setPin(30, true);
              break;
            case -1:    // Bus appears to be in-use. State did not change.
              // Re-throw queue_ready event and try again later.
@@ -904,7 +932,7 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
       return_value = 1;
       break;
     case DIGITABULUM_MSG_CPLD_RESET_CALLBACK:
-      setPin(25, true);
+      setPin(_pins.reset, true);
       //if (getVerbosity() > 4) local_log.concat("CPLD reset.\n");
       return_value = 1;
       //getCPLDVersion();

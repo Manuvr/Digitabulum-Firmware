@@ -425,6 +425,7 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 
 /*
 * Pin defs for this module.
+* Set pin def to 255 to mark it as unused.
 */
 class CPLDPins {
   public:
@@ -438,7 +439,7 @@ class CPLDPins {
       den    = den;
     };
 
-    uint8_t reset;  // WO, SW_BTN
+    uint8_t reset;  // CPLD's reset pin
     uint8_t tx_rdy; // AKA: SPI2_MISO
     uint8_t irq;    // CPLD's IRQ_WAKEUP pin
     uint8_t gpio0;  // GPIO

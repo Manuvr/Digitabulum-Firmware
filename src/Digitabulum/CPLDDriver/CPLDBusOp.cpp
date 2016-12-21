@@ -45,7 +45,7 @@ uint32_t CPLDBusOp::total_transfers  = 0;  // How many total SPI transfers have 
 uint32_t CPLDBusOp::failed_transfers = 0;  // How many failed SPI transfers have we seen?
 uint16_t CPLDBusOp::spi_wait_timeout = 20; // In microseconds. Per-byte.
 ManuvrMsg CPLDBusOp::event_spi_queue_ready;
-
+uint8_t  CPLDBusOp::cs_pin = 255;
 
 /*******************************************************************************
 *   ___ _              ___      _ _              _      _
@@ -242,7 +242,7 @@ void CPLDBusOp::wipe() {
 int8_t CPLDBusOp::markComplete() {
   if (has_bus_control() || (CPLDDriver::current_queue_item == this) ) {
     // If this job has bus control, we need to release the bus and tidy up IRQs.
-    setPin(30, false);
+    setPin(CPLDBusOp::cs_pin, false);
     if (buf_len > 1) {
       // We have DMA cruft to clean.
       enableSPI_DMA(false);

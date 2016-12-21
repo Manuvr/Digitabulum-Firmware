@@ -160,21 +160,21 @@ class LegendManager : public EventReceiver, public BusOpCallback {
 
 
   private:
-    CPLDDriver* _bus = NULL;   // This is the gateway to the hardware.
+    CPLDDriver* _bus = nullptr;   // This is the gateway to the hardware.
 
     // TODO: These shouldn't be static.
     static IIU iius[LEGEND_DATASET_IIU_COUNT];  // This is the chirality-invarient list of IIUs.
     static InertialMeasurement __prealloc[PREALLOCATED_IIU_MEASUREMENTS];
 
-    ManuLegend* operating_legend = NULL;
+    ManuLegend* operating_legend = nullptr;
     /* This is the dataset that we export. */
     uint8_t __dataset[LEGEND_MGR_MAX_DATASET_SIZE];
 
 
     // Used to direct data that we don't want in the legend until data-selection-by-NULL is implemented
     //   in the IIU class.
-    uint32_t*       _ptr_sequence = NULL;
-    float*          _ptr_delta_t  = NULL;
+    uint32_t*       _ptr_sequence = nullptr;
+    float*          _ptr_delta_t  = nullptr;
 
     ManuvrMsg event_legend_frame_ready;
     ManuvrMsg event_iiu_read;
@@ -212,7 +212,7 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     * @return A pointer to the IIU responsible for the given address.
     */
     inline IIU* fetch_iiu_by_bus_addr(uint8_t addr) {
-      return (CPLD_REG_IMU_D5_D_M < addr) ? NULL : fetchIIU(addr % CPLD_REG_IMU_D5_D_I);
+      return (CPLD_REG_IMU_D5_D_M < addr) ? nullptr : fetchIIU(addr % CPLD_REG_IMU_D5_D_I);
     };
 
     /**
