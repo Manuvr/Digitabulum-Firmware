@@ -27,8 +27,8 @@ Intended target is an STM32F7.
 
 #include <Kernel.h>
 #include <Platform/Platform.h>
-//#include <Platform/Peripherals/I2C/I2CAdapter.h>
-//#include <Drivers/ADP8866/ADP8866.h>
+#include <Platform/Peripherals/I2C/I2CAdapter.h>
+#include <Drivers/ADP8866/ADP8866.h>
 #include <XenoSession/Console/ManuvrConsole.h>
 
 #include "Digitabulum/USB/STM32F7USB.h"
@@ -45,7 +45,6 @@ Intended target is an STM32F7.
 #endif
 
 #include "stm32f7xx_hal.h"
-#include "tm_stm32_i2c.h"
 #include "cmsis_os.h"
 #include "fatfs.h"
 
@@ -100,13 +99,6 @@ void unused_gpio() {
   * -----------------------------------------------
   * 6     1      Expansion reset pin
   */
-  GPIO_InitStruct.Pin   = GPIO_PIN_6;
-  GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull  = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_SET);
-
 
   /* Everything below represents a pin that is unused. */
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
@@ -219,6 +211,7 @@ void SystemClock_Config() {
   #endif
   //RCC_OscInitStruct.PLL.PLLN = 432;   // 216MHz
   RCC_OscInitStruct.PLL.PLLN = 400;   // 200MHz
+  //RCC_OscInitStruct.PLL.PLLN = 384;   // 192MHz
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 8;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
@@ -312,14 +305,14 @@ int main() {
   //LegendManager _legend_manager(&_cpld);
   //kernel->subscribe(&_legend_manager);
 
-  //I2CAdapter i2c(1);
-  //kernel->subscribe(&i2c);
+  I2CAdapter i2c(1, 25, 24);
+  kernel->subscribe(&i2c);
 
-  // Pins 58 and 63 are the reset and IRQ pin, respectively.
-  // This is translated to pins 10 and 13 on PortD.
-  //ADP8866 leds(58, 63, 0x27);
-  //i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
-  //kernel->subscribe((EventReceiver*) &leds);
+  // Pins 30 and 31 are the reset and IRQ pin, respectively.
+  // This is translated to pins D11 and D12 on the Disco's arduino harness.
+  ADP8866 leds(30, 31, 0x27);
+  i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
+  kernel->subscribe((EventReceiver*) &leds);
 
   //INA219 ina219(0x4A);
   //i2c.addSlaveDevice(&ina219);
@@ -344,8 +337,6 @@ int main() {
   ManuvrConsole _console((BufferPipe*) &_console_patch);
   kernel->subscribe((EventReceiver*) &_console);
   kernel->subscribe((EventReceiver*) &_console_patch);
-
-  TM_I2C_Init(I2C1, TM_I2C_PinsPack_2, 100000);
 
   platform.forsakeMain();
   return 0;

@@ -422,7 +422,7 @@ int main() {
   LegendManager _legend_manager(&_cpld);
   kernel->subscribe(&_legend_manager);
 
-  I2CAdapter i2c(1);
+  I2CAdapter i2c(1, 23, 22);
   kernel->subscribe(&i2c);
 
   // Pins 58 and 63 are the reset and IRQ pin, respectively.
