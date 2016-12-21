@@ -757,7 +757,7 @@ uint8_t CPLDDriver::getCPLDVersion() {
 }
 
 
-DigitState CPLDDriver::digitState(uint8_t x) {
+DigitState CPLDDriver::digitState(DigitPort x) {
   return DigitState::UNKNOWN;
 }
 
@@ -1024,12 +1024,12 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
           break;
         case 3:
           local_log.concatf("---< Digit states >----------------------\n");
-          local_log.concatf("-- c/mc:  %s\n",   digitStateToString(digitState(0)));
-          local_log.concatf("-- 1:     %s\n",   digitStateToString(digitState(1)));
-          local_log.concatf("-- 2:     %s\n",   digitStateToString(digitState(2)));
-          local_log.concatf("-- 3:     %s\n",   digitStateToString(digitState(3)));
-          local_log.concatf("-- 4:     %s\n",   digitStateToString(digitState(4)));
-          local_log.concatf("-- 5:     %s\n\n", digitStateToString(digitState(5)));
+          local_log.concatf("-- mc:  %s\n",   digitStateToString(digitState(DigitPort::MC)));
+          local_log.concatf("-- 1:   %s\n",   digitStateToString(digitState(DigitPort::PORT_1)));
+          local_log.concatf("-- 2:   %s\n",   digitStateToString(digitState(DigitPort::PORT_2)));
+          local_log.concatf("-- 3:   %s\n",   digitStateToString(digitState(DigitPort::PORT_3)));
+          local_log.concatf("-- 4:   %s\n",   digitStateToString(digitState(DigitPort::PORT_4)));
+          local_log.concatf("-- 5:   %s\n\n", digitStateToString(digitState(DigitPort::PORT_5)));
           break;
         default:
           printDebug(&local_log);

@@ -50,18 +50,19 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #define  LEGEND_MGR_IIU_STATE_NOT_UPDATED    0
 #define  LEGEND_MGR_IIU_STATE_UPDATED        1
 
-#define  LEGEND_MGR_CHIRALITY_UNKNOWN        0
-#define  LEGEND_MGR_CHIRALITY_LEFT           1
-#define  LEGEND_MGR_CHIRALITY_RIGHT          2
-
 /*
 * These state flags are hosted by the EventReceiver. This may change in the future.
 * Might be too much convention surrounding their assignment across inherritence.
 */
-#define  LEGEND_MGR_FLAGS_LEGEND_STABLE         0x01   // If set, the map is not changing.
-#define  LEGEND_MGR_FLAGS_LEGEND_SENT           0x02   // If set, the map is clear-to-send.
-#define  LEGEND_MGR_FLAGS_IO_ON_HIGH_FRAME_AG   0x04   //
-#define  LEGEND_MGR_FLAGS_IO_ON_HIGH_FRAME_M    0x08   //
+#define LEGEND_MGR_FLAGS_CHIRALITY_KNOWN       0x01   // Has the chirality been determined?
+#define LEGEND_MGR_FLAGS_CHIRALITY_LEFT        0x02   // If so, is it a left hand?
+#define LEGEND_MGR_FLAGS_LEGEND_STABLE         0x04   // If set, the map is not changing.
+#define LEGEND_MGR_FLAGS_LEGEND_SENT           0x08   // If set, the map is clear-to-send.
+#define LEGEND_MGR_FLAGS_IO_ON_HIGH_FRAME_AG   0x10   //
+#define LEGEND_MGR_FLAGS_IO_ON_HIGH_FRAME_M    0x20   //
+
+#define LEGEND_MGR_FLAGS_CHIRALITY_MASK        0x03   // Mask that maps to the enum class.
+
 
 /* Manuvr message defs. */
 #define DIGITABULUM_MSG_IMU_LEGEND           0x0600 // No args? Asking for this legend. One arg: Legend provided.
@@ -73,7 +74,7 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #define DIGITABULUM_MSG_IMU_DOUBLE_TAP       0x060B // The given IMU experienced a double tap.
 
 
-#define  PREALLOCATED_IIU_MEASUREMENTS       180
+#define PREALLOCATED_IIU_MEASUREMENTS           180
 
 
 #define AG_BASE_0_SIZE      10
@@ -85,6 +86,25 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #define M_BASE_1_SIZE        6
 #define M_BASE_2_SIZE        4
 
+enum class Chirality {
+  UNKNOWN = 0,   // Interpretable as a bitmask...
+  RIGHT   = 1,   // Bit 0: Chirality known
+  LEFT    = 3    // Bit 1: Left-handed
+};
+
+/*
+* Chirality invarient identifiers for fingers. We follow anatomical convention
+* And consider the thumb to be digit 1.
+*/
+enum class Anatomical {
+  METACARPALS = 0,
+  DIGIT_1     = 1,
+  DIGIT_2     = 2,
+  DIGIT_3     = 3,
+  DIGIT_4     = 4,
+  DIGIT_5     = 5,
+  UNKNOWN     = 6
+};
 
 
 /*
@@ -119,11 +139,16 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     inline ManuLegend* getActiveLegend() {    return operating_legend;    }
     int8_t setLegend(ManuLegend*);
 
+    /* Expose our idea about handedness to other modules. */
+    inline Chirality getChirality() {  return (Chirality) _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_MASK);  };
+    inline bool chiralityKnown() {     return _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_KNOWN);  };
+
 
     static LegendManager* getInstance();
 
     static InertialMeasurement* fetchMeasurement(uint8_t);
     static void reclaimMeasurement(InertialMeasurement*);
+    static const char* chiralityString(Chirality);
 
     static Vector3<int16_t> reflection_mag;
     static Vector3<int16_t> reflection_acc;
@@ -170,6 +195,9 @@ class LegendManager : public EventReceiver, public BusOpCallback {
 
     int8_t reconfigure_data_map();    // Calling causes a pointer dance that reconfigures the data we send to the host.
 
+    int set_chirality(Chirality);
+    DigitPort  get_port_given_digit(Anatomical);
+    Anatomical get_digit_given_port(DigitPort);
 
     /* Inlines for deriving address and IRQ bit offsets from index. */
     // Address of the inertial half of the LSM9DS1.

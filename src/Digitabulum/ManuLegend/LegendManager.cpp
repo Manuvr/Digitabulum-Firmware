@@ -151,6 +151,17 @@ void LegendManager::reclaimMeasurement(InertialMeasurement* obj) {
 }
 
 
+const char* LegendManager::chiralityString(Chirality x) {
+  switch (x) {
+    case Chirality::RIGHT:  return "RIGHT";
+    case Chirality::LEFT:   return "LEFT";
+    case Chirality::UNKNOWN:
+    default:
+      break;
+  }
+  return "UNKNOWN";
+}
+
 
 /*******************************************************************************
 *   ___ _              ___      _ _              _      _
@@ -431,29 +442,31 @@ void LegendManager::printDebug(StringBuilder *output) {
   if (getVerbosity() > 0) {
     // Print just the aggregate sample count and return.
   }
+  output->concatf("-- Chirality           %s\n", chiralityString(getChirality()));
+  output->concatf("-- __IIU location      %p\n", (uintptr_t) iius);
 
   if (getVerbosity() > 3) {
-    output->concatf("--- __dataset location  %p\n", (uintptr_t) __dataset);
-    output->concatf("--- __prealloc location %p\n", (uintptr_t) __prealloc);
-    output->concatf("--- __IIU location      %p\n", (uintptr_t) iius);
-    output->concatf("--- INSTANCE location   %p\n---\n", (uintptr_t) INSTANCE);
+    output->concatf("-- __dataset location  %p\n", (uintptr_t) __dataset);
+    output->concatf("-- __prealloc location %p\n", (uintptr_t) __prealloc);
+    output->concatf("-- __IIU location      %p\n", (uintptr_t) iius);
+    output->concatf("-- INSTANCE location   %p\n--\n", (uintptr_t) INSTANCE);
   }
 
   float grav_consensus = 0.0;
-  output->concat("--- Intertial integration units:\n");
+  output->concat("-- Intertial integration units:\n");
   for (uint8_t i = 0; i < 17; i++) {
     grav_consensus += iius[i].grav_scalar;
   }
   grav_consensus /= 17;
-  output->concatf("--- Gravity consensus:  %.4fg\n",  (double) grav_consensus);
+  output->concatf("-- Gravity consensus:  %.4fg\n",  (double) grav_consensus);
 
-  output->concatf("--- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
-  output->concatf("--- Max quat proc       %u\n",    IIU::max_quats_per_event);
-  output->concatf("--- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
-  output->concatf("--- Delta-t             %2.5f\n---\n", (double) *(_ptr_delta_t));
+  output->concatf("-- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
+  output->concatf("-- Max quat proc       %u\n",    IIU::max_quats_per_event);
+  output->concatf("-- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
+  output->concatf("-- Delta-t             %2.5f\n--\n", (double) *(_ptr_delta_t));
 
   if (getVerbosity() > 3) {
-    output->concatf("--- MAX_DATASET_SIZE    %u\n",    (unsigned long) LEGEND_MGR_MAX_DATASET_SIZE);
+    output->concatf("-- MAX_DATASET_SIZE    %u\n",    (unsigned long) LEGEND_MGR_MAX_DATASET_SIZE);
     #if defined(__MANUVR_DEBUG)
       if (getVerbosity() > 5) {
         event_legend_frame_ready.printDebug(output);
@@ -462,10 +475,10 @@ void LegendManager::printDebug(StringBuilder *output) {
     #endif
   }
 
-  output->concatf("--- prealloc starves    %u\n--- minimum_prealloc    %u\n", (unsigned long) prealloc_starves, (unsigned long) minimum_prealloc_level);
-  output->concatf("--- Measurement queue info\n---\t Instantiated %u \t Freed: %u \t Prealloc queue depth: %d\n---\n", measurement_heap_instantiated, measurement_heap_freed, preallocd_measurements.size());
+  output->concatf("-- prealloc starves    %u\n-- minimum_prealloc    %u\n", (unsigned long) prealloc_starves, (unsigned long) minimum_prealloc_level);
+  output->concatf("-- Measurement queue info\n--\t Instantiated %u \t Freed: %u \t Prealloc queue depth: %d\n--\n", measurement_heap_instantiated, measurement_heap_freed, preallocd_measurements.size());
 
-  output->concat("--- Intertial integration units:\n");
+  output->concat("-- Intertial integration units:\n");
   for (uint8_t i = 0; i < 17; i++) {
     output->concatf("\tIIU %d\t ", i);
     iius[i].printBrief(output);
@@ -525,6 +538,74 @@ int8_t LegendManager::queue_io_job(BusOp* _op) {
   return _bus->queue_io_job(op);
 }
 
+
+/*******************************************************************************
+* Functions related to abstracting chirality away from the hardware.
+*******************************************************************************/
+
+/*
+* Called internally as a result of either (a conclusive chirality test) or
+*   (loaded configuration).
+*/
+int LegendManager::set_chirality(Chirality c) {
+  uint8_t x = LEGEND_MGR_FLAGS_CHIRALITY_KNOWN;
+  switch (c) {   // I won't even apologize for this. Suffer.
+    default:
+    case Chirality::UNKNOWN: return -1;
+    case Chirality::LEFT:    x |= LEGEND_MGR_FLAGS_CHIRALITY_LEFT;
+    case Chirality::RIGHT:   break;
+  }
+  _er_set_flag(x);
+  return 0;
+}
+
+
+DigitPort LegendManager::get_port_given_digit(Anatomical digit) {
+  // TODO: This is sloppy. Might-should rework it to use no conditionals.
+  switch (digit) {
+    case Anatomical::DIGIT_1:
+    case Anatomical::DIGIT_2:
+    case Anatomical::DIGIT_4:
+    case Anatomical::DIGIT_5:
+      if (_er_flag(LEGEND_MGR_FLAGS_CHIRALITY_KNOWN)) {
+        // If left-handed, we mirror around the 3rd digit using XOR..
+        return (DigitPort)(
+          _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_LEFT) ?
+          ((uint8_t)digit)^0x04 : (uint8_t) digit
+        );
+      }
+    case Anatomical::UNKNOWN:
+      break;
+    // The two invarient cases:
+    case Anatomical::METACARPALS:  return DigitPort::MC;
+    case Anatomical::DIGIT_3:      return DigitPort::PORT_3;
+  }
+  return DigitPort::UNKNOWN;
+}
+
+
+Anatomical LegendManager::get_digit_given_port(DigitPort port) {
+  // TODO: This is sloppy. Might-should rework it to use no conditionals.
+  switch (port) {
+    case DigitPort::PORT_1:
+    case DigitPort::PORT_2:
+    case DigitPort::PORT_4:
+    case DigitPort::PORT_5:
+      if (_er_flag(LEGEND_MGR_FLAGS_CHIRALITY_KNOWN)) {
+        // If left-handed, we mirror around the 3rd digit using XOR..
+        return (Anatomical)(
+          _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_LEFT) ?
+          ((uint8_t)port)^0x04 : (uint8_t) port
+        );
+      }
+    case DigitPort::UNKNOWN:
+      break;
+    // The two invarient cases:
+    case DigitPort::MC:      return Anatomical::METACARPALS;
+    case DigitPort::PORT_3:  return Anatomical::DIGIT_3;
+  }
+  return Anatomical::UNKNOWN;
+}
 
 
 

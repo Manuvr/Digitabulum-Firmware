@@ -454,6 +454,17 @@ enum class DigitState {
   AWAKE    = 3
 };
 
+/* Chirality invarient identifiers for digit ports. */
+enum class DigitPort {
+  MC       = 0,
+  PORT_1   = 1,
+  PORT_2   = 2,
+  PORT_3   = 3,
+  PORT_4   = 4,
+  PORT_5   = 5,
+  UNKNOWN  = 6
+};
+
 
 /*
 * The CPLD driver class.
@@ -485,7 +496,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<CPLDBusOp> {
     uint8_t  getCPLDVersion();         // Read the version code in the CPLD.
     inline bool digitExists(uint8_t x) {   return false;   };   // TODO: When digits arrive.
     inline int8_t digitSleep(uint8_t x) {  return 0;       };   // TODO: When digits arrive.
-    DigitState digitState(uint8_t);
+    DigitState digitState(DigitPort);
 
     /* The wrist-moun */
     inline void enableCarpalAG(bool x) {     setPin(33, x);                             };
