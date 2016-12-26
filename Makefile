@@ -45,7 +45,7 @@ LD_FILE      = digitabulum.ld
 
 INCLUDES    = -iquote. -iquotesrc/
 INCLUDES   += -Icompiler/arm-none-eabi/include
-INCLUDES   += -I$(BUILD_ROOT)/lib/ManuvrOS
+INCLUDES   += -I$(BUILD_ROOT)/lib/ManuvrOS/ManuvrOS
 INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/STM32F7xx_HAL_Driver/Inc
 INCLUDES   += -I$(BUILD_ROOT)/lib/Inc
 INCLUDES   += -I$(BUILD_ROOT)/lib

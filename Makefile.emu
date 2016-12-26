@@ -37,7 +37,7 @@ CFLAGS       = -Wall #-m32
 LIBS         = -lc -lm -lpthread -lmanuvr
 
 INCLUDES    = -iquote. -iquotesrc/
-INCLUDES   += -I$(BUILD_ROOT)/lib/ManuvrOS
+INCLUDES   += -I$(BUILD_ROOT)/lib/ManuvrOS/ManuvrOS
 INCLUDES   += -I$(BUILD_ROOT)/lib
 INCLUDES   += -I$(BUILD_ROOT)/confs
 INCLUDES   += -I$(BUILD_ROOT)/src/Digitabulum
