@@ -46,6 +46,10 @@ BTQueuedOperation::BTQueuedOperation(BusOpcode nu_op) : BTQueuedOperation() {
   opcode    = nu_op;
 }
 
+BTQueuedOperation::BTQueuedOperation(BusOpcode nu_op, BusOpCallback* requester) : BTQueuedOperation(nu_op) {
+  callback     = requester;
+};
+
 
 BTQueuedOperation::BTQueuedOperation(BusOpcode nu_op, StringBuilder* nu_data) : BTQueuedOperation(nu_op) {
   data.concatHandoff(nu_data);

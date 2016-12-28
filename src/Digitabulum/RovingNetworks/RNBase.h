@@ -141,7 +141,7 @@ class RNPins {
 *
 *
 */
-class RNBase : public ManuvrXport {
+class RNBase : public ManuvrXport, public BusAdapter<BTQueuedOperation> {
   public:
     RNBase(RNPins* pins);
     virtual ~RNBase();
@@ -165,12 +165,19 @@ class RNBase : public ManuvrXport {
       void procDirectDebugInstruction(StringBuilder*);
     #endif  //MANUVR_CONSOLE_SUPPORT
 
+    /* Overrides from the BusAdapter interface */
+    virtual int8_t io_op_callback(BusOp*);
+    virtual int8_t queue_io_job(BusOp*);
+    virtual int8_t advance_work_queue();
+    BTQueuedOperation* new_op();
+    BTQueuedOperation* new_op(BusOpcode, BusOpCallback*);
+
     /* These are used to send data to a BT connected device. */
     inline bool roomInQueue() {    return !(work_queue.size() < RNBASE_MAX_BT_Q_DEPTH);  }
 
     /* Macros for RN commands. */
     void setDevName(char*);
-    void sendRebootCommand(void);
+    void sendRebootCommand();
     void sendGeneralCommand(const char*);
     void sendGeneralCommand(StringBuilder*);
 
@@ -198,7 +205,7 @@ class RNBase : public ManuvrXport {
     virtual int8_t attached();      // This is called from the base notify().
 
     // Mandatory overrides.
-    virtual void factoryReset(void)    =0;   // Perform the sequence that will factory-reset the RN.
+    virtual void factoryReset()        =0;   // Perform the sequence that will factory-reset the RN.
     virtual void gpioSetup()           =0;
     virtual void force_9600_mode(bool) =0;   // Call with 'true' to force the module into 9600bps.
     virtual void set_bitrate(int)      =0;   //
@@ -215,9 +222,6 @@ class RNBase : public ManuvrXport {
   private:
     uint8_t _reset_pin = 0;
 
-    /* Members concerned with the work queue and keeping messages atomic. */
-    PriorityQueue<BTQueuedOperation*> work_queue;
-
     uint32_t insert_into_work_queue(BusOpcode opcode, StringBuilder* data);
     int8_t burn_or_recycle_current();   // Called during connection turbulence to handle the queued item.
     void process_connection_change(bool conn);
@@ -227,7 +231,7 @@ class RNBase : public ManuvrXport {
 
     /* Macros for RN radio states. */
     void master_mode(bool);       // Call with 'true' to switch the radio into master mode.
-    void setSPPMode(void);
+    void setSPPMode();
     void setAutoconnect(bool);
 
     int8_t sendBreak();           // Send a break stream to the counterparty if things get hosed.
@@ -235,20 +239,15 @@ class RNBase : public ManuvrXport {
     int8_t enterCommandMode();    // Convenience fxn for entering command mode.
     int8_t exitCommandMode();     // Convenience fxn for exiting command mode.
 
+    BTQueuedOperation* fetchPreallocation();
+    void reclaimPreallocation(BTQueuedOperation*);
 
     volatile static RNBase* INSTANCE;
 
     // Prealloc starvation counters...
-    static uint32_t _prealloc_misses;
     static uint32_t _queue_floods;
-    static uint32_t _heap_instantiations;
-    static uint32_t _heap_frees;
 
-    static PriorityQueue<BTQueuedOperation*> preallocated;     // Messages that we've allocated ahead of time.
     static BTQueuedOperation __prealloc_pool[PREALLOCATED_BT_Q_OPS];
-
-    static BTQueuedOperation* fetchPreallocation();
-    static void reclaimPreallocation(BTQueuedOperation*);
 };
 
 #endif  //__RNBASE_H__

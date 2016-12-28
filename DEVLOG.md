@@ -189,3 +189,5 @@ _---J. Ian Lindsay_
 
     284916    2728   42576  330220   New baseline ahead of Manuvr BusOp consolidation.
     284972    2728   43196  330896   Following BusOp consolidation. No RNBase yet.
+    285004    2728   43196  330928   Additions to template. About to convert RNBase.
+    285604    2728   43160  331492   RNBase now extends BusAdapter.

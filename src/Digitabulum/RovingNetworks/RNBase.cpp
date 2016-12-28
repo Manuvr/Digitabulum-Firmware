@@ -25,13 +25,6 @@ limitations under the License.
 #include <Drivers/BusQueue/BusQueue.h>
 
 
-// Messages that are specific to Digitabulum.
-const MessageTypeDef rn_module_message_defs[] = {
-  {  MANUVR_MSG_BT_EXIT_RESET    , 0x0000,    "RN_RESET"    , ManuvrMsg::MSG_ARGS_NONE }, //
-  {  MANUVR_MSG_BT_EXPIRE_LOCKOUT, 0x0000,    "RN_LOCK_LIFT", ManuvrMsg::MSG_ARGS_NONE }, //
-};
-
-
 /*******************************************************************************
 * .-. .----..----.    .-.     .--.  .-. .-..----.
 * | |{ {__  | {}  }   | |    / {} \ |  `| || {}  \
@@ -60,16 +53,17 @@ const MessageTypeDef rn_module_message_defs[] = {
 * Static members and initializers should be located here.
 *******************************************************************************/
 volatile RNBase* RNBase::INSTANCE = nullptr;
-BTQueuedOperation* RNBase::current_work_item = nullptr;
-
-BTQueuedOperation RNBase::__prealloc_pool[PREALLOCATED_BT_Q_OPS];
-
 uint32_t RNBase::_queue_floods          = 0;
-uint32_t RNBase::_prealloc_misses       = 0;
-uint32_t RNBase::_heap_instantiations   = 0;
-uint32_t RNBase::_heap_frees            = 0;
 
-PriorityQueue<BTQueuedOperation*> RNBase::preallocated;     // Messages that we've allocated ahead of time.
+BTQueuedOperation  RNBase::__prealloc_pool[PREALLOCATED_BT_Q_OPS];
+BTQueuedOperation* RNBase::current_work_item = nullptr;
+//template<> PriorityQueue<BTQueuedOperation*> BusAdapter<BTQueuedOperation>::preallocated;
+
+// Messages that are specific to Digitabulum.
+const MessageTypeDef rn_module_message_defs[] = {
+  {  MANUVR_MSG_BT_EXIT_RESET    , 0x0000,    "RN_RESET"    , ManuvrMsg::MSG_ARGS_NONE }, //
+  {  MANUVR_MSG_BT_EXPIRE_LOCKOUT, 0x0000,    "RN_LOCK_LIFT", ManuvrMsg::MSG_ARGS_NONE }, //
+};
 
 
 BTQueuedOperation* RNBase::fetchPreallocation() {
@@ -151,7 +145,7 @@ void RNBase::start_lockout(uint32_t milliseconds) {
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 
-RNBase::RNBase(RNPins* pins) : ManuvrXport() {
+RNBase::RNBase(RNPins* pins) : ManuvrXport(), BusAdapter(RNBASE_MAX_BT_Q_DEPTH) {
   setReceiverName("RNBase");
   set_xport_state(MANUVR_XPORT_FLAG_STREAM_ORIENTED);
   //BTQueuedOperation::buildDMAMembers();
@@ -233,6 +227,121 @@ int8_t RNBase::toCounterparty(StringBuilder* buf, int8_t mm) {
   return MEM_MGMT_RESPONSIBLE_ERROR;
 }
 
+
+/*******************************************************************************
+* BusAdapter
+*******************************************************************************/
+/**
+* Return a vacant SPIBusOp to the caller, allocating if necessary.
+*
+* @return an SPIBusOp to be used. Only NULL if out-of-mem.
+*/
+BTQueuedOperation* RNBase::new_op() {
+  BTQueuedOperation* return_value = preallocated.dequeue();
+  if (nullptr == return_value) {
+    _prealloc_misses++;
+    return_value = new BTQueuedOperation();
+    //if (getVerbosity() > 5) Kernel::log("new_op(): Fresh allocation!\n");
+  }
+  return return_value;
+}
+
+
+/**
+* Return a vacant SPIBusOp to the caller, allocating if necessary.
+*
+* @param  _op   The desired bus operation.
+* @param  _req  The device pointer that is requesting the job.
+* @return an RNBase to be used. Only NULL if out-of-mem.
+*/
+BTQueuedOperation* RNBase::new_op(BusOpcode _op, BusOpCallback* _req) {
+  BTQueuedOperation* return_value = new_op();
+  return_value->set_opcode(_op);
+  return_value->callback = _req;
+  return return_value;
+}
+
+
+/**
+* When a bus operation completes, it is passed back to its issuing class.
+*
+* @param  _op  The bus operation that was completed.
+* @return SPI_CALLBACK_NOMINAL on success, or appropriate error code.
+*/
+int8_t RNBase::io_op_callback(BusOp* _op) {
+  BTQueuedOperation* op = (BTQueuedOperation*) _op;
+  // There is zero chance this object will be a null pointer unless it was done on purpose.
+  if (getVerbosity() > 2) {
+    local_log.concatf("Probably shouldn't be in the default callback case...\n");
+    op->printDebug(&local_log);
+  }
+
+  flushLocalLog();
+  return 0;
+}
+
+
+/*
+* This is the function that should be called to queue-up a bus operation.
+* It may or may not be started immediately.
+*/
+int8_t RNBase::queue_io_job(BusOp* op) {
+  BTQueuedOperation* nu = (BTQueuedOperation*) op;
+	if (current_work_item) {
+		// Something is already going on with the bus. Queue...
+		work_queue.insert(nu);
+	}
+	else {
+		// Bus is idle. Put this work item in the active slot and start the bus operations...
+		current_work_item = nu;
+	  nu->begin();
+	}
+	return 0;
+}
+
+
+/*
+* This function needs to be called to move the queue forward.
+*/
+int8_t RNBase::advance_work_queue() {
+	if (current_work_item) {
+		if (current_work_item->isComplete()) {
+			if (current_work_item->hasFault()) {
+			  #ifdef __MANUVR_DEBUG
+			  if (getVerbosity() > 3) {
+          local_log.concatf("Destroying failed job.\n");
+          if (getVerbosity() > 4) current_work_item->printDebug(&local_log);
+        }
+			  #endif
+			}
+
+			// Hand this completed operation off to the class that requested it. That class will
+			//   take what it wants from the buffer and, when we return to execution here, we will
+			//   be at liberty to clean the operation up.
+			if (current_work_item->callback) {
+				// TODO: need some minor reorg to make this not so obtuse...
+				current_work_item->callback->io_op_callback(current_work_item);
+			}
+
+			delete current_work_item;
+			current_work_item = work_queue.dequeue();
+		}
+	}
+	else {
+		// If there is nothing presently being serviced, we should promote an operation from the
+		//   queue into the active slot and initiate it in the block below.
+		current_work_item = work_queue.dequeue();
+	}
+
+	if (current_work_item) {
+		if (!current_work_item->has_bus_control()) {
+			current_work_item->begin();
+		}
+	}
+
+	flushLocalLog();
+  return 0;
+}
 
 
 /*******************************************************************************
@@ -851,23 +960,21 @@ void RNBase::printQueue(StringBuilder* temp) {
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
-void RNBase::printDebug(StringBuilder* temp) {
-  ManuvrXport::printDebug(temp);
-  //temp->concatf("-- __prealloc_pool addres: 0x%08x\n", (uint32_t) __prealloc_pool);
-  temp->concatf("--\n-- depth:          %d\n", preallocated.size());
-  temp->concatf("-- starves:        %u\n", _prealloc_misses);
-  temp->concatf("-- queue_floods:   %u\n", (unsigned long) _queue_floods);
-  temp->concatf("-- _heap_allocs:   %u\n", (unsigned long) _heap_instantiations);
-  temp->concatf("-- _heap_frees:    %u\n--\n", (unsigned long) _heap_frees);
+void RNBase::printDebug(StringBuilder* output) {
+  ManuvrXport::printDebug(output);
+  //output->concatf("-- __prealloc_pool addres: 0x%08x\n", (uint32_t) __prealloc_pool);
+  output->concatf("--\n-- depth:          %d\n", preallocated.size());
+  output->concatf("-- queue_floods:   %u\n", (unsigned long) _queue_floods);
 
-  temp->concatf("-- bitrate:        %u\n", configured_bitrate);
-  temp->concatf("-- lockout_active: %s\n", (_er_flag(RNBASE_FLAG_LOCK_OUT) ? "yes" : "no"));
+  output->concatf("-- bitrate:        %u\n", configured_bitrate);
+  output->concatf("-- lockout_active: %s\n", (_er_flag(RNBASE_FLAG_LOCK_OUT) ? "yes" : "no"));
 
   const char* cmd_mode_str;
   if (_er_flag(RNBASE_FLAG_CMD_MODE))      cmd_mode_str = "CMD";
   else if (_er_flag(RNBASE_FLAG_CMD_PEND)) cmd_mode_str = "CMD_PENDING";
   else cmd_mode_str = "DATA";
-  temp->concatf("-- cmd mode:       %s\n", cmd_mode_str);
+  output->concatf("-- cmd mode:       %s\n", cmd_mode_str);
+  BusAdapter::printWorkQueue((BusAdapter*)this, output, RNBASE_MAX_QUEUE_PRINT);
 }
 
 

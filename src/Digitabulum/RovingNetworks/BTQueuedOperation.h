@@ -39,6 +39,7 @@ class BTQueuedOperation : public BusOp {
 
     BTQueuedOperation();
     BTQueuedOperation(BusOpcode nu_op);
+    BTQueuedOperation(BusOpcode nu_op, BusOpCallback* requester);
     BTQueuedOperation(BusOpcode nu_op, StringBuilder* nu_data);
     /* Specialized constructor for direct buffer spec. */
     BTQueuedOperation(BusOpcode nu_op, unsigned char *nu_data, uint16_t nu_len);
