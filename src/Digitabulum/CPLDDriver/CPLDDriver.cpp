@@ -999,16 +999,9 @@ void CPLDDriver::printDebug(StringBuilder *output) {
       output->concat("\tCurrently being serviced:\n");
       current_queue_item->printDebug(output);
     }
-
-    if (work_queue.size() > 0) {
-      unsigned int print_depth = strict_min((uint8_t) 3, (uint8_t) CPLD_SPI_MAX_QUEUE_PRINT);
-      output->concatf("\nQueue Listing (top %d of %d total)\n", print_depth, work_queue.size());
-      for (unsigned int i = 0; i < print_depth; i++) {
-        work_queue.get(i)->printDebug(output);
-      }
-      output->concat("\n");
-    }
+    BusAdapter::printWorkQueue((BusAdapter*)this, output, CPLD_SPI_MAX_QUEUE_PRINT);
   }
+
   output->concatf("\n-- SPI2 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI2_READY)?"on":"OFF"));
   output->concatf("-- Valid IRQ buffer:   %d\n", _irq_data_ptr == _irq_data_0 ? 0 : 1);
   output->concatf("-- IRQ service:        %sabled", (_er_flag(CPLD_FLAG_SVC_IRQS)?"en":"dis"));
