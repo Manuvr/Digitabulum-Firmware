@@ -95,7 +95,6 @@ SOURCES_C    += src/stm32f7xx_it.c
 SOURCES_C    += src/system_stm32f7xx.c
 
 SOURCES_CPP   = src/Digitabulum/CPLDDriver/CPLDDriver.cpp
-SOURCES_CPP  += src/Digitabulum/CPLDDriver/CPLDBusOp.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/IIU.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1_AG.cpp

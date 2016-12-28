@@ -37,10 +37,10 @@ IIU LegendManager::iius[LEGEND_DATASET_IIU_COUNT];  // TODO: Shouldn't be static
 InertialMeasurement LegendManager::__prealloc[PREALLOCATED_IIU_MEASUREMENTS];
 // TODO: These shouldn't be static.
 
-CPLDBusOp LegendManager::_preformed_read_a;
-CPLDBusOp LegendManager::_preformed_read_g;
-CPLDBusOp LegendManager::_preformed_read_m;
-CPLDBusOp LegendManager::_preformed_fifo_read;
+SPIBusOp LegendManager::_preformed_read_a;
+SPIBusOp LegendManager::_preformed_read_g;
+SPIBusOp LegendManager::_preformed_read_m;
+SPIBusOp LegendManager::_preformed_fifo_read;
 
 Vector3<int16_t> LegendManager::reflection_mag;
 Vector3<int16_t> LegendManager::reflection_acc;
@@ -171,7 +171,7 @@ const char* LegendManager::chiralityString(Chirality x) {
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
-LegendManager::LegendManager(BusAdapter<CPLDBusOp>* bus) : EventReceiver() {
+LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver() {
   _bus = (CPLDDriver*) bus;  // TODO: Make this cast unnecessary.
 
   setReceiverName("ManuMgmt");
@@ -507,7 +507,7 @@ uint32_t LegendManager::totalSamples() {
 * When a bus operation completes, it is passed back to the class that created it.
 */
 int8_t LegendManager::io_op_callback(BusOp* _op) {
-  CPLDBusOp* op = (CPLDBusOp*) _op;
+  SPIBusOp* op = (SPIBusOp*) _op;
   // There is zero chance this object will be a null pointer unless it was done on purpose.
   if (op->hasFault()) {
     if (getVerbosity() > 3) local_log.concat("io_op_callback() rejected a callback because the bus op failed.\n");
@@ -531,7 +531,7 @@ int8_t LegendManager::io_op_callback(BusOp* _op) {
 * We simply forward to the CPLD.
 */
 int8_t LegendManager::queue_io_job(BusOp* _op) {
-  CPLDBusOp* op = (CPLDBusOp*) _op;
+  SPIBusOp* op = (SPIBusOp*) _op;
   if (NULL == op->callback) {
     op->callback = (BusOpCallback*) this;
   }
@@ -1389,7 +1389,7 @@ int8_t LegendManager::read_identities() {
   bzero(&_imu_ids[0], (2 * LEGEND_DATASET_IIU_COUNT));
 
   // First the inertial aspect.
-  CPLDBusOp* op = _bus->new_op(BusOpcode::RX, this);
+  SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
   op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
   op->setBuffer(&_imu_ids[0], LEGEND_DATASET_IIU_COUNT);
   if (0 == queue_io_job(op)) {
@@ -1405,7 +1405,7 @@ int8_t LegendManager::read_identities() {
 
 
 int8_t LegendManager::read_fifo_depth() {
-  CPLDBusOp* op = _bus->new_op(BusOpcode::RX, this);
+  SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
   op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
   op->setBuffer(&_imu_ids[0], LEGEND_DATASET_IIU_COUNT);
   return queue_io_job(op);

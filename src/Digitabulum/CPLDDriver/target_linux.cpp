@@ -102,7 +102,7 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
 *
 * @param bool enable the interrupts?
 */
-void CPLDBusOp::enableSPI_DMA(bool enable) {
+void enableSPI_DMA(bool enable) {
   if (enable) {
   }
   else {
@@ -122,12 +122,12 @@ void CPLDBusOp::enableSPI_DMA(bool enable) {
 *
 * @return 0 on success, or non-zero on failure.
 */
-int8_t CPLDBusOp::begin() {
+XferFault SPIBusOp::begin() {
   //time_began    = micros();
   if (0 == _param_len) {
     // Obvious invalidity. We must have at least one transfer parameter.
     abort(XferFault::BAD_PARAM);
-    return -1;
+    return XferFault::BAD_PARAM;
   }
 
   set_state(XferState::INITIATE);  // Indicate that we now have bus control.
@@ -143,7 +143,7 @@ int8_t CPLDBusOp::begin() {
     //HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*)(xfer_params + 2), 2);
   }
 
-  return 0;
+  return XferFault::NONE;
 }
 
 
@@ -153,7 +153,7 @@ int8_t CPLDBusOp::begin() {
 *
 * @return 0 on success. Non-zero on failure.
 */
-int8_t CPLDBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
+int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
   //debug_log.concatf("advance_op(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
   //Kernel::log(&debug_log);
 

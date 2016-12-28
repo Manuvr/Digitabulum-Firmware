@@ -71,9 +71,8 @@ void BTQueuedOperation::wipe() {
   xfer_state = XferState::UNDEF;
   xfer_fault = XferFault::NONE;
   opcode     = BusOpcode::UNDEF;
-  buf        = NULL;
+  buf        = nullptr;
   buf_len    = 0;
-  txn_id     = BusOp::next_txn_id++;
   data.clear();
 }
 
@@ -88,7 +87,7 @@ void BTQueuedOperation::set_data(BusOpcode nu_op, StringBuilder* nu_data) {
 /*
 * This queue item can begin executing. This is where any bus access should be initiated.
 */
-int8_t BTQueuedOperation::begin() {
+XferFault BTQueuedOperation::begin() {
   xfer_state = XferState::INITIATE;
   switch (opcode) {
     case BusOpcode::TX_CMD_WAIT_RX:  // Transmit and remember.
@@ -117,7 +116,7 @@ int8_t BTQueuedOperation::begin() {
       }
       break;
   }
-  return 0;
+  return xfer_fault;
 }
 
 
@@ -125,7 +124,7 @@ int8_t BTQueuedOperation::begin() {
 int8_t BTQueuedOperation::abort(XferFault cause) {
   xfer_state = XferState::FAULT;
   xfer_fault = cause;
-  buf       = NULL;
+  buf       = nullptr;
   buf_len   = 0;
   return 0;
 }
@@ -133,7 +132,7 @@ int8_t BTQueuedOperation::abort(XferFault cause) {
 
 /* Call to mark TX complete. */
 int8_t BTQueuedOperation::markComplete() {
-  buf       = NULL;
+  buf       = nullptr;
   buf_len   = 0;
   //enable_DMA_IRQ(false);
   //HAL_DMA_Abort(&_dma_handle);
@@ -151,12 +150,7 @@ int8_t BTQueuedOperation::markComplete() {
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
 void BTQueuedOperation::printDebug(StringBuilder *output) {
-  output->concatf("\t --- txn_id:  0x%08x -------------\n", txn_id);
-  output->concatf("\t opcode:      %s\n", BusOp::getOpcodeString(opcode));
-  output->concatf("\t xfer_state:  %s\n", BusOp::getStateString(xfer_state));
-  if (XferFault::NONE != xfer_fault) {
-    output->concatf("\t xfer_fault:  %s\n", BusOp::getErrorString(xfer_fault));
-  }
+  BusOp::printBusOp("BTOp", this, output);
 
   int tmp_len = data.length();
   output->concatf("\t length:      %d\n", tmp_len);

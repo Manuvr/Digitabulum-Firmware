@@ -36,7 +36,6 @@ class RNBase;
 class BTQueuedOperation : public BusOp {
   public:
     StringBuilder data;       // Might need a raw buffer on the way to DMA...
-    int       txn_id;          // How are we going to keep track of this item?
 
     BTQueuedOperation();
     BTQueuedOperation(BusOpcode nu_op);
@@ -44,22 +43,21 @@ class BTQueuedOperation : public BusOp {
     /* Specialized constructor for direct buffer spec. */
     BTQueuedOperation(BusOpcode nu_op, unsigned char *nu_data, uint16_t nu_len);
 
-    ~BTQueuedOperation();
+    virtual ~BTQueuedOperation();
 
     void set_data(BusOpcode, StringBuilder*);
 
     /*
     * This queue item can begin executing. This is where any bus access should be initiated.
     */
-    int8_t begin();
+    XferFault begin();
+    void wipe();
 
     /* Call to mark something completed that may not be. */
     int8_t abort(XferFault);
 
     /* Call to mark complete and follow the nominal message path. */
     int8_t markComplete();
-
-    void wipe();
 
     void printDebug(StringBuilder *);
 

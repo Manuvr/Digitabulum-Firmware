@@ -186,8 +186,8 @@ class RNBase : public ManuvrXport {
 
   protected:
     uint32_t configured_bitrate;   // The bitrate we have between the CPU and the RN.
-    const char* _cmd_return_str = NULL;
-    const char* _cmd_exit_str   = NULL;
+    const char* _cmd_return_str = nullptr;
+    const char* _cmd_exit_str   = nullptr;
 
     int8_t idleService();
     size_t feed_rx_buffer(unsigned char*, size_t len);   // Append to the class receive buffer.
@@ -239,7 +239,7 @@ class RNBase : public ManuvrXport {
     volatile static RNBase* INSTANCE;
 
     // Prealloc starvation counters...
-    static uint32_t _prealloc_starves;
+    static uint32_t _prealloc_misses;
     static uint32_t _queue_floods;
     static uint32_t _heap_instantiations;
     static uint32_t _heap_frees;

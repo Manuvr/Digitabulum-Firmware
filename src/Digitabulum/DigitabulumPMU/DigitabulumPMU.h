@@ -54,7 +54,7 @@ In Digitabulum, the shunt resistor is Yageo part number RL1210FR-070R2L. It is
 #define __DIGITABULUM_PMU_DRIVER_H__
 
 #include <Kernel.h>
-#include <Drivers/INA219/INA219.h>
+#include <Drivers/Sensors/INA219/INA219.h>
 #include <Drivers/MCP73833/MCP73833.h>
 
 /*

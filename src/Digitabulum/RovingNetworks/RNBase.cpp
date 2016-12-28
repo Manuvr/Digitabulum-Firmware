@@ -64,11 +64,10 @@ BTQueuedOperation* RNBase::current_work_item = nullptr;
 
 BTQueuedOperation RNBase::__prealloc_pool[PREALLOCATED_BT_Q_OPS];
 
-uint32_t RNBase::_prealloc_starves      = 0;
+uint32_t RNBase::_queue_floods          = 0;
+uint32_t RNBase::_prealloc_misses       = 0;
 uint32_t RNBase::_heap_instantiations   = 0;
 uint32_t RNBase::_heap_frees            = 0;
-uint32_t RNBase::_queue_floods          = 0;
-
 
 PriorityQueue<BTQueuedOperation*> RNBase::preallocated;     // Messages that we've allocated ahead of time.
 
@@ -78,9 +77,8 @@ BTQueuedOperation* RNBase::fetchPreallocation() {
 
   if (0 == preallocated.size()) {
     // We have exhausted our preallocated measurements. Note it.
-    _prealloc_starves++;
+    _prealloc_misses++;
     return_value = new BTQueuedOperation();
-    _heap_instantiations++;
   }
   else {
     return_value = preallocated.dequeue();
@@ -107,9 +105,9 @@ BTQueuedOperation* RNBase::fetchPreallocation() {
 * @param BTQueuedOperation* obj is the pointer to the object to be reclaimed.
 */
 void RNBase::reclaimPreallocation(BTQueuedOperation* obj) {
-  unsigned int obj_addr = ((uint32_t) obj);
-  unsigned int pre_min  = ((uint32_t) INSTANCE->__prealloc_pool);
-  unsigned int pre_max  = pre_min + (sizeof(BTQueuedOperation) * PREALLOCATED_BT_Q_OPS);
+  uintptr_t obj_addr = ((uintptr_t) obj);
+  uintptr_t pre_min  = ((uintptr_t) INSTANCE->__prealloc_pool);
+  uintptr_t pre_max  = pre_min + (sizeof(BTQueuedOperation) * PREALLOCATED_BT_Q_OPS);
 
   obj->wipe();
   if ((obj_addr < pre_max) && (obj_addr >= pre_min)) {
@@ -561,7 +559,7 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
   nu->set_data(opcode, data);
 
   //BTQueuedOperation *nu = new BTQueuedOperation(opcode, data->string(), data->length());  // TODO: Preallocate these!
-  uint32_t return_value = nu->txn_id;
+  uint32_t return_value = 0;
 
   /* We need commands to fly to the head of the queue so that they get preferrential service
   even if the data messages are stalled. But to do that we need to add commands with a higher
@@ -857,7 +855,7 @@ void RNBase::printDebug(StringBuilder* temp) {
   ManuvrXport::printDebug(temp);
   //temp->concatf("-- __prealloc_pool addres: 0x%08x\n", (uint32_t) __prealloc_pool);
   temp->concatf("--\n-- depth:          %d\n", preallocated.size());
-  temp->concatf("-- starves:        %u\n", _prealloc_starves);
+  temp->concatf("-- starves:        %u\n", _prealloc_misses);
   temp->concatf("-- queue_floods:   %u\n", (unsigned long) _queue_floods);
   temp->concatf("-- _heap_allocs:   %u\n", (unsigned long) _heap_instantiations);
   temp->concatf("-- _heap_frees:    %u\n--\n", (unsigned long) _heap_frees);
