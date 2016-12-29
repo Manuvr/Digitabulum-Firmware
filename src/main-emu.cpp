@@ -29,6 +29,8 @@ This is the firmware emulation test-bench.
 
 #include <Kernel.h>
 #include <Platform/Platform.h>
+#include <Platform/Peripherals/I2C/I2CAdapter.h>
+#include <Drivers/ADP8866/ADP8866.h>
 #include <XenoSession/Console/ManuvrConsole.h>
 #include <XenoSession/Manuvr/ManuvrSession.h>
 
@@ -36,6 +38,8 @@ This is the firmware emulation test-bench.
 #include <Transports/StandardIO/StandardIO.h>
 #include "Digitabulum/CPLDDriver/CPLDDriver.h"
 #include "Digitabulum/ManuLegend/ManuManager.h"
+#include "Digitabulum/DigitabulumPMU/DigitabulumPMU.h"
+
 
 /* This global makes this source file read better. */
 Kernel* kernel = nullptr;
@@ -49,6 +53,42 @@ BufferPipe* _pipe_factory_2(BufferPipe* _n, BufferPipe* _f) {
   kernel->subscribe(_ses);
   return (BufferPipe*) _ses;
 }
+
+
+/*
+* Pin defs for this module.
+*
+* These Port B pins are push-pull outputs:
+* #  Default  r1  Purpose
+* -------------------------------------------------
+* 9     0     25  ~CPLD Reset
+* 14    0     30  SPI2_MISO  (SPI2 is slave and Rx-only)
+*
+* These Port C pins are inputs with a wakeup ISR attached to
+*    the rising-edge.
+* #  Default  r1  Purpose
+* ---------------------------------------------------
+* 13    0     45  IRQ_WAKEUP
+*
+* These Port E pins are inputs:
+* #  Default  r1  Purpose
+* ---------------------------------------------------
+* 11    0     75  CPLD_GPIO_0
+* 14    0     78  CPLD_GPIO_1
+*
+* These Port C pins are push-pull outputs:
+* #  Default  r1  Purpose
+* ---------------------------------------------------
+* 2     1     33  DEN_AG_CARPALS
+*/
+const CPLDPins cpld_pins(
+  255, // CPLD's reset pin
+  255, // AKA: SPI2_MISO
+  255, // CPLD's IRQ_WAKEUP pin
+  255, // GPIO
+  255, // GPIO
+  255 // The DEN_AG pin on the carpals IMU.
+);
 
 
 /*******************************************************************************
@@ -72,11 +112,23 @@ int main(int argc, const char *argv[]) {
   platform.platformPreInit(opts);
   kernel = platform.kernel();
 
-  CPLDDriver _cpld;
+  CPLDDriver _cpld(&cpld_pins);
   kernel->subscribe(&_cpld);
 
   LegendManager _legend_manager(&_cpld);
   kernel->subscribe(&_legend_manager);
+
+  I2CAdapter i2c(1, 23, 22);
+  kernel->subscribe(&i2c);
+
+  // Pins 58 and 63 are the reset and IRQ pin, respectively.
+  // This is translated to pins 10 and 13 on PortD.
+  ADP8866 leds(58, 63, 0x27);
+  i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
+  kernel->subscribe((EventReceiver*) &leds);
+
+  INA219 ina219(0x4A);
+  i2c.addSlaveDevice(&ina219);
 
   // Pipe strategy planning...
   const uint8_t pipe_plan_clients[] = {2, 0};
