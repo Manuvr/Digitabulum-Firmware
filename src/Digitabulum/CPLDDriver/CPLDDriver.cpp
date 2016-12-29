@@ -343,6 +343,16 @@ void CPLDDriver::_process_conf_update(uint8_t nu) {
 *  ▀▀▀▀▀▀▀▀▀▀▀  ▀            ▀▀▀▀▀▀▀▀▀▀▀     required to complete a transaction.
 *******************************************************************************/
 
+int8_t CPLDDriver::bus_init() {
+  return 0;
+}
+
+int8_t CPLDDriver::bus_deinit() {
+  return 0;
+}
+
+
+
 /**
 * When a bus operation completes, it is passed back to its issuing class.
 *
@@ -626,12 +636,7 @@ void CPLDDriver::purge_queued_work() {
 * @return an SPIBusOp to be used. Only NULL if out-of-mem.
 */
 SPIBusOp* CPLDDriver::new_op() {
-  SPIBusOp* return_value = preallocated.dequeue();
-  if (nullptr == return_value) {
-    _prealloc_misses++;
-    return_value = new SPIBusOp();
-    //if (getVerbosity() > 5) Kernel::log("new_op(): Fresh allocation!\n");
-  }
+  SPIBusOp* return_value = BusAdapter::new_op();
   return_value->setCSPin(_pins.tx_rdy);
   return_value->csActiveHigh(true);
   return return_value;
@@ -668,8 +673,7 @@ void CPLDDriver::reclaim_queue_item(SPIBusOp* op) {
 
   if (op->returnToPrealloc()) {
     //if (getVerbosity() > 6) local_log.concatf("CPLDDriver::reclaim_queue_item(): \t About to wipe.\n");
-    op->wipe();
-    preallocated.insert(op);
+    BusAdapter::return_op_to_pool(op);
   }
   else if (op->shouldReap()) {
     //if (getVerbosity() > 6) local_log.concatf("CPLDDriver::reclaim_queue_item(): \t About to reap.\n");

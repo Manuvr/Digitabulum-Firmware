@@ -191,3 +191,7 @@ _---J. Ian Lindsay_
     284972    2728   43196  330896   Following BusOp consolidation. No RNBase yet.
     285004    2728   43196  330928   Additions to template. About to convert RNBase.
     285604    2728   43160  331492   RNBase now extends BusAdapter.
+    285660    2728   43156  331544   52-bytes of flash for 4-bytes of RAM? Yes.
+    285436    2728   43156  331320   Taking some gains back from templates.
+    285436    2728   43156  331320   Pushing more code replication back into template.
+    286036    2728   43156  331920   More untanglement.

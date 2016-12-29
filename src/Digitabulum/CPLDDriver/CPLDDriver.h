@@ -479,6 +479,8 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     int8_t io_op_callback(BusOp*);
     int8_t queue_io_job(BusOp*);
     int8_t advance_work_queue();
+    int8_t bus_init();
+    int8_t bus_deinit();
     SPIBusOp* new_op();
     SPIBusOp* new_op(BusOpcode, BusOpCallback*);
 

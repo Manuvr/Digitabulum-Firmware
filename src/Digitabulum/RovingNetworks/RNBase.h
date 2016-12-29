@@ -166,14 +166,12 @@ class RNBase : public ManuvrXport, public BusAdapter<BTQueuedOperation> {
     #endif  //MANUVR_CONSOLE_SUPPORT
 
     /* Overrides from the BusAdapter interface */
-    virtual int8_t io_op_callback(BusOp*);
-    virtual int8_t queue_io_job(BusOp*);
-    virtual int8_t advance_work_queue();
-    BTQueuedOperation* new_op();
+    int8_t io_op_callback(BusOp*);
+    int8_t queue_io_job(BusOp*);
+    int8_t advance_work_queue();
+    int8_t bus_init();
+    int8_t bus_deinit();
     BTQueuedOperation* new_op(BusOpcode, BusOpCallback*);
-
-    /* These are used to send data to a BT connected device. */
-    inline bool roomInQueue() {    return !(work_queue.size() < RNBASE_MAX_BT_Q_DEPTH);  }
 
     /* Macros for RN commands. */
     void setDevName(char*);
@@ -196,7 +194,6 @@ class RNBase : public ManuvrXport, public BusAdapter<BTQueuedOperation> {
     const char* _cmd_return_str = nullptr;
     const char* _cmd_exit_str   = nullptr;
 
-    int8_t idleService();
     size_t feed_rx_buffer(unsigned char*, size_t len);   // Append to the class receive buffer.
 
     void printQueue(StringBuilder*);
@@ -239,13 +236,9 @@ class RNBase : public ManuvrXport, public BusAdapter<BTQueuedOperation> {
     int8_t enterCommandMode();    // Convenience fxn for entering command mode.
     int8_t exitCommandMode();     // Convenience fxn for exiting command mode.
 
-    BTQueuedOperation* fetchPreallocation();
     void reclaimPreallocation(BTQueuedOperation*);
 
     volatile static RNBase* INSTANCE;
-
-    // Prealloc starvation counters...
-    static uint32_t _queue_floods;
 
     static BTQueuedOperation __prealloc_pool[PREALLOCATED_BT_Q_OPS];
 };

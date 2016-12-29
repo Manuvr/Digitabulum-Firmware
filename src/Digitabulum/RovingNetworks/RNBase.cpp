@@ -53,7 +53,6 @@ limitations under the License.
 * Static members and initializers should be located here.
 *******************************************************************************/
 volatile RNBase* RNBase::INSTANCE = nullptr;
-uint32_t RNBase::_queue_floods          = 0;
 
 BTQueuedOperation  RNBase::__prealloc_pool[PREALLOCATED_BT_Q_OPS];
 BTQueuedOperation* RNBase::current_work_item = nullptr;
@@ -64,21 +63,6 @@ const MessageTypeDef rn_module_message_defs[] = {
   {  MANUVR_MSG_BT_EXIT_RESET    , 0x0000,    "RN_RESET"    , ManuvrMsg::MSG_ARGS_NONE }, //
   {  MANUVR_MSG_BT_EXPIRE_LOCKOUT, 0x0000,    "RN_LOCK_LIFT", ManuvrMsg::MSG_ARGS_NONE }, //
 };
-
-
-BTQueuedOperation* RNBase::fetchPreallocation() {
-  BTQueuedOperation* return_value;
-
-  if (0 == preallocated.size()) {
-    // We have exhausted our preallocated measurements. Note it.
-    _prealloc_misses++;
-    return_value = new BTQueuedOperation();
-  }
-  else {
-    return_value = preallocated.dequeue();
-  }
-  return return_value;
-}
 
 
 /**
@@ -103,10 +87,9 @@ void RNBase::reclaimPreallocation(BTQueuedOperation* obj) {
   uintptr_t pre_min  = ((uintptr_t) INSTANCE->__prealloc_pool);
   uintptr_t pre_max  = pre_min + (sizeof(BTQueuedOperation) * PREALLOCATED_BT_Q_OPS);
 
-  obj->wipe();
   if ((obj_addr < pre_max) && (obj_addr >= pre_min)) {
     // If we are in this block, it means obj was preallocated. wipe and reclaim it.
-    preallocated.insert(obj);
+    BusAdapter::return_op_to_pool(obj);
   }
   else {
     // We were created because our prealloc was starved. we are therefore a transient heap object.
@@ -231,19 +214,13 @@ int8_t RNBase::toCounterparty(StringBuilder* buf, int8_t mm) {
 /*******************************************************************************
 * BusAdapter
 *******************************************************************************/
-/**
-* Return a vacant SPIBusOp to the caller, allocating if necessary.
-*
-* @return an SPIBusOp to be used. Only NULL if out-of-mem.
-*/
-BTQueuedOperation* RNBase::new_op() {
-  BTQueuedOperation* return_value = preallocated.dequeue();
-  if (nullptr == return_value) {
-    _prealloc_misses++;
-    return_value = new BTQueuedOperation();
-    //if (getVerbosity() > 5) Kernel::log("new_op(): Fresh allocation!\n");
-  }
-  return return_value;
+
+int8_t RNBase::bus_init() {
+  return 0;
+}
+
+int8_t RNBase::bus_deinit() {
+  return 0;
 }
 
 
@@ -255,7 +232,7 @@ BTQueuedOperation* RNBase::new_op() {
 * @return an RNBase to be used. Only NULL if out-of-mem.
 */
 BTQueuedOperation* RNBase::new_op(BusOpcode _op, BusOpCallback* _req) {
-  BTQueuedOperation* return_value = new_op();
+  BTQueuedOperation* return_value = BusAdapter::new_op();
   return_value->set_opcode(_op);
   return_value->callback = _req;
   return return_value;
@@ -300,48 +277,48 @@ int8_t RNBase::queue_io_job(BusOp* op) {
 }
 
 
-/*
-* This function needs to be called to move the queue forward.
-*/
-int8_t RNBase::advance_work_queue() {
-	if (current_work_item) {
-		if (current_work_item->isComplete()) {
-			if (current_work_item->hasFault()) {
-			  #ifdef __MANUVR_DEBUG
-			  if (getVerbosity() > 3) {
-          local_log.concatf("Destroying failed job.\n");
-          if (getVerbosity() > 4) current_work_item->printDebug(&local_log);
-        }
-			  #endif
-			}
-
-			// Hand this completed operation off to the class that requested it. That class will
-			//   take what it wants from the buffer and, when we return to execution here, we will
-			//   be at liberty to clean the operation up.
-			if (current_work_item->callback) {
-				// TODO: need some minor reorg to make this not so obtuse...
-				current_work_item->callback->io_op_callback(current_work_item);
-			}
-
-			delete current_work_item;
-			current_work_item = work_queue.dequeue();
-		}
-	}
-	else {
-		// If there is nothing presently being serviced, we should promote an operation from the
-		//   queue into the active slot and initiate it in the block below.
-		current_work_item = work_queue.dequeue();
-	}
-
-	if (current_work_item) {
-		if (!current_work_item->has_bus_control()) {
-			current_work_item->begin();
-		}
-	}
-
-	flushLocalLog();
-  return 0;
-}
+///*
+//* This function needs to be called to move the queue forward.
+//*/
+//int8_t RNBase::advance_work_queue() {
+//	if (current_work_item) {
+//		if (current_work_item->isComplete()) {
+//			if (current_work_item->hasFault()) {
+//			  #ifdef __MANUVR_DEBUG
+//			  if (getVerbosity() > 3) {
+//          local_log.concatf("Destroying failed job.\n");
+//          if (getVerbosity() > 4) current_work_item->printDebug(&local_log);
+//        }
+//			  #endif
+//			}
+//
+//			// Hand this completed operation off to the class that requested it. That class will
+//			//   take what it wants from the buffer and, when we return to execution here, we will
+//			//   be at liberty to clean the operation up.
+//			if (current_work_item->callback) {
+//				// TODO: need some minor reorg to make this not so obtuse...
+//				current_work_item->callback->io_op_callback(current_work_item);
+//			}
+//
+//			delete current_work_item;
+//			current_work_item = work_queue.dequeue();
+//		}
+//	}
+//	else {
+//		// If there is nothing presently being serviced, we should promote an operation from the
+//		//   queue into the active slot and initiate it in the block below.
+//		current_work_item = work_queue.dequeue();
+//	}
+//
+//	if (current_work_item) {
+//		if (!current_work_item->has_bus_control()) {
+//			current_work_item->begin();
+//		}
+//	}
+//
+//	flushLocalLog();
+//  return 0;
+//}
 
 
 /*******************************************************************************
@@ -557,7 +534,7 @@ void RNBase::setAutoconnect(bool autocon) {
 /*
 * This gets called to service queue events.
 */
-int8_t RNBase::idleService() {
+int8_t RNBase::advance_work_queue() {
   read_port();
   /* Prepare to generate bugs....
   I normally wouldn't write something this way. The idea is to force an exit
@@ -603,7 +580,7 @@ int8_t RNBase::idleService() {
             break;
           default:
             #ifdef __MANUVR_DEBUG
-              if (getVerbosity() > 1) Kernel::log("idleService(): We should not be here.\n");
+              if (getVerbosity() > 1) Kernel::log("advance_work_queue(): We should not be here.\n");
             #endif
             break;
         }
@@ -664,7 +641,7 @@ int8_t RNBase::burn_or_recycle_current() {
 
 
 uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
-  BTQueuedOperation *nu = fetchPreallocation();
+  BTQueuedOperation *nu = BusAdapter::new_op();
   nu->set_data(opcode, data);
 
   //BTQueuedOperation *nu = new BTQueuedOperation(opcode, data->string(), data->length());  // TODO: Preallocate these!
@@ -701,7 +678,7 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
         current_work_item->begin();
         write_port(current_work_item->buf, current_work_item->buf_len);
       }
-      else if (work_queue.size() <= RNBASE_MAX_BT_Q_DEPTH) {
+      else if (roomInQueue()) {
         work_queue.insert(nu, priority);
         nu->markQueued();
       }
@@ -750,7 +727,7 @@ void RNBase::process_connection_change(bool conn) {
     }
   }
   else {
-    idleService();
+    advance_work_queue();
   }
 }
 
@@ -962,9 +939,7 @@ void RNBase::printQueue(StringBuilder* temp) {
 */
 void RNBase::printDebug(StringBuilder* output) {
   ManuvrXport::printDebug(output);
-  //output->concatf("-- __prealloc_pool addres: 0x%08x\n", (uint32_t) __prealloc_pool);
-  output->concatf("--\n-- depth:          %d\n", preallocated.size());
-  output->concatf("-- queue_floods:   %u\n", (unsigned long) _queue_floods);
+  BusAdapter::printAdapter((BusAdapter*)this, output);
 
   output->concatf("-- bitrate:        %u\n", configured_bitrate);
   output->concatf("-- lockout_active: %s\n", (_er_flag(RNBASE_FLAG_LOCK_OUT) ? "yes" : "no"));
@@ -993,7 +968,7 @@ int8_t RNBase::notify(ManuvrMsg* active_event) {
           //active_event->clearArgs();
         }
         else {
-          idleService();
+          advance_work_queue();
         }
         return_value++;
       }
@@ -1009,14 +984,14 @@ int8_t RNBase::notify(ManuvrMsg* active_event) {
     case MANUVR_MSG_BT_EXPIRE_LOCKOUT:
       if (getVerbosity() > 5) Kernel::log("RN lockout expired.\n");
       _er_clear_flag(RNBASE_FLAG_LOCK_OUT);
-      idleService();
+      advance_work_queue();
       return_value++;
       break;
 
     case MANUVR_MSG_BT_ENTERED_CMD_MODE:
     case MANUVR_MSG_BT_EXITED_CMD_MODE:
     case MANUVR_MSG_XPORT_QUEUE_RDY:
-      idleService();
+      advance_work_queue();
       return_value++;
       break;
 
@@ -1127,7 +1102,7 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     case 'u':
-      local_log.concatf("idleService() returns %d\n", idleService());
+      local_log.concatf("advance_work_queue() returns %d\n", advance_work_queue());
       break;
     case 'N':
       temp_byte = atoi((char*) str+1);
