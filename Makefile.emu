@@ -33,8 +33,11 @@ export MAKE    = $(shell which make)
 # Includes, flags, and linker directives...
 ###########################################################################
 CPP_FLAGS    = -fno-rtti -fno-exceptions
-CFLAGS       = -Wall #-m32
+CFLAGS       = -Wall
 LIBS         = -lc -lm -lpthread -lmanuvr
+
+# Enforce a 32-bit build.
+CFLAGS      += -m32
 
 INCLUDES    = -iquote. -iquotesrc/
 INCLUDES   += -I$(BUILD_ROOT)/lib/ManuvrOS/ManuvrOS

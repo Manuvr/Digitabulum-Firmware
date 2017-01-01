@@ -21,7 +21,7 @@ limitations under the License.
 
 //#include <stm32f7xx_hal_dma.h>
 #include "RNBase.h"
-#include "XenoSession/XenoSession.h"
+#include <XenoSession/XenoSession.h>
 #include <Drivers/BusQueue/BusQueue.h>
 
 
@@ -128,8 +128,7 @@ void RNBase::start_lockout(uint32_t milliseconds) {
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 
-RNBase::RNBase(RNPins* pins) : ManuvrXport(), BusAdapter(RNBASE_MAX_BT_Q_DEPTH) {
-  setReceiverName("RNBase");
+RNBase::RNBase(const char* nom, RNPins* pins) : ManuvrXport(nom), BusAdapter(RNBASE_MAX_BT_Q_DEPTH) {
   set_xport_state(MANUVR_XPORT_FLAG_STREAM_ORIENTED);
   //BTQueuedOperation::buildDMAMembers();
   if (nullptr == INSTANCE) {

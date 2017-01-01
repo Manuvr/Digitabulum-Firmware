@@ -48,7 +48,7 @@ extern "C" {
   * @param  None
   * @retval SD status
   */
-uint8_t BSP_SD_Init(void)
+uint8_t BSP_SD_Init()
 {
   uint8_t SD_state = MSD_OK;
   /* Check if the SD card is plugged in the slot */
@@ -337,8 +337,7 @@ uint8_t BSP_SD_IsDetected(void) {
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 
-SDCard::SDCard() : EventReceiver() {
-  setReceiverName("SDCard");
+SDCard::SDCard() : EventReceiver("SDCard") {
 }
 
 

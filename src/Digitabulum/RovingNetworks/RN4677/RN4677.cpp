@@ -229,8 +229,7 @@ extern "C" {
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 
-RN4677::RN4677(RN4677Pins* p) : RNBase((RNPins*) p) {
-  setReceiverName("RN4677");
+RN4677::RN4677(RN4677Pins* p) : RNBase("RN4677", (RNPins*) p) {
   _cmd_return_str = RNBASE_STATUS_CMD;
   _cmd_exit_str   = RNBASE_STATUS_END;
   memcpy(&_pins, p, sizeof(RN4677Pins));

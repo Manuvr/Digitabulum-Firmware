@@ -32,8 +32,7 @@ limitations under the License.
 //volatile ExpansionPort* ExpansionPort::INSTANCE = NULL;
 
 
-ExpansionPort::ExpansionPort() : EventReceiver() {
-  setReceiverName("ExpansionPort");
+ExpansionPort::ExpansionPort() : EventReceiver("ExpansionPort") {
   INSTANCE = this;
 }
 

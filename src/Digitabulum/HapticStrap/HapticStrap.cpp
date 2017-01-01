@@ -62,9 +62,8 @@ const MessageTypeDef haptic_message_defs[] = {
 * Constructors/destructors, class initialization functions and so-forth...
 ****************************************************************************************************/
 
-HapticStrap::HapticStrap() : EventReceiver() {
+HapticStrap::HapticStrap() : EventReceiver("HapticStrap") {
   if (NULL == INSTANCE) {
-    setReceiverName("StandardIO");
     INSTANCE = this;
     ManuvrMsg::registerMessages(
       haptic_message_defs,

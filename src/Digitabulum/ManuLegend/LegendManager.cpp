@@ -171,10 +171,8 @@ const char* LegendManager::chiralityString(Chirality x) {
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
-LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver() {
+LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") {
   _bus = (CPLDDriver*) bus;  // TODO: Make this cast unnecessary.
-
-  setReceiverName("ManuMgmt");
   INSTANCE = this;
 
   reflection_mag.x = 1;
