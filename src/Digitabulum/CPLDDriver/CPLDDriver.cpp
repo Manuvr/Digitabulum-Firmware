@@ -55,26 +55,6 @@ uint8_t active_imu_position = 0;
 
 
 /**
-* Used to abort a hung transfer.
-*/
-void callback_spi_timeout() {
-  if (timeout_punch) {
-    if (((CPLDDriver*) cpld)->current_queue_item) {
-      Kernel::log("callback_spi_timeout()\n");
-      if (((CPLDDriver*) cpld)->current_queue_item->isComplete()) {
-        ((CPLDDriver*) cpld)->advance_work_queue();
-      }
-      else {
-        ((CPLDDriver*) cpld)->current_queue_item->abort(XferFault::BUS_FAULT);
-      }
-    }
-  }
-  else {
-    timeout_punch = true;
-  }
-}
-
-/**
 * ISR for CPLD GPIO.
 */
 void cpld_gpio_isr_0() {
@@ -119,8 +99,7 @@ uint8_t CPLDDriver::cpld_conf_value    = 0;  // Configuration.
 uint8_t CPLDDriver::forsaken_digits    = 0;  // Forsaken digits.
 uint8_t CPLDDriver::cpld_wakeup_source = 0;  // WAKEUP mapping.
 
-SPIBusOp  CPLDDriver::preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];
-SPIBusOp* CPLDDriver::current_queue_item = nullptr;
+SPIBusOp  CPLDDriver::preallocated_bus_jobs[CPLD_SPI_PREALLOC_COUNT];
 
 const unsigned char MSG_ARGS_IMU_READ[] = {
   UINT8_FM, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM, 0  // IMU id and a collection of readings.
@@ -176,6 +155,7 @@ const MessageTypeDef cpld_message_defs[] = {
   {  DIGITABULUM_MSG_CPLD_RESET_CALLBACK  , 0x0000,               "CPLD_RST_CB"    , ManuvrMsg::MSG_ARGS_NONE }, //
   {  DIGITABULUM_MSG_SPI_QUEUE_READY      , 0x0000,               "SPI_Q_RDY"      , ManuvrMsg::MSG_ARGS_NONE }, //
   {  DIGITABULUM_MSG_SPI_CB_QUEUE_READY   , 0x0000,               "SPICB_RDY"      , ManuvrMsg::MSG_ARGS_NONE }, //
+  {  DIGITABULUM_MSG_SPI_TIMEOUT          , 0x0000,               "SPI_TO"         , ManuvrMsg::MSG_ARGS_NONE }, //
 };
 
 
@@ -204,7 +184,7 @@ const char* CPLDDriver::digitStateToString(DigitState x) {
 /**
 * Constructor. Also populates the global pointer reference.
 */
-CPLDDriver::CPLDDriver(const CPLDPins* p) : EventReceiver("CPLDDriver"), BusAdapter(50) {
+CPLDDriver::CPLDDriver(const CPLDPins* p) : EventReceiver("CPLDDriver"), BusAdapter(CPLD_SPI_MAX_QUEUE_DEPTH) {
   memcpy(&_pins, p, sizeof(CPLDPins));
 
   if (nullptr == cpld) {
@@ -224,12 +204,12 @@ CPLDDriver::CPLDDriver(const CPLDPins* p) : EventReceiver("CPLDDriver"), BusAdap
   SPIBusOp::event_spi_queue_ready.priority(5);
 
   // Mark all of our preallocated SPI jobs as "No Reap" and pass them into the prealloc queue.
-  for (uint8_t i = 0; i < PREALLOCATED_SPI_JOBS; i++) {
+  for (uint8_t i = 0; i < CPLD_SPI_PREALLOC_COUNT; i++) {
     preallocated_bus_jobs[i].returnToPrealloc(true);     // Implies SHOuLD_REAP = false.
     preallocated.insert(&preallocated_bus_jobs[i]);
   }
 
-  current_queue_item = nullptr;
+  current_job = nullptr;
   _er_set_flag(CPLD_FLAG_QUEUE_IDLE);
 }
 
@@ -342,15 +322,6 @@ void CPLDDriver::_process_conf_update(uint8_t nu) {
 *  ▀▀▀▀▀▀▀▀▀▀▀  ▀            ▀▀▀▀▀▀▀▀▀▀▀     required to complete a transaction.
 *******************************************************************************/
 
-int8_t CPLDDriver::bus_init() {
-  return 0;
-}
-
-int8_t CPLDDriver::bus_deinit() {
-  return 0;
-}
-
-
 
 /**
 * When a bus operation completes, it is passed back to its issuing class.
@@ -427,9 +398,9 @@ int8_t CPLDDriver::queue_io_job(BusOp* _op) {
       return -4;
     }
 
-    if ((nullptr == current_queue_item) && (work_queue.size() == 0)){
+    if ((nullptr == current_job) && (work_queue.size() == 0)){
       // If the queue is empty, fire the operation now.
-      current_queue_item = op;
+      current_job = op;
       advance_work_queue();
       if (bus_timeout_millis) event_spi_timeout.delaySchedule(bus_timeout_millis);  // Punch the timeout schedule.
     }
@@ -512,26 +483,26 @@ int8_t CPLDDriver::advance_work_queue() {
   int8_t return_value = 0;
 
   timeout_punch = false;
-  if (current_queue_item) {
-    switch (current_queue_item->get_state()) {
+  if (current_job) {
+    switch (current_job->get_state()) {
        case XferState::TX_WAIT:
        case XferState::RX_WAIT:
-         if (current_queue_item->hasFault()) {
+         if (current_job->hasFault()) {
            if (getVerbosity() > 3) local_log.concat("CPLDDriver::advance_work_queue():\t Failed at IO_WAIT.\n");
          }
          else {
-           current_queue_item->markComplete();
+           current_job->markComplete();
          }
          // No break on purpose.
        case XferState::COMPLETE:
-         callback_queue.insert(current_queue_item);
-         current_queue_item = nullptr;
+         callback_queue.insert(current_job);
+         current_job = nullptr;
          if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
          break;
 
        case XferState::IDLE:
        case XferState::INITIATE:
-         switch (current_queue_item->begin()) {
+         switch (current_job->begin()) {
            case XferFault::NONE:     // Nominal outcome. Transfer started with no problens...
              break;
            case XferFault::BUS_BUSY:    // Bus appears to be in-use. State did not change.
@@ -541,8 +512,8 @@ int8_t CPLDDriver::advance_work_queue() {
              break;
            default:    // Began the transfer, and it barffed... was aborted.
              if (getVerbosity() > 3) local_log.concat("CPLDDriver::advance_work_queue():\t Failed to begin transfer after starting.\n");
-             callback_queue.insert(current_queue_item);
-             current_queue_item = nullptr;
+             callback_queue.insert(current_job);
+             current_job = nullptr;
              if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
              break;
          }
@@ -550,7 +521,7 @@ int8_t CPLDDriver::advance_work_queue() {
 
        /* Cases below ought to be handled by ISR flow... */
        case XferState::ADDR:
-         current_queue_item->advance_operation(0, 0);
+         current_job->advance_operation(0, 0);
        case XferState::STOP:
          if (getVerbosity() > 5) local_log.concatf("State might be corrupted if we tried to advance_queue(). \n");
          break;
@@ -561,11 +532,11 @@ int8_t CPLDDriver::advance_work_queue() {
   }
 
 
-  if (current_queue_item == nullptr) {
-    current_queue_item = work_queue.dequeue();
+  if (current_job == nullptr) {
+    current_job = work_queue.dequeue();
     // Begin the bus operation.
-    if (current_queue_item) {
-      if (XferFault::NONE != current_queue_item->begin()) {
+    if (current_job) {
+      if (XferFault::NONE != current_job->begin()) {
         if (getVerbosity() > 2) local_log.concatf("advance_work_queue() tried to clobber an existing transfer on the pick-up.\n");
         Kernel::staticRaiseEvent(&SPIBusOp::event_spi_queue_ready);  // Bypass our method. Jump right to the target.
       }
@@ -695,10 +666,10 @@ void CPLDDriver::reclaim_queue_item(SPIBusOp* op) {
 * Purges a stalled job from the active slot.
 */
 void CPLDDriver::purge_stalled_job() {
-  if (current_queue_item) {
-    current_queue_item->abort(XferFault::QUEUE_FLUSH);
-    reclaim_queue_item(current_queue_item);
-    current_queue_item = nullptr;
+  if (current_job) {
+    current_job->abort(XferFault::QUEUE_FLUSH);
+    reclaim_queue_item(current_job);
+    current_job = nullptr;
   }
 }
 
@@ -846,19 +817,24 @@ int8_t CPLDDriver::attached() {
     _periodic_debug.alterScheduleRecurrence(-1);
     _periodic_debug.autoClear(false);
     _periodic_debug.enableSchedule(false);
-
-    //platform.kernel()->addSchedule(&event_spi_timeout);
     platform.kernel()->addSchedule(&_periodic_debug);
 
     gpioSetup();
     init_ext_clk();
+    bus_init();
 
-    init_spi(1, 0);   // CPOL=1, CPHA=0, HW-driven
     init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
 
     // An SPI transfer might hang (very unlikely). This will un-hang it.
-    event_spi_timeout.alterSchedule(bus_timeout_millis, -1, false, callback_spi_timeout);
+    event_spi_timeout.repurpose(DIGITABULUM_MSG_SPI_TIMEOUT, (EventReceiver*) this);
     event_spi_timeout.incRefs();
+    event_spi_timeout.specific_target = (EventReceiver*) this;
+    event_spi_timeout.priority(6);
+    event_spi_timeout.alterSchedulePeriod(bus_timeout_millis);
+    event_spi_timeout.alterScheduleRecurrence(-1);
+    event_spi_timeout.autoClear(false);
+    event_spi_timeout.enableSchedule(false);
+    //platform.kernel()->addSchedule(&event_spi_timeout);
 
     reset();
     return 1;
@@ -889,7 +865,7 @@ int8_t CPLDDriver::callback_proc(ManuvrMsg* event) {
   /* Some class-specific set of conditionals below this line. */
   switch (event->eventCode()) {
     case DIGITABULUM_MSG_SPI_QUEUE_READY:
-      return_value = ((work_queue.size() > 0) || (nullptr != current_queue_item)) ? EVENT_CALLBACK_RETURN_RECYCLE : return_value;
+      return_value = ((work_queue.size() > 0) || (nullptr != current_job)) ? EVENT_CALLBACK_RETURN_RECYCLE : return_value;
       break;
     case DIGITABULUM_MSG_SPI_CB_QUEUE_READY:
       return_value = (callback_queue.size() > 0) ? EVENT_CALLBACK_RETURN_RECYCLE : return_value;
@@ -934,6 +910,24 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
       service_callback_queue();
       return_value = 1;
       break;
+    case DIGITABULUM_MSG_SPI_TIMEOUT:
+      if (timeout_punch) {
+        if (current_job) {
+          Kernel::log("callback_spi_timeout()\n");
+          if (current_job->isComplete()) {
+            advance_work_queue();
+          }
+          else {
+            current_job->abort(XferFault::TIMEOUT);
+          }
+        }
+      }
+      else {
+        timeout_punch = true;
+      }
+      return_value = 1;
+      break;
+
     case DIGITABULUM_MSG_CPLD_RESET_CALLBACK:
       setPin(_pins.reset, true);
       //if (getVerbosity() > 4) local_log.concat("CPLD reset.\n");
@@ -998,9 +992,9 @@ void CPLDDriver::printDebug(StringBuilder *output) {
   output->concatf("-- callback q depth    %d\n\n", callback_queue.size());
 
   if (getVerbosity() > 3) {
-    if (current_queue_item) {
+    if (current_job) {
       output->concat("\tCurrently being serviced:\n");
-      current_queue_item->printDebug(output);
+      current_job->printDebug(output);
     }
     BusAdapter::printWorkQueue((BusAdapter*)this, output, CPLD_SPI_MAX_QUEUE_PRINT);
   }

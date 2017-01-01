@@ -90,6 +90,12 @@ const CPLDPins cpld_pins(
   255 // The DEN_AG pin on the carpals IMU.
 );
 
+const I2CAdapterOptions i2c_opts(
+  0,   // Device number
+  255, // sda
+  255  // scl
+);
+
 
 /*******************************************************************************
 * The main function.                                                           *
@@ -118,8 +124,8 @@ int main(int argc, const char *argv[]) {
   LegendManager _legend_manager(&_cpld);
   kernel->subscribe(&_legend_manager);
 
-  I2CAdapter i2c(1);
-  kernel->subscribe(&i2c);
+  I2CAdapter i2c(&i2c_opts);
+  kernel->subscribe((EventReceiver*) &i2c);
 
   // Pins 58 and 63 are the reset and IRQ pin, respectively.
   // This is translated to pins 10 and 13 on PortD.
@@ -159,6 +165,9 @@ int main(int argc, const char *argv[]) {
     tcp_srv.listen();
   #endif
 
-  platform.forsakeMain();
+  //platform.forsakeMain();
+  while (true) {
+    kernel->procIdleFlags();
+  }
   return 0;
 }

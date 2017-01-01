@@ -30,6 +30,15 @@ This file contains functions for running firmware under linux.
 void CPLDDriver::_deinit() {
 }
 
+int8_t CPLDDriver::bus_init() {
+  return 0;
+}
+
+int8_t CPLDDriver::bus_deinit() {
+  return 0;
+}
+
+
 
 /**
 * Init the timer to provide the CPLD with an external clock. This clock is the

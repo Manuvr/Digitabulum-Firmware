@@ -55,7 +55,6 @@ limitations under the License.
 volatile RNBase* RNBase::INSTANCE = nullptr;
 
 BTQueuedOperation  RNBase::__prealloc_pool[PREALLOCATED_BT_Q_OPS];
-BTQueuedOperation* RNBase::current_work_item = nullptr;
 //template<> PriorityQueue<BTQueuedOperation*> BusAdapter<BTQueuedOperation>::preallocated;
 
 // Messages that are specific to Digitabulum.
@@ -210,9 +209,6 @@ int8_t RNBase::toCounterparty(StringBuilder* buf, int8_t mm) {
 }
 
 
-/*******************************************************************************
-* BusAdapter
-*******************************************************************************/
 
 int8_t RNBase::bus_init() {
   return 0;
@@ -263,13 +259,13 @@ int8_t RNBase::io_op_callback(BusOp* _op) {
 */
 int8_t RNBase::queue_io_job(BusOp* op) {
   BTQueuedOperation* nu = (BTQueuedOperation*) op;
-	if (current_work_item) {
+	if (current_job) {
 		// Something is already going on with the bus. Queue...
 		work_queue.insert(nu);
 	}
 	else {
 		// Bus is idle. Put this work item in the active slot and start the bus operations...
-		current_work_item = nu;
+		current_job = nu;
 	  nu->begin();
 	}
 	return 0;
@@ -280,13 +276,13 @@ int8_t RNBase::queue_io_job(BusOp* op) {
 //* This function needs to be called to move the queue forward.
 //*/
 //int8_t RNBase::advance_work_queue() {
-//	if (current_work_item) {
-//		if (current_work_item->isComplete()) {
-//			if (current_work_item->hasFault()) {
+//	if (current_job) {
+//		if (current_job->isComplete()) {
+//			if (current_job->hasFault()) {
 //			  #ifdef __MANUVR_DEBUG
 //			  if (getVerbosity() > 3) {
 //          local_log.concatf("Destroying failed job.\n");
-//          if (getVerbosity() > 4) current_work_item->printDebug(&local_log);
+//          if (getVerbosity() > 4) current_job->printDebug(&local_log);
 //        }
 //			  #endif
 //			}
@@ -294,24 +290,24 @@ int8_t RNBase::queue_io_job(BusOp* op) {
 //			// Hand this completed operation off to the class that requested it. That class will
 //			//   take what it wants from the buffer and, when we return to execution here, we will
 //			//   be at liberty to clean the operation up.
-//			if (current_work_item->callback) {
+//			if (current_job->callback) {
 //				// TODO: need some minor reorg to make this not so obtuse...
-//				current_work_item->callback->io_op_callback(current_work_item);
+//				current_job->callback->io_op_callback(current_job);
 //			}
 //
-//			delete current_work_item;
-//			current_work_item = work_queue.dequeue();
+//			delete current_job;
+//			current_job = work_queue.dequeue();
 //		}
 //	}
 //	else {
 //		// If there is nothing presently being serviced, we should promote an operation from the
 //		//   queue into the active slot and initiate it in the block below.
-//		current_work_item = work_queue.dequeue();
+//		current_job = work_queue.dequeue();
 //	}
 //
-//	if (current_work_item) {
-//		if (!current_work_item->has_bus_control()) {
-//			current_work_item->begin();
+//	if (current_job) {
+//		if (!current_job->has_bus_control()) {
+//			current_job->begin();
 //		}
 //	}
 //
@@ -351,9 +347,9 @@ int8_t RNBase::reset() {
   while (work_queue.hasNext()) {
     reclaimPreallocation(work_queue.dequeue());
   }
-  if (current_work_item) {
-    reclaimPreallocation(current_work_item);
-    current_work_item = nullptr;
+  if (current_job) {
+    reclaimPreallocation(current_job);
+    current_job = nullptr;
   }
 
   _er_set_flag(RNBASE_FLAG_LOCK_OUT);
@@ -541,9 +537,9 @@ int8_t RNBase::advance_work_queue() {
   we will traverse before our work is done.
   */
   while (true) {
-    if (current_work_item) {
-      if (current_work_item->isComplete()) {   // Is it completed?
-        if (BusOpcode::RX == current_work_item->get_opcode()) {
+    if (current_job) {
+      if (current_job->isComplete()) {   // Is it completed?
+        if (BusOpcode::RX == current_job->get_opcode()) {
           // This is meant for the session.
           if (haveFar()) {
             #ifdef __MANUVR_DEBUG
@@ -551,26 +547,26 @@ int8_t RNBase::advance_work_queue() {
             #endif
           }
         }
-        reclaimPreallocation(current_work_item);
-        current_work_item = nullptr;
+        reclaimPreallocation(current_job);
+        current_job = nullptr;
       }
-      else if (current_work_item->inProgress()) {   // Is it initiated?
+      else if (current_job->inProgress()) {   // Is it initiated?
         // We'd probably be interfering with somehting if we do anything. So do nothing.
         return -2;
       }
       else if (!_er_flag(RNBASE_FLAG_LOCK_OUT)) {
         // If it isn't completed or initiated, and we aren't locked out, let's kick it off...
-        switch (current_work_item->get_opcode()) {
+        switch (current_job->get_opcode()) {
           case BusOpcode::TX_CMD_WAIT_RX:
           case BusOpcode::TX_CMD:
             //_er_set_flag(RNBASE_FLAG_CMD_PEND, !_er_flag(RNBASE_FLAG_CMD_MODE));
-            current_work_item->begin();
-            write_port(current_work_item->buf, current_work_item->buf_len);
+            current_job->begin();
+            write_port(current_job->buf, current_job->buf_len);
             break;
           case BusOpcode::TX:
             if (connected()) {
-              current_work_item->begin();
-              write_port(current_work_item->buf, current_work_item->buf_len);
+              current_job->begin();
+              write_port(current_job->buf, current_job->buf_len);
             }
             else {
               // Could have started a counterparty-bound message and didn't because: NO COUNTERPARTY
@@ -590,8 +586,8 @@ int8_t RNBase::advance_work_queue() {
       }
     }
     else {
-      current_work_item = work_queue.dequeue();
-      if (nullptr == current_work_item) {
+      current_job = work_queue.dequeue();
+      if (nullptr == current_job) {
         return 0;  // Nothing more to process.
       }
     }
@@ -620,14 +616,14 @@ void RNBase::master_mode(bool force_master_mode) {
 // Return 0 indicates caller should burn or wait.
 // Return 1 indicates we recycled.
 int8_t RNBase::burn_or_recycle_current() {
-  if ((nullptr != current_work_item) && (current_work_item->get_opcode() == BusOpcode::TX)) {
+  if ((nullptr != current_job) && (current_job->get_opcode() == BusOpcode::TX)) {
     // If there is something in-process and it is meant for a counterparty....
-    if (! current_work_item->inProgress()) {
+    if (! current_job->inProgress()) {
       // If there is an un-initiated counterparty transaction waiting, displace it.
       // Re-queue with retry priority.
-      work_queue.insert(current_work_item, RNBASE_RETRY_PRIORITY);
-      current_work_item->markQueued();
-      current_work_item = nullptr;   // Let the downstream code do its job...
+      work_queue.insert(current_job, RNBASE_RETRY_PRIORITY);
+      current_job->markQueued();
+      current_job = nullptr;   // Let the downstream code do its job...
       return 1;
     }
     else {
@@ -658,13 +654,13 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
         // Burn
       }
 
-      if ((nullptr != current_work_item) && (current_work_item->get_opcode() == BusOpcode::TX_CMD)) {
-        if (! current_work_item->inProgress()) {
+      if ((nullptr != current_job) && (current_job->get_opcode() == BusOpcode::TX_CMD)) {
+        if (! current_job->inProgress()) {
           // If there is an un-initiated counterparty transaction waiting, displace it.
           // Re-queue with retry priority.
-          work_queue.insert(current_work_item, RNBASE_RETRY_PRIORITY);
-          current_work_item->markQueued();
-          current_work_item = nullptr;   // Let the downstream code do its job...
+          work_queue.insert(current_job, RNBASE_RETRY_PRIORITY);
+          current_job->markQueued();
+          current_job = nullptr;   // Let the downstream code do its job...
         }
       }
       priority = RNBASE_CMD_PRIORITY;
@@ -672,10 +668,10 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
       nu->markQueued();
       break;
     case BusOpcode::TX:
-      if (nullptr == current_work_item) {
-        current_work_item = nu;
-        current_work_item->begin();
-        write_port(current_work_item->buf, current_work_item->buf_len);
+      if (nullptr == current_job) {
+        current_job = nu;
+        current_job->begin();
+        write_port(current_job->buf, current_job->buf_len);
       }
       else if (roomInQueue()) {
         work_queue.insert(nu, priority);
@@ -745,15 +741,15 @@ size_t RNBase::feed_rx_buffer(unsigned char *nu, size_t len) {
   while (remaining_len > 0) {
     if (_er_flag(RNBASE_FLAG_CMD_PEND)) {
       // Reasoning... If the module is in RNBASE_FLAG_CMD_PEND, it can only be $$$.
-      if (current_work_item) {
-        if (BusOpcode::TX_CMD_WAIT_RX == current_work_item->get_opcode()) {
+      if (current_job) {
+        if (BusOpcode::TX_CMD_WAIT_RX == current_job->get_opcode()) {
           size_t temp_len = strict_min((uint32_t) strlen(_cmd_return_str), (uint32_t) remaining_len);
           if ((remaining_len > temp_len) && (0 != memcmp(nu, _cmd_return_str, temp_len))) {
             // This is the command prompt.
             _er_set_flag(RNBASE_FLAG_CMD_PEND, false);
             _er_set_flag(RNBASE_FLAG_CMD_MODE, true);
             remaining_len -= temp_len;
-            current_work_item->markComplete();
+            current_job->markComplete();
           }
         }
       }
@@ -772,13 +768,13 @@ size_t RNBase::feed_rx_buffer(unsigned char *nu, size_t len) {
         remaining_len = end_idx - nu;
       }
 
-      if (current_work_item) {
-        if (BusOpcode::TX_CMD_WAIT_RX == current_work_item->get_opcode()) {
+      if (current_job) {
+        if (BusOpcode::TX_CMD_WAIT_RX == current_job->get_opcode()) {
           size_t temp_len = strict_min((uint32_t) strlen(_cmd_exit_str), (uint32_t) remaining_len);
           if ((remaining_len > temp_len) && (0 != memcmp(nu, _cmd_exit_str, temp_len))) {
             _er_set_flag(RNBASE_FLAG_CMD_MODE, true);
             remaining_len -= temp_len;
-            current_work_item->markComplete();
+            current_job->markComplete();
           }
         }
         else {
@@ -791,7 +787,7 @@ size_t RNBase::feed_rx_buffer(unsigned char *nu, size_t len) {
             local_log.concat("\n\n");
           }
           #endif
-          current_work_item->abort(XferFault::ILLEGAL_STATE);
+          current_job->abort(XferFault::ILLEGAL_STATE);
           return (len - remaining_len);
         }
       }
@@ -909,9 +905,9 @@ int8_t RNBase::callback_proc(ManuvrMsg* event) {
 void RNBase::printQueue(StringBuilder* temp) {
   BTQueuedOperation* q_item = nullptr;
 
-  if (current_work_item) {
+  if (current_job) {
     temp->concat("\n-- In working slot:\n");
-    current_work_item->printDebug(temp);
+    current_job->printDebug(temp);
   }
 
   if (getVerbosity() > 3) {
@@ -1029,9 +1025,9 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
       while (work_queue.hasNext()) {
         reclaimPreallocation(work_queue.dequeue());
       }
-      if (current_work_item) {
-        reclaimPreallocation(current_work_item);
-        current_work_item = nullptr;
+      if (current_job) {
+        reclaimPreallocation(current_job);
+        current_job = nullptr;
       }
       break;
     case 'c':

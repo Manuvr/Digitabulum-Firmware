@@ -149,6 +149,18 @@ void CPLDDriver::init_ext_clk() {
   HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1);
 }
 
+
+int8_t CPLDDriver::bus_init() {
+  init_spi(1, 0);   // CPOL=1, CPHA=0, HW-driven
+  return 0;
+}
+
+int8_t CPLDDriver::bus_deinit() {
+  return 0;
+}
+
+
+
 /**
 * Init of SPI peripheral 1. This is broken out because we might be bringing it
 *   up and down in a single runtime for debug reasons.
