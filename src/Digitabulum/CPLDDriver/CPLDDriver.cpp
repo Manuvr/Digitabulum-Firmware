@@ -204,8 +204,7 @@ const char* CPLDDriver::digitStateToString(DigitState x) {
 /**
 * Constructor. Also populates the global pointer reference.
 */
-CPLDDriver::CPLDDriver(const CPLDPins* p) : EventReceiver(), BusAdapter(50) {
-  setReceiverName("CPLDDriver");
+CPLDDriver::CPLDDriver(const CPLDPins* p) : EventReceiver("CPLDDriver"), BusAdapter(50) {
   memcpy(&_pins, p, sizeof(CPLDPins));
 
   if (nullptr == cpld) {

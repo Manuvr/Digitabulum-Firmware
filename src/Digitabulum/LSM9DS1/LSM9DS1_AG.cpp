@@ -717,7 +717,7 @@ bool LSM9DS1_AG::is_setup_completed() {
 * This is an override.
 */
 void LSM9DS1_AG::dumpDevRegs(StringBuilder *output) {
-  if (NULL == output) return;
+  if (nullptr == output) return;
   LSM9DSx_Common::dumpDevRegs(output);
 
   if (getVerbosity() > 1) {

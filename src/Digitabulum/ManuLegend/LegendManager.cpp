@@ -46,7 +46,7 @@ Vector3<int16_t> LegendManager::reflection_mag;
 Vector3<int16_t> LegendManager::reflection_acc;
 Vector3<int16_t> LegendManager::reflection_gyr;
 
-LegendManager* LegendManager::INSTANCE = NULL;
+LegendManager* LegendManager::INSTANCE = nullptr;
 
 LegendManager* LegendManager::getInstance() {
   return INSTANCE;
@@ -341,7 +341,7 @@ int8_t LegendManager::refreshIMU() {
 * @return non-zero on error.
 */
 int8_t LegendManager::send_map_event() {
-  event_legend_frame_ready.specific_target = NULL;
+  event_legend_frame_ready.specific_target = nullptr;
   if (operating_legend && _er_flag(LEGEND_MGR_FLAGS_LEGEND_SENT)) {
     operating_legend->copy_frame();
     Kernel::staticRaiseEvent(&event_legend_frame_ready);
@@ -437,7 +437,7 @@ int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
 
 
 void LegendManager::printDebug(StringBuilder *output) {
-  if (output == NULL) return;
+  if (output == nullptr) return;
   EventReceiver::printDebug(output);
   if (getVerbosity() > 0) {
     // Print just the aggregate sample count and return.
@@ -532,7 +532,7 @@ int8_t LegendManager::io_op_callback(BusOp* _op) {
 */
 int8_t LegendManager::queue_io_job(BusOp* _op) {
   SPIBusOp* op = (SPIBusOp*) _op;
-  if (NULL == op->callback) {
+  if (nullptr == op->callback) {
     op->callback = (BusOpCallback*) this;
   }
   return _bus->queue_io_job(op);
@@ -654,7 +654,7 @@ int8_t LegendManager::attached() {
     // Build some pre-formed Events.
     event_legend_frame_ready.repurpose(DIGITABULUM_MSG_IMU_MAP_STATE, (EventReceiver*) this);
     event_legend_frame_ready.incRefs();
-    event_legend_frame_ready.specific_target = NULL; //(EventReceiver*) this;
+    event_legend_frame_ready.specific_target = nullptr; //(EventReceiver*) this;
     event_legend_frame_ready.priority(EVENT_PRIORITY_LOWEST);
     event_legend_frame_ready.alterSchedulePeriod(25);
     event_legend_frame_ready.alterScheduleRecurrence(-1);

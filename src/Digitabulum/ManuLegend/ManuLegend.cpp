@@ -47,7 +47,7 @@ ManuLegend::ManuLegend() {
 ManuLegend::~ManuLegend() {
   if (dataset_local) {
     free(dataset_local);
-    dataset_local = NULL;
+    dataset_local = nullptr;
     ds_size = 0;
   }
 }
@@ -61,7 +61,7 @@ int8_t ManuLegend::finallize() {
   if (dataset_local) {
     // We have already carved out space for a dataset. We will need to re-allocate.
     free(dataset_local);
-    dataset_local = NULL;
+    dataset_local = nullptr;
   }
 
   // Nominal case: The dataset has yet to be created.
@@ -78,7 +78,7 @@ int8_t ManuLegend::finallize() {
 * Calling this will cause the class to copy the data the owner requested from the global data map.
 */
 int8_t ManuLegend::copy_frame() {
-  if (NULL == dataset_local) return -1;  // Bailout clause.
+  if (nullptr == dataset_local) return -1;  // Bailout clause.
   StringBuilder output;
   uint16_t accumulated_offset = 0;
   if (sequence()) {

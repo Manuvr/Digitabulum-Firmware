@@ -79,7 +79,7 @@ extern "C" {
 *
 * Static members and initializers should be located here.
 *******************************************************************************/
-volatile STM32F7USB* STM32F7USB::INSTANCE = NULL;
+volatile STM32F7USB* STM32F7USB::INSTANCE = nullptr;
 
 
 /*******************************************************************************

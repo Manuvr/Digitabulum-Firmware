@@ -528,7 +528,7 @@ void IIU::setVerbosity(int8_t nu) {
 
 
 void IIU::printLastFrame(StringBuilder *output) {
-  if (NULL == output) return;
+  if (nullptr == output) return;
   output->concatf("--- (MAG) (%.4f, %.4f, %.4f)",  (double)(_ptr_mag->x), (double)(_ptr_mag->y), (double)(_ptr_mag->z));
   output->concatf("\t(ACCEL) (%.4f, %.4f, %.4f)",  (double)(_ptr_acc->x), (double)(_ptr_acc->y), (double)(_ptr_acc->z));
   output->concatf("\t(GYRO) (%.4f, %.4f, %.4f)\n", (double)(_ptr_gyr->x), (double)(_ptr_gyr->y), (double)(_ptr_gyr->z));
@@ -541,7 +541,7 @@ void IIU::printLastFrame(StringBuilder *output) {
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
 void IIU::printDebug(StringBuilder* output) {
-  if (NULL == output) return;
+  if (nullptr == output) return;
   output->concatf("\n-------------------------------------------------------\n--- IIU %d\n-------------------------------------------------------\n--- %s legend\n--- Samples:\t ", pos_id, (legend_writable()?"writable":"invalid"));
   printBrief(output);  // OK
   output->concatf("--- measurements\n--- quat_queue:\t %d measurements\n", quat_queue.size());
@@ -579,7 +579,7 @@ void IIU::printBrief(StringBuilder* output) {
 
 
 void IIU::dumpPreformedElements(StringBuilder* output) {
-  if (NULL == output) return;
+  if (nullptr == output) return;
   output->concat("\n-------------------------------------------------------\n--- IIU \n-------------------------------------------------------\n");
   output->concat("--- Quat-crunch event\n");
   #if defined(__MANUVR_DEBUG)
