@@ -179,7 +179,7 @@ int8_t LSM9DS1_AG::set_base_filter_param_acc(uint8_t nu_bw_idx) {
 
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *   _____
 *  / ____|
 * | |  __ _   _ _ __ ___
@@ -188,7 +188,7 @@ int8_t LSM9DS1_AG::set_base_filter_param_acc(uint8_t nu_bw_idx) {
 *  \_____|\__, |_|  \___/
 *          __/ |
 *         |___/
-****************************************************************************************************/
+*******************************************************************************/
 
 /*
 * Gyroscope data
@@ -717,7 +717,7 @@ bool LSM9DS1_AG::is_setup_completed() {
 * This is an override.
 */
 void LSM9DS1_AG::dumpDevRegs(StringBuilder *output) {
-  if (NULL == output) return;
+  if (nullptr == output) return;
   LSM9DSx_Common::dumpDevRegs(output);
 
   if (getVerbosity() > 1) {
@@ -764,16 +764,20 @@ void LSM9DS1_AG::dumpPreformedElements(StringBuilder *output) {
 
 
 
-/****************************************************************************************************
-* Overrides from the SPI apparatus...                                                               *
-****************************************************************************************************/
+/*******************************************************************************
+* ___     _       _                      These members are mandatory overrides
+*  |   / / \ o   | \  _     o  _  _      for implementing I/O callbacks. They
+* _|_ /  \_/ o   |_/ (/_ \/ | (_ (/_     are also implemented by Adapters.
+*******************************************************************************/
 
-/*
-* All notifications of bus activity enter the class here. This is probably where
-*   we should act on data coming in.
+/**
+* When a bus operation completes, it is passed back to its issuing class.
+*
+* @param  _op  The bus operation that was completed.
+* @return SPI_CALLBACK_NOMINAL on success, or appropriate error code.
 */
 int8_t LSM9DS1_AG::io_op_callback(BusOp* _op) {
-  CPLDBusOp* op = (CPLDBusOp*) _op;
+  SPIBusOp* op = (SPIBusOp*) _op;
   int8_t return_value = SPI_CALLBACK_NOMINAL;
 
   // There is zero chance this object will be a null pointer unless it was done on purpose.

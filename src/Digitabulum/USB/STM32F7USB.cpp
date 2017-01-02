@@ -79,7 +79,7 @@ extern "C" {
 *
 * Static members and initializers should be located here.
 *******************************************************************************/
-volatile STM32F7USB* STM32F7USB::INSTANCE = NULL;
+volatile STM32F7USB* STM32F7USB::INSTANCE = nullptr;
 
 
 /*******************************************************************************
@@ -94,9 +94,8 @@ volatile STM32F7USB* STM32F7USB::INSTANCE = NULL;
 * Constructor.
 *
 */
-STM32F7USB::STM32F7USB() : ManuvrXport() {
+STM32F7USB::STM32F7USB() : ManuvrXport("USB") {
   INSTANCE = this;
-  setReceiverName("USB");
 
   // /* Init USB peripheral as VCP */
   // TM_USBD_CDC_Init(TM_USB_FS);

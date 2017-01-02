@@ -46,6 +46,10 @@ BTQueuedOperation::BTQueuedOperation(BusOpcode nu_op) : BTQueuedOperation() {
   opcode    = nu_op;
 }
 
+BTQueuedOperation::BTQueuedOperation(BusOpcode nu_op, BusOpCallback* requester) : BTQueuedOperation(nu_op) {
+  callback     = requester;
+};
+
 
 BTQueuedOperation::BTQueuedOperation(BusOpcode nu_op, StringBuilder* nu_data) : BTQueuedOperation(nu_op) {
   data.concatHandoff(nu_data);
@@ -67,16 +71,6 @@ BTQueuedOperation::~BTQueuedOperation() {
 }
 
 
-void BTQueuedOperation::wipe() {
-  xfer_state = XferState::UNDEF;
-  xfer_fault = XferFault::NONE;
-  opcode     = BusOpcode::UNDEF;
-  buf        = NULL;
-  buf_len    = 0;
-  txn_id     = BusOp::next_txn_id++;
-  data.clear();
-}
-
 
 void BTQueuedOperation::set_data(BusOpcode nu_op, StringBuilder* nu_data) {
   opcode = nu_op;
@@ -85,10 +79,68 @@ void BTQueuedOperation::set_data(BusOpcode nu_op, StringBuilder* nu_data) {
 }
 
 
+/* Call to mark something completed that may not be. */
+int8_t BTQueuedOperation::abort(XferFault cause) {
+  xfer_state = XferState::FAULT;
+  xfer_fault = cause;
+  buf       = nullptr;
+  buf_len   = 0;
+  return 0;
+}
+
+
+/* Call to mark TX complete. */
+int8_t BTQueuedOperation::markComplete() {
+  buf       = nullptr;
+  buf_len   = 0;
+  //enable_DMA_IRQ(false);
+  //HAL_DMA_Abort(&_dma_handle);
+  data.clear();   // Clear the data we just sent.
+  xfer_state = XferState::COMPLETE;
+  RNBase::isr_bt_queue_ready();
+  return 0;
+}
+
+
+/*******************************************************************************
+* ___     _                              These members are mandatory overrides
+*  |   / / \ o     |  _  |_              from the BusOp class.
+* _|_ /  \_/ o   \_| (_) |_)
+*******************************************************************************/
+
+/**
+* Wipes this bus operation so it can be reused.
+*/
+void BTQueuedOperation::wipe() {
+  xfer_state = XferState::UNDEF;
+  xfer_fault = XferFault::NONE;
+  opcode     = BusOpcode::UNDEF;
+  buf        = nullptr;
+  buf_len    = 0;
+  data.clear();
+}
+
+
+/**
+* Debug support method. This fxn is only present in debug builds.
+*
+* @param   StringBuilder* The buffer into which this fxn should write its output.
+*/
+void BTQueuedOperation::printDebug(StringBuilder *output) {
+  BusOp::printBusOp("BTOp", this, output);
+  int tmp_len = data.length();
+  output->concatf("\t length:      %d\n", tmp_len);
+  if (tmp_len > 0) {
+    output->concatf("\t data:        %s\n", data.string());
+  }
+  output->concat("\n\n");
+}
+
+
 /*
 * This queue item can begin executing. This is where any bus access should be initiated.
 */
-int8_t BTQueuedOperation::begin() {
+XferFault BTQueuedOperation::begin() {
   xfer_state = XferState::INITIATE;
   switch (opcode) {
     case BusOpcode::TX_CMD_WAIT_RX:  // Transmit and remember.
@@ -117,50 +169,5 @@ int8_t BTQueuedOperation::begin() {
       }
       break;
   }
-  return 0;
-}
-
-
-/* Call to mark something completed that may not be. */
-int8_t BTQueuedOperation::abort(XferFault cause) {
-  xfer_state = XferState::FAULT;
-  xfer_fault = cause;
-  buf       = NULL;
-  buf_len   = 0;
-  return 0;
-}
-
-
-/* Call to mark TX complete. */
-int8_t BTQueuedOperation::markComplete() {
-  buf       = NULL;
-  buf_len   = 0;
-  //enable_DMA_IRQ(false);
-  //HAL_DMA_Abort(&_dma_handle);
-  data.clear();   // Clear the data we just sent.
-  xfer_state = XferState::COMPLETE;
-  RNBase::isr_bt_queue_ready();
-  return 0;
-}
-
-
-
-/**
-* Debug support method. This fxn is only present in debug builds.
-*
-* @param   StringBuilder* The buffer into which this fxn should write its output.
-*/
-void BTQueuedOperation::printDebug(StringBuilder *output) {
-  output->concatf("\t --- txn_id:  0x%08x -------------\n", txn_id);
-  output->concatf("\t opcode:      %s\n", BusOp::getOpcodeString(opcode));
-  output->concatf("\t xfer_state:  %s\n", BusOp::getStateString(xfer_state));
-  if (XferFault::NONE != xfer_fault) {
-    output->concatf("\t xfer_fault:  %s\n", BusOp::getErrorString(xfer_fault));
-  }
-
-  int tmp_len = data.length();
-  output->concatf("\t length:      %d\n", tmp_len);
-  if (tmp_len > 0) {
-    output->concatf("\t data:        %s\n", data.string());
-  }
+  return xfer_fault;
 }

@@ -37,16 +37,16 @@ IIU LegendManager::iius[LEGEND_DATASET_IIU_COUNT];  // TODO: Shouldn't be static
 InertialMeasurement LegendManager::__prealloc[PREALLOCATED_IIU_MEASUREMENTS];
 // TODO: These shouldn't be static.
 
-CPLDBusOp LegendManager::_preformed_read_a;
-CPLDBusOp LegendManager::_preformed_read_g;
-CPLDBusOp LegendManager::_preformed_read_m;
-CPLDBusOp LegendManager::_preformed_fifo_read;
+SPIBusOp LegendManager::_preformed_read_a;
+SPIBusOp LegendManager::_preformed_read_g;
+SPIBusOp LegendManager::_preformed_read_m;
+SPIBusOp LegendManager::_preformed_fifo_read;
 
 Vector3<int16_t> LegendManager::reflection_mag;
 Vector3<int16_t> LegendManager::reflection_acc;
 Vector3<int16_t> LegendManager::reflection_gyr;
 
-LegendManager* LegendManager::INSTANCE = NULL;
+LegendManager* LegendManager::INSTANCE = nullptr;
 
 LegendManager* LegendManager::getInstance() {
   return INSTANCE;
@@ -171,10 +171,8 @@ const char* LegendManager::chiralityString(Chirality x) {
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
-LegendManager::LegendManager(BusAdapter<CPLDBusOp>* bus) : EventReceiver() {
+LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") {
   _bus = (CPLDDriver*) bus;  // TODO: Make this cast unnecessary.
-
-  setReceiverName("ManuMgmt");
   INSTANCE = this;
 
   reflection_mag.x = 1;
@@ -341,7 +339,7 @@ int8_t LegendManager::refreshIMU() {
 * @return non-zero on error.
 */
 int8_t LegendManager::send_map_event() {
-  event_legend_frame_ready.specific_target = NULL;
+  event_legend_frame_ready.specific_target = nullptr;
   if (operating_legend && _er_flag(LEGEND_MGR_FLAGS_LEGEND_SENT)) {
     operating_legend->copy_frame();
     Kernel::staticRaiseEvent(&event_legend_frame_ready);
@@ -349,7 +347,6 @@ int8_t LegendManager::send_map_event() {
   }
   return -1;
 }
-
 
 
 /**
@@ -436,58 +433,6 @@ int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
 
 
 
-void LegendManager::printDebug(StringBuilder *output) {
-  if (output == NULL) return;
-  EventReceiver::printDebug(output);
-  if (getVerbosity() > 0) {
-    // Print just the aggregate sample count and return.
-  }
-  output->concatf("-- Chirality           %s\n", chiralityString(getChirality()));
-  output->concatf("-- __IIU location      %p\n", (uintptr_t) iius);
-
-  if (getVerbosity() > 3) {
-    output->concatf("-- __dataset location  %p\n", (uintptr_t) __dataset);
-    output->concatf("-- __prealloc location %p\n", (uintptr_t) __prealloc);
-    output->concatf("-- __IIU location      %p\n", (uintptr_t) iius);
-    output->concatf("-- INSTANCE location   %p\n--\n", (uintptr_t) INSTANCE);
-  }
-
-  float grav_consensus = 0.0;
-  output->concat("-- Intertial integration units:\n");
-  for (uint8_t i = 0; i < 17; i++) {
-    grav_consensus += iius[i].grav_scalar;
-  }
-  grav_consensus /= 17;
-  output->concatf("-- Gravity consensus:  %.4fg\n",  (double) grav_consensus);
-
-  output->concatf("-- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
-  output->concatf("-- Max quat proc       %u\n",    IIU::max_quats_per_event);
-  output->concatf("-- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
-  output->concatf("-- Delta-t             %2.5f\n--\n", (double) *(_ptr_delta_t));
-
-  if (getVerbosity() > 3) {
-    output->concatf("-- MAX_DATASET_SIZE    %u\n",    (unsigned long) LEGEND_MGR_MAX_DATASET_SIZE);
-    #if defined(__MANUVR_DEBUG)
-      if (getVerbosity() > 5) {
-        event_legend_frame_ready.printDebug(output);
-        event_iiu_read.printDebug(output);
-      }
-    #endif
-  }
-
-  output->concatf("-- prealloc starves    %u\n-- minimum_prealloc    %u\n", (unsigned long) prealloc_starves, (unsigned long) minimum_prealloc_level);
-  output->concatf("-- Measurement queue info\n--\t Instantiated %u \t Freed: %u \t Prealloc queue depth: %d\n--\n", measurement_heap_instantiated, measurement_heap_freed, preallocd_measurements.size());
-
-  output->concat("-- Intertial integration units:\n");
-  for (uint8_t i = 0; i < 17; i++) {
-    output->concatf("\tIIU %d\t ", i);
-    iius[i].printBrief(output);
-  }
-  output->concat("\n");
-}
-
-
-
 uint32_t LegendManager::totalSamples() {
   uint32_t return_value = 0;
   for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
@@ -496,47 +441,6 @@ uint32_t LegendManager::totalSamples() {
   return return_value;
 }
 
-
-
-
-/*******************************************************************************
-* Overrides from the SPI apparatus...                                          *
-*******************************************************************************/
-
-/*
-* When a bus operation completes, it is passed back to the class that created it.
-*/
-int8_t LegendManager::io_op_callback(BusOp* _op) {
-  CPLDBusOp* op = (CPLDBusOp*) _op;
-  // There is zero chance this object will be a null pointer unless it was done on purpose.
-  if (op->hasFault()) {
-    if (getVerbosity() > 3) local_log.concat("io_op_callback() rejected a callback because the bus op failed.\n");
-    return SPI_CALLBACK_ERROR;
-  }
-
-  if (op == &_preformed_read_a) {
-  }
-  else if (op == &_preformed_read_g) {
-  }
-  else if (op == &_preformed_read_m) {
-  }
-
-  if (local_log.length() > 0) Kernel::log(&local_log);
-  return SPI_CALLBACK_NOMINAL;
-}
-
-
-/*
-* This is what we call when this class wants to conduct a transaction on the SPI bus.
-* We simply forward to the CPLD.
-*/
-int8_t LegendManager::queue_io_job(BusOp* _op) {
-  CPLDBusOp* op = (CPLDBusOp*) _op;
-  if (NULL == op->callback) {
-    op->callback = (BusOpCallback*) this;
-  }
-  return _bus->queue_io_job(op);
-}
 
 
 /*******************************************************************************
@@ -609,6 +513,73 @@ Anatomical LegendManager::get_digit_given_port(DigitPort port) {
 
 
 
+/*******************************************************************************
+* ___     _       _                      These members are mandatory overrides
+*  |   / / \ o   | \  _     o  _  _      for implementing I/O callbacks. They
+* _|_ /  \_/ o   |_/ (/_ \/ | (_ (/_     are also implemented by Adapters.
+*******************************************************************************/
+
+/**
+* Called prior to the given bus operation beginning.
+* Returning 0 will allow the operation to continue.
+* Returning anything else will fail the operation with IO_RECALL.
+*   Operations failed this way will have their callbacks invoked as normal.
+*
+* Here we have the chance to ammend or cancel a bus operation prior to it
+*   consuming bus time.
+*
+* @param  _op  The bus operation that was completed.
+* @return 0 to run the op, or non-zero to cancel it.
+*/
+int8_t LegendManager::io_op_callahead(BusOp* _op) {
+  return 0;
+}
+
+
+/**
+* When a bus operation completes, it is passed back to its issuing class.
+*
+* @param  _op  The bus operation that was completed.
+* @return 0 on success, or appropriate error code.
+*/
+int8_t LegendManager::io_op_callback(BusOp* _op) {
+  SPIBusOp* op = (SPIBusOp*) _op;
+  // There is zero chance this object will be a null pointer unless it was done on purpose.
+  if (op->hasFault()) {
+    if (getVerbosity() > 3) local_log.concat("io_op_callback() rejected a callback because the bus op failed.\n");
+    return SPI_CALLBACK_ERROR;
+  }
+
+  if (op == &_preformed_read_a) {
+  }
+  else if (op == &_preformed_read_g) {
+  }
+  else if (op == &_preformed_read_m) {
+  }
+
+  if (local_log.length() > 0) Kernel::log(&local_log);
+  return SPI_CALLBACK_NOMINAL;
+}
+
+
+/**
+* This is what is called when the class wants to conduct a transaction on the bus.
+* Note that this is different from other class implementations, in that it checks for
+*   callback population before clobbering it. This is because this class is also the
+*   SPI driver. This might end up being reworked later.
+*
+* @param  _op  The bus operation to execute.
+* @return Zero on success, or appropriate error code.
+*/
+int8_t LegendManager::queue_io_job(BusOp* _op) {
+  SPIBusOp* op = (SPIBusOp*) _op;
+  if (nullptr == op->callback) {
+    op->callback = (BusOpCallback*) this;
+  }
+  return _bus->queue_io_job(op);
+}
+
+
 
 /*******************************************************************************
 * ######## ##     ## ######## ##    ## ########  ######
@@ -654,7 +625,7 @@ int8_t LegendManager::attached() {
     // Build some pre-formed Events.
     event_legend_frame_ready.repurpose(DIGITABULUM_MSG_IMU_MAP_STATE, (EventReceiver*) this);
     event_legend_frame_ready.incRefs();
-    event_legend_frame_ready.specific_target = NULL; //(EventReceiver*) this;
+    event_legend_frame_ready.specific_target = nullptr; //(EventReceiver*) this;
     event_legend_frame_ready.priority(EVENT_PRIORITY_LOWEST);
     event_legend_frame_ready.alterSchedulePeriod(25);
     event_legend_frame_ready.alterScheduleRecurrence(-1);
@@ -916,20 +887,62 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
 }
 
 
+/**
+* Debug support method. This fxn is only present in debug builds.
+*
+* @param   StringBuilder* The buffer into which this fxn should write its output.
+*/
+void LegendManager::printDebug(StringBuilder *output) {
+  if (output == nullptr) return;
+  EventReceiver::printDebug(output);
+  if (getVerbosity() > 0) {
+    // Print just the aggregate sample count and return.
+  }
+  output->concatf("-- Chirality           %s\n", chiralityString(getChirality()));
+  output->concatf("-- __IIU location      %p\n", (uintptr_t) iius);
 
-/*******************************************************************************
-*  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄         ▄  ▄▄▄▄▄▄▄▄▄▄▄
-* ▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░▌       ▐░▌▐░░░░░░░░░░░▌
-* ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌▐░█▀▀▀▀▀▀▀▀▀
-* ▐░▌       ▐░▌▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░▌
-* ▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌▐░▌       ▐░▌▐░▌ ▄▄▄▄▄▄▄▄
-* ▐░▌       ▐░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░▌       ▐░▌▐░▌▐░░░░░░░░▌
-* ▐░▌       ▐░▌▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌▐░▌ ▀▀▀▀▀▀█░▌
-* ▐░▌       ▐░▌▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░▌       ▐░▌
-* ▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄█░▌
-* ▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
-*  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀
-*******************************************************************************/
+  if (getVerbosity() > 3) {
+    output->concatf("-- __dataset location  %p\n", (uintptr_t) __dataset);
+    output->concatf("-- __prealloc location %p\n", (uintptr_t) __prealloc);
+    output->concatf("-- __IIU location      %p\n", (uintptr_t) iius);
+    output->concatf("-- INSTANCE location   %p\n--\n", (uintptr_t) INSTANCE);
+  }
+
+  float grav_consensus = 0.0;
+  output->concat("-- Intertial integration units:\n");
+  for (uint8_t i = 0; i < 17; i++) {
+    grav_consensus += iius[i].grav_scalar;
+  }
+  grav_consensus /= 17;
+  output->concatf("-- Gravity consensus:  %.4fg\n",  (double) grav_consensus);
+
+  output->concatf("-- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
+  output->concatf("-- Max quat proc       %u\n",    IIU::max_quats_per_event);
+  output->concatf("-- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
+  output->concatf("-- Delta-t             %2.5f\n--\n", (double) *(_ptr_delta_t));
+
+  if (getVerbosity() > 3) {
+    output->concatf("-- MAX_DATASET_SIZE    %u\n",    (unsigned long) LEGEND_MGR_MAX_DATASET_SIZE);
+    #if defined(__MANUVR_DEBUG)
+      if (getVerbosity() > 5) {
+        event_legend_frame_ready.printDebug(output);
+        event_iiu_read.printDebug(output);
+      }
+    #endif
+  }
+
+  output->concatf("-- prealloc starves    %u\n-- minimum_prealloc    %u\n", (unsigned long) prealloc_starves, (unsigned long) minimum_prealloc_level);
+  output->concatf("-- Measurement queue info\n--\t Instantiated %u \t Freed: %u \t Prealloc queue depth: %d\n--\n", measurement_heap_instantiated, measurement_heap_freed, preallocd_measurements.size());
+
+  output->concat("-- Intertial integration units:\n");
+  for (uint8_t i = 0; i < 17; i++) {
+    output->concatf("\tIIU %d\t ", i);
+    iius[i].printBrief(output);
+  }
+  output->concat("\n");
+}
+
+
 
 #if defined(MANUVR_CONSOLE_SUPPORT)
 void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
@@ -1389,7 +1402,7 @@ int8_t LegendManager::read_identities() {
   bzero(&_imu_ids[0], (2 * LEGEND_DATASET_IIU_COUNT));
 
   // First the inertial aspect.
-  CPLDBusOp* op = _bus->new_op(BusOpcode::RX, this);
+  SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
   op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
   op->setBuffer(&_imu_ids[0], LEGEND_DATASET_IIU_COUNT);
   if (0 == queue_io_job(op)) {
@@ -1405,7 +1418,7 @@ int8_t LegendManager::read_identities() {
 
 
 int8_t LegendManager::read_fifo_depth() {
-  CPLDBusOp* op = _bus->new_op(BusOpcode::RX, this);
+  SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
   op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
   op->setBuffer(&_imu_ids[0], LEGEND_DATASET_IIU_COUNT);
   return queue_io_job(op);

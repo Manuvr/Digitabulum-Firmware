@@ -30,7 +30,6 @@ This file contains functions for running firmware under linux.
 void CPLDDriver::_deinit() {
 }
 
-
 /**
 * Init the timer to provide the CPLD with an external clock. This clock is the
 *   most-flexible, and we use it by default.
@@ -38,7 +37,6 @@ void CPLDDriver::_deinit() {
 bool CPLDDriver::_set_timer_base(uint16_t _period) {
   return true;
 }
-
 
 /**
 * Init the timer to provide the CPLD with an external clock. This clock is the
@@ -85,6 +83,23 @@ void CPLDDriver::externalOscillator(bool on) {
 }
 
 
+
+/*******************************************************************************
+* ___     _                                  This is a template class for
+*  |   / / \ o    /\   _|  _. ._ _|_  _  ._  defining arbitrary I/O adapters.
+* _|_ /  \_/ o   /--\ (_| (_| |_) |_ (/_ |   Adapters must be instanced with
+*                             |              a BusOp as the template param.
+*******************************************************************************/
+
+int8_t CPLDDriver::bus_init() {
+  return 0;
+}
+
+int8_t CPLDDriver::bus_deinit() {
+  return 0;
+}
+
+
 /**
 * Debug support method. This fxn is only present in debug builds.
 *
@@ -95,39 +110,23 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
 
 
 
-
-
-/**
-* Used to disable the DMA IRQs at the NVIC.
-*
-* @param bool enable the interrupts?
-*/
-void CPLDBusOp::enableSPI_DMA(bool enable) {
-  if (enable) {
-  }
-  else {
-  }
-}
-
-
-// Useful trick to mask warnings that the compiler raises, but which we know are
-//   intentional.
-//   http://stackoverflow.com/questions/3378560/how-to-disable-gcc-warnings-for-a-few-lines-of-code
-//   https://gcc.gnu.org/onlinedocs/gcc/Diagnostic-Pragmas.html
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+/*******************************************************************************
+* ___     _                              These members are mandatory overrides
+*  |   / / \ o     |  _  |_              from the BusOp class.
+* _|_ /  \_/ o   \_| (_) |_)
+*******************************************************************************/
 
 /**
 * Calling this member will cause the bus operation to be started.
 *
 * @return 0 on success, or non-zero on failure.
 */
-int8_t CPLDBusOp::begin() {
+XferFault SPIBusOp::begin() {
   //time_began    = micros();
   if (0 == _param_len) {
     // Obvious invalidity. We must have at least one transfer parameter.
     abort(XferFault::BAD_PARAM);
-    return -1;
+    return XferFault::BAD_PARAM;
   }
 
   set_state(XferState::INITIATE);  // Indicate that we now have bus control.
@@ -143,7 +142,7 @@ int8_t CPLDBusOp::begin() {
     //HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*)(xfer_params + 2), 2);
   }
 
-  return 0;
+  return XferFault::NONE;
 }
 
 
@@ -153,7 +152,7 @@ int8_t CPLDBusOp::begin() {
 *
 * @return 0 on success. Non-zero on failure.
 */
-int8_t CPLDBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
+int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
   //debug_log.concatf("advance_op(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
   //Kernel::log(&debug_log);
 
@@ -198,4 +197,3 @@ int8_t CPLDBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
 
   return -1;
 }
-#pragma GCC diagnostic pop

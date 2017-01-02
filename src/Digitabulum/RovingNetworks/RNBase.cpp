@@ -21,15 +21,8 @@ limitations under the License.
 
 //#include <stm32f7xx_hal_dma.h>
 #include "RNBase.h"
-#include "XenoSession/XenoSession.h"
+#include <XenoSession/XenoSession.h>
 #include <Drivers/BusQueue/BusQueue.h>
-
-
-// Messages that are specific to Digitabulum.
-const MessageTypeDef rn_module_message_defs[] = {
-  {  MANUVR_MSG_BT_EXIT_RESET    , 0x0000,    "RN_RESET"    , ManuvrMsg::MSG_ARGS_NONE }, //
-  {  MANUVR_MSG_BT_EXPIRE_LOCKOUT, 0x0000,    "RN_LOCK_LIFT", ManuvrMsg::MSG_ARGS_NONE }, //
-};
 
 
 /*******************************************************************************
@@ -60,33 +53,15 @@ const MessageTypeDef rn_module_message_defs[] = {
 * Static members and initializers should be located here.
 *******************************************************************************/
 volatile RNBase* RNBase::INSTANCE = nullptr;
-BTQueuedOperation* RNBase::current_work_item = nullptr;
 
-BTQueuedOperation RNBase::__prealloc_pool[PREALLOCATED_BT_Q_OPS];
+BTQueuedOperation  RNBase::__prealloc_pool[PREALLOCATED_BT_Q_OPS];
+//template<> PriorityQueue<BTQueuedOperation*> BusAdapter<BTQueuedOperation>::preallocated;
 
-uint32_t RNBase::_prealloc_starves      = 0;
-uint32_t RNBase::_heap_instantiations   = 0;
-uint32_t RNBase::_heap_frees            = 0;
-uint32_t RNBase::_queue_floods          = 0;
-
-
-PriorityQueue<BTQueuedOperation*> RNBase::preallocated;     // Messages that we've allocated ahead of time.
-
-
-BTQueuedOperation* RNBase::fetchPreallocation() {
-  BTQueuedOperation* return_value;
-
-  if (0 == preallocated.size()) {
-    // We have exhausted our preallocated measurements. Note it.
-    _prealloc_starves++;
-    return_value = new BTQueuedOperation();
-    _heap_instantiations++;
-  }
-  else {
-    return_value = preallocated.dequeue();
-  }
-  return return_value;
-}
+// Messages that are specific to Digitabulum.
+const MessageTypeDef rn_module_message_defs[] = {
+  {  MANUVR_MSG_BT_EXIT_RESET    , 0x0000,    "RN_RESET"    , ManuvrMsg::MSG_ARGS_NONE }, //
+  {  MANUVR_MSG_BT_EXPIRE_LOCKOUT, 0x0000,    "RN_LOCK_LIFT", ManuvrMsg::MSG_ARGS_NONE }, //
+};
 
 
 /**
@@ -107,14 +82,13 @@ BTQueuedOperation* RNBase::fetchPreallocation() {
 * @param BTQueuedOperation* obj is the pointer to the object to be reclaimed.
 */
 void RNBase::reclaimPreallocation(BTQueuedOperation* obj) {
-  unsigned int obj_addr = ((uint32_t) obj);
-  unsigned int pre_min  = ((uint32_t) INSTANCE->__prealloc_pool);
-  unsigned int pre_max  = pre_min + (sizeof(BTQueuedOperation) * PREALLOCATED_BT_Q_OPS);
+  uintptr_t obj_addr = ((uintptr_t) obj);
+  uintptr_t pre_min  = ((uintptr_t) INSTANCE->__prealloc_pool);
+  uintptr_t pre_max  = pre_min + (sizeof(BTQueuedOperation) * PREALLOCATED_BT_Q_OPS);
 
-  obj->wipe();
   if ((obj_addr < pre_max) && (obj_addr >= pre_min)) {
     // If we are in this block, it means obj was preallocated. wipe and reclaim it.
-    preallocated.insert(obj);
+    BusAdapter::return_op_to_pool(obj);
   }
   else {
     // We were created because our prealloc was starved. we are therefore a transient heap object.
@@ -153,8 +127,7 @@ void RNBase::start_lockout(uint32_t milliseconds) {
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 
-RNBase::RNBase(RNPins* pins) : ManuvrXport() {
-  setReceiverName("RNBase");
+RNBase::RNBase(const char* nom, RNPins* pins) : ManuvrXport(nom), BusAdapter(RNBASE_MAX_BT_Q_DEPTH) {
   set_xport_state(MANUVR_XPORT_FLAG_STREAM_ORIENTED);
   //BTQueuedOperation::buildDMAMembers();
   if (nullptr == INSTANCE) {
@@ -238,6 +211,216 @@ int8_t RNBase::toCounterparty(StringBuilder* buf, int8_t mm) {
 
 
 /*******************************************************************************
+* ___     _       _                      These members are mandatory overrides
+*  |   / / \ o   | \  _     o  _  _      for implementing I/O callbacks. They
+* _|_ /  \_/ o   |_/ (/_ \/ | (_ (/_     are also implemented by Adapters.
+*******************************************************************************/
+
+/**
+* Called prior to the given bus operation beginning.
+* Returning 0 will allow the operation to continue.
+* Returning anything else will fail the operation with IO_RECALL.
+*   Operations failed this way will have their callbacks invoked as normal.
+*
+* @param  _op  The bus operation that was completed.
+* @return 0 to run the op, or non-zero to cancel it.
+*/
+int8_t RNBase::io_op_callahead(BusOp* _op) {
+  // Bus adapters don't typically do anything here, other
+  //   than permit the transfer.
+  return 0;
+}
+
+
+/**
+* When a bus operation completes, it is passed back to its issuing class.
+*
+* @param  _op  The bus operation that was completed.
+* @return SPI_CALLBACK_NOMINAL on success, or appropriate error code.
+*/
+int8_t RNBase::io_op_callback(BusOp* _op) {
+  BTQueuedOperation* op = (BTQueuedOperation*) _op;
+  // There is zero chance this object will be a null pointer unless it was done on purpose.
+  if (getVerbosity() > 2) {
+    local_log.concatf("Probably shouldn't be in the default callback case...\n");
+    op->printDebug(&local_log);
+  }
+
+  flushLocalLog();
+  return 0;
+}
+
+
+/*
+* This is what is called when the class wants to conduct a transaction on the bus.
+*
+* @param  _op  The bus operation to execute.
+* @return Zero on success, or appropriate error code.
+*/
+int8_t RNBase::queue_io_job(BusOp* op) {
+  BTQueuedOperation* nu = (BTQueuedOperation*) op;
+	if (current_job) {
+		// Something is already going on with the bus. Queue...
+		work_queue.insert(nu);
+	}
+	else {
+		// Bus is idle. Put this work item in the active slot and start the bus operations...
+		current_job = nu;
+	  nu->begin();
+	}
+	return 0;
+}
+
+
+/*******************************************************************************
+* ___     _                                  This is a template class for
+*  |   / / \ o    /\   _|  _. ._ _|_  _  ._  defining arbitrary I/O adapters.
+* _|_ /  \_/ o   /--\ (_| (_| |_) |_ (/_ |   Adapters must be instanced with
+*                             |              a BusOp as the template param.
+*******************************************************************************/
+
+int8_t RNBase::bus_init() {
+  return 0;
+}
+
+int8_t RNBase::bus_deinit() {
+  return 0;
+}
+
+
+/**
+* Return a vacant SPIBusOp to the caller, allocating if necessary.
+*
+* @param  _op   The desired bus operation.
+* @param  _req  The device pointer that is requesting the job.
+* @return an RNBase to be used. Only NULL if out-of-mem.
+*/
+BTQueuedOperation* RNBase::new_op(BusOpcode _op, BusOpCallback* _req) {
+  BTQueuedOperation* return_value = BusAdapter::new_op();
+  return_value->set_opcode(_op);
+  return_value->callback = _req;
+  return return_value;
+}
+
+
+/*
+* Calling this function will advance the work queue after performing cleanup
+*   operations on the present or pending operation.
+*
+* @return the number of bus operations proc'd.
+*/
+int8_t RNBase::advance_work_queue() {
+  read_port();
+  /* Prepare to generate bugs....
+  I normally wouldn't write something this way. The idea is to force an exit
+  through one of the states. We don't know going into this call how many states
+  we will traverse before our work is done.
+  */
+  while (true) {
+    if (current_job) {
+      if (current_job->isComplete()) {   // Is it completed?
+        if (BusOpcode::RX == current_job->get_opcode()) {
+          // This is meant for the session.
+          if (haveFar()) {
+            #ifdef __MANUVR_DEBUG
+              if (getVerbosity() > 4) Kernel::log("RNBase sending RX to application...\n");
+            #endif
+          }
+        }
+        reclaimPreallocation(current_job);
+        current_job = nullptr;
+      }
+      else if (current_job->inProgress()) {   // Is it initiated?
+        // We'd probably be interfering with somehting if we do anything. So do nothing.
+        return -2;
+      }
+      else if (!_er_flag(RNBASE_FLAG_LOCK_OUT)) {
+        // If it isn't completed or initiated, and we aren't locked out, let's kick it off...
+        switch (current_job->get_opcode()) {
+          case BusOpcode::TX_CMD_WAIT_RX:
+          case BusOpcode::TX_CMD:
+            //_er_set_flag(RNBASE_FLAG_CMD_PEND, !_er_flag(RNBASE_FLAG_CMD_MODE));
+            current_job->begin();
+            write_port(current_job->buf, current_job->buf_len);
+            break;
+          case BusOpcode::TX:
+            if (connected()) {
+              current_job->begin();
+              write_port(current_job->buf, current_job->buf_len);
+            }
+            else {
+              // Could have started a counterparty-bound message and didn't because: NO COUNTERPARTY
+              return -3;
+            }
+            break;
+          default:
+            #ifdef __MANUVR_DEBUG
+              if (getVerbosity() > 1) Kernel::log("advance_work_queue(): We should not be here.\n");
+            #endif
+            break;
+        }
+        return 1;   // We fired off a transaction.
+      }
+      else {
+        return -1;   // We could have done something, but lockout was active.
+      }
+    }
+    else {
+      current_job = work_queue.dequeue();
+      if (nullptr == current_job) {
+        return 0;  // Nothing more to process.
+      }
+    }
+  }
+  return 0;
+}
+
+
+///*
+//* This function needs to be called to move the queue forward.
+//*/
+//int8_t RNBase::advance_work_queue() {
+//	if (current_job) {
+//		if (current_job->isComplete()) {
+//			if (current_job->hasFault()) {
+//			  #ifdef __MANUVR_DEBUG
+//			  if (getVerbosity() > 3) {
+//          local_log.concatf("Destroying failed job.\n");
+//          if (getVerbosity() > 4) current_job->printDebug(&local_log);
+//        }
+//			  #endif
+//			}
+//
+//			// Hand this completed operation off to the class that requested it. That class will
+//			//   take what it wants from the buffer and, when we return to execution here, we will
+//			//   be at liberty to clean the operation up.
+//			if (current_job->callback) {
+//				// TODO: need some minor reorg to make this not so obtuse...
+//				current_job->callback->io_op_callback(current_job);
+//			}
+//
+//			delete current_job;
+//			current_job = work_queue.dequeue();
+//		}
+//	}
+//	else {
+//		// If there is nothing presently being serviced, we should promote an operation from the
+//		//   queue into the active slot and initiate it in the block below.
+//		current_job = work_queue.dequeue();
+//	}
+//
+//	if (current_job) {
+//		if (!current_job->has_bus_control()) {
+//			current_job->begin();
+//		}
+//	}
+//
+//	flushLocalLog();
+//  return 0;
+//}
+
+
+/*******************************************************************************
 * ___________                                                  __
 * \__    ___/___________    ____   ____________   ____________/  |_
 *   |    |  \_  __ \__  \  /    \ /  ___/\____ \ /  _ \_  __ \   __\
@@ -268,9 +451,9 @@ int8_t RNBase::reset() {
   while (work_queue.hasNext()) {
     reclaimPreallocation(work_queue.dequeue());
   }
-  if (current_work_item) {
-    reclaimPreallocation(current_work_item);
-    current_work_item = nullptr;
+  if (current_job) {
+    reclaimPreallocation(current_job);
+    current_job = nullptr;
   }
 
   _er_set_flag(RNBASE_FLAG_LOCK_OUT);
@@ -368,7 +551,7 @@ void RNBase::setDevName(char *nu_name) {
 /**
 * Sends the soft-reboot command to the module.
 */
-void RNBase::sendRebootCommand(void) {
+void RNBase::sendRebootCommand() {
   enterCommandMode();
   StringBuilder temp(RNBASE_CMD_REBOOT);
   insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, &temp);
@@ -447,77 +630,6 @@ void RNBase::setAutoconnect(bool autocon) {
 * Asynchronous support fxns
 *******************************************************************************/
 
-/*
-* This gets called to service queue events.
-*/
-int8_t RNBase::idleService() {
-  read_port();
-  /* Prepare to generate bugs....
-  I normally wouldn't write something this way. The idea is to force an exit
-  through one of the states. We don't know going into this call how many states
-  we will traverse before our work is done.
-  */
-  while (true) {
-    if (current_work_item) {
-      if (current_work_item->isComplete()) {   // Is it completed?
-        if (BusOpcode::RX == current_work_item->get_opcode()) {
-          // This is meant for the session.
-          if (haveFar()) {
-            #ifdef __MANUVR_DEBUG
-              if (getVerbosity() > 4) Kernel::log("RNBase sending RX to application...\n");
-            #endif
-          }
-        }
-        reclaimPreallocation(current_work_item);
-        current_work_item = nullptr;
-      }
-      else if (current_work_item->inProgress()) {   // Is it initiated?
-        // We'd probably be interfering with somehting if we do anything. So do nothing.
-        return -2;
-      }
-      else if (!_er_flag(RNBASE_FLAG_LOCK_OUT)) {
-        // If it isn't completed or initiated, and we aren't locked out, let's kick it off...
-        switch (current_work_item->get_opcode()) {
-          case BusOpcode::TX_CMD_WAIT_RX:
-          case BusOpcode::TX_CMD:
-            //_er_set_flag(RNBASE_FLAG_CMD_PEND, !_er_flag(RNBASE_FLAG_CMD_MODE));
-            current_work_item->begin();
-            write_port(current_work_item->buf, current_work_item->buf_len);
-            break;
-          case BusOpcode::TX:
-            if (connected()) {
-              current_work_item->begin();
-              write_port(current_work_item->buf, current_work_item->buf_len);
-            }
-            else {
-              // Could have started a counterparty-bound message and didn't because: NO COUNTERPARTY
-              return -3;
-            }
-            break;
-          default:
-            #ifdef __MANUVR_DEBUG
-              if (getVerbosity() > 1) Kernel::log("idleService(): We should not be here.\n");
-            #endif
-            break;
-        }
-        return 1;   // We fired off a transaction.
-      }
-      else {
-        return -1;   // We could have done something, but lockout was active.
-      }
-    }
-    else {
-      current_work_item = work_queue.dequeue();
-      if (nullptr == current_work_item) {
-        return 0;  // Nothing more to process.
-      }
-    }
-  }
-  return 0;
-}
-
-
-
 /**
 * Put the module into master mode.
 * This setting persists across runtimes.
@@ -537,14 +649,14 @@ void RNBase::master_mode(bool force_master_mode) {
 // Return 0 indicates caller should burn or wait.
 // Return 1 indicates we recycled.
 int8_t RNBase::burn_or_recycle_current() {
-  if ((nullptr != current_work_item) && (current_work_item->get_opcode() == BusOpcode::TX)) {
+  if ((nullptr != current_job) && (current_job->get_opcode() == BusOpcode::TX)) {
     // If there is something in-process and it is meant for a counterparty....
-    if (! current_work_item->inProgress()) {
+    if (! current_job->inProgress()) {
       // If there is an un-initiated counterparty transaction waiting, displace it.
       // Re-queue with retry priority.
-      work_queue.insert(current_work_item, RNBASE_RETRY_PRIORITY);
-      current_work_item->markQueued();
-      current_work_item = nullptr;   // Let the downstream code do its job...
+      work_queue.insert(current_job, RNBASE_RETRY_PRIORITY);
+      current_job->markQueued();
+      current_job = nullptr;   // Let the downstream code do its job...
       return 1;
     }
     else {
@@ -557,11 +669,11 @@ int8_t RNBase::burn_or_recycle_current() {
 
 
 uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
-  BTQueuedOperation *nu = fetchPreallocation();
+  BTQueuedOperation *nu = BusAdapter::new_op();
   nu->set_data(opcode, data);
 
   //BTQueuedOperation *nu = new BTQueuedOperation(opcode, data->string(), data->length());  // TODO: Preallocate these!
-  uint32_t return_value = nu->txn_id;
+  uint32_t return_value = 0;
 
   /* We need commands to fly to the head of the queue so that they get preferrential service
   even if the data messages are stalled. But to do that we need to add commands with a higher
@@ -575,13 +687,13 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
         // Burn
       }
 
-      if ((nullptr != current_work_item) && (current_work_item->get_opcode() == BusOpcode::TX_CMD)) {
-        if (! current_work_item->inProgress()) {
+      if ((nullptr != current_job) && (current_job->get_opcode() == BusOpcode::TX_CMD)) {
+        if (! current_job->inProgress()) {
           // If there is an un-initiated counterparty transaction waiting, displace it.
           // Re-queue with retry priority.
-          work_queue.insert(current_work_item, RNBASE_RETRY_PRIORITY);
-          current_work_item->markQueued();
-          current_work_item = nullptr;   // Let the downstream code do its job...
+          work_queue.insert(current_job, RNBASE_RETRY_PRIORITY);
+          current_job->markQueued();
+          current_job = nullptr;   // Let the downstream code do its job...
         }
       }
       priority = RNBASE_CMD_PRIORITY;
@@ -589,12 +701,12 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
       nu->markQueued();
       break;
     case BusOpcode::TX:
-      if (nullptr == current_work_item) {
-        current_work_item = nu;
-        current_work_item->begin();
-        write_port(current_work_item->buf, current_work_item->buf_len);
+      if (nullptr == current_job) {
+        current_job = nu;
+        current_job->begin();
+        write_port(current_job->buf, current_job->buf_len);
       }
-      else if (work_queue.size() <= RNBASE_MAX_BT_Q_DEPTH) {
+      else if (roomInQueue()) {
         work_queue.insert(nu, priority);
         nu->markQueued();
       }
@@ -643,7 +755,7 @@ void RNBase::process_connection_change(bool conn) {
     }
   }
   else {
-    idleService();
+    advance_work_queue();
   }
 }
 
@@ -662,15 +774,15 @@ size_t RNBase::feed_rx_buffer(unsigned char *nu, size_t len) {
   while (remaining_len > 0) {
     if (_er_flag(RNBASE_FLAG_CMD_PEND)) {
       // Reasoning... If the module is in RNBASE_FLAG_CMD_PEND, it can only be $$$.
-      if (current_work_item) {
-        if (BusOpcode::TX_CMD_WAIT_RX == current_work_item->get_opcode()) {
+      if (current_job) {
+        if (BusOpcode::TX_CMD_WAIT_RX == current_job->get_opcode()) {
           size_t temp_len = strict_min((uint32_t) strlen(_cmd_return_str), (uint32_t) remaining_len);
           if ((remaining_len > temp_len) && (0 != memcmp(nu, _cmd_return_str, temp_len))) {
             // This is the command prompt.
             _er_set_flag(RNBASE_FLAG_CMD_PEND, false);
             _er_set_flag(RNBASE_FLAG_CMD_MODE, true);
             remaining_len -= temp_len;
-            current_work_item->markComplete();
+            current_job->markComplete();
           }
         }
       }
@@ -689,13 +801,13 @@ size_t RNBase::feed_rx_buffer(unsigned char *nu, size_t len) {
         remaining_len = end_idx - nu;
       }
 
-      if (current_work_item) {
-        if (BusOpcode::TX_CMD_WAIT_RX == current_work_item->get_opcode()) {
+      if (current_job) {
+        if (BusOpcode::TX_CMD_WAIT_RX == current_job->get_opcode()) {
           size_t temp_len = strict_min((uint32_t) strlen(_cmd_exit_str), (uint32_t) remaining_len);
           if ((remaining_len > temp_len) && (0 != memcmp(nu, _cmd_exit_str, temp_len))) {
             _er_set_flag(RNBASE_FLAG_CMD_MODE, true);
             remaining_len -= temp_len;
-            current_work_item->markComplete();
+            current_job->markComplete();
           }
         }
         else {
@@ -708,7 +820,7 @@ size_t RNBase::feed_rx_buffer(unsigned char *nu, size_t len) {
             local_log.concat("\n\n");
           }
           #endif
-          current_work_item->abort(XferFault::ILLEGAL_STATE);
+          current_job->abort(XferFault::ILLEGAL_STATE);
           return (len - remaining_len);
         }
       }
@@ -823,53 +935,19 @@ int8_t RNBase::callback_proc(ManuvrMsg* event) {
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
-void RNBase::printQueue(StringBuilder* temp) {
-  BTQueuedOperation* q_item = nullptr;
+void RNBase::printDebug(StringBuilder* output) {
+  ManuvrXport::printDebug(output);
+  printAdapter(output);
 
-  if (current_work_item) {
-    temp->concat("\n-- In working slot:\n");
-    current_work_item->printDebug(temp);
-  }
-
-  if (getVerbosity() > 3) {
-    if (work_queue.hasNext()) {
-      int q_read_count = strict_min((int16_t) work_queue.size(), (int16_t) RNBASE_MAX_QUEUE_PRINT);
-      temp->concatf("\n-- Queue Listing (top %d of %d)", q_read_count, work_queue.size());
-      for (int i = 0; i < q_read_count; i++) {
-        q_item = work_queue.get(i);
-        q_item->printDebug(temp);
-        temp->concat("\n");
-      }
-    }
-    else {
-      temp->concat("-- No Queue\n\n");
-    }
-  }
-}
-
-
-/**
-* Debug support method. This fxn is only present in debug builds.
-*
-* @param   StringBuilder* The buffer into which this fxn should write its output.
-*/
-void RNBase::printDebug(StringBuilder* temp) {
-  ManuvrXport::printDebug(temp);
-  //temp->concatf("-- __prealloc_pool addres: 0x%08x\n", (uint32_t) __prealloc_pool);
-  temp->concatf("--\n-- depth:          %d\n", preallocated.size());
-  temp->concatf("-- starves:        %u\n", _prealloc_starves);
-  temp->concatf("-- queue_floods:   %u\n", (unsigned long) _queue_floods);
-  temp->concatf("-- _heap_allocs:   %u\n", (unsigned long) _heap_instantiations);
-  temp->concatf("-- _heap_frees:    %u\n--\n", (unsigned long) _heap_frees);
-
-  temp->concatf("-- bitrate:        %u\n", configured_bitrate);
-  temp->concatf("-- lockout_active: %s\n", (_er_flag(RNBASE_FLAG_LOCK_OUT) ? "yes" : "no"));
+  output->concatf("-- bitrate:        %u\n", configured_bitrate);
+  output->concatf("-- lockout_active: %s\n", (_er_flag(RNBASE_FLAG_LOCK_OUT) ? "yes" : "no"));
 
   const char* cmd_mode_str;
   if (_er_flag(RNBASE_FLAG_CMD_MODE))      cmd_mode_str = "CMD";
   else if (_er_flag(RNBASE_FLAG_CMD_PEND)) cmd_mode_str = "CMD_PENDING";
   else cmd_mode_str = "DATA";
-  temp->concatf("-- cmd mode:       %s\n", cmd_mode_str);
+  output->concatf("-- cmd mode:       %s\n", cmd_mode_str);
+  printWorkQueue(output, RNBASE_MAX_QUEUE_PRINT);
 }
 
 
@@ -888,7 +966,7 @@ int8_t RNBase::notify(ManuvrMsg* active_event) {
           //active_event->clearArgs();
         }
         else {
-          idleService();
+          advance_work_queue();
         }
         return_value++;
       }
@@ -904,14 +982,14 @@ int8_t RNBase::notify(ManuvrMsg* active_event) {
     case MANUVR_MSG_BT_EXPIRE_LOCKOUT:
       if (getVerbosity() > 5) Kernel::log("RN lockout expired.\n");
       _er_clear_flag(RNBASE_FLAG_LOCK_OUT);
-      idleService();
+      advance_work_queue();
       return_value++;
       break;
 
     case MANUVR_MSG_BT_ENTERED_CMD_MODE:
     case MANUVR_MSG_BT_EXITED_CMD_MODE:
     case MANUVR_MSG_XPORT_QUEUE_RDY:
-      idleService();
+      advance_work_queue();
       return_value++;
       break;
 
@@ -938,7 +1016,7 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
     case 'i':        // Readback test
       switch (temp_byte) {
         case 1:
-          printQueue(&local_log);
+          printWorkQueue(&local_log, RNBASE_MAX_QUEUE_PRINT);
           break;
         default:
           printDebug(&local_log);
@@ -950,9 +1028,9 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
       while (work_queue.hasNext()) {
         reclaimPreallocation(work_queue.dequeue());
       }
-      if (current_work_item) {
-        reclaimPreallocation(current_work_item);
-        current_work_item = nullptr;
+      if (current_job) {
+        reclaimPreallocation(current_job);
+        current_job = nullptr;
       }
       break;
     case 'c':
@@ -1022,7 +1100,7 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     case 'u':
-      local_log.concatf("idleService() returns %d\n", idleService());
+      local_log.concatf("advance_work_queue() returns %d\n", advance_work_queue());
       break;
     case 'N':
       temp_byte = atoi((char*) str+1);

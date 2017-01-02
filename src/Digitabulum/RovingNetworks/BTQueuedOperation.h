@@ -36,32 +36,33 @@ class RNBase;
 class BTQueuedOperation : public BusOp {
   public:
     StringBuilder data;       // Might need a raw buffer on the way to DMA...
-    int       txn_id;          // How are we going to keep track of this item?
 
     BTQueuedOperation();
     BTQueuedOperation(BusOpcode nu_op);
+    BTQueuedOperation(BusOpcode nu_op, BusOpCallback* requester);
     BTQueuedOperation(BusOpcode nu_op, StringBuilder* nu_data);
     /* Specialized constructor for direct buffer spec. */
     BTQueuedOperation(BusOpcode nu_op, unsigned char *nu_data, uint16_t nu_len);
 
-    ~BTQueuedOperation();
+    virtual ~BTQueuedOperation();
 
-    void set_data(BusOpcode, StringBuilder*);
+    /* Mandatory overrides from the BusOp interface... */
+    //XferFault advance();
+    XferFault begin();
+    void wipe();
+    void printDebug(StringBuilder*);
 
-    /*
-    * This queue item can begin executing. This is where any bus access should be initiated.
+    int8_t markComplete();
+    /**
+    * This will mark the bus operation complete with a given error code.
+    * Overriden for simplicity. Marks the operation with failure code NO_REASON.
+    *
+    * @return 0 on success. Non-zero on failure.
     */
-    int8_t begin();
-
-    /* Call to mark something completed that may not be. */
+    inline int8_t abort() {    return abort(XferFault::NO_REASON); }
     int8_t abort(XferFault);
 
-    /* Call to mark complete and follow the nominal message path. */
-    int8_t markComplete();
-
-    void wipe();
-
-    void printDebug(StringBuilder *);
+    void set_data(BusOpcode, StringBuilder*);
 
 
   private:

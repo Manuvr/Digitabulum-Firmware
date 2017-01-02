@@ -40,7 +40,7 @@ IMUs need to be aware of their own bus addresses so that bus access can be encap
 #define __LSM9DS1_COMMON_H
 
 #include <DataStructures/InertialMeasurement.h>
-#include "../CPLDDriver/CPLDBusOp.h"
+#include <Platform/Peripherals/SPI/SPIBusOp.h>
 
 class CPLDDriver;
 
@@ -139,6 +139,29 @@ enum class State {
 */
 class LSM9DSx_Common : public BusOpCallback {
   public:
+    /* Overrides from the BusOpCallback interface */
+    int8_t io_op_callahead(BusOp*);
+    virtual int8_t io_op_callback(BusOp*)  = 0;
+    int8_t queue_io_job(BusOp*);
+
+    int8_t setDesiredState(State);   // Used to set the state the OS wants the IMU class to acheive.
+    void   write_test_bytes();
+    bool   step_state();      // Used internally to move between states. TODO: Should be private.
+
+    int8_t  init();
+    virtual void reset();           // Reset our state without causing a re-init.
+
+    virtual int8_t bulk_refresh();    // Read all the non-identity/non-FIFO registers in the device.
+
+    /* Debug stuff... */
+    virtual void dumpDevRegs(StringBuilder*);
+    virtual void dumpPreformedElements(StringBuilder*);
+
+    /* Functions called by the IIU */
+    virtual int8_t readSensor() =0;      // Call to poll the sensor's registers and take any appropriate action.
+    //virtual int8_t enable(bool);             // Pass a boolean to turn the sensor on or off.
+    //virtual int8_t set_base_filter_param(uint8_t nu_bw_idx) =0;
+
     /* State-check functions. Inlined where practical. */
     inline State getState() {               return imu_state;                             }
     inline State desiredState() {           return desired_state;                         }
@@ -156,28 +179,6 @@ class LSM9DSx_Common : public BusOpCallback {
     inline bool cancel_error() {    return _check_flags(IMU_COMMON_FLAG_CANCEL_ERROR);  };
     inline void profile(bool x) {       _alter_flags(x, IMU_COMMON_FLAG_PROFILING);     };
     inline void cancel_error(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_CANCEL_ERROR);  };
-
-    int8_t setDesiredState(State);   // Used to set the state the OS wants the IMU class to acheive.
-    void   write_test_bytes();
-    bool   step_state();      // Used internally to move between states. TODO: Should be private.
-
-    int8_t  init(void);
-    virtual void reset(void);           // Reset our state without causing a re-init.
-
-    virtual int8_t bulk_refresh();    // Read all the non-identity/non-FIFO registers in the device.
-
-    /* Debug stuff... */
-    virtual void dumpDevRegs(StringBuilder*);
-    virtual void dumpPreformedElements(StringBuilder*);
-
-    /* Overrides from the BusOpCallback interface */
-    virtual int8_t io_op_callback(BusOp*) = 0;
-    int8_t queue_io_job(BusOp*);         // Implemented here.
-
-    /* Functions called by the IIU */
-    virtual int8_t readSensor(void) =0;      // Call to poll the sensor's registers and take any appropriate action.
-    //virtual int8_t enable(bool);             // Pass a boolean to turn the sensor on or off.
-    //virtual int8_t set_base_filter_param(uint8_t nu_bw_idx) =0;
 
     /* Inlines for the specialized flag duty of get/set class verbosity. */
     inline uint8_t getVerbosity() {
@@ -197,7 +198,7 @@ class LSM9DSx_Common : public BusOpCallback {
 
 
   protected:
-    IIU* integrator = NULL;
+    IIU* integrator = nullptr;
 
     uint8_t BUS_ADDR;  // What is our address on the bus? TODO: const
     // TODO: r1 simplified things a great deal. All these members can probably DIAF.
@@ -226,7 +227,7 @@ class LSM9DSx_Common : public BusOpCallback {
     State     imu_state        = State::STAGE_0;
     State     desired_state    = State::STAGE_0;
 
-    CPLDBusOp full_register_refresh;
+    SPIBusOp full_register_refresh;
 
     StringBuilder local_log;
 
@@ -249,6 +250,14 @@ class LSM9DSx_Common : public BusOpCallback {
     uint8_t* regPtr(uint8_t idx);
     /* This is the end of the low-level functions.                                    */
 
+    int8_t identity_check();
+    bool fire_preformed_bus_op(SPIBusOp* op);
+    bool integrity_check();
+
+    virtual bool is_setup_completed() =0;
+    virtual int8_t configure_sensor() =0;
+    virtual const char* imu_type()    =0;
+
     /**
     * Sets the current IMU state without blowing away the high bits in the state member.
     */
@@ -263,19 +272,9 @@ class LSM9DSx_Common : public BusOpCallback {
     };
 
 
-    int8_t identity_check();
-    bool fire_preformed_bus_op(CPLDBusOp* op);
-    bool integrity_check();
-
-    virtual bool is_setup_completed() =0;
-    virtual int8_t configure_sensor() =0;
-    virtual const char* imu_type()    =0;
-
-
 
   private:
-    bool reset_preformed_queue_item(CPLDBusOp* op);
-
+    bool reset_preformed_queue_item(SPIBusOp* op);
 };
 
 #endif // __LSM9DS1_COMMON_H

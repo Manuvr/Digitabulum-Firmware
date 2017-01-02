@@ -85,8 +85,7 @@ const char* PMU::getChargeStateString(ChargeState code) {
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 
-PMU::PMU(INA219* _cv_sense) : EventReceiver() {
-  setReceiverName("PMU");
+PMU::PMU(INA219* _cv_sense) : EventReceiver("PMU") {
   if (nullptr == INSTANCE) {
     INSTANCE   = this;
     ManuvrMsg::registerMessages(pmu_message_defs, sizeof(pmu_message_defs) / sizeof(MessageTypeDef));

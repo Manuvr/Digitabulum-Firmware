@@ -6,4 +6,4 @@
 
 # Manuvr
 #rm -rf lib/ManuvrOS
-#git clone https://github.com/jspark311/ManuvrOS lib/ManuvrOS
+git clone https://github.com/jspark311/ManuvrOS lib/ManuvrOS

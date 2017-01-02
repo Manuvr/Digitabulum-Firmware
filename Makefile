@@ -45,7 +45,7 @@ LD_FILE      = digitabulum.ld
 
 INCLUDES    = -iquote. -iquotesrc/
 INCLUDES   += -Icompiler/arm-none-eabi/include
-INCLUDES   += -I$(BUILD_ROOT)/lib/ManuvrOS
+INCLUDES   += -I$(BUILD_ROOT)/lib/ManuvrOS/ManuvrOS
 INCLUDES   += -I$(BUILD_ROOT)/lib/Drivers/STM32F7xx_HAL_Driver/Inc
 INCLUDES   += -I$(BUILD_ROOT)/lib/Inc
 INCLUDES   += -I$(BUILD_ROOT)/lib
@@ -95,7 +95,6 @@ SOURCES_C    += src/stm32f7xx_it.c
 SOURCES_C    += src/system_stm32f7xx.c
 
 SOURCES_CPP   = src/Digitabulum/CPLDDriver/CPLDDriver.cpp
-SOURCES_CPP  += src/Digitabulum/CPLDDriver/CPLDBusOp.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/IIU.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1_AG.cpp

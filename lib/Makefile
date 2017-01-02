@@ -5,7 +5,7 @@
 all: manuvr stm32f7
 
 manuvr:
-	$(MAKE) -C ManuvrOS
+	$(MAKE) -C ManuvrOS/ManuvrOS
 
 stm32f7:
 	$(MAKE) -C Drivers
@@ -16,4 +16,4 @@ clean:
 	rm -f $(OUTPUT_PATH)/$(LIBNAME)
 	$(MAKE) clean -C Drivers
 	$(MAKE) clean -C Middlewares
-	$(MAKE) clean -C ManuvrOS
+	$(MAKE) clean -C ManuvrOS/ManuvrOS

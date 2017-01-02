@@ -116,12 +116,8 @@ enum class Anatomical {
 */
 class LegendManager : public EventReceiver, public BusOpCallback {
   public:
-    LegendManager(BusAdapter<CPLDBusOp>*);
+    LegendManager(BusAdapter<SPIBusOp>*);
     ~LegendManager();
-
-    /* Overrides from the SPICallback interface */
-    int8_t io_op_callback(BusOp*);
-    int8_t queue_io_job(BusOp*);
 
     /* Overrides from EventReceiver */
     void printDebug(StringBuilder*);
@@ -131,6 +127,12 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     #if defined(MANUVR_CONSOLE_SUPPORT)
       void procDirectDebugInstruction(StringBuilder*);
     #endif  //MANUVR_CONSOLE_SUPPORT
+
+    /* Overrides from the BusOpCallback interface */
+    int8_t io_op_callahead(BusOp*);
+    int8_t io_op_callback(BusOp*);
+    int8_t queue_io_job(BusOp*);
+
 
     uint32_t totalSamples();
 
@@ -156,7 +158,8 @@ class LegendManager : public EventReceiver, public BusOpCallback {
 
 
   protected:
-    int8_t attached();      // This is called from the base notify().
+    /* Overrides from EventReceiver */
+    int8_t attached();
 
 
   private:
@@ -229,11 +232,11 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     static LegendManager *INSTANCE;
 
     // These are preformed bus operations that address multiple IMUs...
-    static CPLDBusOp _preformed_read_a;
-    static CPLDBusOp _preformed_read_g;
-    static CPLDBusOp _preformed_read_m;
-    static CPLDBusOp _preformed_read_temp;
-    static CPLDBusOp _preformed_fifo_read;
+    static SPIBusOp _preformed_read_a;
+    static SPIBusOp _preformed_read_g;
+    static SPIBusOp _preformed_read_m;
+    static SPIBusOp _preformed_read_temp;
+    static SPIBusOp _preformed_fifo_read;
 
     // Prealloc starvation counters...
     static uint32_t prealloc_starves;

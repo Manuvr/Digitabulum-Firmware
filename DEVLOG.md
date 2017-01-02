@@ -178,7 +178,7 @@ The CPLD driver is now fully separated from the concerns of IMUs. It is a genera
 Re-wrote some IIU lookup functions as inlines. They were not referenced anywhere, so they may disappear completely. Now that the drivers don't have to deal with the heterogeneous bus topology that r0 exhibited, the drivers can more cleanly carved into functional units.
 
     283508    2800   11080  297388   489ac  Rounding out some CPLD function defs.
-    283700    2800   35760  322260   4ead4  Temporarilly made IIU class static to see mem impact.
+    283700    2800   35760  322260   4ead4  Temporarily made IIU class static to see mem impact.
 
 And there we have it... All IMU/IIU driver classes are now stack-defined and will not burden the heap.
 Turning in for the night.
@@ -186,3 +186,12 @@ Turning in for the night.
 _---J. Ian Lindsay_
 
     283572    2800   42960  329332   50674  Moved InertialMeasurement queue to static for a bit.
+
+    284916    2728   42576  330220   New baseline ahead of Manuvr BusOp consolidation.
+    284972    2728   43196  330896   Following BusOp consolidation. No RNBase yet.
+    285004    2728   43196  330928   Additions to template. About to convert RNBase.
+    285604    2728   43160  331492   RNBase now extends BusAdapter.
+    285660    2728   43156  331544   52-bytes of flash for 4-bytes of RAM? Yes.
+    285436    2728   43156  331320   Taking some gains back from templates.
+    285436    2728   43156  331320   Pushing more code replication back into template.
+    286036    2728   43156  331920   More untanglement.

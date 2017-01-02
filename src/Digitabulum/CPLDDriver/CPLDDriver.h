@@ -324,12 +324,23 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #ifndef __CPLD_DRIVER_H__
 #define __CPLD_DRIVER_H__
 
-#include "CPLDBusOp.h"
+#include <Platform/Peripherals/SPI/SPIBusOp.h>
 #include <Platform/Platform.h>
 
 
-#define CPLD_SPI_MAX_QUEUE_PRINT 3     // How many SPI queue items should we print for debug?
-#define PREALLOCATED_SPI_JOBS    10    // How many SPI queue items should we have on-tap?
+/* Compile-time bounds on memory usage. */
+#ifndef CPLD_SPI_MAX_QUEUE_PRINT
+  // How many queue items should we print for debug?
+  #define CPLD_SPI_MAX_QUEUE_PRINT 3
+#endif
+#ifndef CPLD_SPI_MAX_QUEUE_DEPTH
+  // How deep should the queue be allowed to become before rejecting work?
+  #define CPLD_SPI_MAX_QUEUE_DEPTH 50
+#endif
+#ifndef CPLD_SPI_PREALLOC_COUNT
+  // How many queue items should we have on-tap?
+  #define CPLD_SPI_PREALLOC_COUNT  10
+#endif
 
 /*
 * These state flags are hosted by the EventReceiver. This may change in the future.
@@ -346,18 +357,19 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 
 
 /* Event codes that are specific to Digitabulum's IMU apparatus. */
-  #define DIGITABULUM_MSG_IMU_IRQ_RAISED       0x0602 // IRQ asserted by CPLD.
-  #define DIGITABULUM_MSG_IMU_LEGEND           0x0600 // No args? Asking for this legend. One arg: Legend provided.
-  #define DIGITABULUM_MSG_IMU_INIT             0x0604 //
-  #define DIGITABULUM_MSG_IMU_READ             0x0605 // Signal to read a given set of IMUs.
-  #define DIGITABULUM_MSG_IMU_MAP_STATE        0x0606
-  #define DIGITABULUM_MSG_IMU_QUAT_CRUNCH      0x0609 // The given IMU has samples to grind into a quat.
-  #define DIGITABULUM_MSG_IMU_TAP              0x060A // The given IMU experienced a tap.
-  #define DIGITABULUM_MSG_IMU_DOUBLE_TAP       0x060B // The given IMU experienced a double tap.
+#define DIGITABULUM_MSG_IMU_IRQ_RAISED       0x0602 // IRQ asserted by CPLD.
+#define DIGITABULUM_MSG_IMU_LEGEND           0x0600 // No args? Asking for this legend. One arg: Legend provided.
+#define DIGITABULUM_MSG_IMU_INIT             0x0604 //
+#define DIGITABULUM_MSG_IMU_READ             0x0605 // Signal to read a given set of IMUs.
+#define DIGITABULUM_MSG_IMU_MAP_STATE        0x0606
+#define DIGITABULUM_MSG_IMU_QUAT_CRUNCH      0x0609 // The given IMU has samples to grind into a quat.
+#define DIGITABULUM_MSG_IMU_TAP              0x060A // The given IMU experienced a tap.
+#define DIGITABULUM_MSG_IMU_DOUBLE_TAP       0x060B // The given IMU experienced a double tap.
 
 /* Event codes for Digitabulum's CPLD. */
 #define DIGITABULUM_MSG_SPI_QUEUE_READY      0x0230 // There is a new job in the SPI bus queue.
 #define DIGITABULUM_MSG_SPI_CB_QUEUE_READY   0x0231 // There is something ready in the callback queue.
+#define DIGITABULUM_MSG_SPI_TIMEOUT          0x0232 // SPI timeout message.
 #define DIGITABULUM_MSG_CPLD_RESET_COMPLETE  0x0607 // The CPLD reset is ready for disassertion.
 #define DIGITABULUM_MSG_CPLD_RESET_CALLBACK  0x0608 // The CPLD reset is ready for disassertion.
 #define DIGITABULUM_MSG_CPLD_DIGIT_DROP      0x0609 // A digit was lost.
@@ -470,25 +482,27 @@ enum class DigitPort {
 /*
 * The CPLD driver class.
 */
-class CPLDDriver : public EventReceiver, public BusAdapter<CPLDBusOp> {
+class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
   public:
     CPLDDriver(const CPLDPins*);
     ~CPLDDriver();       // Should never be called. Here for the sake of completeness.
 
     /* Overrides from the BusAdapter interface */
+    int8_t io_op_callahead(BusOp*);
     int8_t io_op_callback(BusOp*);
     int8_t queue_io_job(BusOp*);
     int8_t advance_work_queue();
-    CPLDBusOp* new_op();
-    CPLDBusOp* new_op(BusOpcode, BusOpCallback*);
+    int8_t bus_init();
+    int8_t bus_deinit();
+    SPIBusOp* new_op();
+    SPIBusOp* new_op(BusOpcode, BusOpCallback*);
 
     /* Overrides from EventReceiver */
-    void printDebug(StringBuilder*);
     int8_t notify(ManuvrMsg*);
     int8_t callback_proc(ManuvrMsg*);
-    int8_t attached();      // This is called from the base notify().
     #if defined(MANUVR_CONSOLE_SUPPORT)
       void procDirectDebugInstruction(StringBuilder*);
+      void printDebug(StringBuilder*);
       void printHardwareState(StringBuilder*);
     #endif  //MANUVR_CONSOLE_SUPPORT
 
@@ -509,9 +523,11 @@ class CPLDDriver : public EventReceiver, public BusAdapter<CPLDBusOp> {
       return writeRegister(CPLD_REG_WAKEUP_IRQ, _val | 0x80);
     };
 
-    static CPLDBusOp* current_queue_item;
     static const char* digitStateToString(DigitState);
 
+
+  protected:
+    int8_t attached();      // This is called from the base notify().
 
 
   private:
@@ -522,9 +538,8 @@ class CPLDDriver : public EventReceiver, public BusAdapter<CPLDBusOp> {
     CPLDPins _pins;
 
     /* List of pending callbacks for bus transactions. */
-    PriorityQueue<CPLDBusOp*> callback_queue;
+    PriorityQueue<SPIBusOp*> callback_queue;
     uint32_t  bus_timeout_millis = 5;  // How long to spend in IO_WAIT?
-    uint32_t  specificity_burden = 0;  // How many queue items have been deleted?
     uint8_t   spi_cb_per_event   = 3;  // Limit the number of callbacks processed per event.
     uint16_t  _digit_flags       = 0;  // Digit sleep state tracking flags.
 
@@ -540,7 +555,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<CPLDBusOp> {
     void purge_queued_work_by_dev(BusOpCallback *dev);   // Flush the work queue by callback match
     void purge_stalled_job();     // TODO: Misnomer. Really purges the active job.
     int8_t service_callback_queue();
-    void reclaim_queue_item(CPLDBusOp*);
+    void reclaim_queue_item(SPIBusOp*);
 
     /* Setup and init fxns. */
     void gpioSetup();
@@ -559,7 +574,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<CPLDBusOp> {
     int8_t iiu_group_irq();
 
 
-    static CPLDBusOp preallocated_bus_jobs[PREALLOCATED_SPI_JOBS];// __attribute__ ((section(".ccm")));
+    static SPIBusOp preallocated_bus_jobs[CPLD_SPI_PREALLOC_COUNT];// __attribute__ ((section(".ccm")));
 
     /* Register representations. */
     static uint8_t cpld_version;        // CPLD version byte.

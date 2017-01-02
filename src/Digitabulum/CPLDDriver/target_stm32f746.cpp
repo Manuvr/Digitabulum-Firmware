@@ -57,6 +57,22 @@ typedef struct {
 } DMA_Base_Registers;
 
 
+/**
+* Used to disable the DMA IRQs at the NVIC.
+*
+* @param bool enable the interrupts?
+*/
+void enableSPI_DMA(bool enable) {
+  if (enable) {
+    NVIC_EnableIRQ(DMA2_Stream2_IRQn);
+    NVIC_EnableIRQ(DMA2_Stream3_IRQn);
+  }
+  else {
+    NVIC_DisableIRQ(DMA2_Stream2_IRQn);
+    NVIC_DisableIRQ(DMA2_Stream3_IRQn);
+  }
+}
+
 
 /**
 * Should undo all the effects of the init functions.
@@ -148,6 +164,7 @@ void CPLDDriver::init_ext_clk() {
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_SET;
   HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1);
 }
+
 
 /**
 * Init of SPI peripheral 1. This is broken out because we might be bringing it
@@ -442,8 +459,9 @@ extern "C" {
 
   void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
     if (hspi == &hspi1) {
-      if (NULL != CPLDDriver::current_queue_item) {
-        CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
+      SPIBusOp* c = ((CPLDDriver*) cpld)->currentJob();
+      if (c) {
+        c->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
       }
     }
   }
@@ -451,8 +469,9 @@ extern "C" {
 
   void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
     if (hspi == &hspi1) {
-      if (NULL != CPLDDriver::current_queue_item) {
-        CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
+      SPIBusOp* c = ((CPLDDriver*) cpld)->currentJob();
+      if (c) {
+        c->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
       }
     }
   }
@@ -460,8 +479,9 @@ extern "C" {
 
   void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi){
     if (hspi == &hspi1) {
-      if (NULL != CPLDDriver::current_queue_item) {
-        CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
+      SPIBusOp* c = ((CPLDDriver*) cpld)->currentJob();
+      if (c) {
+        c->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
       }
     }
   }
@@ -469,8 +489,9 @@ extern "C" {
 
   void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi){
     if (hspi == &hspi1) {
-      if (NULL != CPLDDriver::current_queue_item) {
-        CPLDDriver::current_queue_item->abort(XferFault::BUS_FAULT);
+      SPIBusOp* c = ((CPLDDriver*) cpld)->currentJob();
+      if (c) {
+        c->abort(XferFault::BUS_FAULT);
       }
     }
   }
@@ -523,8 +544,9 @@ extern "C" {
       /* Change the DMA state */
       _dma_r.State = HAL_DMA_STATE_READY_MEM0;
       __HAL_DMA_DISABLE(&_dma_r);
-      if (NULL != CPLDDriver::current_queue_item) {
-        CPLDDriver::current_queue_item->advance_operation(0, 0);
+      SPIBusOp* c = ((CPLDDriver*) cpld)->currentJob();
+      if (c) {
+        c->advance_operation(0, 0);
       }
     }
   }
@@ -533,7 +555,7 @@ extern "C" {
   /*
   * DMA ISR. Tx
   */
-  void DMA2_Stream3_IRQHandler(void) {
+  void DMA2_Stream3_IRQHandler() {
     Kernel::log("DMA2_Stream3_IRQHandler()\n");
     __HAL_DMA_DISABLE_IT(&_dma_r, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
     __HAL_DMA_DISABLE_IT(&_dma_w, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
@@ -559,6 +581,23 @@ void CPLDDriver::externalOscillator(bool on) {
 }
 
 
+
+/*******************************************************************************
+* ___     _                                  This is a template class for
+*  |   / / \ o    /\   _|  _. ._ _|_  _  ._  defining arbitrary I/O adapters.
+* _|_ /  \_/ o   /--\ (_| (_| |_) |_ (/_ |   Adapters must be instanced with
+*                             |              a BusOp as the template param.
+*******************************************************************************/
+
+int8_t CPLDDriver::bus_init() {
+  init_spi(1, 0);   // CPOL=1, CPHA=0, HW-driven
+  return 0;
+}
+
+int8_t CPLDDriver::bus_deinit() {
+  return 0;
+}
+
 /**
 * Debug support method. This fxn is only present in debug builds.
 *
@@ -580,26 +619,11 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
 }
 
 
-
-
-
-
-/**
-* Used to disable the DMA IRQs at the NVIC.
-*
-* @param bool enable the interrupts?
-*/
-void CPLDBusOp::enableSPI_DMA(bool enable) {
-  if (enable) {
-    NVIC_EnableIRQ(DMA2_Stream2_IRQn);
-    NVIC_EnableIRQ(DMA2_Stream3_IRQn);
-  }
-  else {
-    NVIC_DisableIRQ(DMA2_Stream2_IRQn);
-    NVIC_DisableIRQ(DMA2_Stream3_IRQn);
-  }
-}
-
+/*******************************************************************************
+* ___     _                              These members are mandatory overrides
+*  |   / / \ o     |  _  |_              from the BusOp class.
+* _|_ /  \_/ o   \_| (_) |_)
+*******************************************************************************/
 
 // Useful trick to mask warnings that the compiler raises, but which we know are
 //   intentional.
@@ -613,18 +637,18 @@ void CPLDBusOp::enableSPI_DMA(bool enable) {
 *
 * @return 0 on success, or non-zero on failure.
 */
-int8_t CPLDBusOp::begin() {
+XferFault SPIBusOp::begin() {
   //time_began    = micros();
   if (0 == _param_len) {
     // Obvious invalidity. We must have at least one transfer parameter.
     abort(XferFault::BAD_PARAM);
-    return -1;
+    return XferFault::BAD_PARAM;
   }
 
   if (SPI1->SR & SPI_FLAG_BSY) {
     Kernel::log("SPI op aborted before taking bus control.\n");
     abort(XferFault::BUS_BUSY);
-    return -1;
+    return XferFault::BUS_BUSY;
   }
 
   set_state(XferState::INITIATE);  // Indicate that we now have bus control.
@@ -639,8 +663,9 @@ int8_t CPLDBusOp::begin() {
     // We can afford to read two bytes into the same space as our xfer_params...
     HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*)(xfer_params + 2), 2);
   }
-  setPin(CPLDBusOp::cs_pin, true);
-  return 0;
+
+  _assert_cs(true);
+  return XferFault::NONE;
 }
 
 
@@ -650,7 +675,7 @@ int8_t CPLDBusOp::begin() {
 *
 * @return 0 on success. Non-zero on failure.
 */
-int8_t CPLDBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
+int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
   //debug_log.concatf("advance_op(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
   //Kernel::log(&debug_log);
 

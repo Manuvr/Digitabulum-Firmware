@@ -29,8 +29,7 @@ limitations under the License.
 volatile IREmitter* IREmitter::INSTANCE = NULL;
 
 
-IREmitter::IREmitter() : EventReceiver() {
-  setReceiverName("IREmitter");
+IREmitter::IREmitter() : EventReceiver("IREmitter") {
   INSTANCE = (IREmitter*) this;
 }
 

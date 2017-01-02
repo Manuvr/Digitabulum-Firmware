@@ -64,7 +64,7 @@ const float LSM9DS1_M::max_range_vect_mag   = 16.0;
 
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *  __  __                        _                       _
 * |  \/  |                      | |                     | |
 * | \  / | __ _  __ _ _ __   ___| |_ ___  _ __ ___   ___| |_ ___ _ __
@@ -73,7 +73,7 @@ const float LSM9DS1_M::max_range_vect_mag   = 16.0;
 * |_|  |_|\__,_|\__, |_| |_|\___|\__\___/|_| |_| |_|\___|\__\___|_|
 *                __/ |
 *               |___/
-****************************************************************************************************/
+*******************************************************************************/
 /*
 * Magnetometer data
 * Tests all the required registers for freshness and builds a Vector with the new reading
@@ -235,7 +235,7 @@ void LSM9DS1_M::class_init(uint8_t address, IIU* _integrator) {
 /****************************************************************************************************
 * Members to be called from the integrator.                                                         *
 ****************************************************************************************************/
-int8_t LSM9DS1_M::readSensor(void) {
+int8_t LSM9DS1_M::readSensor() {
   int8_t return_value = 0;
   if (!present()) {
     return -1;
@@ -389,7 +389,7 @@ bool LSM9DS1_M::is_setup_completed() {
 * This is an override.
 */
 void LSM9DS1_M::dumpDevRegs(StringBuilder *output) {
-  if (NULL == output) return;
+  if (nullptr == output) return;
   LSM9DSx_Common::dumpDevRegs(output);
 
   if (getVerbosity() > 1) {
@@ -422,17 +422,20 @@ void LSM9DS1_M::dumpPreformedElements(StringBuilder *output) {
 
 
 
+/*******************************************************************************
+* ___     _       _                      These members are mandatory overrides
+*  |   / / \ o   | \  _     o  _  _      for implementing I/O callbacks. They
+* _|_ /  \_/ o   |_/ (/_ \/ | (_ (/_     are also implemented by Adapters.
+*******************************************************************************/
 
-/****************************************************************************************************
-* Overrides from the SPI apparatus...                                                               *
-****************************************************************************************************/
-
-/*
-* All notifications of bus activity enter the class here. This is probably where
-*   we should act on data coming in.
+/**
+* When a bus operation completes, it is passed back to its issuing class.
+*
+* @param  _op  The bus operation that was completed.
+* @return SPI_CALLBACK_NOMINAL on success, or appropriate error code.
 */
 int8_t LSM9DS1_M::io_op_callback(BusOp* _op) {
-  CPLDBusOp* op = (CPLDBusOp*) _op;
+  SPIBusOp* op = (SPIBusOp*) _op;
   int8_t return_value = SPI_CALLBACK_NOMINAL;
 
   // There is zero chance this object will be a null pointer unless it was done on purpose.
