@@ -143,7 +143,7 @@ class RNPins {
 */
 class RNBase : public ManuvrXport, public BusAdapter<BTQueuedOperation> {
   public:
-    RNBase(RNPins* pins);
+    RNBase(const char*, RNPins* pins);
     virtual ~RNBase();
 
     /* Override from BufferPipe. */

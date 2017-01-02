@@ -454,8 +454,9 @@ extern "C" {
 
   void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
     if (hspi == &hspi1) {
-      if (NULL != CPLDDriver::current_queue_item) {
-        CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
+      SPIBusOp* c = ((CPLDDriver*) cpld)->currentJob();
+      if (c) {
+        c->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
       }
     }
   }
@@ -463,8 +464,9 @@ extern "C" {
 
   void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
     if (hspi == &hspi1) {
-      if (NULL != CPLDDriver::current_queue_item) {
-        CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
+      SPIBusOp* c = ((CPLDDriver*) cpld)->currentJob();
+      if (c) {
+        c->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
       }
     }
   }
@@ -472,8 +474,9 @@ extern "C" {
 
   void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi){
     if (hspi == &hspi1) {
-      if (NULL != CPLDDriver::current_queue_item) {
-        CPLDDriver::current_queue_item->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
+      SPIBusOp* c = ((CPLDDriver*) cpld)->currentJob();
+      if (c) {
+        c->advance_operation(hspi->Instance->SR, hspi->Instance->DR);
       }
     }
   }
@@ -481,8 +484,9 @@ extern "C" {
 
   void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi){
     if (hspi == &hspi1) {
-      if (NULL != CPLDDriver::current_queue_item) {
-        CPLDDriver::current_queue_item->abort(XferFault::BUS_FAULT);
+      SPIBusOp* c = ((CPLDDriver*) cpld)->currentJob();
+      if (c) {
+        c->abort(XferFault::BUS_FAULT);
       }
     }
   }
@@ -535,8 +539,9 @@ extern "C" {
       /* Change the DMA state */
       _dma_r.State = HAL_DMA_STATE_READY_MEM0;
       __HAL_DMA_DISABLE(&_dma_r);
-      if (NULL != CPLDDriver::current_queue_item) {
-        CPLDDriver::current_queue_item->advance_operation(0, 0);
+      SPIBusOp* c = ((CPLDDriver*) cpld)->currentJob();
+      if (c) {
+        c->advance_operation(0, 0);
       }
     }
   }
