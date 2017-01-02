@@ -934,7 +934,7 @@ void RNBase::printQueue(StringBuilder* temp) {
 */
 void RNBase::printDebug(StringBuilder* output) {
   ManuvrXport::printDebug(output);
-  BusAdapter::printAdapter((BusAdapter*)this, output);
+  printAdapter(output);
 
   output->concatf("-- bitrate:        %u\n", configured_bitrate);
   output->concatf("-- lockout_active: %s\n", (_er_flag(RNBASE_FLAG_LOCK_OUT) ? "yes" : "no"));
@@ -944,7 +944,7 @@ void RNBase::printDebug(StringBuilder* output) {
   else if (_er_flag(RNBASE_FLAG_CMD_PEND)) cmd_mode_str = "CMD_PENDING";
   else cmd_mode_str = "DATA";
   output->concatf("-- cmd mode:       %s\n", cmd_mode_str);
-  BusAdapter::printWorkQueue((BusAdapter*)this, output, RNBASE_MAX_QUEUE_PRINT);
+  printWorkQueue(output, RNBASE_MAX_QUEUE_PRINT);
 }
 
 
