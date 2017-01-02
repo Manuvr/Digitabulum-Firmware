@@ -501,6 +501,23 @@ uint32_t LegendManager::totalSamples() {
 * Overrides from the SPI apparatus...                                          *
 *******************************************************************************/
 
+/**
+* Called prior to the given bus operation beginning.
+* Returning 0 will allow the operation to continue.
+* Returning anything else will fail the operation with IO_RECALL.
+*   Operations failed this way will have their callbacks invoked as normal.
+*
+* Here we have the chance to ammend or cancel a bus operation prior to it
+*   consuming bus time.
+*
+* @param  _op  The bus operation that was completed.
+* @return 0 to run the op, or non-zero to cancel it.
+*/
+int8_t LegendManager::io_op_callahead(BusOp* _op) {
+  return 0;
+}
+
+
 /*
 * When a bus operation completes, it is passed back to the class that created it.
 */

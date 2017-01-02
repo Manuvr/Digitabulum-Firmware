@@ -235,6 +235,22 @@ BTQueuedOperation* RNBase::new_op(BusOpcode _op, BusOpCallback* _req) {
 
 
 /**
+* Called prior to the given bus operation beginning.
+* Returning 0 will allow the operation to continue.
+* Returning anything else will fail the operation with IO_RECALL.
+*   Operations failed this way will have their callbacks invoked as normal.
+*
+* @param  _op  The bus operation that was completed.
+* @return 0 to run the op, or non-zero to cancel it.
+*/
+int8_t RNBase::io_op_callahead(BusOp* _op) {
+  // Bus adapters don't typically do anything here, other
+  //   than permit the transfer.
+  return 0;
+}
+
+
+/**
 * When a bus operation completes, it is passed back to its issuing class.
 *
 * @param  _op  The bus operation that was completed.

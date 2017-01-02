@@ -166,12 +166,9 @@ class RNBase : public ManuvrXport, public BusAdapter<BTQueuedOperation> {
     #endif  //MANUVR_CONSOLE_SUPPORT
 
     /* Overrides from the BusAdapter interface */
-    int8_t io_op_callback(BusOp*);
-    int8_t queue_io_job(BusOp*);
-    int8_t advance_work_queue();
-    int8_t bus_init();
-    int8_t bus_deinit();
-    BTQueuedOperation* new_op(BusOpcode, BusOpCallback*);
+    int8_t io_op_callahead(BusOp*);  // Called ahead of op.
+    int8_t io_op_callback(BusOp*);   // Called behind completed op.
+    int8_t queue_io_job(BusOp*);     // Queue an I/O operation.
 
     /* Macros for RN commands. */
     void setDevName(char*);
@@ -193,6 +190,12 @@ class RNBase : public ManuvrXport, public BusAdapter<BTQueuedOperation> {
     uint32_t configured_bitrate;   // The bitrate we have between the CPU and the RN.
     const char* _cmd_return_str = nullptr;
     const char* _cmd_exit_str   = nullptr;
+
+    /* Overrides from the BusAdapter interface */
+    int8_t advance_work_queue();
+    int8_t bus_init();
+    int8_t bus_deinit();
+    BTQueuedOperation* new_op(BusOpcode, BusOpCallback*);
 
     size_t feed_rx_buffer(unsigned char*, size_t len);   // Append to the class receive buffer.
 

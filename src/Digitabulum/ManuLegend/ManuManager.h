@@ -120,6 +120,7 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     ~LegendManager();
 
     /* Overrides from the SPICallback interface */
+    int8_t io_op_callahead(BusOp*);
     int8_t io_op_callback(BusOp*);
     int8_t queue_io_job(BusOp*);
 

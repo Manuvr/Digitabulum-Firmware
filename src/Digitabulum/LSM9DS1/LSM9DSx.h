@@ -171,11 +171,12 @@ class LSM9DSx_Common : public BusOpCallback {
     virtual void dumpPreformedElements(StringBuilder*);
 
     /* Overrides from the BusOpCallback interface */
-    virtual int8_t io_op_callback(BusOp*) = 0;
+    virtual int8_t io_op_callback(BusOp*)  = 0;
+    int8_t io_op_callahead(BusOp*);
     int8_t queue_io_job(BusOp*);         // Implemented here.
 
     /* Functions called by the IIU */
-    virtual int8_t readSensor(void) =0;      // Call to poll the sensor's registers and take any appropriate action.
+    virtual int8_t readSensor() =0;      // Call to poll the sensor's registers and take any appropriate action.
     //virtual int8_t enable(bool);             // Pass a boolean to turn the sensor on or off.
     //virtual int8_t set_base_filter_param(uint8_t nu_bw_idx) =0;
 

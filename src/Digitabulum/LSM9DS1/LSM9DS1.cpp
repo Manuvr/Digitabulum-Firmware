@@ -360,6 +360,11 @@ int8_t LSM9DSx_Common::bulk_refresh() {
 }
 
 
+int8_t LSM9DSx_Common::io_op_callahead(BusOp* _op) {
+  return 0;
+}
+
+
 /*
 * Ultimately, all bus access this class does passes to this function as its last-stop
 *   before becoming folded into the SPI bus queue.
