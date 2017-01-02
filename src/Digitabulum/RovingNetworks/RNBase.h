@@ -191,6 +191,8 @@ class RNBase : public ManuvrXport, public BusAdapter<BTQueuedOperation> {
     const char* _cmd_return_str = nullptr;
     const char* _cmd_exit_str   = nullptr;
 
+    virtual int8_t attached();      // This is called from the base notify().
+
     /* Overrides from the BusAdapter interface */
     int8_t advance_work_queue();
     int8_t bus_init();
@@ -199,10 +201,6 @@ class RNBase : public ManuvrXport, public BusAdapter<BTQueuedOperation> {
 
     size_t feed_rx_buffer(unsigned char*, size_t len);   // Append to the class receive buffer.
 
-    void printQueue(StringBuilder*);
-
-
-    virtual int8_t attached();      // This is called from the base notify().
 
     // Mandatory overrides.
     virtual void factoryReset()        =0;   // Perform the sequence that will factory-reset the RN.

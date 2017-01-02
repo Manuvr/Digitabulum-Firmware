@@ -57,6 +57,22 @@ typedef struct {
 } DMA_Base_Registers;
 
 
+/**
+* Used to disable the DMA IRQs at the NVIC.
+*
+* @param bool enable the interrupts?
+*/
+void enableSPI_DMA(bool enable) {
+  if (enable) {
+    NVIC_EnableIRQ(DMA2_Stream2_IRQn);
+    NVIC_EnableIRQ(DMA2_Stream3_IRQn);
+  }
+  else {
+    NVIC_DisableIRQ(DMA2_Stream2_IRQn);
+    NVIC_DisableIRQ(DMA2_Stream3_IRQn);
+  }
+}
+
 
 /**
 * Should undo all the effects of the init functions.
@@ -148,17 +164,6 @@ void CPLDDriver::init_ext_clk() {
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_SET;
   HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1);
 }
-
-
-int8_t CPLDDriver::bus_init() {
-  init_spi(1, 0);   // CPOL=1, CPHA=0, HW-driven
-  return 0;
-}
-
-int8_t CPLDDriver::bus_deinit() {
-  return 0;
-}
-
 
 
 /**
@@ -550,7 +555,7 @@ extern "C" {
   /*
   * DMA ISR. Tx
   */
-  void DMA2_Stream3_IRQHandler(void) {
+  void DMA2_Stream3_IRQHandler() {
     Kernel::log("DMA2_Stream3_IRQHandler()\n");
     __HAL_DMA_DISABLE_IT(&_dma_r, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
     __HAL_DMA_DISABLE_IT(&_dma_w, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
@@ -576,6 +581,23 @@ void CPLDDriver::externalOscillator(bool on) {
 }
 
 
+
+/*******************************************************************************
+* ___     _                                  This is a template class for
+*  |   / / \ o    /\   _|  _. ._ _|_  _  ._  defining arbitrary I/O adapters.
+* _|_ /  \_/ o   /--\ (_| (_| |_) |_ (/_ |   Adapters must be instanced with
+*                             |              a BusOp as the template param.
+*******************************************************************************/
+
+int8_t CPLDDriver::bus_init() {
+  init_spi(1, 0);   // CPOL=1, CPHA=0, HW-driven
+  return 0;
+}
+
+int8_t CPLDDriver::bus_deinit() {
+  return 0;
+}
+
 /**
 * Debug support method. This fxn is only present in debug builds.
 *
@@ -597,26 +619,11 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
 }
 
 
-
-
-
-
-/**
-* Used to disable the DMA IRQs at the NVIC.
-*
-* @param bool enable the interrupts?
-*/
-void enableSPI_DMA(bool enable) {
-  if (enable) {
-    NVIC_EnableIRQ(DMA2_Stream2_IRQn);
-    NVIC_EnableIRQ(DMA2_Stream3_IRQn);
-  }
-  else {
-    NVIC_DisableIRQ(DMA2_Stream2_IRQn);
-    NVIC_DisableIRQ(DMA2_Stream3_IRQn);
-  }
-}
-
+/*******************************************************************************
+* ___     _                              These members are mandatory overrides
+*  |   / / \ o     |  _  |_              from the BusOp class.
+* _|_ /  \_/ o   \_| (_) |_)
+*******************************************************************************/
 
 // Useful trick to mask warnings that the compiler raises, but which we know are
 //   intentional.

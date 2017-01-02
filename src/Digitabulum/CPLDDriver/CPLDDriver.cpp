@@ -322,6 +322,11 @@ void CPLDDriver::_process_conf_update(uint8_t nu) {
 *  ▀▀▀▀▀▀▀▀▀▀▀  ▀            ▀▀▀▀▀▀▀▀▀▀▀     required to complete a transaction.
 *******************************************************************************/
 
+/*******************************************************************************
+* ___     _       _                      These members are mandatory overrides
+*  |   / / \ o   | \  _     o  _  _      for implementing I/O callbacks. They
+* _|_ /  \_/ o   |_/ (/_ \/ | (_ (/_     are also implemented by Adapters.
+*******************************************************************************/
 
 /**
 * Called prior to the given bus operation beginning.
@@ -389,7 +394,7 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
 
 
 /**
-* This is what we call when this class wants to conduct a transaction on the SPI bus.
+* This is what is called when the class wants to conduct a transaction on the bus.
 * Note that this is different from other class implementations, in that it checks for
 *   callback population before clobbering it. This is because this class is also the
 *   SPI driver. This might end up being reworked later.
@@ -444,50 +449,12 @@ int8_t CPLDDriver::queue_io_job(BusOp* _op) {
 }
 
 
-/**
-* Execute any I/O callbacks that are pending. The function is present because
-*   this class contains the bus implementation.
-*
-* @return the number of callbacks proc'd.
-*/
-int8_t CPLDDriver::service_callback_queue() {
-  int8_t return_value = 0;
-  SPIBusOp* temp_op = callback_queue.dequeue();
-
-  while ((nullptr != temp_op) && (return_value < spi_cb_per_event)) {
-  //if (nullptr != temp_op) {
-    if (getVerbosity() > 6) temp_op->printDebug(&local_log);
-    if (nullptr != temp_op->callback) {
-      int8_t cb_code = temp_op->callback->io_op_callback(temp_op);
-      switch (cb_code) {
-        case SPI_CALLBACK_RECYCLE:
-          temp_op->set_state(XferState::IDLE);
-          queue_io_job(temp_op);
-          break;
-
-        case SPI_CALLBACK_ERROR:
-        case SPI_CALLBACK_NOMINAL:
-          // No harm in this yet, since this fxn respects preforms and prealloc.
-          reclaim_queue_item(temp_op);
-          break;
-        default:
-          local_log.concatf("Unsure about SPI_CALLBACK_CODE %d.\n", cb_code);
-          reclaim_queue_item(temp_op);
-          break;
-      }
-    }
-    else {
-      // We are the responsible party.
-      reclaim_queue_item(temp_op);
-    }
-    return_value++;
-    temp_op = callback_queue.dequeue();
-  }
-
-  flushLocalLog();
-  return return_value;
-}
-
+/*******************************************************************************
+* ___     _                                  This is a template class for
+*  |   / / \ o    /\   _|  _. ._ _|_  _  ._  defining arbitrary I/O adapters.
+* _|_ /  \_/ o   /--\ (_| (_| |_) |_ (/_ |   Adapters must be instanced with
+*                             |              a BusOp as the template param.
+*******************************************************************************/
 
 /**
 * Calling this function will advance the work queue after performing cleanup
@@ -547,7 +514,6 @@ int8_t CPLDDriver::advance_work_queue() {
     }
   }
 
-
   if (current_job == nullptr) {
     current_job = work_queue.dequeue();
     // Begin the bus operation.
@@ -565,7 +531,6 @@ int8_t CPLDDriver::advance_work_queue() {
   }
 
   flushLocalLog();
-
   return return_value;
 }
 
@@ -613,6 +578,18 @@ void CPLDDriver::purge_queued_work() {
 
   // Check this last to head off any silliness with bus operations colliding with us.
   purge_stalled_job();
+}
+
+
+/**
+* Purges a stalled job from the active slot.
+*/
+void CPLDDriver::purge_stalled_job() {
+  if (current_job) {
+    current_job->abort(XferFault::QUEUE_FLUSH);
+    reclaim_queue_item(current_job);
+    current_job = nullptr;
+  }
 }
 
 
@@ -679,15 +656,49 @@ void CPLDDriver::reclaim_queue_item(SPIBusOp* op) {
 
 
 /**
-* Purges a stalled job from the active slot.
+* Execute any I/O callbacks that are pending. The function is present because
+*   this class contains the bus implementation.
+*
+* @return the number of callbacks proc'd.
 */
-void CPLDDriver::purge_stalled_job() {
-  if (current_job) {
-    current_job->abort(XferFault::QUEUE_FLUSH);
-    reclaim_queue_item(current_job);
-    current_job = nullptr;
+int8_t CPLDDriver::service_callback_queue() {
+  int8_t return_value = 0;
+  SPIBusOp* temp_op = callback_queue.dequeue();
+
+  while ((nullptr != temp_op) && (return_value < spi_cb_per_event)) {
+  //if (nullptr != temp_op) {
+    if (getVerbosity() > 6) temp_op->printDebug(&local_log);
+    if (nullptr != temp_op->callback) {
+      int8_t cb_code = temp_op->callback->io_op_callback(temp_op);
+      switch (cb_code) {
+        case SPI_CALLBACK_RECYCLE:
+          temp_op->set_state(XferState::IDLE);
+          queue_io_job(temp_op);
+          break;
+
+        case SPI_CALLBACK_ERROR:
+        case SPI_CALLBACK_NOMINAL:
+          // No harm in this yet, since this fxn respects preforms and prealloc.
+          reclaim_queue_item(temp_op);
+          break;
+        default:
+          local_log.concatf("Unsure about SPI_CALLBACK_CODE %d.\n", cb_code);
+          reclaim_queue_item(temp_op);
+          break;
+      }
+    }
+    else {
+      // We are the responsible party.
+      reclaim_queue_item(temp_op);
+    }
+    return_value++;
+    temp_op = callback_queue.dequeue();
   }
+
+  flushLocalLog();
+  return return_value;
 }
+
 
 
 /*******************************************************************************
@@ -959,21 +970,6 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
   return return_value;
 }
 
-
-
-/*******************************************************************************
-*  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄         ▄  ▄▄▄▄▄▄▄▄▄▄▄
-* ▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░▌       ▐░▌▐░░░░░░░░░░░▌
-* ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌▐░█▀▀▀▀▀▀▀▀▀
-* ▐░▌       ▐░▌▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░▌
-* ▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌▐░▌       ▐░▌▐░▌ ▄▄▄▄▄▄▄▄
-* ▐░▌       ▐░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░▌       ▐░▌▐░▌▐░░░░░░░░▌
-* ▐░▌       ▐░▌▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌▐░▌ ▀▀▀▀▀▀█░▌
-* ▐░▌       ▐░▌▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░▌       ▐░▌
-* ▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄█░▌
-* ▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
-*  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀
-*******************************************************************************/
 
 /**
 * Debug support method. This fxn is only present in debug builds.

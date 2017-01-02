@@ -119,11 +119,6 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     LegendManager(BusAdapter<SPIBusOp>*);
     ~LegendManager();
 
-    /* Overrides from the SPICallback interface */
-    int8_t io_op_callahead(BusOp*);
-    int8_t io_op_callback(BusOp*);
-    int8_t queue_io_job(BusOp*);
-
     /* Overrides from EventReceiver */
     void printDebug(StringBuilder*);
     int8_t notify(ManuvrMsg*);
@@ -132,6 +127,12 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     #if defined(MANUVR_CONSOLE_SUPPORT)
       void procDirectDebugInstruction(StringBuilder*);
     #endif  //MANUVR_CONSOLE_SUPPORT
+
+    /* Overrides from the BusOpCallback interface */
+    int8_t io_op_callahead(BusOp*);
+    int8_t io_op_callback(BusOp*);
+    int8_t queue_io_job(BusOp*);
+
 
     uint32_t totalSamples();
 
@@ -157,7 +158,8 @@ class LegendManager : public EventReceiver, public BusOpCallback {
 
 
   protected:
-    int8_t attached();      // This is called from the base notify().
+    /* Overrides from EventReceiver */
+    int8_t attached();
 
 
   private:

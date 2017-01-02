@@ -30,16 +30,6 @@ This file contains functions for running firmware under linux.
 void CPLDDriver::_deinit() {
 }
 
-int8_t CPLDDriver::bus_init() {
-  return 0;
-}
-
-int8_t CPLDDriver::bus_deinit() {
-  return 0;
-}
-
-
-
 /**
 * Init the timer to provide the CPLD with an external clock. This clock is the
 *   most-flexible, and we use it by default.
@@ -47,7 +37,6 @@ int8_t CPLDDriver::bus_deinit() {
 bool CPLDDriver::_set_timer_base(uint16_t _period) {
   return true;
 }
-
 
 /**
 * Init the timer to provide the CPLD with an external clock. This clock is the
@@ -94,6 +83,23 @@ void CPLDDriver::externalOscillator(bool on) {
 }
 
 
+
+/*******************************************************************************
+* ___     _                                  This is a template class for
+*  |   / / \ o    /\   _|  _. ._ _|_  _  ._  defining arbitrary I/O adapters.
+* _|_ /  \_/ o   /--\ (_| (_| |_) |_ (/_ |   Adapters must be instanced with
+*                             |              a BusOp as the template param.
+*******************************************************************************/
+
+int8_t CPLDDriver::bus_init() {
+  return 0;
+}
+
+int8_t CPLDDriver::bus_deinit() {
+  return 0;
+}
+
+
 /**
 * Debug support method. This fxn is only present in debug builds.
 *
@@ -104,27 +110,11 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
 
 
 
-
-
-/**
-* Used to disable the DMA IRQs at the NVIC.
-*
-* @param bool enable the interrupts?
-*/
-void enableSPI_DMA(bool enable) {
-  if (enable) {
-  }
-  else {
-  }
-}
-
-
-// Useful trick to mask warnings that the compiler raises, but which we know are
-//   intentional.
-//   http://stackoverflow.com/questions/3378560/how-to-disable-gcc-warnings-for-a-few-lines-of-code
-//   https://gcc.gnu.org/onlinedocs/gcc/Diagnostic-Pragmas.html
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+/*******************************************************************************
+* ___     _                              These members are mandatory overrides
+*  |   / / \ o     |  _  |_              from the BusOp class.
+* _|_ /  \_/ o   \_| (_) |_)
+*******************************************************************************/
 
 /**
 * Calling this member will cause the bus operation to be started.
@@ -207,4 +197,3 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
 
   return -1;
 }
-#pragma GCC diagnostic pop

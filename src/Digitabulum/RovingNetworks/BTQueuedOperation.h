@@ -46,21 +46,23 @@ class BTQueuedOperation : public BusOp {
 
     virtual ~BTQueuedOperation();
 
-    void set_data(BusOpcode, StringBuilder*);
-
-    /*
-    * This queue item can begin executing. This is where any bus access should be initiated.
-    */
+    /* Mandatory overrides from the BusOp interface... */
+    //XferFault advance();
     XferFault begin();
     void wipe();
+    void printDebug(StringBuilder*);
 
-    /* Call to mark something completed that may not be. */
+    int8_t markComplete();
+    /**
+    * This will mark the bus operation complete with a given error code.
+    * Overriden for simplicity. Marks the operation with failure code NO_REASON.
+    *
+    * @return 0 on success. Non-zero on failure.
+    */
+    inline int8_t abort() {    return abort(XferFault::NO_REASON); }
     int8_t abort(XferFault);
 
-    /* Call to mark complete and follow the nominal message path. */
-    int8_t markComplete();
-
-    void printDebug(StringBuilder *);
+    void set_data(BusOpcode, StringBuilder*);
 
 
   private:

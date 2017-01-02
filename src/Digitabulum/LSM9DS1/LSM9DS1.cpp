@@ -360,23 +360,6 @@ int8_t LSM9DSx_Common::bulk_refresh() {
 }
 
 
-int8_t LSM9DSx_Common::io_op_callahead(BusOp* _op) {
-  return 0;
-}
-
-
-/*
-* Ultimately, all bus access this class does passes to this function as its last-stop
-*   before becoming folded into the SPI bus queue.
-*/
-int8_t LSM9DSx_Common::queue_io_job(BusOp* _op) {
-  if (nullptr == _op) return -1;   // This should never happen.
-  SPIBusOp* op = (SPIBusOp*) _op;
-  op->callback = (BusOpCallback*) this;         // Notify us of the results.
-  return ((CPLDDriver*)cpld)->queue_io_job(op);     // Pass it to the CPLD for bus access.
-}
-
-
 int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t nu_val) {
   if (regExists(reg_index) && regWritable(reg_index)) {
     uint8_t* tmp = regPtr(reg_index);
@@ -625,4 +608,36 @@ void LSM9DSx_Common::dumpDevRegs(StringBuilder *output) {
     output->concatf("--- Base filter param   %d\n", base_filter_param);
   }
   output->concatf("--- Error condition     %s\n---\n", getErrorString(error_condition));
+}
+
+
+/*******************************************************************************
+* ___     _       _                      These members are mandatory overrides
+*  |   / / \ o   | \  _     o  _  _      for implementing I/O callbacks. They
+* _|_ /  \_/ o   |_/ (/_ \/ | (_ (/_     are also implemented by Adapters.
+*******************************************************************************/
+
+/**
+* Called prior to the given bus operation beginning.
+* Returning 0 will allow the operation to continue.
+* Returning anything else will fail the operation with IO_RECALL.
+*   Operations failed this way will have their callbacks invoked as normal.
+*
+* @param  _op  The bus operation that was completed.
+* @return 0 to run the op, or non-zero to cancel it.
+*/
+int8_t LSM9DSx_Common::io_op_callahead(BusOp* _op) {
+  return 0;
+}
+
+
+/*
+* Ultimately, all bus access this class does passes to this function as its last-stop
+*   before becoming folded into the SPI bus queue.
+*/
+int8_t LSM9DSx_Common::queue_io_job(BusOp* _op) {
+  if (nullptr == _op) return -1;   // This should never happen.
+  SPIBusOp* op = (SPIBusOp*) _op;
+  op->callback = (BusOpCallback*) this;         // Notify us of the results.
+  return ((CPLDDriver*)cpld)->queue_io_job(op);     // Pass it to the CPLD for bus access.
 }

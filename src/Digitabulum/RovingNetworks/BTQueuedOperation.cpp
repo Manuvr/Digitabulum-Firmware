@@ -71,6 +71,46 @@ BTQueuedOperation::~BTQueuedOperation() {
 }
 
 
+
+void BTQueuedOperation::set_data(BusOpcode nu_op, StringBuilder* nu_data) {
+  opcode = nu_op;
+  data.concatHandoff(nu_data);
+  data.string();
+}
+
+
+/* Call to mark something completed that may not be. */
+int8_t BTQueuedOperation::abort(XferFault cause) {
+  xfer_state = XferState::FAULT;
+  xfer_fault = cause;
+  buf       = nullptr;
+  buf_len   = 0;
+  return 0;
+}
+
+
+/* Call to mark TX complete. */
+int8_t BTQueuedOperation::markComplete() {
+  buf       = nullptr;
+  buf_len   = 0;
+  //enable_DMA_IRQ(false);
+  //HAL_DMA_Abort(&_dma_handle);
+  data.clear();   // Clear the data we just sent.
+  xfer_state = XferState::COMPLETE;
+  RNBase::isr_bt_queue_ready();
+  return 0;
+}
+
+
+/*******************************************************************************
+* ___     _                              These members are mandatory overrides
+*  |   / / \ o     |  _  |_              from the BusOp class.
+* _|_ /  \_/ o   \_| (_) |_)
+*******************************************************************************/
+
+/**
+* Wipes this bus operation so it can be reused.
+*/
 void BTQueuedOperation::wipe() {
   xfer_state = XferState::UNDEF;
   xfer_fault = XferFault::NONE;
@@ -81,10 +121,19 @@ void BTQueuedOperation::wipe() {
 }
 
 
-void BTQueuedOperation::set_data(BusOpcode nu_op, StringBuilder* nu_data) {
-  opcode = nu_op;
-  data.concatHandoff(nu_data);
-  data.string();
+/**
+* Debug support method. This fxn is only present in debug builds.
+*
+* @param   StringBuilder* The buffer into which this fxn should write its output.
+*/
+void BTQueuedOperation::printDebug(StringBuilder *output) {
+  BusOp::printBusOp("BTOp", this, output);
+  int tmp_len = data.length();
+  output->concatf("\t length:      %d\n", tmp_len);
+  if (tmp_len > 0) {
+    output->concatf("\t data:        %s\n", data.string());
+  }
+  output->concat("\n\n");
 }
 
 
@@ -121,44 +170,4 @@ XferFault BTQueuedOperation::begin() {
       break;
   }
   return xfer_fault;
-}
-
-
-/* Call to mark something completed that may not be. */
-int8_t BTQueuedOperation::abort(XferFault cause) {
-  xfer_state = XferState::FAULT;
-  xfer_fault = cause;
-  buf       = nullptr;
-  buf_len   = 0;
-  return 0;
-}
-
-
-/* Call to mark TX complete. */
-int8_t BTQueuedOperation::markComplete() {
-  buf       = nullptr;
-  buf_len   = 0;
-  //enable_DMA_IRQ(false);
-  //HAL_DMA_Abort(&_dma_handle);
-  data.clear();   // Clear the data we just sent.
-  xfer_state = XferState::COMPLETE;
-  RNBase::isr_bt_queue_ready();
-  return 0;
-}
-
-
-
-/**
-* Debug support method. This fxn is only present in debug builds.
-*
-* @param   StringBuilder* The buffer into which this fxn should write its output.
-*/
-void BTQueuedOperation::printDebug(StringBuilder *output) {
-  BusOp::printBusOp("BTOp", this, output);
-
-  int tmp_len = data.length();
-  output->concatf("\t length:      %d\n", tmp_len);
-  if (tmp_len > 0) {
-    output->concatf("\t data:        %s\n", data.string());
-  }
 }

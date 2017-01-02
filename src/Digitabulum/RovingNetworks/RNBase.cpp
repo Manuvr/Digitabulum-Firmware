@@ -210,29 +210,11 @@ int8_t RNBase::toCounterparty(StringBuilder* buf, int8_t mm) {
 
 
 
-int8_t RNBase::bus_init() {
-  return 0;
-}
-
-int8_t RNBase::bus_deinit() {
-  return 0;
-}
-
-
-/**
-* Return a vacant SPIBusOp to the caller, allocating if necessary.
-*
-* @param  _op   The desired bus operation.
-* @param  _req  The device pointer that is requesting the job.
-* @return an RNBase to be used. Only NULL if out-of-mem.
-*/
-BTQueuedOperation* RNBase::new_op(BusOpcode _op, BusOpCallback* _req) {
-  BTQueuedOperation* return_value = BusAdapter::new_op();
-  return_value->set_opcode(_op);
-  return_value->callback = _req;
-  return return_value;
-}
-
+/*******************************************************************************
+* ___     _       _                      These members are mandatory overrides
+*  |   / / \ o   | \  _     o  _  _      for implementing I/O callbacks. They
+* _|_ /  \_/ o   |_/ (/_ \/ | (_ (/_     are also implemented by Adapters.
+*******************************************************************************/
 
 /**
 * Called prior to the given bus operation beginning.
@@ -270,8 +252,10 @@ int8_t RNBase::io_op_callback(BusOp* _op) {
 
 
 /*
-* This is the function that should be called to queue-up a bus operation.
-* It may or may not be started immediately.
+* This is what is called when the class wants to conduct a transaction on the bus.
+*
+* @param  _op  The bus operation to execute.
+* @return Zero on success, or appropriate error code.
 */
 int8_t RNBase::queue_io_job(BusOp* op) {
   BTQueuedOperation* nu = (BTQueuedOperation*) op;
@@ -285,6 +269,110 @@ int8_t RNBase::queue_io_job(BusOp* op) {
 	  nu->begin();
 	}
 	return 0;
+}
+
+
+/*******************************************************************************
+* ___     _                                  This is a template class for
+*  |   / / \ o    /\   _|  _. ._ _|_  _  ._  defining arbitrary I/O adapters.
+* _|_ /  \_/ o   /--\ (_| (_| |_) |_ (/_ |   Adapters must be instanced with
+*                             |              a BusOp as the template param.
+*******************************************************************************/
+
+int8_t RNBase::bus_init() {
+  return 0;
+}
+
+int8_t RNBase::bus_deinit() {
+  return 0;
+}
+
+
+/**
+* Return a vacant SPIBusOp to the caller, allocating if necessary.
+*
+* @param  _op   The desired bus operation.
+* @param  _req  The device pointer that is requesting the job.
+* @return an RNBase to be used. Only NULL if out-of-mem.
+*/
+BTQueuedOperation* RNBase::new_op(BusOpcode _op, BusOpCallback* _req) {
+  BTQueuedOperation* return_value = BusAdapter::new_op();
+  return_value->set_opcode(_op);
+  return_value->callback = _req;
+  return return_value;
+}
+
+
+/*
+* Calling this function will advance the work queue after performing cleanup
+*   operations on the present or pending operation.
+*
+* @return the number of bus operations proc'd.
+*/
+int8_t RNBase::advance_work_queue() {
+  read_port();
+  /* Prepare to generate bugs....
+  I normally wouldn't write something this way. The idea is to force an exit
+  through one of the states. We don't know going into this call how many states
+  we will traverse before our work is done.
+  */
+  while (true) {
+    if (current_job) {
+      if (current_job->isComplete()) {   // Is it completed?
+        if (BusOpcode::RX == current_job->get_opcode()) {
+          // This is meant for the session.
+          if (haveFar()) {
+            #ifdef __MANUVR_DEBUG
+              if (getVerbosity() > 4) Kernel::log("RNBase sending RX to application...\n");
+            #endif
+          }
+        }
+        reclaimPreallocation(current_job);
+        current_job = nullptr;
+      }
+      else if (current_job->inProgress()) {   // Is it initiated?
+        // We'd probably be interfering with somehting if we do anything. So do nothing.
+        return -2;
+      }
+      else if (!_er_flag(RNBASE_FLAG_LOCK_OUT)) {
+        // If it isn't completed or initiated, and we aren't locked out, let's kick it off...
+        switch (current_job->get_opcode()) {
+          case BusOpcode::TX_CMD_WAIT_RX:
+          case BusOpcode::TX_CMD:
+            //_er_set_flag(RNBASE_FLAG_CMD_PEND, !_er_flag(RNBASE_FLAG_CMD_MODE));
+            current_job->begin();
+            write_port(current_job->buf, current_job->buf_len);
+            break;
+          case BusOpcode::TX:
+            if (connected()) {
+              current_job->begin();
+              write_port(current_job->buf, current_job->buf_len);
+            }
+            else {
+              // Could have started a counterparty-bound message and didn't because: NO COUNTERPARTY
+              return -3;
+            }
+            break;
+          default:
+            #ifdef __MANUVR_DEBUG
+              if (getVerbosity() > 1) Kernel::log("advance_work_queue(): We should not be here.\n");
+            #endif
+            break;
+        }
+        return 1;   // We fired off a transaction.
+      }
+      else {
+        return -1;   // We could have done something, but lockout was active.
+      }
+    }
+    else {
+      current_job = work_queue.dequeue();
+      if (nullptr == current_job) {
+        return 0;  // Nothing more to process.
+      }
+    }
+  }
+  return 0;
 }
 
 
@@ -463,7 +551,7 @@ void RNBase::setDevName(char *nu_name) {
 /**
 * Sends the soft-reboot command to the module.
 */
-void RNBase::sendRebootCommand(void) {
+void RNBase::sendRebootCommand() {
   enterCommandMode();
   StringBuilder temp(RNBASE_CMD_REBOOT);
   insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, &temp);
@@ -541,77 +629,6 @@ void RNBase::setAutoconnect(bool autocon) {
 /*******************************************************************************
 * Asynchronous support fxns
 *******************************************************************************/
-
-/*
-* This gets called to service queue events.
-*/
-int8_t RNBase::advance_work_queue() {
-  read_port();
-  /* Prepare to generate bugs....
-  I normally wouldn't write something this way. The idea is to force an exit
-  through one of the states. We don't know going into this call how many states
-  we will traverse before our work is done.
-  */
-  while (true) {
-    if (current_job) {
-      if (current_job->isComplete()) {   // Is it completed?
-        if (BusOpcode::RX == current_job->get_opcode()) {
-          // This is meant for the session.
-          if (haveFar()) {
-            #ifdef __MANUVR_DEBUG
-              if (getVerbosity() > 4) Kernel::log("RNBase sending RX to application...\n");
-            #endif
-          }
-        }
-        reclaimPreallocation(current_job);
-        current_job = nullptr;
-      }
-      else if (current_job->inProgress()) {   // Is it initiated?
-        // We'd probably be interfering with somehting if we do anything. So do nothing.
-        return -2;
-      }
-      else if (!_er_flag(RNBASE_FLAG_LOCK_OUT)) {
-        // If it isn't completed or initiated, and we aren't locked out, let's kick it off...
-        switch (current_job->get_opcode()) {
-          case BusOpcode::TX_CMD_WAIT_RX:
-          case BusOpcode::TX_CMD:
-            //_er_set_flag(RNBASE_FLAG_CMD_PEND, !_er_flag(RNBASE_FLAG_CMD_MODE));
-            current_job->begin();
-            write_port(current_job->buf, current_job->buf_len);
-            break;
-          case BusOpcode::TX:
-            if (connected()) {
-              current_job->begin();
-              write_port(current_job->buf, current_job->buf_len);
-            }
-            else {
-              // Could have started a counterparty-bound message and didn't because: NO COUNTERPARTY
-              return -3;
-            }
-            break;
-          default:
-            #ifdef __MANUVR_DEBUG
-              if (getVerbosity() > 1) Kernel::log("advance_work_queue(): We should not be here.\n");
-            #endif
-            break;
-        }
-        return 1;   // We fired off a transaction.
-      }
-      else {
-        return -1;   // We could have done something, but lockout was active.
-      }
-    }
-    else {
-      current_job = work_queue.dequeue();
-      if (nullptr == current_job) {
-        return 0;  // Nothing more to process.
-      }
-    }
-  }
-  return 0;
-}
-
-
 
 /**
 * Put the module into master mode.
@@ -918,36 +935,6 @@ int8_t RNBase::callback_proc(ManuvrMsg* event) {
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
-void RNBase::printQueue(StringBuilder* temp) {
-  BTQueuedOperation* q_item = nullptr;
-
-  if (current_job) {
-    temp->concat("\n-- In working slot:\n");
-    current_job->printDebug(temp);
-  }
-
-  if (getVerbosity() > 3) {
-    if (work_queue.hasNext()) {
-      int q_read_count = strict_min((int16_t) work_queue.size(), (int16_t) RNBASE_MAX_QUEUE_PRINT);
-      temp->concatf("\n-- Queue Listing (top %d of %d)", q_read_count, work_queue.size());
-      for (int i = 0; i < q_read_count; i++) {
-        q_item = work_queue.get(i);
-        q_item->printDebug(temp);
-        temp->concat("\n");
-      }
-    }
-    else {
-      temp->concat("-- No Queue\n\n");
-    }
-  }
-}
-
-
-/**
-* Debug support method. This fxn is only present in debug builds.
-*
-* @param   StringBuilder* The buffer into which this fxn should write its output.
-*/
 void RNBase::printDebug(StringBuilder* output) {
   ManuvrXport::printDebug(output);
   printAdapter(output);
@@ -1029,7 +1016,7 @@ void RNBase::procDirectDebugInstruction(StringBuilder *input) {
     case 'i':        // Readback test
       switch (temp_byte) {
         case 1:
-          printQueue(&local_log);
+          printWorkQueue(&local_log, RNBASE_MAX_QUEUE_PRINT);
           break;
         default:
           printDebug(&local_log);
