@@ -532,6 +532,7 @@ Anatomical LegendManager::get_digit_given_port(DigitPort port) {
 * @return 0 to run the op, or non-zero to cancel it.
 */
 int8_t LegendManager::io_op_callahead(BusOp* _op) {
+  Kernel::log("LegendManager::io_op_callahead\n");
   return 0;
 }
 
@@ -956,7 +957,6 @@ void LegendManager::printDebug(StringBuilder *output) {
     // Print just the aggregate sample count and return.
   }
   output->concatf("-- Chirality           %s\n", chiralityString(getChirality()));
-  output->concatf("-- __IIU location      %p\n", (uintptr_t) iius);
 
   if (getVerbosity() > 3) {
     output->concatf("-- __dataset location  %p\n", (uintptr_t) __dataset);
@@ -1472,16 +1472,9 @@ int8_t LegendManager::read_identities() {
 
   // First the inertial aspect.
   SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
-  op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
-  op->setBuffer(&_imu_ids[0], LEGEND_DATASET_IIU_COUNT);
-  if (0 == queue_io_job(op)) {
-    // Now for the magnetic aspect.
-    op = _bus->new_op(BusOpcode::RX, this);
-    op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
-    op->setBuffer(&_imu_ids[LEGEND_DATASET_IIU_COUNT], LEGEND_DATASET_IIU_COUNT);
-    return queue_io_job(op);
-  }
-  return -1;
+  op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
+  op->setBuffer(&_imu_ids[0], (2 * LEGEND_DATASET_IIU_COUNT));
+  return queue_io_job(op);
 }
 
 

@@ -471,12 +471,12 @@ int8_t CPLDDriver::advance_work_queue() {
       case XferState::TX_WAIT:
       case XferState::RX_WAIT:
         if (current_job->hasFault()) {
+          _failed_xfers++;
           if (getVerbosity() > 3) local_log.concat("CPLDDriver::advance_work_queue():\t Failed at IO_WAIT.\n");
         }
         else {
           current_job->markComplete();
         }
-        _failed_xfers++;
         // No break on purpose.
       case XferState::COMPLETE:
         _total_xfers++;
@@ -504,15 +504,20 @@ int8_t CPLDDriver::advance_work_queue() {
         }
         break;
 
-       /* Cases below ought to be handled by ISR flow... */
-       case XferState::ADDR:
-         current_job->advance_operation(0, 0);
-       case XferState::STOP:
-         if (getVerbosity() > 5) local_log.concatf("State might be corrupted if we tried to advance_queue(). \n");
-         break;
-       default:
-         if (getVerbosity() > 3) local_log.concatf("advance_work_queue() default state \n");
-         break;
+      /* Cases below ought to be handled by ISR flow... */
+      case XferState::ADDR:
+        Kernel::log("####################### advance_operation entry\n");
+        current_job->advance_operation(0, 0);
+        local_log.concat("####################### advance_operation exit\n");
+        current_job->printDebug(&local_log);
+        flushLocalLog();
+        break;
+      case XferState::STOP:
+        if (getVerbosity() > 5) local_log.concatf("State might be corrupted if we tried to advance_queue(). \n");
+        break;
+      default:
+        if (getVerbosity() > 3) local_log.concatf("advance_work_queue() default state \n");
+        break;
     }
   }
 
@@ -979,8 +984,6 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
 void CPLDDriver::printDebug(StringBuilder *output) {
-  if (nullptr == output) return;
-
   EventReceiver::printDebug(output);
   //if (getVerbosity() > 6) output->concatf("-- volatile *cpld      0x%08x\n--\n", cpld);
   output->concatf("-- Conf                0x%02x\n",      cpld_conf_value);
