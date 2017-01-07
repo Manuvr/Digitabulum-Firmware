@@ -468,39 +468,41 @@ int8_t CPLDDriver::advance_work_queue() {
   timeout_punch = false;
   if (current_job) {
     switch (current_job->get_state()) {
-       case XferState::TX_WAIT:
-       case XferState::RX_WAIT:
-         if (current_job->hasFault()) {
-           if (getVerbosity() > 3) local_log.concat("CPLDDriver::advance_work_queue():\t Failed at IO_WAIT.\n");
-         }
-         else {
-           current_job->markComplete();
-         }
-         // No break on purpose.
-       case XferState::COMPLETE:
-         callback_queue.insert(current_job);
-         current_job = nullptr;
-         if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
-         break;
+      case XferState::TX_WAIT:
+      case XferState::RX_WAIT:
+        if (current_job->hasFault()) {
+          if (getVerbosity() > 3) local_log.concat("CPLDDriver::advance_work_queue():\t Failed at IO_WAIT.\n");
+        }
+        else {
+          current_job->markComplete();
+        }
+        _failed_xfers++;
+        // No break on purpose.
+      case XferState::COMPLETE:
+        _total_xfers++;
+        callback_queue.insert(current_job);
+        current_job = nullptr;
+        if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
+        break;
 
-       case XferState::IDLE:
-       case XferState::INITIATE:
-         switch (current_job->begin()) {
-           case XferFault::NONE:     // Nominal outcome. Transfer started with no problens...
-             break;
-           case XferFault::BUS_BUSY:    // Bus appears to be in-use. State did not change.
-             // Re-throw queue_ready event and try again later.
-             if (getVerbosity() > 2) local_log.concat("  advance_work_queue() tried to clobber an existing transfer on chain.\n");
-             //Kernel::staticRaiseEvent(&event_spi_queue_ready);  // Bypass our method. Jump right to the target.
-             break;
-           default:    // Began the transfer, and it barffed... was aborted.
-             if (getVerbosity() > 3) local_log.concat("CPLDDriver::advance_work_queue():\t Failed to begin transfer after starting.\n");
-             callback_queue.insert(current_job);
-             current_job = nullptr;
-             if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
-             break;
-         }
-         break;
+      case XferState::IDLE:
+      case XferState::INITIATE:
+        switch (current_job->begin()) {
+          case XferFault::NONE:     // Nominal outcome. Transfer started with no problens...
+            break;
+          case XferFault::BUS_BUSY:    // Bus appears to be in-use. State did not change.
+            // Re-throw queue_ready event and try again later.
+            if (getVerbosity() > 2) local_log.concat("  advance_work_queue() tried to clobber an existing transfer on chain.\n");
+            //Kernel::staticRaiseEvent(&event_spi_queue_ready);  // Bypass our method. Jump right to the target.
+            break;
+          default:    // Began the transfer, and it barffed... was aborted.
+            if (getVerbosity() > 3) local_log.concat("CPLDDriver::advance_work_queue():\t Failed to begin transfer after starting.\n");
+            callback_queue.insert(current_job);
+            current_job = nullptr;
+            if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
+            break;
+        }
+        break;
 
        /* Cases below ought to be handled by ISR flow... */
        case XferState::ADDR:

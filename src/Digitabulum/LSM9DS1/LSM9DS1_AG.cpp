@@ -23,7 +23,7 @@ limitations under the License.
 #include "IIU.h"
 #include "../ManuLegend/ManuManager.h"
 
-/****************************************************************************************************
+/*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
 *     /       |           |   /   \  |           ||  |  /      |   /       |
 *    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
@@ -31,8 +31,8 @@ limitations under the License.
 * .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
 * |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
 *
-* Static members and initializers should be located here. Initializers first, functions second.
-****************************************************************************************************/
+* Static members and initializers should be located here.
+*******************************************************************************/
 /*
 * This is a table of frequencies versus period (in micros).
 */
@@ -56,7 +56,6 @@ const UpdateRate2Hertz LSM9DS1_AG::rate_settings_gyr[MAXIMUM_RATE_INDEX_AG] = {
   {952,  (1/952.0f)}
 };
 
-
 /*
 * This is a generic table of scales versus unit-per-bit for 16-bit types.
 * This needs to be updated with actual datasheet values.
@@ -79,7 +78,7 @@ const float LSM9DS1_AG::max_range_vect_acc  = 16.0;
 const float LSM9DS1_AG::max_range_vect_gyr  = 2000.0;
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *                       _                               _
 *     /\               | |                             | |
 *    /  \   ___ ___ ___| | ___ _ __ ___  _ __ ___   ___| |_ ___ _ __
@@ -87,7 +86,7 @@ const float LSM9DS1_AG::max_range_vect_gyr  = 2000.0;
 *  / ____ \ (_| (_|  __/ |  __/ | | (_) | | | | | |  __/ ||  __/ |
 * /_/    \_\___\___\___|_|\___|_|  \___/|_| |_| |_|\___|\__\___|_|
 *
-****************************************************************************************************/
+*******************************************************************************/
 /*
 * Accelerometer data
 * Tests all the required registers for freshness and builds a Vector with the new reading
@@ -129,7 +128,6 @@ int8_t LSM9DS1_AG::collect_reading_acc() {
 
   return 1;
 }
-
 
 
 /**
@@ -175,7 +173,6 @@ int8_t LSM9DS1_AG::set_base_filter_param_acc(uint8_t nu_bw_idx) {
   }
   return -1;
 }
-
 
 
 
@@ -296,14 +293,14 @@ int8_t LSM9DS1_AG::collect_reading_temperature() {
 
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *   ___ _              ___      _ _              _      _
 *  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
 * | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
 *  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
-****************************************************************************************************/
+*******************************************************************************/
 
 /*
 ( This accelerometer has 49 registers (as we choose to carve them).
