@@ -546,8 +546,19 @@ int8_t LegendManager::io_op_callback(BusOp* _op) {
   SPIBusOp* op = (SPIBusOp*) _op;
   // There is zero chance this object will be a null pointer unless it was done on purpose.
   if (op->hasFault()) {
-    if (getVerbosity() > 3) local_log.concat("io_op_callback() rejected a callback because the bus op failed.\n");
+    if (getVerbosity() > 3) {
+      local_log.concat("io_op_callback() rejected a callback because the bus op failed.\n");
+      Kernel::log(&local_log);
+    }
     return SPI_CALLBACK_ERROR;
+  }
+
+  switch (op->getTransferParam(3)) {
+    case 0x8F:  // This is a bulk identity check.
+      printIMURollCall(&local_log);
+      break;
+    default:
+      break;
   }
 
   if (op == &_preformed_read_a) {
@@ -557,7 +568,7 @@ int8_t LegendManager::io_op_callback(BusOp* _op) {
   else if (op == &_preformed_read_m) {
   }
 
-  if (local_log.length() > 0) Kernel::log(&local_log);
+  flushLocalLog();
   return SPI_CALLBACK_NOMINAL;
 }
 
@@ -887,6 +898,52 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
 }
 
 
+
+
+/**
+* Debug support method. This fxn is only present in debug builds.
+* // TODO: This is a lie. Audit __MANUVR_DEBUG usage and elaborate it by class to reduce build sizes.
+*
+* @param   StringBuilder* The buffer into which this fxn should write its output.
+*/
+void LegendManager::printIMURollCall(StringBuilder *output) {
+  EventReceiver::printDebug(output);
+  output->concat("-- Intertial integration units: id(I/M)\n--\n-- Dgt      Prx        Imt        Dst\n");
+  // TODO: Audit usage of length-specified integers as iterators. Cut where not
+  //   important and check effects on optimization, as some arch's take a
+  //   runtime hit for access in any length less than thier ALU widths.
+  for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+    switch (i) {
+      case 1:   // Skip output for the IMU that doesn't exist at digit0.
+        output->concat("   <N/A>   ");
+        break;
+      case 0:
+        output->concat("-- 0(MC)    ");
+        break;
+      case 2:   // digit1 begins
+        output->concat("\n-- 1        ");
+        break;
+      case 5:   // digit2 begins
+        output->concat("\n-- 2        ");
+        break;
+      case 8:   // digit3 begins
+        output->concat("\n-- 3        ");
+        break;
+      case 11:  // digit4 begins
+        output->concat("\n-- 4        ");
+        break;
+      case 14:  // digit5 begins
+        output->concat("\n-- 5        ");
+        break;
+      default:
+        break;
+    }
+    output->concatf("%02u(%02x/%02x)  ", i, _imu_ids[i], _imu_ids[i+LEGEND_DATASET_IIU_COUNT]);
+  }
+  output->concat("\n\n");
+}
+
+
 /**
 * Debug support method. This fxn is only present in debug builds.
 *
@@ -970,19 +1027,32 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     case 'i':
-      if (1 == temp_byte) {
-        local_log.concatf("The IIU preallocated measurements are stored at %p.\n", (uintptr_t) __prealloc);
-      }
-      else if (2 == temp_byte) {
-        if (operating_legend) {
-          operating_legend->printDebug(&local_log);
-        }
-      }
-      else {
-        int8_t old_verbosity = getVerbosity();
-        if (temp_byte && (temp_byte < 7)) setVerbosity(temp_byte);
-        printDebug(&local_log);
-        if (temp_byte && (temp_byte < 7)) setVerbosity(old_verbosity);
+      switch (temp_byte) {
+        case 1:
+          local_log.concatf("IIU preallocated measurements are stored at %p.\n", __prealloc);
+          break;
+        case 2:
+          if (operating_legend) {
+            operating_legend->printDebug(&local_log);
+          }
+          else {
+            local_log.concat("No operating ManuLegend.\n");
+          }
+          break;
+        case 3:
+          read_identities();  // Read the sensor's identity registers.
+          break;
+        case 4:
+          printIMURollCall(&local_log);   // Show us the results, JIC
+          break;
+        default:
+          {
+            int8_t old_verbosity = getVerbosity();
+            if (temp_byte && (temp_byte < 7)) setVerbosity(temp_byte);
+            printDebug(&local_log);
+            if (temp_byte && (temp_byte < 7)) setVerbosity(old_verbosity);
+          }
+          break;
       }
       break;
 
@@ -1378,7 +1448,6 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
         iius[temp_byte].dumpPreformedElements(&local_log);
       }
       break;
-
 
     default:
       EventReceiver::procDirectDebugInstruction(input);
