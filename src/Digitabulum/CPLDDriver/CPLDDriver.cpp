@@ -1153,9 +1153,10 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, nullptr);   // Raise an event
       break;
 
-    case '%':
-      if (setCPLDClkFreq(temp_byte << 8)) {
-        local_log.concatf("Set ext clock period to %d.\n", temp_byte << 8);
+    case '%':   // Ext clock rate.
+      temp_byte = temp_byte % 16;
+      if (setCPLDClkFreq(1 << temp_byte)) {
+        local_log.concatf("Set ext clock period to %d.\n", 1 << temp_byte);
       }
       else {
         local_log.concat("Failed to set ext clock period.\n");
