@@ -909,7 +909,7 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
 */
 void LegendManager::printIMURollCall(StringBuilder *output) {
   EventReceiver::printDebug(output);
-  output->concat("-- Intertial integration units: id(I/M)\n--\n-- Dgt      Prx        Imt        Dst\n");
+  output->concat("-- Intertial integration units: id(M/I)\n--\n-- Dgt      Prx        Imt        Dst        Reports\n");
   // TODO: Audit usage of length-specified integers as iterators. Cut where not
   //   important and check effects on optimization, as some arch's take a
   //   runtime hit for access in any length less than thier ALU widths.
@@ -922,26 +922,26 @@ void LegendManager::printIMURollCall(StringBuilder *output) {
         output->concat("-- 0(MC)    ");
         break;
       case 2:   // digit1 begins
-        output->concat("\n-- 1        ");
+        output->concatf("%c\n-- 1        ", _bus->digitExists(DigitPort::MC) ? 'Y' : ' ');
         break;
       case 5:   // digit2 begins
-        output->concat("\n-- 2        ");
+        output->concatf("%c\n-- 2        ", _bus->digitExists(DigitPort::PORT_1) ? 'Y' : ' ');
         break;
       case 8:   // digit3 begins
-        output->concat("\n-- 3        ");
+        output->concatf("%c\n-- 3        ", _bus->digitExists(DigitPort::PORT_2) ? 'Y' : ' ');
         break;
       case 11:  // digit4 begins
-        output->concat("\n-- 4        ");
+        output->concatf("%c\n-- 4        ", _bus->digitExists(DigitPort::PORT_3) ? 'Y' : ' ');
         break;
       case 14:  // digit5 begins
-        output->concat("\n-- 5        ");
+        output->concatf("%c\n-- 5        ", _bus->digitExists(DigitPort::PORT_4) ? 'Y' : ' ');
         break;
       default:
         break;
     }
     output->concatf("%02u(%02x/%02x)  ", i, _imu_ids[i], _imu_ids[i+LEGEND_DATASET_IIU_COUNT]);
   }
-  output->concat("\n\n");
+  output->concatf("%c\n\n", _bus->digitExists(DigitPort::PORT_5) ? 'Y' : ' ');
 }
 
 
@@ -1470,9 +1470,10 @@ int8_t LegendManager::read_identities() {
   // Zero the space so we ensure no false positives.
   bzero(&_imu_ids[0], (2 * LEGEND_DATASET_IIU_COUNT));
 
-  // First the inertial aspect.
+  // Because the identity address is the same for both aspects, and their addresses
+  //   are continuous, we just read 1 byte from 34 sensors.
   SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
-  op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
+  op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
   op->setBuffer(&_imu_ids[0], (2 * LEGEND_DATASET_IIU_COUNT));
   return queue_io_job(op);
 }

@@ -202,40 +202,40 @@ IMU register access procedure:
 --------------------------------------------------------------------------------
   DEV_ADDR | Digit | Position | Aspect
   =========|=======|==========|==========================================
-  0x00     |   0   | Proximal | Inertial
-  0x01     |   0   | Distal   | Inertial
-  0x02     |   1   | Proximal | Inertial
-  0x03     |   1   | Intrmedt | Inertial
-  0x04     |   1   | Distal   | Inertial
-  0x05     |   2   | Proximal | Inertial
-  0x06     |   2   | Intrmedt | Inertial
-  0x07     |   2   | Distal   | Inertial
-  0x08     |   3   | Proximal | Inertial
-  0x09     |   3   | Intrmedt | Inertial
-  0x0A     |   3   | Distal   | Inertial
-  0x0B     |   4   | Proximal | Inertial
-  0x0C     |   4   | Intrmedt | Inertial
-  0x0D     |   4   | Distal   | Inertial
-  0x0E     |   5   | Proximal | Inertial
-  0x0F     |   5   | Intrmedt | Inertial
-  0x10     |   5   | Distal   | Inertial
-  0x11     |   0   | Proximal | Magnetic
-  0x12     |   0   | Distal   | Magnetic
-  0x13     |   1   | Proximal | Magnetic
-  0x14     |   1   | Intrmedt | Magnetic
-  0x15     |   1   | Distal   | Magnetic
-  0x16     |   2   | Proximal | Magnetic
-  0x17     |   2   | Intrmedt | Magnetic
-  0x18     |   2   | Distal   | Magnetic
-  0x19     |   3   | Proximal | Magnetic
-  0x1A     |   3   | Intrmedt | Magnetic
-  0x1B     |   3   | Distal   | Magnetic
-  0x1C     |   4   | Proximal | Magnetic
-  0x1D     |   4   | Intrmedt | Magnetic
-  0x1E     |   4   | Distal   | Magnetic
-  0x1F     |   5   | Proximal | Magnetic
-  0x20     |   5   | Intrmedt | Magnetic
-  0x21     |   5   | Distal   | Magnetic
+  0x00     |   0   | Proximal | Magnetic
+  0x01     |   0   | Distal   | Magnetic
+  0x02     |   1   | Proximal | Magnetic
+  0x03     |   1   | Intrmedt | Magnetic
+  0x04     |   1   | Distal   | Magnetic
+  0x05     |   2   | Proximal | Magnetic
+  0x06     |   2   | Intrmedt | Magnetic
+  0x07     |   2   | Distal   | Magnetic
+  0x08     |   3   | Proximal | Magnetic
+  0x09     |   3   | Intrmedt | Magnetic
+  0x0A     |   3   | Distal   | Magnetic
+  0x0B     |   4   | Proximal | Magnetic
+  0x0C     |   4   | Intrmedt | Magnetic
+  0x0D     |   4   | Distal   | Magnetic
+  0x0E     |   5   | Proximal | Magnetic
+  0x0F     |   5   | Intrmedt | Magnetic
+  0x10     |   5   | Distal   | Magnetic
+  0x11     |   0   | Proximal | Inertial
+  0x12     |   0   | Distal   | Inertial
+  0x13     |   1   | Proximal | Inertial
+  0x14     |   1   | Intrmedt | Inertial
+  0x15     |   1   | Distal   | Inertial
+  0x16     |   2   | Proximal | Inertial
+  0x17     |   2   | Intrmedt | Inertial
+  0x18     |   2   | Distal   | Inertial
+  0x19     |   3   | Proximal | Inertial
+  0x1A     |   3   | Intrmedt | Inertial
+  0x1B     |   3   | Distal   | Inertial
+  0x1C     |   4   | Proximal | Inertial
+  0x1D     |   4   | Intrmedt | Inertial
+  0x1E     |   4   | Distal   | Inertial
+  0x1F     |   5   | Proximal | Inertial
+  0x20     |   5   | Intrmedt | Inertial
+  0x21     |   5   | Distal   | Inertial
 
   /-------------------------------------------------------------------------\
   | DEV_ADDR  | XFER_LEN  | DEV_COUNT | REG_ADDR  |          DATA           |
@@ -310,6 +310,89 @@ As is the case with individual IMU access, REG_ADDR will be captured in an
   boundaries.
 
 
+IRQ definitions
+--------------------------------------------------------------------------------
+00  PORT_5
+01  PORT_5
+02  PORT_5
+03  PORT_5
+04  PORT_5
+05  PORT_5
+06  PORT_5
+07  PORT_5
+08  PORT_5
+09  PORT_5
+10  PORT_5
+11  PORT_5
+12  PORT_4
+13  PORT_4
+14  PORT_4
+15  PORT_4
+16  PORT_4
+17  PORT_4
+18  PORT_4
+19  PORT_4
+20  PORT_4
+21  PORT_4
+22  PORT_4
+23  PORT_4
+24  PORT_3
+25  PORT_3
+26  PORT_3
+27  PORT_3
+28  PORT_3
+29  PORT_3
+30  PORT_3
+31  PORT_3
+32  PORT_3
+33  PORT_3
+34  PORT_3
+35  PORT_3
+36  PORT_2
+37  PORT_2
+38  PORT_2
+39  PORT_2
+40  PORT_2
+41  PORT_2
+42  PORT_2
+43  PORT_2
+44  PORT_2
+45  PORT_2
+46  PORT_2
+47  PORT_2
+48  PORT_1
+49  PORT_1
+50  PORT_1
+51  PORT_1
+52  PORT_1
+53  PORT_1
+54  PORT_1
+55  PORT_1
+56  PORT_1
+57  PORT_1
+58  PORT_1
+59  PORT_1
+60  MC
+61  MC
+62  MC
+63  MC
+64  MC
+65  MC
+66  MC
+67  MC
+68  Metacarpals present.
+69  Digit 1 present.
+70  Digit 2 present.
+71  Digit 3 present.
+72  Digit 4 present.
+73  Digit 5 present.
+74  CONFIG register, bit 2.
+75  CPLD_OE
+76  0
+77  0
+78  0
+79  0
+
 
 CPLD Version notes:
 ================================================================================
@@ -376,40 +459,40 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 
 
 /* CPLD register map ***************************************/
-#define CPLD_REG_IMU_DM_P_I    0x00  // |
-#define CPLD_REG_IMU_DM_D_I    0x01  // | These are pseudo registers.
-#define CPLD_REG_IMU_D1_P_I    0x02  // | If the first byte in an SPI
-#define CPLD_REG_IMU_D1_I_I    0x03  // |   transaction is equal to one of these
-#define CPLD_REG_IMU_D1_D_I    0x04  // |   values, the corresponding IMU will
-#define CPLD_REG_IMU_D2_P_I    0x05  // |   be selected, and its bus connected
-#define CPLD_REG_IMU_D2_I_I    0x06  // |   to the CPU's SPI. Each bus operation
-#define CPLD_REG_IMU_D2_D_I    0x07  // |   that targets an individual IMU must
-#define CPLD_REG_IMU_D3_P_I    0x08  // |   be immediately preceeded by one of
-#define CPLD_REG_IMU_D3_I_I    0x09  // |   these bytes.
-#define CPLD_REG_IMU_D3_D_I    0x0A  // |
-#define CPLD_REG_IMU_D4_P_I    0x0B  // | The resulting bus connection will be
-#define CPLD_REG_IMU_D4_I_I    0x0C  // |   retained until the CPU-facing ~CS
-#define CPLD_REG_IMU_D4_D_I    0x0D  // |   line goes high.
-#define CPLD_REG_IMU_D5_P_I    0x0E  // |
-#define CPLD_REG_IMU_D5_I_I    0x0F  // |
-#define CPLD_REG_IMU_D5_D_I    0x10  // |
-#define CPLD_REG_IMU_DM_P_M    0x11  // |
-#define CPLD_REG_IMU_DM_D_M    0x12  // |
-#define CPLD_REG_IMU_D1_P_M    0x13  // |
-#define CPLD_REG_IMU_D1_I_M    0x14  // |
-#define CPLD_REG_IMU_D1_D_M    0x15  // |
-#define CPLD_REG_IMU_D2_P_M    0x16  // |
-#define CPLD_REG_IMU_D2_I_M    0x17  // |
-#define CPLD_REG_IMU_D2_D_M    0x18  // |
-#define CPLD_REG_IMU_D3_P_M    0x19  // |
-#define CPLD_REG_IMU_D3_I_M    0x1A  // |
-#define CPLD_REG_IMU_D3_D_M    0x1B  // |
-#define CPLD_REG_IMU_D4_P_M    0x1C  // |
-#define CPLD_REG_IMU_D4_I_M    0x1D  // |
-#define CPLD_REG_IMU_D4_D_M    0x1E  // |
-#define CPLD_REG_IMU_D5_P_M    0x1F  // |
-#define CPLD_REG_IMU_D5_I_M    0x20  // |
-#define CPLD_REG_IMU_D5_D_M    0x21  // |
+#define CPLD_REG_IMU_DM_P_M    0x00  // |
+#define CPLD_REG_IMU_DM_D_M    0x01  // | These are pseudo registers.
+#define CPLD_REG_IMU_D1_P_M    0x02  // | If the first byte in an SPI
+#define CPLD_REG_IMU_D1_I_M    0x03  // |   transaction is equal to one of these
+#define CPLD_REG_IMU_D1_D_M    0x04  // |   values, the corresponding IMU will
+#define CPLD_REG_IMU_D2_P_M    0x05  // |   be selected, and its bus connected
+#define CPLD_REG_IMU_D2_I_M    0x06  // |   to the CPU's SPI. Each bus operation
+#define CPLD_REG_IMU_D2_D_M    0x07  // |   that targets an individual IMU must
+#define CPLD_REG_IMU_D3_P_M    0x08  // |   be immediately preceeded by one of
+#define CPLD_REG_IMU_D3_I_M    0x09  // |   these bytes.
+#define CPLD_REG_IMU_D3_D_M    0x0A  // |
+#define CPLD_REG_IMU_D4_P_M    0x0B  // | The resulting bus connection will be
+#define CPLD_REG_IMU_D4_I_M    0x0C  // |   retained until the CPU-facing ~CS
+#define CPLD_REG_IMU_D4_D_M    0x0D  // |   line goes high.
+#define CPLD_REG_IMU_D5_P_M    0x0E  // |
+#define CPLD_REG_IMU_D5_I_M    0x0F  // |
+#define CPLD_REG_IMU_D5_D_M    0x10  // |
+#define CPLD_REG_IMU_DM_P_I    0x11  // |
+#define CPLD_REG_IMU_DM_D_I    0x12  // |
+#define CPLD_REG_IMU_D1_P_I    0x13  // |
+#define CPLD_REG_IMU_D1_I_I    0x14  // |
+#define CPLD_REG_IMU_D1_D_I    0x15  // |
+#define CPLD_REG_IMU_D2_P_I    0x16  // |
+#define CPLD_REG_IMU_D2_I_I    0x17  // |
+#define CPLD_REG_IMU_D2_D_I    0x18  // |
+#define CPLD_REG_IMU_D3_P_I    0x19  // |
+#define CPLD_REG_IMU_D3_I_I    0x1A  // |
+#define CPLD_REG_IMU_D3_D_I    0x1B  // |
+#define CPLD_REG_IMU_D4_P_I    0x1C  // |
+#define CPLD_REG_IMU_D4_I_I    0x1D  // |
+#define CPLD_REG_IMU_D4_D_I    0x1E  // |
+#define CPLD_REG_IMU_D5_P_I    0x1F  // |
+#define CPLD_REG_IMU_D5_I_I    0x20  // |
+#define CPLD_REG_IMU_D5_D_I    0x21  // |
 
 #define CPLD_REG_RANK_P_I      0x22  // | These registers are for ranked access.
 #define CPLD_REG_RANK_I_I      0x23  // | This is only useful for write operations.
@@ -509,8 +592,8 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     /* High-level hardware control and discovery. */
     void     reset();                  // Causes the CPLD to be reset.
     uint8_t  getCPLDVersion();         // Read the version code in the CPLD.
-    inline bool digitExists(uint8_t x) {   return false;   };   // TODO: When digits arrive.
-    inline int8_t digitSleep(uint8_t x) {  return 0;       };   // TODO: When digits arrive.
+    bool digitExists(DigitPort);
+    inline int8_t digitSleep(uint8_t x) {    return 0;       };   // TODO: When digits arrive.
     DigitState digitState(DigitPort);
 
     /* The wrist-moun */

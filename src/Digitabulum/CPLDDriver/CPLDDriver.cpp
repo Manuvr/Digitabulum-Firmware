@@ -817,6 +817,30 @@ int8_t CPLDDriver::iiu_group_irq() {
 }
 
 
+/**
+* Used by the ManuManager to easily check for a digit's IRQ validity.
+*
+* @return True if the IRQ data confirms a digit.
+*/
+bool CPLDDriver::digitExists(DigitPort x) {
+  switch (x) {
+    case DigitPort::MC:
+    case DigitPort::PORT_1:
+    case DigitPort::PORT_2:
+    case DigitPort::PORT_3:
+    case DigitPort::PORT_4:
+    case DigitPort::PORT_5:
+      break;
+    default:
+      return false;
+  }
+  // MC_PRESENT is bit 68 in the IRQ stream.
+  const uint8_t bit_offset  = 4 + (uint8_t) x;
+  const uint8_t byte_offset = (bit_offset < 72) ? 8:9;
+  return ((_irq_data_ptr[byte_offset] & (0x01 << bit_offset)) != 0);
+};
+
+
 
 /*******************************************************************************
 * ######## ##     ## ######## ##    ## ########  ######
