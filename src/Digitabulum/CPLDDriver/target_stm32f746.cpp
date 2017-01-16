@@ -78,16 +78,18 @@ void enableSPI_DMA(bool enable) {
 * Should undo all the effects of the init functions.
 */
 void CPLDDriver::_deinit() {
+  setPin(_pins.reset, false);  // Hold the CPLD in reset.
+
   //HAL_GPIO_DeInit(GPIOA, GPIO_PIN_4|GPIO_PIN_6|GPIO_PIN_5|GPIO_PIN_7);
   //HAL_GPIO_DeInit(GPIOB, GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15);
 
-  //__TIM1_CLK_DISABLE();
-  //HAL_GPIO_DeInit(GPIOA, GPIO_PIN_8);
+  HAL_SPI_DeInit(&hspi1);
+  HAL_SPI_DeInit(&hspi2);
+  __HAL_RCC_SPI1_CLK_DISABLE();
+  __HAL_RCC_SPI2_CLK_DISABLE();
 
-  //HAL_SPI_DeInit(&hspi1);
-  //HAL_SPI_DeInit(&hspi2);
-  //__HAL_RCC_SPI1_CLK_DISABLE();
-  //__HAL_RCC_SPI2_CLK_DISABLE();
+  __TIM1_CLK_DISABLE();
+  //HAL_GPIO_DeInit(GPIOA, GPIO_PIN_8);
 }
 
 
@@ -210,6 +212,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
   //setPinEvent(3, uint8_t condition, cpld_xfer_complete);
 
+  _dma_r.Parent                    = &hspi1;
   _dma_r.Instance                  = DMA2_Stream2;
   _dma_r.Init.Channel              = DMA_CHANNEL_3;
   _dma_r.Init.Direction            = DMA_PERIPH_TO_MEMORY;   // Receive
@@ -226,6 +229,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   HAL_DMA_Init(&_dma_r);
   HAL_NVIC_EnableIRQ(DMA2_Stream2_IRQn);
 
+  _dma_w.Parent                   = &hspi1;
   _dma_w.Instance                 = DMA2_Stream3;
   _dma_w.Init.Channel             = DMA_CHANNEL_3;
   _dma_w.Init.Direction           = DMA_MEMORY_TO_PERIPH;   // Transmit
@@ -403,26 +407,27 @@ extern "C" {
       _spi2_dma.ErrorCode |= HAL_DMA_ERROR_NONE;
 
       if((DMA1_Stream3->CR & (uint32_t)(DMA_SxCR_DBM)) != 0) {
-        uint8_t* completed_buf;
         uint8_t* previous_buf;
         if((DMA1_Stream3->CR & DMA_SxCR_CT) == 0) {
-          _irq_data_ptr = (uint8_t*) _irq_data_1;  // The consumer of this buffer should start here.
-          completed_buf = (uint8_t*) _irq_data_0;
+          _irq_data_ptr = (uint8_t*) _irq_data_0;  // The consumer of this buffer should start here.
           previous_buf  = (uint8_t*) _irq_data_1;
           //Kernel::log("DMA1_Stream3 Circular Bank 0\n");
           _spi2_dma.State = HAL_DMA_STATE_READY_MEM0;
         }
         else {
-          _irq_data_ptr = (uint8_t*) _irq_data_0;  // The consumer of this buffer should start here.
-          completed_buf = (uint8_t*) _irq_data_1;
+          _irq_data_ptr = (uint8_t*) _irq_data_1;  // The consumer of this buffer should start here.
           previous_buf  = (uint8_t*) _irq_data_0;
           //Kernel::log("DMA1_Stream3 Circular Bank 1\n");
           _spi2_dma.State = HAL_DMA_STATE_READY_MEM1;
         }
 
-        *(uint32_t*)(_irq_diff + 0) = *(uint32_t*)(previous_buf + 0) ^ *(uint32_t*)(completed_buf + 0);
-        *(uint32_t*)(_irq_diff + 4) = *(uint32_t*)(previous_buf + 4) ^ *(uint32_t*)(completed_buf + 4);
-        *(uint16_t*)(_irq_diff + 8) = *(uint16_t*)(previous_buf + 8) ^ *(uint16_t*)(completed_buf + 8);
+        *(uint32_t*)(_irq_diff + 0) = *(uint32_t*)(previous_buf + 0) ^ *(uint32_t*)(_irq_data_ptr + 0);
+        *(uint32_t*)(_irq_diff + 4) = *(uint32_t*)(previous_buf + 4) ^ *(uint32_t*)(_irq_data_ptr + 4);
+        *(uint16_t*)(_irq_diff + 8) = *(uint16_t*)(previous_buf + 8) ^ *(uint16_t*)(_irq_data_ptr + 8);
+
+        *(uint32_t*)(_irq_accum + 0) |= *(uint32_t*)(_irq_diff + 0);
+        *(uint32_t*)(_irq_accum + 4) |= *(uint32_t*)(_irq_diff + 4);
+        *(uint16_t*)(_irq_accum + 8) |= *(uint16_t*)(_irq_diff + 8);
       }
       else {
         ///* Change the DMA state */
@@ -459,7 +464,7 @@ extern "C" {
 
 
   void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
-    Kernel::log("##### HAL_SPI_TxCpltCallback\n");
+    //Kernel::log("##### HAL_SPI_TxCpltCallback\n");
     if (hspi == &hspi1) {
       SPIBusOp* c = ((CPLDDriver*) cpld)->currentJob();
       if (c) {
@@ -476,7 +481,7 @@ extern "C" {
 
 
   void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
-    Kernel::log("##### HAL_SPI_TxRxCpltCallback\n");
+    //Kernel::log("##### HAL_SPI_TxRxCpltCallback\n");
     if (hspi == &hspi1) {
       SPIBusOp* c = ((CPLDDriver*) cpld)->currentJob();
       if (c) {
@@ -493,7 +498,7 @@ extern "C" {
 
 
   void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi){
-    Kernel::log("##### HAL_SPI_RxCpltCallback\n");
+    //Kernel::log("##### HAL_SPI_RxCpltCallback\n");
     if (hspi == &hspi1) {
       SPIBusOp* c = ((CPLDDriver*) cpld)->currentJob();
       if (c) {
@@ -510,12 +515,14 @@ extern "C" {
 
 
   void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi){
-    Kernel::log("##### HAL_SPI_ErrorCallback\n");
     if (hspi == &hspi1) {
       SPIBusOp* c = ((CPLDDriver*) cpld)->currentJob();
       if (c) {
         c->abort(XferFault::BUS_FAULT);
       }
+    }
+    else {
+      Kernel::log("HAL_SPI_ErrorCallback(): Unknown device.\n");
     }
   }
 
@@ -582,9 +589,10 @@ extern "C" {
   * DMA ISR. Tx
   */
   void DMA2_Stream3_IRQHandler() {
-    Kernel::log("DMA2_Stream3_IRQHandler()\n");
-    __HAL_DMA_DISABLE_IT(&_dma_r, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
-    __HAL_DMA_DISABLE_IT(&_dma_w, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+    //Kernel::log("DMA2_Stream3_IRQHandler()\n");
+    //__HAL_DMA_DISABLE_IT(&_dma_r, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+    //__HAL_DMA_DISABLE_IT(&_dma_w, (DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME | DMA_IT_FE));
+    HAL_DMA_IRQHandler(&_dma_w);
   }
 }  // extern "C"
 
@@ -632,16 +640,21 @@ int8_t CPLDDriver::bus_deinit() {
 void CPLDDriver::printHardwareState(StringBuilder *output) {
   output->concatf("-- SPI1 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI1_READY)?"on":"OFF"));
   output->concatf("-- hspi1.State:        0x%08x\n", (unsigned long) hspi1.State);
-  if (hspi2.ErrorCode) {
+  if (hspi1.ErrorCode) {
     output->concatf("-- hspi1.ErrorCode:    0x%08x\n", (unsigned long) hspi1.ErrorCode);
   }
   output->concatf("-- hspi1.RxXferCount:  0x%04x\n", hspi1.RxXferCount);
   output->concatf("-- hspi1.TxXferCount:  0x%04x\n", hspi1.TxXferCount);
-  output->concatf("-- __hack_buffer       0x%08x\n--\n", __hack_buffer);
   output->concatf("-- _dma_r State      0x%04x\n", _dma_r.State);
   output->concatf("-- _dma_r->CR        0x%08x\n", DMA2_Stream2->CR);
   output->concatf("-- _dma_r->FCR       0x%08x\n", DMA2_Stream2->FCR);
   output->concatf("-- _dma_r->NDTR      0x%08x\n", DMA2_Stream2->NDTR);
+
+  output->concatf("\n-- SPI2 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI2_READY)?"on":"OFF"));
+  output->concatf("-- hspi2.State:        0x%08x\n", (unsigned long) hspi2.State);
+  if (hspi2.ErrorCode) {
+    output->concatf("-- hspi2.ErrorCode:    0x%08x\n", (unsigned long) hspi2.ErrorCode);
+  }
 }
 
 
@@ -710,10 +723,12 @@ XferFault SPIBusOp::begin() {
 * @return 0 on success. Non-zero on failure.
 */
 int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
-  StringBuilder debug_log;
-  debug_log.concatf("advance_op(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
-  printDebug(&debug_log);
-  Kernel::log(&debug_log);
+  if (csAsserted()) _assert_cs(false);
+
+  //StringBuilder debug_log;
+  //debug_log.concatf("advance_op(0x%08x, 0x%02x)\t status: 0x%08x\n\n", status_reg, data_reg, (unsigned long) hspi1.State);
+  //printDebug(&debug_log);
+  //Kernel::log(&debug_log);
 
   /* These are our transfer-size-invariant cases. */
   switch (xfer_state) {
@@ -729,8 +744,8 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
     case XferState::ADDR:
       if (buf_len > 0) {
         // We have 4 bytes to throw away from the params transfer.
-        //uint16_t tmpreg = hspi1.Instance->DR;
-        //tmpreg = hspi1.Instance->DR;
+        uint16_t tmpreg = hspi1.Instance->DR;
+        tmpreg = hspi1.Instance->DR;
         if (opcode == BusOpcode::TX) {
           set_state(XferState::TX_WAIT);
           HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) buf, buf_len);

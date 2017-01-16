@@ -199,6 +199,7 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     int8_t reconfigure_data_map();    // Calling causes a pointer dance that reconfigures the data we send to the host.
 
     void printIMURollCall(StringBuilder*);
+    void printTemperatures(StringBuilder*);
 
     int set_chirality(Chirality);
     DigitPort  get_port_given_digit(Anatomical);
