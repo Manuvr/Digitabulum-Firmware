@@ -207,9 +207,9 @@ class LegendManager : public EventReceiver, public BusOpCallback {
 
     /* Inlines for deriving address and IRQ bit offsets from index. */
     // Address of the inertial half of the LSM9DS1.
-    inline uint8_t _intertial_addr(int idx) {   return ((idx % 17) + 0x00);   };
+    inline uint8_t _intertial_addr(int idx) {   return ((idx % 17) + CPLD_REG_IMU_DM_P_I);   };
     // Address of the magnetic half of the LSM9DS1.
-    inline uint8_t _magnetic_addr(int idx) {    return ((idx % 17) + 0x11);   };
+    inline uint8_t _magnetic_addr(int idx) {    return ((idx % 17) + CPLD_REG_IMU_DM_P_M);   };
 
     /**
     * Given an address, find the associated IIU.
@@ -218,7 +218,7 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     * @return A pointer to the IIU responsible for the given address.
     */
     inline IIU* fetch_iiu_by_bus_addr(uint8_t addr) {
-      return (CPLD_REG_IMU_D5_D_M < addr) ? nullptr : fetchIIU(addr % CPLD_REG_IMU_D5_D_I);
+      return (CPLD_REG_IMU_D5_D_I < addr) ? nullptr : fetchIIU(addr);
     };
 
     /**

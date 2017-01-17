@@ -203,3 +203,4 @@ Took a few weeks to do hardware stuff. Digit and metacarpals flex units arrive a
     make DEBUG=1
     286988    2728   43144  332860   Tonight's baseline.
     287892    2728   43184  333804   Expanded IRQ work.
+    287284    2728   43152  333164   Fixed SPI1 for the moment.
