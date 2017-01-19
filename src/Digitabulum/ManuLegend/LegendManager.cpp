@@ -64,22 +64,106 @@ uint32_t LegendManager::minimum_prealloc_level = PREALLOCATED_IIU_MEASUREMENTS;
 
 /* ---------------------- */
 /*    Register memory     */
+/*    Experiment #2       */
 /* ---------------------- */
+// TODO: These ranges of memory are not accessed outside of this translation unit.
+//         they probably should not be class members.
 /* These are giant strips of DMA-capable memory that are used for raw frame
      reads from the sensor package. Twice what we need for double-buffering. */
+
+//Vector3<int16_t> LegendManager::__frame_buf_a[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
+//Vector3<int16_t> LegendManager::__frame_buf_g[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
+//
+///* More large stretches of DMA memory. These are for IIU register definitions.
+//     Registers laid out this way cannot be multiply-accessed as more than single bytes
+//     by their respective IIU classes because the memory is not contiguous. */
+//int16_t LegendManager::__temperatures[LEGEND_DATASET_IIU_COUNT];
+//
+//uint8_t LegendManager::__ag_status[LEGEND_DATASET_IIU_COUNT];
+//
+///* Identity registers for both sensor aspects. */
+//uint8_t LegendManager::_imu_ids[2 * LEGEND_DATASET_IIU_COUNT];
+//
+//// TODO: Implement things below this line....
+///* Accelerometer interrupt registers. */
+//uint8_t LegendManager::_reg_block_ag_0[LEGEND_DATASET_IIU_COUNT * AG_BASE_0_SIZE];
+///* Gyroscope control registers. */
+//uint8_t LegendManager::_reg_block_ag_1[LEGEND_DATASET_IIU_COUNT * AG_BASE_1_SIZE];
+///* Accelerometer control registers. */
+//uint8_t LegendManager::_reg_block_ag_2[LEGEND_DATASET_IIU_COUNT * AG_BASE_2_SIZE];
+//
+///* Inertial aspect control registers. */
+//uint8_t _reg_block_ag_ctrl1[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl2[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl3[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl4[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl5[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl6[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl7[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl8[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl9[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl10[LEGEND_DATASET_IIU_COUNT];
+//
+///* Accelerometer IRQ status registers. */
+//uint8_t _reg_block_a_irq_src[LEGEND_DATASET_IIU_COUNT];
+//
+//
+//
+///* Inertial aspect status registers. */
+//uint8_t _reg_block_ag_status[LEGEND_DATASET_IIU_COUNT];
+//
+///* Inertial aspect FIFO control and status registers. */
+//uint8_t __fifo_ctrl[LEGEND_DATASET_IIU_COUNT];
+//uint8_t __fifo_levels[LEGEND_DATASET_IIU_COUNT];
+//
+///* Gyroscope interrupt config and source registers. */
+//uint8_t _reg_block_g_irq_cfg[LEGEND_DATASET_IIU_COUNT];
+//
+///* Gyroscope threshold registers. Will be interpreted as 15-bit unsigned. */
+//Vector3<int16_t> _reg_block_g_thresholds[LEGEND_DATASET_IIU_COUNT];
+//
+//
+///* Magnetometer offset registers. */
+//Vector3<int16_t> _reg_block_m_offsets[LEGEND_DATASET_IIU_COUNT];
+//
+///* Magnetometer data registers. */
+//Vector3<int16_t> _reg_block_m_data[LEGEND_DATASET_IIU_COUNT];
+//
+///* Magnetometer control registers. */
+//uint8_t _reg_block_m_ctrl1[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_m_ctrl2[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_m_ctrl3[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_m_ctrl4[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_m_ctrl5[LEGEND_DATASET_IIU_COUNT];
+//
+///* Magnetometer status registers. */
+//uint8_t  _reg_block_m_status[LEGEND_DATASET_IIU_COUNT];
+//
+///* Magnetometer interrupt config and source registers. */
+//uint8_t _reg_block_m_irq_cfg[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_m_irq_src[LEGEND_DATASET_IIU_COUNT];
+//
+///* Magnetometer threshold registers. Will be interpreted as 15-bit unsigned. */
+//uint16_t _reg_block_m_thresholds[LEGEND_DATASET_IIU_COUNT];
+///* ---------------------- */
+///* End of register memory */
+///* ---------------------- */
+
+/* ---------------------- */
+/*    Register memory     */
+/*    Experiment #1       */
+/* ---------------------- */
+/* Identity registers. */
+uint8_t LegendManager::_imu_ids[2 * LEGEND_DATASET_IIU_COUNT];
+
 Vector3<int16_t> LegendManager::__frame_buf_a[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
 Vector3<int16_t> LegendManager::__frame_buf_g[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
-Vector3<int16_t> LegendManager::__frame_buf_m[2 * LEGEND_DATASET_IIU_COUNT];  // Mag data
-/* More large stretches of DMA memory. These are for IIU register definitions.
-     Registers laid out this way cannot be multiply-accessed as more than single bytes
-     by their respective IIU classes because the memory is not contiguous. */
+Vector3<int16_t> _reg_block_m_data[2 * LEGEND_DATASET_IIU_COUNT];  // Mag data
+
 int16_t LegendManager::__temperatures[LEGEND_DATASET_IIU_COUNT];
 uint8_t LegendManager::__fifo_ctrl[LEGEND_DATASET_IIU_COUNT];
 uint8_t LegendManager::__fifo_levels[LEGEND_DATASET_IIU_COUNT];  // The FIFO levels.
 uint8_t LegendManager::__ag_status[LEGEND_DATASET_IIU_COUNT];
-
-/* Identity registers. */
-uint8_t LegendManager::_imu_ids[2 * LEGEND_DATASET_IIU_COUNT];
 
 // TODO: Implement things below this line....
 /* Accelerometer interrupt registers. */
@@ -90,12 +174,13 @@ uint8_t LegendManager::_reg_block_ag_1[LEGEND_DATASET_IIU_COUNT * AG_BASE_1_SIZE
 uint8_t LegendManager::_reg_block_ag_2[LEGEND_DATASET_IIU_COUNT * AG_BASE_2_SIZE];
 /* Gyroscope interrupt registers. */
 uint8_t LegendManager::_reg_block_ag_3[LEGEND_DATASET_IIU_COUNT * AG_BASE_3_SIZE];
+
 /* Magnetometer offset registers. */
-uint8_t LegendManager::_reg_block_m_0[LEGEND_DATASET_IIU_COUNT * M_BASE_0_SIZE];
+uint8_t _reg_block_m_0[LEGEND_DATASET_IIU_COUNT * M_BASE_0_SIZE];
 /* Magnetometer control registers. */
-uint8_t LegendManager::_reg_block_m_1[LEGEND_DATASET_IIU_COUNT * M_BASE_1_SIZE];
+uint8_t _reg_block_m_1[LEGEND_DATASET_IIU_COUNT * M_BASE_1_SIZE];
 /* Magnetometer interrupt registers. */
-uint8_t LegendManager::_reg_block_m_2[LEGEND_DATASET_IIU_COUNT * M_BASE_2_SIZE];
+uint8_t _reg_block_m_2[LEGEND_DATASET_IIU_COUNT * M_BASE_2_SIZE];
 /* ---------------------- */
 /* End of register memory */
 /* ---------------------- */
@@ -199,7 +284,7 @@ LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgm
   // Read 6 bytes...
   // ...across 17 sensors...
   // ...from this base address...
-  _preformed_read_a.setParams(CPLD_REG_IMU_DM_P_I|0x80, 6, 17, LSM9DS1_A_DATA_X|0xC0);
+  _preformed_read_a.setParams(CPLD_REG_IMU_DM_P_I|0x80, 6, 17, LSM9DS1_A_DATA_X|0x80);
   // ...and drop the results here.
   _preformed_read_a.buf      = (uint8_t*) __frame_buf_a;
   _preformed_read_a.buf_len  = 102;
@@ -212,7 +297,7 @@ LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgm
   // Read 6 bytes...
   // ...across 17 sensors...
   // ...from this base address...
-  _preformed_read_g.setParams(CPLD_REG_IMU_DM_P_I|0x80, 6, 17, LSM9DS1_G_DATA_X|0xC0);
+  _preformed_read_g.setParams(CPLD_REG_IMU_DM_P_I|0x80, 6, 17, LSM9DS1_G_DATA_X|0x80);
   // ...and drop the results here.
   _preformed_read_g.buf      = (uint8_t*) __frame_buf_g;
   _preformed_read_g.buf_len  = 102;
@@ -227,7 +312,7 @@ LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgm
   // ...from this base address...
   _preformed_read_m.setParams(CPLD_REG_IMU_DM_P_M|0x80, 6, 17, LSM9DS1_M_DATA_X|0xC0);
   // ...and drop the results here.
-  _preformed_read_m.buf      = (uint8_t*) __frame_buf_m;
+  _preformed_read_m.buf      = (uint8_t*) _reg_block_m_data;
   _preformed_read_m.buf_len  = 102;
 
   _preformed_fifo_read.shouldReap(false);
@@ -251,7 +336,7 @@ LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgm
   // Read 2 bytes...
   // ...across 17 sensors...
   // ...from this base address...
-  _preformed_read_temp.setParams(CPLD_REG_IMU_DM_P_I|0x80, 2, 17, LSM9DS1_AG_DATA_TEMP|0xC0);
+  _preformed_read_temp.setParams(CPLD_REG_IMU_DM_P_I|0x80, 2, 17, LSM9DS1_AG_DATA_TEMP|0x80);
   // ...and drop the results here.
   _preformed_read_temp.buf      = (uint8_t*) __temperatures;
   _preformed_read_temp.buf_len  = 34;
