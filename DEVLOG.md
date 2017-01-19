@@ -195,3 +195,12 @@ _---J. Ian Lindsay_
     285436    2728   43156  331320   Taking some gains back from templates.
     285436    2728   43156  331320   Pushing more code replication back into template.
     286036    2728   43156  331920   More untanglement.
+
+### 2016.01.14:
+
+Took a few weeks to do hardware stuff. Digit and metacarpals flex units arrive and test good, aside from my goof with the mirrored connector. Bus operations do not cycle out of the queue after completing successfully. So that's my immediate next task. But I'm going to spend some time culling obsolete code first, to come up to speed.
+
+    make DEBUG=1
+    286988    2728   43144  332860   Tonight's baseline.
+    287892    2728   43184  333804   Expanded IRQ work.
+    287284    2728   43152  333164   Fixed SPI1 for the moment.

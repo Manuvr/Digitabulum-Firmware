@@ -40,6 +40,7 @@ InertialMeasurement LegendManager::__prealloc[PREALLOCATED_IIU_MEASUREMENTS];
 SPIBusOp LegendManager::_preformed_read_a;
 SPIBusOp LegendManager::_preformed_read_g;
 SPIBusOp LegendManager::_preformed_read_m;
+SPIBusOp LegendManager::_preformed_read_temp;
 SPIBusOp LegendManager::_preformed_fifo_read;
 
 Vector3<int16_t> LegendManager::reflection_mag;
@@ -63,21 +64,108 @@ uint32_t LegendManager::minimum_prealloc_level = PREALLOCATED_IIU_MEASUREMENTS;
 
 /* ---------------------- */
 /*    Register memory     */
+/*    Experiment #2       */
 /* ---------------------- */
+// TODO: These ranges of memory are not accessed outside of this translation unit.
+//         they probably should not be class members.
 /* These are giant strips of DMA-capable memory that are used for raw frame
      reads from the sensor package. Twice what we need for double-buffering. */
+
+//Vector3<int16_t> LegendManager::__frame_buf_a[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
+//Vector3<int16_t> LegendManager::__frame_buf_g[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
+//
+///* More large stretches of DMA memory. These are for IIU register definitions.
+//     Registers laid out this way cannot be multiply-accessed as more than single bytes
+//     by their respective IIU classes because the memory is not contiguous. */
+//int16_t LegendManager::__temperatures[LEGEND_DATASET_IIU_COUNT];
+//
+//uint8_t LegendManager::__ag_status[LEGEND_DATASET_IIU_COUNT];
+//
+///* Identity registers for both sensor aspects. */
+//uint8_t LegendManager::_imu_ids[2 * LEGEND_DATASET_IIU_COUNT];
+//
+//// TODO: Implement things below this line....
+///* Accelerometer interrupt registers. */
+//uint8_t LegendManager::_reg_block_ag_0[LEGEND_DATASET_IIU_COUNT * AG_BASE_0_SIZE];
+///* Gyroscope control registers. */
+//uint8_t LegendManager::_reg_block_ag_1[LEGEND_DATASET_IIU_COUNT * AG_BASE_1_SIZE];
+///* Accelerometer control registers. */
+//uint8_t LegendManager::_reg_block_ag_2[LEGEND_DATASET_IIU_COUNT * AG_BASE_2_SIZE];
+//
+///* Inertial aspect control registers. */
+//uint8_t _reg_block_ag_ctrl1[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl2[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl3[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl4[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl5[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl6[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl7[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl8[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl9[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_ag_ctrl10[LEGEND_DATASET_IIU_COUNT];
+//
+///* Accelerometer IRQ status registers. */
+//uint8_t _reg_block_a_irq_src[LEGEND_DATASET_IIU_COUNT];
+//
+//
+//
+///* Inertial aspect status registers. */
+//uint8_t _reg_block_ag_status[LEGEND_DATASET_IIU_COUNT];
+//
+///* Inertial aspect FIFO control and status registers. */
+//uint8_t __fifo_ctrl[LEGEND_DATASET_IIU_COUNT];
+//uint8_t __fifo_levels[LEGEND_DATASET_IIU_COUNT];
+//
+///* Gyroscope interrupt config and source registers. */
+//uint8_t _reg_block_g_irq_cfg[LEGEND_DATASET_IIU_COUNT];
+//
+///* Gyroscope threshold registers. Will be interpreted as 15-bit unsigned. */
+//Vector3<int16_t> _reg_block_g_thresholds[LEGEND_DATASET_IIU_COUNT];
+//
+//
+///* Magnetometer offset registers. */
+//Vector3<int16_t> _reg_block_m_offsets[LEGEND_DATASET_IIU_COUNT];
+//
+///* Magnetometer data registers. */
+//Vector3<int16_t> _reg_block_m_data[LEGEND_DATASET_IIU_COUNT];
+//
+///* Magnetometer control registers. */
+//uint8_t _reg_block_m_ctrl1[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_m_ctrl2[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_m_ctrl3[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_m_ctrl4[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_m_ctrl5[LEGEND_DATASET_IIU_COUNT];
+//
+///* Magnetometer status registers. */
+//uint8_t  _reg_block_m_status[LEGEND_DATASET_IIU_COUNT];
+//
+///* Magnetometer interrupt config and source registers. */
+//uint8_t _reg_block_m_irq_cfg[LEGEND_DATASET_IIU_COUNT];
+//uint8_t _reg_block_m_irq_src[LEGEND_DATASET_IIU_COUNT];
+//
+///* Magnetometer threshold registers. Will be interpreted as 15-bit unsigned. */
+//uint16_t _reg_block_m_thresholds[LEGEND_DATASET_IIU_COUNT];
+///* ---------------------- */
+///* End of register memory */
+///* ---------------------- */
+
+/* ---------------------- */
+/*    Register memory     */
+/*    Experiment #1       */
+/* ---------------------- */
+/* Identity registers. */
+uint8_t LegendManager::_imu_ids[2 * LEGEND_DATASET_IIU_COUNT];
+
 Vector3<int16_t> LegendManager::__frame_buf_a[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
 Vector3<int16_t> LegendManager::__frame_buf_g[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
-Vector3<int16_t> LegendManager::__frame_buf_m[2 * LEGEND_DATASET_IIU_COUNT];  // Mag data
-/* More large stretches of DMA memory. These are for IIU register definitions.
-     Registers laid out this way cannot be multiply-accessed as more than single bytes
-     by their respective IIU classes because the memory is not contiguous. */
+Vector3<int16_t> _reg_block_m_data[2 * LEGEND_DATASET_IIU_COUNT];  // Mag data
+
 int16_t LegendManager::__temperatures[LEGEND_DATASET_IIU_COUNT];
 uint8_t LegendManager::__fifo_ctrl[LEGEND_DATASET_IIU_COUNT];
 uint8_t LegendManager::__fifo_levels[LEGEND_DATASET_IIU_COUNT];  // The FIFO levels.
 uint8_t LegendManager::__ag_status[LEGEND_DATASET_IIU_COUNT];
-/* Identity registers. */
-uint8_t LegendManager::_imu_ids[2 * LEGEND_DATASET_IIU_COUNT];
+
+// TODO: Implement things below this line....
 /* Accelerometer interrupt registers. */
 uint8_t LegendManager::_reg_block_ag_0[LEGEND_DATASET_IIU_COUNT * AG_BASE_0_SIZE];
 /* Gyroscope control registers. */
@@ -86,12 +174,13 @@ uint8_t LegendManager::_reg_block_ag_1[LEGEND_DATASET_IIU_COUNT * AG_BASE_1_SIZE
 uint8_t LegendManager::_reg_block_ag_2[LEGEND_DATASET_IIU_COUNT * AG_BASE_2_SIZE];
 /* Gyroscope interrupt registers. */
 uint8_t LegendManager::_reg_block_ag_3[LEGEND_DATASET_IIU_COUNT * AG_BASE_3_SIZE];
+
 /* Magnetometer offset registers. */
-uint8_t LegendManager::_reg_block_m_0[LEGEND_DATASET_IIU_COUNT * M_BASE_0_SIZE];
+uint8_t _reg_block_m_0[LEGEND_DATASET_IIU_COUNT * M_BASE_0_SIZE];
 /* Magnetometer control registers. */
-uint8_t LegendManager::_reg_block_m_1[LEGEND_DATASET_IIU_COUNT * M_BASE_1_SIZE];
+uint8_t _reg_block_m_1[LEGEND_DATASET_IIU_COUNT * M_BASE_1_SIZE];
 /* Magnetometer interrupt registers. */
-uint8_t LegendManager::_reg_block_m_2[LEGEND_DATASET_IIU_COUNT * M_BASE_2_SIZE];
+uint8_t _reg_block_m_2[LEGEND_DATASET_IIU_COUNT * M_BASE_2_SIZE];
 /* ---------------------- */
 /* End of register memory */
 /* ---------------------- */
@@ -195,7 +284,7 @@ LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgm
   // Read 6 bytes...
   // ...across 17 sensors...
   // ...from this base address...
-  _preformed_read_a.setParams(CPLD_REG_IMU_DM_P_I|0x80, 6, 17, LSM9DS1_A_DATA_X);
+  _preformed_read_a.setParams(CPLD_REG_IMU_DM_P_I|0x80, 6, 17, LSM9DS1_A_DATA_X|0x80);
   // ...and drop the results here.
   _preformed_read_a.buf      = (uint8_t*) __frame_buf_a;
   _preformed_read_a.buf_len  = 102;
@@ -208,7 +297,7 @@ LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgm
   // Read 6 bytes...
   // ...across 17 sensors...
   // ...from this base address...
-  _preformed_read_g.setParams(CPLD_REG_IMU_DM_P_I|0x80, 6, 17, LSM9DS1_G_DATA_X);
+  _preformed_read_g.setParams(CPLD_REG_IMU_DM_P_I|0x80, 6, 17, LSM9DS1_G_DATA_X|0x80);
   // ...and drop the results here.
   _preformed_read_g.buf      = (uint8_t*) __frame_buf_g;
   _preformed_read_g.buf_len  = 102;
@@ -221,24 +310,36 @@ LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgm
   // Read 6 bytes...
   // ...across 17 sensors...
   // ...from this base address...
-  _preformed_read_m.setParams(CPLD_REG_IMU_DM_P_M|0x80, 6, 17, LSM9DS1_M_DATA_X);
+  _preformed_read_m.setParams(CPLD_REG_IMU_DM_P_M|0x80, 6, 17, LSM9DS1_M_DATA_X|0xC0);
   // ...and drop the results here.
-  _preformed_read_m.buf      = (uint8_t*) __frame_buf_m;
+  _preformed_read_m.buf      = (uint8_t*) _reg_block_m_data;
   _preformed_read_m.buf_len  = 102;
 
   _preformed_fifo_read.shouldReap(false);
-  _preformed_fifo_read.devRegisterAdvance(true);
+  _preformed_fifo_read.devRegisterAdvance(false);
   _preformed_fifo_read.set_opcode(BusOpcode::RX);
   _preformed_fifo_read.callback = (BusOpCallback*) this;
   // Starting from the first inertial...
   // Read 1 byte...
   // ...across 17 sensors...
   // ...from this base address...
-  _preformed_fifo_read.setParams(CPLD_REG_IMU_DM_P_I|0x80, 1, 17, LSM9DS1_AG_FIFO_SRC);
+  _preformed_fifo_read.setParams(CPLD_REG_IMU_DM_P_I|0x80, 1, 17, LSM9DS1_AG_FIFO_SRC|0x80);
   // ...and drop the results here.
   _preformed_fifo_read.buf      = (uint8_t*) __fifo_levels;
   _preformed_fifo_read.buf_len  = 17;
 
+  _preformed_read_temp.shouldReap(false);
+  _preformed_read_temp.devRegisterAdvance(true);
+  _preformed_read_temp.set_opcode(BusOpcode::RX);
+  _preformed_read_temp.callback = (BusOpCallback*) this;
+  // Starting from the first inertial...
+  // Read 2 bytes...
+  // ...across 17 sensors...
+  // ...from this base address...
+  _preformed_read_temp.setParams(CPLD_REG_IMU_DM_P_I|0x80, 2, 17, LSM9DS1_AG_DATA_TEMP|0x80);
+  // ...and drop the results here.
+  _preformed_read_temp.buf      = (uint8_t*) __temperatures;
+  _preformed_read_temp.buf_len  = 34;
 
   /* Populate all the static preallocation slots for measurements. */
   for (uint16_t i = 0; i < PREALLOCATED_IIU_MEASUREMENTS; i++) {
@@ -309,7 +410,6 @@ int8_t LegendManager::refreshIMU(uint8_t idx) {
 
 /* Read all IMUs. */
 int8_t LegendManager::refreshIMU() {
-
   if (last_imu_read) {
     // We are alrady doing something to the IMUs, Need to wait.
     if (getVerbosity() > 2) {
@@ -361,7 +461,6 @@ int8_t LegendManager::reconfigure_data_map() {
     iius[i].class_init(i);
 
     /* Assign the ManuLegend specification to the IIU class, thereby giving the IIU class its pointers. */
-
     iius[i].assign_legend_pointers(
       (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_ACC      ),
       (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_GYR      ),
@@ -404,7 +503,6 @@ int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
       event_legend_frame_ready.enableSchedule(false);
       should_enable_pid = true;
     }
-
 
     // Store a pointer to our dataset in the event that is to carry them.
     // It is important that this argument NOT be reaped.
@@ -532,6 +630,7 @@ Anatomical LegendManager::get_digit_given_port(DigitPort port) {
 * @return 0 to run the op, or non-zero to cancel it.
 */
 int8_t LegendManager::io_op_callahead(BusOp* _op) {
+  Kernel::log("LegendManager::io_op_callahead\n");
   return 0;
 }
 
@@ -546,8 +645,19 @@ int8_t LegendManager::io_op_callback(BusOp* _op) {
   SPIBusOp* op = (SPIBusOp*) _op;
   // There is zero chance this object will be a null pointer unless it was done on purpose.
   if (op->hasFault()) {
-    if (getVerbosity() > 3) local_log.concat("io_op_callback() rejected a callback because the bus op failed.\n");
+    if (getVerbosity() > 3) {
+      local_log.concat("io_op_callback() rejected a callback because the bus op failed.\n");
+      Kernel::log(&local_log);
+    }
     return SPI_CALLBACK_ERROR;
+  }
+
+  switch (op->getTransferParam(3)) {
+    case 0x8F:  // This is a bulk identity check.
+      printIMURollCall(&local_log);
+      break;
+    default:
+      break;
   }
 
   if (op == &_preformed_read_a) {
@@ -556,8 +666,13 @@ int8_t LegendManager::io_op_callback(BusOp* _op) {
   }
   else if (op == &_preformed_read_m) {
   }
+  else if (op == &_preformed_read_temp) {
+    // Our pre-formed temperature read.
+  }
+  else if (op == &_preformed_fifo_read) {
+  }
 
-  if (local_log.length() > 0) Kernel::log(&local_log);
+  flushLocalLog();
   return SPI_CALLBACK_NOMINAL;
 }
 
@@ -887,6 +1002,97 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
 }
 
 
+
+
+/**
+* Debug support method. This fxn is only present in debug builds.
+* // TODO: This is a lie. Audit __MANUVR_DEBUG usage and elaborate it by class to reduce build sizes.
+*
+* @param   StringBuilder* The buffer into which this fxn should write its output.
+*/
+void LegendManager::printIMURollCall(StringBuilder *output) {
+  EventReceiver::printDebug(output);
+  output->concat("-- Intertial integration units: id(M/I)\n--\n-- Dgt      Prx        Imt        Dst        Reports\n");
+  // TODO: Audit usage of length-specified integers as iterators. Cut where not
+  //   important and check effects on optimization, as some arch's take a
+  //   runtime hit for access in any length less than thier ALU widths.
+  for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+    switch (i) {
+      case 1:   // Skip output for the IMU that doesn't exist at digit0.
+        output->concat("   <N/A>   ");
+        break;
+      case 0:
+        output->concat("-- 0(MC)    ");
+        break;
+      case 2:   // digit1 begins
+        output->concatf("%c\n-- 1        ", _bus->digitExists(DigitPort::MC) ? 'Y' : ' ');
+        break;
+      case 5:   // digit2 begins
+        output->concatf("%c\n-- 2        ", _bus->digitExists(DigitPort::PORT_1) ? 'Y' : ' ');
+        break;
+      case 8:   // digit3 begins
+        output->concatf("%c\n-- 3        ", _bus->digitExists(DigitPort::PORT_2) ? 'Y' : ' ');
+        break;
+      case 11:  // digit4 begins
+        output->concatf("%c\n-- 4        ", _bus->digitExists(DigitPort::PORT_3) ? 'Y' : ' ');
+        break;
+      case 14:  // digit5 begins
+        output->concatf("%c\n-- 5        ", _bus->digitExists(DigitPort::PORT_4) ? 'Y' : ' ');
+        break;
+      default:
+        break;
+    }
+    output->concatf("%02u(%02x/%02x)  ", i, _imu_ids[i], _imu_ids[i+LEGEND_DATASET_IIU_COUNT]);
+  }
+  output->concatf("%c\n\n", _bus->digitExists(DigitPort::PORT_5) ? 'Y' : ' ');
+}
+
+
+/**
+* Debug support method. This fxn is only present in debug builds.
+*
+* @param   StringBuilder* The buffer into which this fxn should write its output.
+*/
+void LegendManager::printTemperatures(StringBuilder *output) {
+  EventReceiver::printDebug(output);
+  output->concat("-- Intertial integration units: id(deg-C)\n--\n-- Dgt      Prx        Imt        Dst\n");
+  // TODO: Audit usage of length-specified integers as iterators. Cut where not
+  //   important and check effects on optimization, as some arch's take a
+  //   runtime hit for access in any length less than thier ALU widths.
+  for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+    switch (i) {
+      case 1:   // Skip output for the IMU that doesn't exist at digit0.
+        output->concat("   <N/A>   ");
+        break;
+      case 0:
+        output->concat("-- 0(MC)    ");
+        break;
+      case 2:   // digit1 begins
+        output->concat("\n-- 1        ");
+        break;
+      case 5:   // digit2 begins
+        output->concat("\n-- 2        ");
+        break;
+      case 8:   // digit3 begins
+        output->concat("\n-- 3        ");
+        break;
+      case 11:  // digit4 begins
+        output->concat("\n-- 4        ");
+        break;
+      case 14:  // digit5 begins
+        output->concat("\n-- 5        ");
+        break;
+      default:
+        break;
+    }
+    output->concatf("%02u(%03d)  ", i, *((int16_t*) &__temperatures[i << 2]));
+  }
+  output->concat("\n\n");
+}
+
+
+
+
 /**
 * Debug support method. This fxn is only present in debug builds.
 *
@@ -899,7 +1105,6 @@ void LegendManager::printDebug(StringBuilder *output) {
     // Print just the aggregate sample count and return.
   }
   output->concatf("-- Chirality           %s\n", chiralityString(getChirality()));
-  output->concatf("-- __IIU location      %p\n", (uintptr_t) iius);
 
   if (getVerbosity() > 3) {
     output->concatf("-- __dataset location  %p\n", (uintptr_t) __dataset);
@@ -970,19 +1175,35 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     case 'i':
-      if (1 == temp_byte) {
-        local_log.concatf("The IIU preallocated measurements are stored at %p.\n", (uintptr_t) __prealloc);
-      }
-      else if (2 == temp_byte) {
-        if (operating_legend) {
-          operating_legend->printDebug(&local_log);
-        }
-      }
-      else {
-        int8_t old_verbosity = getVerbosity();
-        if (temp_byte && (temp_byte < 7)) setVerbosity(temp_byte);
-        printDebug(&local_log);
-        if (temp_byte && (temp_byte < 7)) setVerbosity(old_verbosity);
+      switch (temp_byte) {
+        case 1:
+          local_log.concatf("IIU preallocated measurements are stored at %p.\n", __prealloc);
+          break;
+        case 2:
+          if (operating_legend) {
+            operating_legend->printDebug(&local_log);
+          }
+          else {
+            local_log.concat("No operating ManuLegend.\n");
+          }
+          break;
+        case 3:
+          read_identities();  // Read the sensor's identity registers.
+          break;
+        case 4:
+          printIMURollCall(&local_log);   // Show us the results, JIC
+          break;
+        case 9:
+          printTemperatures(&local_log);   // Show us the temperatures.
+          break;
+        default:
+          {
+            int8_t old_verbosity = getVerbosity();
+            if (temp_byte && (temp_byte < 7)) setVerbosity(temp_byte);
+            printDebug(&local_log);
+            if (temp_byte && (temp_byte < 7)) setVerbosity(old_verbosity);
+          }
+          break;
       }
       break;
 
@@ -1379,6 +1600,22 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
+    /* Single frame readback tests. */
+    case '!':   // Temperature
+      queue_io_job(&_preformed_read_temp);
+      break;
+    case '@':   // Mag
+      queue_io_job(&_preformed_read_m);
+      break;
+    case '#':   // Accel
+      queue_io_job(&_preformed_read_a);
+      break;
+    case '$':   // Gyro
+      queue_io_job(&_preformed_read_g);
+      break;
+    case '%':   // FIFO
+      queue_io_job(&_preformed_fifo_read);
+      break;
 
     default:
       EventReceiver::procDirectDebugInstruction(input);
@@ -1401,18 +1638,12 @@ int8_t LegendManager::read_identities() {
   // Zero the space so we ensure no false positives.
   bzero(&_imu_ids[0], (2 * LEGEND_DATASET_IIU_COUNT));
 
-  // First the inertial aspect.
+  // Because the identity address is the same for both aspects, and their addresses
+  //   are continuous, we just read 1 byte from 34 sensors.
   SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
-  op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
-  op->setBuffer(&_imu_ids[0], LEGEND_DATASET_IIU_COUNT);
-  if (0 == queue_io_job(op)) {
-    // Now for the magnetic aspect.
-    op = _bus->new_op(BusOpcode::RX, this);
-    op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
-    op->setBuffer(&_imu_ids[LEGEND_DATASET_IIU_COUNT], LEGEND_DATASET_IIU_COUNT);
-    return queue_io_job(op);
-  }
-  return -1;
+  op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
+  op->setBuffer(&_imu_ids[0], (2 * LEGEND_DATASET_IIU_COUNT));
+  return queue_io_job(op);
 }
 
 

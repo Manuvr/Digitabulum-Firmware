@@ -8,7 +8,7 @@ This is a map of the pathways traversed by sensor data in the firmware.
 
 The two aspects of this sensor are pysically divided in the package, with separate data and chip-select lines.
 
-  ```mermaid
+  ```{mermaid}
   graph TD
     a(LSM9DS1 inertial aspect)
     b(LSM9DS1 magnetic aspect)
@@ -37,7 +37,7 @@ The two aspects of this sensor are pysically divided in the package, with separa
 
 This graph is distinct from the control flow. The sensor data is scaled, upgraded to float, filtered, and fused before being deposited in a ManuLegend for transmission to other firmware modules (typically a counter-party via a comm link).
 
-  ```mermaid
+  ```{mermaid}
   graph TD
     subgraph Color Key
     key0[Asynchronous break]
@@ -50,7 +50,7 @@ This graph is distinct from the control flow. The sensor data is scaled, upgrade
     style key2 fill:#e95,stroke:#222,stroke-width:2px;
   ```
 
-  ```mermaid
+  ```{mermaid}
   graph TD
     h(SPIBusOp)
     i(LSM9DS1_AG)
@@ -106,5 +106,3 @@ This graph is distinct from the control flow. The sensor data is scaled, upgrade
   ```
 
 -----
-
-#### Software (Control path)

@@ -38,19 +38,34 @@ volatile CPLDDriver* cpld = nullptr;
 /* Used to minimize software burden incurred by timeout support. */
 volatile bool timeout_punch = false;
 
-/* IRQs are double-buffered in the first 20 bytes. The remaining 10 are diff. */
-volatile static uint8_t  _irq_data[30] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+/*
+* For the sake of speed, we handle IRQ data issues in a single memory field,
+*   none of which is concurrency-safe.
+* IRQs are double-buffered in the first 20 bytes, over which DMA runs continuously.
+*   Upon DMA half-complete, _irq_data_ptr is set to the most-recent (stable) half
+*   of the buffer, and any differences between them are computed and stored in...
+* _irq_data[20-29] are diff. Diffs get clobbered each DMA half-cycle, so to
+*   avoid losing track of IRQs, we then write them into...
+* _irq_data[30-39] an action accumulator. The ISR writes...
+*    action |= diff
+*
+* The ISR then fires the _irq_data_arrival message, with _irq_data[30-39]
+*   attached as a reference. When it comes time to thread, this will be revised.
+*/
+volatile static uint8_t  _irq_data[40] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                                           0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                                           0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 volatile static uint8_t* _irq_data_0   = &(_irq_data[0]);   // Convenience
 volatile static uint8_t* _irq_data_1   = &(_irq_data[10]);  // Convenience
 volatile static uint8_t* _irq_diff     = &(_irq_data[20]);  // Convenience
+volatile static uint8_t* _irq_accum    = &(_irq_data[30]);  // Convenience
 volatile static uint8_t* _irq_data_ptr = _irq_data_0;  // Used for block-wise access.
 
+/* This message is dispatched when IRQ data changes. */
 ManuvrMsg _irq_data_arrival;
 
 // These are debug. Cut them.
-uint8_t __hack_buffer[34];
 uint8_t active_imu_position = 0;
 
 
@@ -418,6 +433,7 @@ int8_t CPLDDriver::queue_io_job(BusOp* _op) {
       if (getVerbosity() > 3) Kernel::log("Tried to fire a bus op that is not in IDLE state.\n");
       return -4;
     }
+    op->setCSPin(_pins.tx_rdy);
 
     if ((nullptr == current_job) && (work_queue.size() == 0)){
       // If the queue is empty, fire the operation now.
@@ -468,49 +484,56 @@ int8_t CPLDDriver::advance_work_queue() {
   timeout_punch = false;
   if (current_job) {
     switch (current_job->get_state()) {
-       case XferState::TX_WAIT:
-       case XferState::RX_WAIT:
-         if (current_job->hasFault()) {
-           if (getVerbosity() > 3) local_log.concat("CPLDDriver::advance_work_queue():\t Failed at IO_WAIT.\n");
-         }
-         else {
-           current_job->markComplete();
-         }
-         // No break on purpose.
-       case XferState::COMPLETE:
-         callback_queue.insert(current_job);
-         current_job = nullptr;
-         if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
-         break;
+      case XferState::TX_WAIT:
+      case XferState::RX_WAIT:
+        if (current_job->hasFault()) {
+          _failed_xfers++;
+          if (getVerbosity() > 3) local_log.concat("CPLDDriver::advance_work_queue():\t Failed at IO_WAIT.\n");
+        }
+        else {
+          current_job->markComplete();
+        }
+        // No break on purpose.
+      case XferState::COMPLETE:
+        _total_xfers++;
+        callback_queue.insert(current_job);
+        current_job = nullptr;
+        if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
+        break;
 
-       case XferState::IDLE:
-       case XferState::INITIATE:
-         switch (current_job->begin()) {
-           case XferFault::NONE:     // Nominal outcome. Transfer started with no problens...
-             break;
-           case XferFault::BUS_BUSY:    // Bus appears to be in-use. State did not change.
-             // Re-throw queue_ready event and try again later.
-             if (getVerbosity() > 2) local_log.concat("  advance_work_queue() tried to clobber an existing transfer on chain.\n");
-             //Kernel::staticRaiseEvent(&event_spi_queue_ready);  // Bypass our method. Jump right to the target.
-             break;
-           default:    // Began the transfer, and it barffed... was aborted.
-             if (getVerbosity() > 3) local_log.concat("CPLDDriver::advance_work_queue():\t Failed to begin transfer after starting.\n");
-             callback_queue.insert(current_job);
-             current_job = nullptr;
-             if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
-             break;
-         }
-         break;
+      case XferState::IDLE:
+      case XferState::INITIATE:
+        switch (current_job->begin()) {
+          case XferFault::NONE:     // Nominal outcome. Transfer started with no problens...
+            break;
+          case XferFault::BUS_BUSY:    // Bus appears to be in-use. State did not change.
+            // Re-throw queue_ready event and try again later.
+            if (getVerbosity() > 2) local_log.concat("  advance_work_queue() tried to clobber an existing transfer on chain.\n");
+            //Kernel::staticRaiseEvent(&event_spi_queue_ready);  // Bypass our method. Jump right to the target.
+            break;
+          default:    // Began the transfer, and it barffed... was aborted.
+            if (getVerbosity() > 3) local_log.concat("CPLDDriver::advance_work_queue():\t Failed to begin transfer after starting.\n");
+            callback_queue.insert(current_job);
+            current_job = nullptr;
+            if (callback_queue.size() == 1) Kernel::staticRaiseEvent(&event_spi_callback_ready);
+            break;
+        }
+        break;
 
-       /* Cases below ought to be handled by ISR flow... */
-       case XferState::ADDR:
-         current_job->advance_operation(0, 0);
-       case XferState::STOP:
-         if (getVerbosity() > 5) local_log.concatf("State might be corrupted if we tried to advance_queue(). \n");
-         break;
-       default:
-         if (getVerbosity() > 3) local_log.concatf("advance_work_queue() default state \n");
-         break;
+      /* Cases below ought to be handled by ISR flow... */
+      case XferState::ADDR:
+        Kernel::log("####################### advance_operation entry\n");
+        current_job->advance_operation(0, 0);
+        local_log.concat("####################### advance_operation exit\n");
+        current_job->printDebug(&local_log);
+        flushLocalLog();
+        break;
+      case XferState::STOP:
+        if (getVerbosity() > 5) local_log.concatf("State might be corrupted if we tried to advance_queue(). \n");
+        break;
+      default:
+        if (getVerbosity() > 3) local_log.concatf("advance_work_queue() default state \n");
+        break;
     }
   }
 
@@ -788,13 +811,32 @@ uint8_t CPLDDriver::getCPLDVersion() {
 
 
 DigitState CPLDDriver::digitState(DigitPort x) {
-  return DigitState::UNKNOWN;
+  if (digitExists(x)) {
+    // Digit asleep or not?
+    return DigitState::AWAKE;
+  }
+  return DigitState::ABSENT;
 }
 
 
 /*******************************************************************************
 * This is where IMU-related functions live.                                    *
 *******************************************************************************/
+
+// NO ERROR CHECKING! Don't call this with an argument >79.
+bool irq_is_presently_high(uint8_t bit) {
+  const uint8_t bit_offset  = bit & 0x07;  // Cheaper than modulus 8.
+  const uint8_t byte_offset = bit >> 3;    // Cheaper than div by 8.
+  return ((_irq_data_ptr[byte_offset] & (0x01 << bit_offset)) != 0);
+}
+
+// NO ERROR CHECKING! Don't call this with an argument >79.
+bool irq_demands_service(uint8_t bit) {
+  const uint8_t bit_offset  = bit & 0x07;  // Cheaper than modulus 8.
+  const uint8_t byte_offset = bit >> 3;    // Cheaper than div by 8.
+  return ((_irq_accum[byte_offset] & (0x01 << bit_offset)) != 0);
+}
+
 
 /**
 *
@@ -803,11 +845,85 @@ DigitState CPLDDriver::digitState(DigitPort x) {
 */
 int8_t CPLDDriver::iiu_group_irq() {
   int8_t return_value = 0;
-  if (getVerbosity() > 2) local_log.concatf("CPLD iiu_group_irq: (0x%08x):  \n", 0);
 
+  // This class cares about these IRQs...
+  // 68  Metacarpals present.
+  // 69  Digit 1 present.
+  // 70  Digit 2 present.
+  // 71  Digit 3 present.
+  // 72  Digit 4 present.
+  // 73  Digit 5 present.
+  // 74  CONFIG register, bit 2.
+  // 75  CPLD_OE
+
+  // TODO: Next CPLD revision should align these bits better.
+  if (_irq_accum[8] & 0xF0) {  // We only care about the upper-half here.
+    uint8_t reset_bits = 0xFF;   // These are bit we wish to preserve.
+    if (_irq_accum[8] & 0x10) {
+      reset_bits &= ~0x10;
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): MC PRESENT %s\n", irq_is_presently_high(68) ? "L->H":"H->L");
+    }
+    if (_irq_accum[8] & 0x20) {
+      reset_bits &= ~0x20;
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_1 %s\n", irq_is_presently_high(69) ? "L->H":"H->L");
+    }
+    if (_irq_accum[8] & 0x40) {
+      reset_bits &= ~0x40;
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_2 %s\n", irq_is_presently_high(70) ? "L->H":"H->L");
+    }
+    if (_irq_accum[8] & 0x80) {
+      reset_bits &= ~0x80;
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_3 %s\n", irq_is_presently_high(71) ? "L->H":"H->L");
+    }
+    _irq_accum[8] &= reset_bits;
+  }
+
+  if (_irq_accum[9] & 0x0F) {  // We only care about the lower-half here.
+    uint8_t reset_bits = 0xFF;   // These are bit we wish to preserve.
+    if (_irq_accum[9] & 0x01) {
+      reset_bits &= ~0x01;
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_4 %s\n", irq_is_presently_high(72) ? "L->H":"H->L");
+    }
+    if (_irq_accum[9] & 0x02) {
+      reset_bits &= ~0x02;
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_5 %s\n", irq_is_presently_high(73) ? "L->H":"H->L");
+    }
+    if (_irq_accum[9] & 0x04) {
+      reset_bits &= ~0x04;
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): CONFIG[2] %s\n", irq_is_presently_high(74) ? "L->H":"H->L");
+    }
+    if (_irq_accum[9] & 0x08) {
+      reset_bits &= ~0x08;
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): CPLD_OE %s.\n", irq_is_presently_high(75) ? "L->H":"H->L");
+    }
+    _irq_accum[9] &= reset_bits;  // Clear serviced bits.
+  }
   flushLocalLog();
   return return_value;
 }
+
+
+/**
+* Used by the ManuManager to easily check for a digit's IRQ validity.
+* Pulls directly from the most-recent valid IRQ buffer, so this check is fairly
+*   direct, and not reliant on IMU access.
+*
+* @return True if the IRQ data confirms a digit.
+*/
+bool CPLDDriver::digitExists(DigitPort x) {
+  switch (x) {
+    case DigitPort::MC:
+    case DigitPort::PORT_1:
+    case DigitPort::PORT_2:
+    case DigitPort::PORT_3:
+    case DigitPort::PORT_4:
+    case DigitPort::PORT_5:
+      // MC_PRESENT is bit 68 in the IRQ stream.
+      return irq_is_presently_high(68 + (uint8_t) x);
+    default:
+      return false;
+  }
+};
 
 
 
@@ -835,6 +951,7 @@ int8_t CPLDDriver::attached() {
     _irq_data_arrival.incRefs();
     _irq_data_arrival.specific_target = (EventReceiver*) this;
     _irq_data_arrival.priority(2);
+    _irq_data_arrival.addArg((void*) _irq_accum, 10);
 
     _periodic_debug.repurpose(0x5080, (EventReceiver*) this);
     _periodic_debug.incRefs();
@@ -847,10 +964,11 @@ int8_t CPLDDriver::attached() {
     platform.kernel()->addSchedule(&_periodic_debug);
 
     gpioSetup();
-    init_ext_clk();
     bus_init();
 
     init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
+
+    init_ext_clk();
 
     // An SPI transfer might hang (very unlikely). This will un-hang it.
     event_spi_timeout.repurpose(DIGITABULUM_MSG_SPI_TIMEOUT, (EventReceiver*) this);
@@ -891,6 +1009,10 @@ int8_t CPLDDriver::callback_proc(ManuvrMsg* event) {
 
   /* Some class-specific set of conditionals below this line. */
   switch (event->eventCode()) {
+    case DIGITABULUM_MSG_IMU_IRQ_RAISED:
+      // Wipe the service array. TODO: This is not concurrency-safe.
+      for (int i = 0; i < 10; i++) { _irq_accum[i] = 0; }
+      break;
     case DIGITABULUM_MSG_SPI_QUEUE_READY:
       return_value = ((work_queue.size() > 0) || (nullptr != current_job)) ? EVENT_CALLBACK_RETURN_RECYCLE : return_value;
       break;
@@ -912,21 +1034,27 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
     case MANUVR_MSG_INTERRUPTS_MASKED:
       break;
     case MANUVR_MSG_SYS_REBOOT:
-      break;
     case MANUVR_MSG_SYS_BOOTLOADER:
+      // If we are to go down for reboot, reset the CPLD.
+      _deinit();
+      return_value = 1;
       break;
 
     case 0x5050:
-      {
-        SPIBusOp* op = new_op(BusOpcode::RX, this);
-        op->setParams((active_imu_position | 0x80), 0x01, 0x02, 0x8F);
-        op->setBuffer(__hack_buffer, 2);
-        queue_io_job((BusOp*) op);
-      }
+      //{
+      //  SPIBusOp* op = new_op(BusOpcode::RX, this);
+      //  op->setParams((active_imu_position | 0x80), 0x01, 0x02, 0x8F);
+      //  op->setBuffer(__hack_buffer, 2);
+      //  queue_io_job((BusOp*) op);
+      //}
+      return_value = 1;
       break;
 
     /* Things that only this class is likely to care about. */
     case DIGITABULUM_MSG_IMU_IRQ_RAISED:
+      // We scan the IRQ list for signals we care about and let the ManuManager
+      //   do the same.
+      iiu_group_irq();
       return_value = 1;
       break;
     case DIGITABULUM_MSG_SPI_QUEUE_READY:
@@ -977,8 +1105,6 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
 void CPLDDriver::printDebug(StringBuilder *output) {
-  if (nullptr == output) return;
-
   EventReceiver::printDebug(output);
   //if (getVerbosity() > 6) output->concatf("-- volatile *cpld      0x%08x\n--\n", cpld);
   output->concatf("-- Conf                0x%02x\n",      cpld_conf_value);
@@ -1001,14 +1127,13 @@ void CPLDDriver::printDebug(StringBuilder *output) {
     output->concatf("-- spi_cb_per_event    %d\n--\n",   spi_cb_per_event);
   }
   printAdapter(output);
-  output->concatf("-- callback q depth    %d\n\n", callback_queue.size());
+  output->concatf("-- callback q depth    %d\n--\n", callback_queue.size());
 
   if (getVerbosity() > 3) {
     printWorkQueue(output, CPLD_SPI_MAX_QUEUE_PRINT);
   }
 
-  output->concatf("\n-- SPI2 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI2_READY)?"on":"OFF"));
-  output->concatf("-- Valid IRQ buffer:   %d\n", _irq_data_ptr == _irq_data_0 ? 0 : 1);
+  output->concatf("--\n-- Valid IRQ buffer:   %d\n", _irq_data_ptr == _irq_data_0 ? 0 : 1);
   output->concatf("-- IRQ service:        %sabled", (_er_flag(CPLD_FLAG_SVC_IRQS)?"en":"dis"));
   output->concat("\n--    _irq_data_0:     ");
   for (int i = 0; i < 10; i++) { output->concatf("%02x", _irq_data_0[i]); }
@@ -1016,6 +1141,8 @@ void CPLDDriver::printDebug(StringBuilder *output) {
   for (int i = 0; i < 10; i++) { output->concatf("%02x", _irq_data_1[i]); }
   output->concat("\n--    _irq_diff:       ");
   for (int i = 0; i < 10; i++) { output->concatf("%02x", _irq_diff[i]); }
+  output->concat("\n--    _irq_accum:      ");
+  for (int i = 0; i < 10; i++) { output->concatf("%02x", _irq_accum[i]); }
   output->concat("\n\n");
 }
 
@@ -1148,9 +1275,10 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, nullptr);   // Raise an event
       break;
 
-    case '%':
-      if (setCPLDClkFreq(temp_byte << 8)) {
-        local_log.concatf("Set ext clock period to %d.\n", temp_byte << 8);
+    case '%':   // Ext clock rate.
+      temp_byte = temp_byte % 16;
+      if (setCPLDClkFreq(1 << temp_byte)) {
+        local_log.concatf("Set ext clock period to %d.\n", 1 << temp_byte);
       }
       else {
         local_log.concat("Failed to set ext clock period.\n");
@@ -1220,46 +1348,46 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       local_log.concatf("%s periodic reader.\n", (*(str) == 'z' ? "Stopping" : "Starting"));
       break;
 
-    case 'C':    // Individual IMU access tests...
-    case 'c':    // Individual IMU access tests...
-      if (temp_byte < 0x22) {
-        active_imu_position = temp_byte;
-        for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
-        SPIBusOp* op = new_op(BusOpcode::RX, this);
-        op->setParams((temp_byte | 0x80), 0x01, 0x01, 0x8F);
-        op->setBuffer(__hack_buffer, (*(str) == 'C' ? 5 : 1));
-        queue_io_job((BusOp*) op);
-      }
-      else {
-        local_log.concat("IMU out of bounds.\n");
-      }
-      break;
+    //case 'C':    // Individual IMU access tests...
+    //case 'c':    // Individual IMU access tests...
+    //  if (temp_byte < 0x22) {
+    //    active_imu_position = temp_byte;
+    //    for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
+    //    SPIBusOp* op = new_op(BusOpcode::RX, this);
+    //    op->setParams((temp_byte | 0x80), 0x01, 0x01, 0x8F);
+    //    op->setBuffer(__hack_buffer, (*(str) == 'C' ? 5 : 1));
+    //    queue_io_job((BusOp*) op);
+    //  }
+    //  else {
+    //    local_log.concat("IMU out of bounds.\n");
+    //  }
+    //  break;
 
-    case 'n':    // Many bytes for a given address...
-      if (temp_byte < 35) {
-        for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
-        SPIBusOp* op = new_op(BusOpcode::RX, this);
-        op->setParams((active_imu_position | 0x80), temp_byte, 0x01, 0x8F);
-        op->setBuffer(__hack_buffer, temp_byte);
-        queue_io_job((BusOp*) op);
-      }
-      else {
-        local_log.concat("Length out of bounds.\n");
-      }
-      break;
+    //case 'n':    // Many bytes for a given address...
+    //  if (temp_byte < 35) {
+    //    for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
+    //    SPIBusOp* op = new_op(BusOpcode::RX, this);
+    //    op->setParams((active_imu_position | 0x80), temp_byte, 0x01, 0x8F);
+    //    op->setBuffer(__hack_buffer, temp_byte);
+    //    queue_io_job((BusOp*) op);
+    //  }
+    //  else {
+    //    local_log.concat("Length out of bounds.\n");
+    //  }
+    //  break;
 
-    case 'N':    // Single byte for a multiple access...
-      if (temp_byte < 35) {
-        for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
-        SPIBusOp* op = new_op(BusOpcode::RX, this);
-        op->setParams((active_imu_position | 0x80), 0x01, temp_byte, 0x8F);
-        op->setBuffer(__hack_buffer, temp_byte);
-        queue_io_job((BusOp*) op);
-      }
-      else {
-        local_log.concat("Length out of bounds.\n");
-      }
-      break;
+    //case 'N':    // Single byte for a multiple access...
+    //  if (temp_byte < 35) {
+    //    for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
+    //    SPIBusOp* op = new_op(BusOpcode::RX, this);
+    //    op->setParams((active_imu_position | 0x80), 0x01, temp_byte, 0x8F);
+    //    op->setBuffer(__hack_buffer, temp_byte);
+    //    queue_io_job((BusOp*) op);
+    //  }
+    //  else {
+    //    local_log.concat("Length out of bounds.\n");
+    //  }
+    //  break;
 
     default:
       EventReceiver::procDirectDebugInstruction(input);

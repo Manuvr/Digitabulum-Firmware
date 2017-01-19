@@ -1025,7 +1025,7 @@ HAL_StatusTypeDef HAL_SPI_Transmit_IT(SPI_HandleTypeDef *hspi, uint8_t *pData, u
       /* Enable SPI peripheral */    
       __HAL_SPI_ENABLE(hspi);
     }
-        
+
     return HAL_OK;
   }
   else
@@ -1915,41 +1915,40 @@ static void SPI_DMAReceiveCplt(DMA_HandleTypeDef *hdma)
   if((hdma->Instance->CR & DMA_SxCR_CIRC) == 0)
   {  
     /* CRC handling */
-    if(hspi->Init.CRCCalculation == SPI_CRCCALCULATION_ENABLE)
-    {
-      /* Wait until TXE flag */
-      if(SPI_WaitFlagStateUntilTimeout(hspi, SPI_FLAG_RXNE, SPI_FLAG_RXNE, SPI_DEFAULT_TIMEOUT) != HAL_OK)
-      {
+    //if(hspi->Init.CRCCalculation == SPI_CRCCALCULATION_ENABLE) {
+      ///* Wait until TXE flag */
+      //if(SPI_WaitFlagStateUntilTimeout(hspi, SPI_FLAG_RXNE, SPI_FLAG_RXNE, SPI_DEFAULT_TIMEOUT) != HAL_OK)
+      //{
         /* Error on the CRC reception */
-        hspi->ErrorCode|= HAL_SPI_ERROR_CRC;      
-      }
-      if(hspi->Init.DataSize > SPI_DATASIZE_8BIT)
-      {        
-        tmpreg = hspi->Instance->DR;
-        UNUSED(tmpreg); /* To avoid GCC warning */
-      }
-      else
-      {
-        tmpreg = *(__IO uint8_t *)&hspi->Instance->DR;
-        UNUSED(tmpreg); /* To avoid GCC warning */
+        //hspi->ErrorCode|= HAL_SPI_ERROR_CRC;      
+      //}
+      //if(hspi->Init.DataSize > SPI_DATASIZE_8BIT)
+      //{        
+        //tmpreg = hspi->Instance->DR;
+        //UNUSED(tmpreg); /* To avoid GCC warning */
+      //}
+      //else
+      //{
+        //tmpreg = *(__IO uint8_t *)&hspi->Instance->DR;
+        //UNUSED(tmpreg); /* To avoid GCC warning */
         
-        if(hspi->Init.CRCLength == SPI_CRC_LENGTH_16BIT)
-        {
-          if(SPI_WaitFlagStateUntilTimeout(hspi, SPI_FLAG_RXNE, SPI_FLAG_RXNE, SPI_DEFAULT_TIMEOUT) != HAL_OK)
-          {
+        //if(hspi->Init.CRCLength == SPI_CRC_LENGTH_16BIT)
+        //{
+          //if(SPI_WaitFlagStateUntilTimeout(hspi, SPI_FLAG_RXNE, SPI_FLAG_RXNE, SPI_DEFAULT_TIMEOUT) != HAL_OK)
+          //{
             /* Error on the CRC reception */
-            hspi->ErrorCode|= HAL_SPI_ERROR_CRC;      
-          }
-          tmpreg = *(__IO uint8_t *)&hspi->Instance->DR;
-          UNUSED(tmpreg); /* To avoid GCC warning */
-        }
-      }  
-    }
+            //hspi->ErrorCode|= HAL_SPI_ERROR_CRC;      
+          //}
+          //tmpreg = *(__IO uint8_t *)&hspi->Instance->DR;
+          //UNUSED(tmpreg); /* To avoid GCC warning */
+        //}
+      //}  
+    //}
     
     /* Disable Rx DMA Request */
     hspi->Instance->CR2 &= (uint32_t)(~SPI_CR2_RXDMAEN);
     /* Disable Tx DMA Request (done by default to handle the case master rx direction 2 lines) */
-    hspi->Instance->CR2 &= (uint32_t)(~SPI_CR2_TXDMAEN);
+    //hspi->Instance->CR2 &= (uint32_t)(~SPI_CR2_TXDMAEN);
     
     /* Check the end of the transaction */
     SPI_EndRxTransaction(hspi,SPI_DEFAULT_TIMEOUT);
@@ -1958,14 +1957,14 @@ static void SPI_DMAReceiveCplt(DMA_HandleTypeDef *hdma)
     hspi->State = HAL_SPI_STATE_READY;
     
     /* Check if CRC error occurred */
-    if(__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_CRCERR) != RESET)
-    {
-      hspi->ErrorCode|= HAL_SPI_ERROR_CRC;
-      __HAL_SPI_CLEAR_CRCERRFLAG(hspi);
-      HAL_SPI_RxCpltCallback(hspi);
-    }
-    else
-    {
+    //if(__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_CRCERR) != RESET)
+    //{
+      //hspi->ErrorCode|= HAL_SPI_ERROR_CRC;
+      //__HAL_SPI_CLEAR_CRCERRFLAG(hspi);
+      //HAL_SPI_RxCpltCallback(hspi);
+    //}
+    //else
+    //{
       if(hspi->ErrorCode == HAL_SPI_ERROR_NONE)
       {
         HAL_SPI_RxCpltCallback(hspi);
@@ -1974,7 +1973,7 @@ static void SPI_DMAReceiveCplt(DMA_HandleTypeDef *hdma)
       {
         HAL_SPI_ErrorCallback(hspi); 
       }
-    }
+    //}
   }
   else
   {

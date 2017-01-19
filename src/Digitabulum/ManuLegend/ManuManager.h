@@ -86,6 +86,7 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #define M_BASE_1_SIZE        6
 #define M_BASE_2_SIZE        4
 
+
 enum class Chirality {
   UNKNOWN = 0,   // Interpretable as a bitmask...
   RIGHT   = 1,   // Bit 0: Chirality known
@@ -198,15 +199,18 @@ class LegendManager : public EventReceiver, public BusOpCallback {
 
     int8_t reconfigure_data_map();    // Calling causes a pointer dance that reconfigures the data we send to the host.
 
+    void printIMURollCall(StringBuilder*);
+    void printTemperatures(StringBuilder*);
+
     int set_chirality(Chirality);
     DigitPort  get_port_given_digit(Anatomical);
     Anatomical get_digit_given_port(DigitPort);
 
     /* Inlines for deriving address and IRQ bit offsets from index. */
     // Address of the inertial half of the LSM9DS1.
-    inline uint8_t _intertial_addr(int idx) {   return ((idx % 17) + 0x00);   };
+    inline uint8_t _intertial_addr(int idx) {   return ((idx % 17) + CPLD_REG_IMU_DM_P_I);   };
     // Address of the magnetic half of the LSM9DS1.
-    inline uint8_t _magnetic_addr(int idx) {    return ((idx % 17) + 0x11);   };
+    inline uint8_t _magnetic_addr(int idx) {    return ((idx % 17) + CPLD_REG_IMU_DM_P_M);   };
 
     /**
     * Given an address, find the associated IIU.
@@ -215,7 +219,7 @@ class LegendManager : public EventReceiver, public BusOpCallback {
     * @return A pointer to the IIU responsible for the given address.
     */
     inline IIU* fetch_iiu_by_bus_addr(uint8_t addr) {
-      return (CPLD_REG_IMU_D5_D_M < addr) ? nullptr : fetchIIU(addr % CPLD_REG_IMU_D5_D_I);
+      return (CPLD_REG_IMU_D5_D_I < addr) ? nullptr : fetchIIU(addr);
     };
 
     /**
@@ -256,7 +260,6 @@ class LegendManager : public EventReceiver, public BusOpCallback {
          reads from the sensor package. Twice what we need for double-buffering. */
     static Vector3<int16_t> __frame_buf_a[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
     static Vector3<int16_t> __frame_buf_g[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
-    static Vector3<int16_t> __frame_buf_m[2 * LEGEND_DATASET_IIU_COUNT];  // Mag data
 
     /* More large stretches of DMA memory. These are for IIU register definitions.
          Registers laid out this way cannot be multiply-accessed as more than single bytes
@@ -280,18 +283,6 @@ class LegendManager : public EventReceiver, public BusOpCallback {
 
     /* Gyroscope interrupt registers. */
     static uint8_t _reg_block_ag_3[LEGEND_DATASET_IIU_COUNT * AG_BASE_3_SIZE];
-
-    /* Magnetometer offset registers. */
-    static uint8_t _reg_block_m_0[LEGEND_DATASET_IIU_COUNT * M_BASE_0_SIZE];
-
-    /* Magnetometer control registers. */
-    static uint8_t _reg_block_m_1[LEGEND_DATASET_IIU_COUNT * M_BASE_1_SIZE];
-
-    /* Magnetometer interrupt registers. */
-    static uint8_t _reg_block_m_2[LEGEND_DATASET_IIU_COUNT * M_BASE_2_SIZE];
-    /* ---------------------- */
-    /* End of register memory */
-    /* ---------------------- */
 };
 
 #endif  // __DIGITABULUM_MANU_MGR_H_
