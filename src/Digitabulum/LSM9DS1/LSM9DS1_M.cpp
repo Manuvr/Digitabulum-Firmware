@@ -19,10 +19,8 @@ limitations under the License.
 
 */
 
-#include "LSM9DS1_M.h"
-#include "IIU.h"
+#include "LSM9DS1.h"
 #include "../ManuLegend/ManuManager.h"
-
 
 /*******************************************************************************
 *  __  __                        _                       _
@@ -43,7 +41,7 @@ limitations under the License.
 *   1 on success with new vector.
 *  -1 on error.
 */
-int8_t LSM9DS1_M::collect_reading_mag() {
+int8_t LSM9DS1::collect_reading_mag() {
   /* Ok... so we know that if we got here, the pre-formed bus op is freshly execed,
        so we are going to grab its ending timestamp and populate the measurement's
        field with the value corrected for boot-time.
@@ -72,7 +70,7 @@ int8_t LSM9DS1_M::collect_reading_mag() {
 /**
 * Call to rescale the sensor.
 */
-int8_t LSM9DS1_M::request_rescale_mag(uint8_t nu_scale_idx) {
+int8_t LSM9DS1::request_rescale_mag(uint8_t nu_scale_idx) {
   if (nu_scale_idx < MAXIMUM_GAIN_INDEX_MAG) {
     if (scale_mag != nu_scale_idx) {
       if (getVerbosity() > 2) Kernel::log("request_rescale_mag():\tRescaling magnetometer.\n");
@@ -86,7 +84,7 @@ int8_t LSM9DS1_M::request_rescale_mag(uint8_t nu_scale_idx) {
 /**
 * Call to alter sample rate.
 */
-int8_t LSM9DS1_M::set_sample_rate_mag(uint8_t nu_srate_idx) {
+int8_t LSM9DS1::set_sample_rate_mag(uint8_t nu_srate_idx) {
   if (nu_srate_idx < MAXIMUM_RATE_INDEX_MAG) {
     if (update_rate_mag != nu_srate_idx) {
       uint8_t temp8 = regValue(LSM9DS1_M_CTRL_REG1);
@@ -106,143 +104,9 @@ int8_t LSM9DS1_M::set_sample_rate_mag(uint8_t nu_srate_idx) {
 
 
 
-/*******************************************************************************
-*   ___ _              ___      _ _              _      _
-*  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
-* | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
-*  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
-*                                          |_|
-* Constructors/destructors, class initialization functions and so-forth...
-*******************************************************************************/
-
-LSM9DS1_M::LSM9DS1_M() : LSM9DSx_Common() {
-}
-
-LSM9DS1_M::~LSM9DS1_M() {
-}
-
-
-void LSM9DS1_M::class_init(uint8_t address, IIU* _integrator) {
-  // First, we should define our registers....
-  // 16 registers. 23 bytes
-
-  // Now we should give them initial definitions. This is our chance to set default configs.
-  //reg_defs[LSM9DS1_M_OFFSET_X]      = DeviceRegister((BUS_ADDR + 0x05), (uint16_t) 0x00, (register_pool +  0), false, false, true);
-  //reg_defs[LSM9DS1_M_OFFSET_Y]      = DeviceRegister((BUS_ADDR + 0x07), (uint16_t) 0x00, (register_pool +  2), false, false, true);
-  //reg_defs[LSM9DS1_M_OFFSET_Z]      = DeviceRegister((BUS_ADDR + 0x09), (uint16_t) 0x00, (register_pool +  4), false, false, true);
-  //reg_defs[LSM9DS1_M_WHO_AM_I]      = DeviceRegister((BUS_ADDR + 0x0F), (uint8_t)  0x00, (register_pool +  6), false, false, false);
-  //reg_defs[LSM9DS1_M_CTRL_REG1]     = DeviceRegister((BUS_ADDR + 0x20), (uint8_t)  0x10, (register_pool +  7), false, false, true );  //
-  //reg_defs[LSM9DS1_M_CTRL_REG2]     = DeviceRegister((BUS_ADDR + 0x21), (uint8_t)  0x00, (register_pool +  8), false, false, true );  //
-  //reg_defs[LSM9DS1_M_CTRL_REG3]     = DeviceRegister((BUS_ADDR + 0x22), (uint8_t)  0x03, (register_pool +  9), false, false, true );  //
-  //reg_defs[LSM9DS1_M_CTRL_REG4]     = DeviceRegister((BUS_ADDR + 0x23), (uint8_t)  0x00, (register_pool + 10), false, false, true );  //
-  //reg_defs[LSM9DS1_M_CTRL_REG5]     = DeviceRegister((BUS_ADDR + 0x24), (uint8_t)  0x00, (register_pool + 11), false, false, true );  //
-  //reg_defs[LSM9DS1_M_STATUS_REG]    = DeviceRegister((BUS_ADDR + 0x27), (uint8_t)  0x00, (register_pool + 12), false, false, true );  //
-  //reg_defs[LSM9DS1_M_DATA_X]        = DeviceRegister((BUS_ADDR + 0x28), (uint16_t) 0x00, (register_pool + 13), false, false, false);
-  //reg_defs[LSM9DS1_M_DATA_Y]        = DeviceRegister((BUS_ADDR + 0x2A), (uint16_t) 0x00, (register_pool + 15), false, false, false);
-  //reg_defs[LSM9DS1_M_DATA_Z]        = DeviceRegister((BUS_ADDR + 0x2C), (uint16_t) 0x00, (register_pool + 17), false, false, false);
-  //reg_defs[LSM9DS1_M_INT_CFG]       = DeviceRegister((BUS_ADDR + 0x30), (uint8_t)  0x08, (register_pool + 19), false, false, true);
-  //reg_defs[LSM9DS1_M_INT_SRC]       = DeviceRegister((BUS_ADDR + 0x31), (uint8_t)  0x00, (register_pool + 20), false, false, false);
-  //reg_defs[LSM9DS1_M_INT_TSH]       = DeviceRegister((BUS_ADDR + 0x32), (uint16_t) 0x00, (register_pool + 21), false, false, true);
-
-  // Preform our most commonly-used bus operations to minimize thrash and other kinds of overhead.
-  /* Interrupt discovery. */
-  preformed_busop_irq_mag.shouldReap(false);
-  preformed_busop_irq_mag.devRegisterAdvance(false);
-  preformed_busop_irq_mag.set_opcode(BusOpcode::RX);
-  preformed_busop_irq_mag.callback = (BusOpCallback*) this;
-  preformed_busop_irq_mag.buf      = regPtr(LSM9DS1_M_INT_SRC);
-  preformed_busop_irq_mag.buf_len  = 1;
-  preformed_busop_irq_mag.setParams(
-    BUS_ADDR|0x80,
-    preformed_busop_irq_mag.buf_len,
-    1,
-    (LSM9DS1_M_INT_SRC | 0xC0)
-  );
-
-  preformed_busop_read_mag.shouldReap(false);
-  preformed_busop_read_mag.devRegisterAdvance(true);
-  preformed_busop_read_mag.set_opcode(BusOpcode::RX);
-  preformed_busop_read_mag.callback = (BusOpCallback*) this;
-  preformed_busop_read_mag.buf      = regPtr(LSM9DS1_M_DATA_X);
-  preformed_busop_read_mag.buf_len  = 6;
-  preformed_busop_read_mag.setParams(
-    BUS_ADDR|0x80,
-    preformed_busop_read_mag.buf_len,
-    1,
-    (LSM9DS1_M_DATA_X | 0xC0)
-  );
-
-  last_val_mag(0.0f, 0.0f, 0.0f);
-  noise_floor_mag(0, 0, 0);
-
-  // Local class stuff...
-  scale_mag           = 0;
-  update_rate_mag     = 0;
-  discards_remain_mag = 0;
-  discards_total_mag  = 0;
-
-  integrator = _integrator;
-  BUS_ADDR = address;
-  IDX_T0 = LSM9DS1_M_OFFSET_X;
-  IDX_T1 = LSM9DS1_M_OFFSET_Y;
-  IDX_ID = LSM9DS1_M_WHO_AM_I;
-  init();
-}
-
-
-
-
-/****************************************************************************************************
-* Members to be called from the integrator.                                                         *
-****************************************************************************************************/
-int8_t LSM9DS1_M::readSensor() {
-  int8_t return_value = 0;
-  if (!present()) {
-    return -1;
-  }
-  if (!calibrated()) {
-    //return IMU_ERROR_NOT_CALIBRATED;
-  }
-
-  if (initComplete()) {
-    // If there is more data on the way, we will let the callback do this for us.
-    if (preformed_busop_read_mag.isIdle()) {
-      fire_preformed_bus_op(&preformed_busop_read_mag);
-    }
-  }
-  return return_value;
-}
-
-
-/**
-* Reads every non-FIFO register in the sensor with maximum bux efficiency.
-* Note that this is an override. We make sure we can insert read operations
-*   for our specific implementation before calling the upstream fxn to refresh
-*   the basic things.
-*
-*/
-int8_t LSM9DS1_M::bulk_refresh() {
-  if (getVerbosity() > 3) Kernel::log("LSM9DS1_M::bulk_refresh()\n");
-  if (!present()) {
-    return readRegister((uint8_t) LSM9DS1_M_WHO_AM_I);
-  }
-
-  if (fire_preformed_bus_op(&preformed_busop_irq_mag)) {
-    return LSM9DSx_Common::bulk_refresh();
-  }
-  else {
-    if (getVerbosity() > 2) Kernel::log("\t Failed to fire preform irq_mag\n");
-  }
-  return IMU_ERROR_BUS_OPERATION_FAILED_R;
-}
-
-
-
-int8_t LSM9DS1_M::irq() {
+int8_t LSM9DS1::irq_2() {
   int8_t return_value = IMU_ERROR_NO_ERROR;
-
-  if (getVerbosity() > 3) Kernel::log("LSM9DS1_M::irq()\n");
-
+  if (getVerbosity() > 3) Kernel::log("LSM9DS1::irq_2()\n");
   if (initComplete()) {
     if ( !fire_preformed_bus_op(&preformed_busop_irq_mag) ) {
       // Error-handling block.
@@ -252,56 +116,15 @@ int8_t LSM9DS1_M::irq() {
 }
 
 
-
-void LSM9DS1_M::reset() {
-  scale_mag           = 0;
-  update_rate_mag     = 0;
-  discards_remain_mag = 0;
-  discards_total_mag  = 0;
-
-  noise_floor_mag.set(0.0f, 0.0f, 0.0f);
-
-  LSM9DSx_Common::reset();
-  writeRegister(LSM9DS1_M_CTRL_REG2, 0x04);
+int8_t LSM9DS1::irq_3() {
+  int8_t return_value = IMU_ERROR_NO_ERROR;
+  if (getVerbosity() > 3) Kernel::log("LSM9DS1::irq_3()\n");
+  return return_value;
 }
 
 
-uint8_t bulk_init_block_g[]   = { 0b01001111, 0b00000000, 0b00010000, 0b10010000, 0b01010000 };
-uint8_t bulk_init_block_g_1[] = { 0b01101111, 0b01101111, 0b01101111};
-uint8_t sample_rate_block_g[] = { 0b00000000, 0b00000000};
-
-
-/****************************************************************************************************
-* Runtime settings and status members.                                                              *
-****************************************************************************************************/
-
-// Init parameters for the magnetometer. Starting at CTRL_REG1.
-uint8_t bulk_init_block_m[5] = {
-  0b11011000,  // Temp compensated, mid-range X/Y performance, 40Hz output.
-  0b00000000,  // 4 gauss,
-  0b00000000,  // SPI read/write, continuous conversion. Normal power mode.
-  0b00001000,  // Mid-range Z-axis performance, little-endian,
-  0b00000000,  // Continuous (unblocked) data register update.
-};
-
-
-int8_t LSM9DS1_M::configure_sensor() {
-  if (getVerbosity() > 3) Kernel::log("LSM9DS1_M::configure_sensor()\n");
-
-  writeRegister(LSM9DS1_M_CTRL_REG1, (uint8_t*) &bulk_init_block_m, 5);
-
-  // Latched active-high interrupt enabled on INT_M pin for all axes.
-  writeRegister(LSM9DS1_M_INT_TSH, (uint8_t) 0x28);
-  writeRegister(LSM9DS1_M_INT_CFG, (uint8_t) 0b11100101);
-
-  write_test_bytes();
-  return 0;
-}
-
-
-int8_t LSM9DS1_M::calibrate_from_data() {
+int8_t LSM9DS1::calibrate_from_data_mag() {
   // Is reading stable?
-
   // Average vectors....
   Vector3<int32_t> avg;
   for (int i = 0; i < 32; i++) {
@@ -317,99 +140,14 @@ int8_t LSM9DS1_M::calibrate_from_data() {
 }
 
 
-/*
-*
-*/
-bool LSM9DS1_M::is_setup_completed() {
-  if (!present()) return false;
-
-  if (!initComplete()) {
-    if (initPending()) {
-      //if (reg_defs[LSM9DS1_M_INT_TSH].dirty) return false;
-      //if (reg_defs[LSM9DS1_M_INT_CFG].dirty) return false;
-      //if (reg_defs[LSM9DS1_M_CTRL_REG1].dirty) return false;
-      //if (reg_defs[LSM9DS1_M_CTRL_REG2].dirty) return false;
-      //if (reg_defs[LSM9DS1_M_CTRL_REG3].dirty) return false;
-      //if (reg_defs[LSM9DS1_M_CTRL_REG4].dirty) return false;
-      //if (reg_defs[LSM9DS1_M_CTRL_REG5].dirty) return false;
-    }
-  }
-
-  return true;
-}
-
-
-
-
-/****************************************************************************************************
-* Debugging and logging aides...                                                                    *
-****************************************************************************************************/
-/*
-* Dump the contents of this device to the logger.
-* This is an override.
-*/
-void LSM9DS1_M::dumpDevRegs(StringBuilder *output) {
-  if (nullptr == output) return;
-  LSM9DSx_Common::dumpDevRegs(output);
-
-  if (getVerbosity() > 1) {
-    output->concatf("--- update_rate_mag     %3.0f Hz\n", (double) rate_settings_mag[update_rate_mag].hertz);
-  }
-  if (getVerbosity() > 2) {
-    output->concatf("--- scale_mag           +/-%d deg/s\n", error_map_mag[scale_mag].scale);
-    output->concatf("--- autoscale_mag       %s\n\n", (autoscale_mag() ? "yes" : "no"));
-    output->concatf("--- noise_floor_mag     (%d, %d, %d)\n", noise_floor_mag.x, noise_floor_mag.y, noise_floor_mag.z);
-  }
-
-  if (getVerbosity() > 3) dumpDevRegs(output);
-}
-
-
-/*
-* Dump the contents of this device to the logger.
-* This is an override.
-*/
-void LSM9DS1_M::dumpPreformedElements(StringBuilder *output) {
-  output->concat("--- Mag preformed elements\n");
-  LSM9DSx_Common::dumpPreformedElements(output);
-
-  output->concat("--- Vector read\n");
-  preformed_busop_read_mag.printDebug(output);
-  output->concat("--- IRQ pin\n");
-  preformed_busop_irq_mag.printDebug(output);
-  output->concat("\n");
-}
-
-
-
-/*******************************************************************************
-* ___     _       _                      These members are mandatory overrides
-*  |   / / \ o   | \  _     o  _  _      for implementing I/O callbacks. They
-* _|_ /  \_/ o   |_/ (/_ \/ | (_ (/_     are also implemented by Adapters.
-*******************************************************************************/
-
 /**
 * When a bus operation completes, it is passed back to its issuing class.
 *
 * @param  _op  The bus operation that was completed.
 * @return SPI_CALLBACK_NOMINAL on success, or appropriate error code.
 */
-int8_t LSM9DS1_M::io_op_callback(BusOp* _op) {
-  SPIBusOp* op = (SPIBusOp*) _op;
+int8_t LSM9DS1::io_op_callback_mag(SPIBusOp* op) {
   int8_t return_value = SPI_CALLBACK_NOMINAL;
-
-  // There is zero chance this object will be a null pointer unless it was done on purpose.
-  if (op->hasFault()) {
-    if (getVerbosity() > 3) {
-      local_log.concat("~~~~~~~~LSM9DS1_M::io_op_callback   (ERROR CASE -1)\n");
-      op->printDebug(&local_log);
-      Kernel::log(&local_log);
-    }
-    error_condition = (BusOpcode::RX == op->get_opcode()) ? IMU_ERROR_BUS_OPERATION_FAILED_R : IMU_ERROR_BUS_OPERATION_FAILED_W;
-
-    // TODO: Should think carefully, and...   return_value = SPI_CALLBACK_RECYCLE;   // Re-run the job.
-    return SPI_CALLBACK_ERROR;
-  }
 
   unsigned int access_len = op->buf_len;  // The access length lets us know how many things changed.
   uint8_t access_idx = op->getTransferParam(3);

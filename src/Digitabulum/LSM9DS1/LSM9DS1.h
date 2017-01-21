@@ -184,7 +184,7 @@ enum class RegID {
 * This class is purely for abstraction, and is never instatntiated. It is only
 *   intended to hold functions and members common to a single device package.
 */
-class LSM9DSx_Common : public BusOpCallback {
+class LSM9DS1 : public BusOpCallback {
   public:
     LSM9DS1();
     ~LSM9DS1();
@@ -364,8 +364,6 @@ class LSM9DSx_Common : public BusOpCallback {
     Vector3<int16_t> noise_floor_gyr;
 
 
-    LSM9DSx_Common();
-
     /* These are higher-level fxns that are used as "macros" for specific patterns of */
     /*   register access. Common large-scale operations should go here.               */
     void   reset(uint8_t reg_idx);   // Reset our state without causing a re-init.
@@ -389,6 +387,9 @@ class LSM9DSx_Common : public BusOpCallback {
     bool is_setup_completed();
     int8_t configure_sensor();
 
+    int8_t io_op_callback_mag(SPIBusOp*);
+    int8_t io_op_callback_ag(SPIBusOp*);
+
     /**
     * Sets the current IMU state without blowing away the high bits in the state member.
     */
@@ -409,7 +410,9 @@ class LSM9DSx_Common : public BusOpCallback {
     inline bool power_to_gyr() {   return _check_flags(IMU_COMMON_FLAG_GYR_POWERED);   };
     inline void power_to_gyr(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_GYR_POWERED);  };
 
-    int8_t calibrate_from_data();
+    int8_t calibrate_from_data_mag();
+    int8_t calibrate_from_data_ag();
+
     int8_t collect_reading_mag();
     int8_t collect_reading_acc();
     int8_t collect_reading_gyr();
