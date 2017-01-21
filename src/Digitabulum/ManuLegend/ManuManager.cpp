@@ -1,5 +1,5 @@
 /*
-File:   LegendManager.cpp
+File:   ManuManager.cpp
 Author: J. Ian Lindsay
 Date:   2014.07.01
 
@@ -33,34 +33,34 @@ limitations under the License.
 *
 * Static members and initializers should be located here.
 *******************************************************************************/
-IIU LegendManager::iius[LEGEND_DATASET_IIU_COUNT];  // TODO: Shouldn't be static.
-InertialMeasurement LegendManager::__prealloc[PREALLOCATED_IIU_MEASUREMENTS];
+IIU ManuManager::iius[LEGEND_DATASET_IIU_COUNT];  // TODO: Shouldn't be static.
+InertialMeasurement ManuManager::__prealloc[PREALLOCATED_IIU_MEASUREMENTS];
 // TODO: These shouldn't be static.
 
-SPIBusOp LegendManager::_preformed_read_a;
-SPIBusOp LegendManager::_preformed_read_g;
-SPIBusOp LegendManager::_preformed_read_m;
-SPIBusOp LegendManager::_preformed_read_temp;
-SPIBusOp LegendManager::_preformed_fifo_read;
+SPIBusOp ManuManager::_preformed_read_a;
+SPIBusOp ManuManager::_preformed_read_g;
+SPIBusOp ManuManager::_preformed_read_m;
+SPIBusOp ManuManager::_preformed_read_temp;
+SPIBusOp ManuManager::_preformed_fifo_read;
 
-Vector3<int16_t> LegendManager::reflection_mag;
-Vector3<int16_t> LegendManager::reflection_acc;
-Vector3<int16_t> LegendManager::reflection_gyr;
+Vector3<int16_t> ManuManager::reflection_mag;
+Vector3<int16_t> ManuManager::reflection_acc;
+Vector3<int16_t> ManuManager::reflection_gyr;
 
-LegendManager* LegendManager::INSTANCE = nullptr;
+ManuManager* ManuManager::INSTANCE = nullptr;
 
-LegendManager* LegendManager::getInstance() {
+ManuManager* ManuManager::getInstance() {
   return INSTANCE;
 }
 
-uint32_t LegendManager::measurement_heap_instantiated = 0;
-uint32_t LegendManager::measurement_heap_freed        = 0;
+uint32_t ManuManager::measurement_heap_instantiated = 0;
+uint32_t ManuManager::measurement_heap_freed        = 0;
 
-uint32_t LegendManager::prealloc_starves = 0;
+uint32_t ManuManager::prealloc_starves = 0;
 
-PriorityQueue<InertialMeasurement*>  LegendManager::preallocd_measurements;
+PriorityQueue<InertialMeasurement*>  ManuManager::preallocd_measurements;
 
-uint32_t LegendManager::minimum_prealloc_level = PREALLOCATED_IIU_MEASUREMENTS;
+uint32_t ManuManager::minimum_prealloc_level = PREALLOCATED_IIU_MEASUREMENTS;
 
 /* ---------------------- */
 /*    Register memory     */
@@ -71,26 +71,26 @@ uint32_t LegendManager::minimum_prealloc_level = PREALLOCATED_IIU_MEASUREMENTS;
 /* These are giant strips of DMA-capable memory that are used for raw frame
      reads from the sensor package. Twice what we need for double-buffering. */
 
-//Vector3<int16_t> LegendManager::__frame_buf_a[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
-//Vector3<int16_t> LegendManager::__frame_buf_g[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
+//Vector3<int16_t> ManuManager::__frame_buf_a[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
+//Vector3<int16_t> ManuManager::__frame_buf_g[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
 //
 ///* More large stretches of DMA memory. These are for IIU register definitions.
 //     Registers laid out this way cannot be multiply-accessed as more than single bytes
 //     by their respective IIU classes because the memory is not contiguous. */
-//int16_t LegendManager::__temperatures[LEGEND_DATASET_IIU_COUNT];
+//int16_t ManuManager::__temperatures[LEGEND_DATASET_IIU_COUNT];
 //
-//uint8_t LegendManager::__ag_status[LEGEND_DATASET_IIU_COUNT];
+//uint8_t ManuManager::__ag_status[LEGEND_DATASET_IIU_COUNT];
 //
 ///* Identity registers for both sensor aspects. */
-//uint8_t LegendManager::_imu_ids[2 * LEGEND_DATASET_IIU_COUNT];
+//uint8_t ManuManager::_imu_ids[2 * LEGEND_DATASET_IIU_COUNT];
 //
 //// TODO: Implement things below this line....
 ///* Accelerometer interrupt registers. */
-//uint8_t LegendManager::_reg_block_ag_0[LEGEND_DATASET_IIU_COUNT * AG_BASE_0_SIZE];
+//uint8_t ManuManager::_reg_block_ag_0[LEGEND_DATASET_IIU_COUNT * AG_BASE_0_SIZE];
 ///* Gyroscope control registers. */
-//uint8_t LegendManager::_reg_block_ag_1[LEGEND_DATASET_IIU_COUNT * AG_BASE_1_SIZE];
+//uint8_t ManuManager::_reg_block_ag_1[LEGEND_DATASET_IIU_COUNT * AG_BASE_1_SIZE];
 ///* Accelerometer control registers. */
-//uint8_t LegendManager::_reg_block_ag_2[LEGEND_DATASET_IIU_COUNT * AG_BASE_2_SIZE];
+//uint8_t ManuManager::_reg_block_ag_2[LEGEND_DATASET_IIU_COUNT * AG_BASE_2_SIZE];
 //
 ///* Inertial aspect control registers. */
 //uint8_t _reg_block_ag_ctrl1[LEGEND_DATASET_IIU_COUNT];
@@ -154,26 +154,26 @@ uint32_t LegendManager::minimum_prealloc_level = PREALLOCATED_IIU_MEASUREMENTS;
 /*    Experiment #1       */
 /* ---------------------- */
 /* Identity registers. */
-uint8_t LegendManager::_imu_ids[2 * LEGEND_DATASET_IIU_COUNT];
+uint8_t ManuManager::_imu_ids[2 * LEGEND_DATASET_IIU_COUNT];
 
-Vector3<int16_t> LegendManager::__frame_buf_a[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
-Vector3<int16_t> LegendManager::__frame_buf_g[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
+Vector3<int16_t> ManuManager::__frame_buf_a[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
+Vector3<int16_t> ManuManager::__frame_buf_g[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
 Vector3<int16_t> _reg_block_m_data[2 * LEGEND_DATASET_IIU_COUNT];  // Mag data
 
-int16_t LegendManager::__temperatures[LEGEND_DATASET_IIU_COUNT];
-uint8_t LegendManager::__fifo_ctrl[LEGEND_DATASET_IIU_COUNT];
-uint8_t LegendManager::__fifo_levels[LEGEND_DATASET_IIU_COUNT];  // The FIFO levels.
-uint8_t LegendManager::__ag_status[LEGEND_DATASET_IIU_COUNT];
+int16_t ManuManager::__temperatures[LEGEND_DATASET_IIU_COUNT];
+uint8_t ManuManager::__fifo_ctrl[LEGEND_DATASET_IIU_COUNT];
+uint8_t ManuManager::__fifo_levels[LEGEND_DATASET_IIU_COUNT];  // The FIFO levels.
+uint8_t ManuManager::__ag_status[LEGEND_DATASET_IIU_COUNT];
 
 // TODO: Implement things below this line....
 /* Accelerometer interrupt registers. */
-uint8_t LegendManager::_reg_block_ag_0[LEGEND_DATASET_IIU_COUNT * AG_BASE_0_SIZE];
+uint8_t ManuManager::_reg_block_ag_0[LEGEND_DATASET_IIU_COUNT * AG_BASE_0_SIZE];
 /* Gyroscope control registers. */
-uint8_t LegendManager::_reg_block_ag_1[LEGEND_DATASET_IIU_COUNT * AG_BASE_1_SIZE];
+uint8_t ManuManager::_reg_block_ag_1[LEGEND_DATASET_IIU_COUNT * AG_BASE_1_SIZE];
 /* Accelerometer control registers. */
-uint8_t LegendManager::_reg_block_ag_2[LEGEND_DATASET_IIU_COUNT * AG_BASE_2_SIZE];
+uint8_t ManuManager::_reg_block_ag_2[LEGEND_DATASET_IIU_COUNT * AG_BASE_2_SIZE];
 /* Gyroscope interrupt registers. */
-uint8_t LegendManager::_reg_block_ag_3[LEGEND_DATASET_IIU_COUNT * AG_BASE_3_SIZE];
+uint8_t ManuManager::_reg_block_ag_3[LEGEND_DATASET_IIU_COUNT * AG_BASE_3_SIZE];
 
 /* Magnetometer offset registers. */
 uint8_t _reg_block_m_0[LEGEND_DATASET_IIU_COUNT * M_BASE_0_SIZE];
@@ -187,7 +187,7 @@ uint8_t _reg_block_m_2[LEGEND_DATASET_IIU_COUNT * M_BASE_2_SIZE];
 
 
 
-InertialMeasurement* LegendManager::fetchMeasurement(uint8_t type_code) {
+InertialMeasurement* ManuManager::fetchMeasurement(uint8_t type_code) {
   InertialMeasurement* return_value;
 
   if (0 == preallocd_measurements.size()) {
@@ -222,7 +222,7 @@ InertialMeasurement* LegendManager::fetchMeasurement(uint8_t type_code) {
 *
 * @param InertialMeasurement* obj is the pointer to the object to be reclaimed.
 */
-void LegendManager::reclaimMeasurement(InertialMeasurement* obj) {
+void ManuManager::reclaimMeasurement(InertialMeasurement* obj) {
   uintptr_t obj_addr = ((uintptr_t) obj);
   uintptr_t pre_min  = ((uintptr_t) INSTANCE->__prealloc);
   uintptr_t pre_max  = pre_min + (sizeof(InertialMeasurement) * PREALLOCATED_IIU_MEASUREMENTS);
@@ -240,7 +240,7 @@ void LegendManager::reclaimMeasurement(InertialMeasurement* obj) {
 }
 
 
-const char* LegendManager::chiralityString(Chirality x) {
+const char* ManuManager::chiralityString(Chirality x) {
   switch (x) {
     case Chirality::RIGHT:  return "RIGHT";
     case Chirality::LEFT:   return "LEFT";
@@ -260,7 +260,7 @@ const char* LegendManager::chiralityString(Chirality x) {
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
-LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") {
+ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") {
   _bus = (CPLDDriver*) bus;  // TODO: Make this cast unnecessary.
   INSTANCE = this;
 
@@ -377,7 +377,7 @@ LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgm
 
 
 /* This should probably never be called. */
-LegendManager::~LegendManager() {
+ManuManager::~ManuManager() {
   while (active_legends.hasNext()) active_legends.remove();
 }
 
@@ -388,32 +388,32 @@ LegendManager::~LegendManager() {
 *   absolutely no excuse for returning NULL, since we built these objects when CPLDDriver
 *   was constructed.
 */
-IIU* LegendManager::fetchIIU(uint8_t idx) {
+IIU* ManuManager::fetchIIU(uint8_t idx) {
   if (idx > 16) {
-    local_log.concatf("LegendManager::fetchIIU(%d):  We should crash, but will return mod-17 instead.\n", idx);
+    local_log.concatf("ManuManager::fetchIIU(%d):  We should crash, but will return mod-17 instead.\n", idx);
     Kernel::log(&local_log);
   }
   return &iius[idx % LEGEND_DATASET_IIU_COUNT];
 }
 
 
-int8_t LegendManager::init_iiu(uint8_t idx) {
+int8_t ManuManager::init_iiu(uint8_t idx) {
   return (idx > 16) ? -1 : iius[idx].init();
 }
 
 
 /* Read the given IMU. */
-int8_t LegendManager::refreshIMU(uint8_t idx) {
+int8_t ManuManager::refreshIMU(uint8_t idx) {
   return (idx > 16) ? -1 : iius[idx].readSensor();
 }
 
 
 /* Read all IMUs. */
-int8_t LegendManager::refreshIMU() {
+int8_t ManuManager::refreshIMU() {
   if (last_imu_read) {
     // We are alrady doing something to the IMUs, Need to wait.
     if (getVerbosity() > 2) {
-      local_log.concat("LegendManager tried to do two large IMU operations at once. Doing nothing. Be patient.\n");
+      local_log.concat("ManuManager tried to do two large IMU operations at once. Doing nothing. Be patient.\n");
       Kernel::log(&local_log);
     }
     return -1;
@@ -438,7 +438,7 @@ int8_t LegendManager::refreshIMU() {
 *
 * @return non-zero on error.
 */
-int8_t LegendManager::send_map_event() {
+int8_t ManuManager::send_map_event() {
   event_legend_frame_ready.specific_target = nullptr;
   if (operating_legend && _er_flag(LEGEND_MGR_FLAGS_LEGEND_SENT)) {
     operating_legend->copy_frame();
@@ -454,7 +454,7 @@ int8_t LegendManager::send_map_event() {
 *
 * @return non-zero on error.
 */
-int8_t LegendManager::reconfigure_data_map() {
+int8_t ManuManager::reconfigure_data_map() {
   uint16_t accumulated_offset = LEGEND_DATASET_GLOBAL_SIZE;
   for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
     // Configure the IIU...
@@ -487,7 +487,7 @@ int8_t LegendManager::reconfigure_data_map() {
 
 // Calling causes a pointer dance that reconfigures the data we send to the host.
 // Don't do anything unless the legend is stable. This is concurrency-control.
-int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
+int8_t ManuManager::setLegend(ManuLegend* nu_legend) {
   if (_er_flag(LEGEND_MGR_FLAGS_LEGEND_STABLE)) {
     // Only reconfigure if stable.
     _er_clear_flag(LEGEND_MGR_FLAGS_LEGEND_STABLE);   // Mark as unstable.
@@ -531,7 +531,7 @@ int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
 
 
 
-uint32_t LegendManager::totalSamples() {
+uint32_t ManuManager::totalSamples() {
   uint32_t return_value = 0;
   for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
     return_value += iius[i].totalSamples();
@@ -549,7 +549,7 @@ uint32_t LegendManager::totalSamples() {
 * Called internally as a result of either (a conclusive chirality test) or
 *   (loaded configuration).
 */
-int LegendManager::set_chirality(Chirality c) {
+int ManuManager::set_chirality(Chirality c) {
   uint8_t x = LEGEND_MGR_FLAGS_CHIRALITY_KNOWN;
   switch (c) {   // I won't even apologize for this. Suffer.
     default:
@@ -562,7 +562,7 @@ int LegendManager::set_chirality(Chirality c) {
 }
 
 
-DigitPort LegendManager::get_port_given_digit(Anatomical digit) {
+DigitPort ManuManager::get_port_given_digit(Anatomical digit) {
   // TODO: This is sloppy. Might-should rework it to use no conditionals.
   switch (digit) {
     case Anatomical::DIGIT_1:
@@ -586,7 +586,7 @@ DigitPort LegendManager::get_port_given_digit(Anatomical digit) {
 }
 
 
-Anatomical LegendManager::get_digit_given_port(DigitPort port) {
+Anatomical ManuManager::get_digit_given_port(DigitPort port) {
   // TODO: This is sloppy. Might-should rework it to use no conditionals.
   switch (port) {
     case DigitPort::PORT_1:
@@ -629,8 +629,8 @@ Anatomical LegendManager::get_digit_given_port(DigitPort port) {
 * @param  _op  The bus operation that was completed.
 * @return 0 to run the op, or non-zero to cancel it.
 */
-int8_t LegendManager::io_op_callahead(BusOp* _op) {
-  Kernel::log("LegendManager::io_op_callahead\n");
+int8_t ManuManager::io_op_callahead(BusOp* _op) {
+  Kernel::log("ManuManager::io_op_callahead\n");
   return 0;
 }
 
@@ -641,7 +641,7 @@ int8_t LegendManager::io_op_callahead(BusOp* _op) {
 * @param  _op  The bus operation that was completed.
 * @return 0 on success, or appropriate error code.
 */
-int8_t LegendManager::io_op_callback(BusOp* _op) {
+int8_t ManuManager::io_op_callback(BusOp* _op) {
   SPIBusOp* op = (SPIBusOp*) _op;
   // There is zero chance this object will be a null pointer unless it was done on purpose.
   if (op->hasFault()) {
@@ -686,7 +686,7 @@ int8_t LegendManager::io_op_callback(BusOp* _op) {
 * @param  _op  The bus operation to execute.
 * @return Zero on success, or appropriate error code.
 */
-int8_t LegendManager::queue_io_job(BusOp* _op) {
+int8_t ManuManager::queue_io_job(BusOp* _op) {
   SPIBusOp* op = (SPIBusOp*) _op;
   if (nullptr == op->callback) {
     op->callback = (BusOpCallback*) this;
@@ -714,7 +714,7 @@ int8_t LegendManager::queue_io_job(BusOp* _op) {
 *
 * @return 0 on no action, 1 on action, -1 on failure.
 */
-int8_t LegendManager::attached() {
+int8_t ManuManager::attached() {
   if (EventReceiver::attached()) {
     /* Get ready for a silly pointer dance....
     *  This is an argument-heavy event, and we will be using it ALOT. So we build the Event arguments
@@ -766,7 +766,7 @@ int8_t LegendManager::attached() {
 * @param  event  The event for which service has been completed.
 * @return A callback return code.
 */
-int8_t LegendManager::callback_proc(ManuvrMsg* event) {
+int8_t ManuManager::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
   int8_t return_value = (0 == event->refCount()) ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
@@ -799,7 +799,7 @@ int8_t LegendManager::callback_proc(ManuvrMsg* event) {
           break;
 
         default:
-          if (getVerbosity() > 2) local_log.concat("LegendManager::callback_proc(IMU_READ): Bad arg\n");
+          if (getVerbosity() > 2) local_log.concat("ManuManager::callback_proc(IMU_READ): Bad arg\n");
           last_imu_read = 0;
           break;
       }
@@ -825,16 +825,16 @@ int8_t LegendManager::callback_proc(ManuvrMsg* event) {
         case 14:
         case 15:
           last_imu_read++;
-          if (getVerbosity() > 6) local_log.concat("LegendManager::callback_proc(IMU_INIT): RECYCLING\n");
+          if (getVerbosity() > 6) local_log.concat("ManuManager::callback_proc(IMU_INIT): RECYCLING\n");
           // We still have IMUs left to deal with. Recycle the event...
           return EVENT_CALLBACK_RETURN_RECYCLE;
         case 16:
           last_imu_read = 0;
-          if (getVerbosity() > 6) local_log.concat("LegendManager::callback_proc(IMU_INIT): DROPPING\n");
+          if (getVerbosity() > 6) local_log.concat("ManuManager::callback_proc(IMU_INIT): DROPPING\n");
           break;
 
         default:
-          if (getVerbosity() > 2) local_log.concat("LegendManager::callback_proc(IMU_READ): Bad arg\n");
+          if (getVerbosity() > 2) local_log.concat("ManuManager::callback_proc(IMU_READ): Bad arg\n");
           last_imu_read = 0;
           break;
       }
@@ -863,14 +863,14 @@ int8_t LegendManager::callback_proc(ManuvrMsg* event) {
           }
         }
         else {
-          local_log.concat("LegendManager::callback_proc(): QUAT crunch had no argument?!.\n");
+          local_log.concat("ManuManager::callback_proc(): QUAT crunch had no argument?!.\n");
         }
       }
       break;
 
     default:
       if (getVerbosity() > 5) {
-        local_log.concat("LegendManager::callback_proc(): Default case.\n");
+        local_log.concat("ManuManager::callback_proc(): Default case.\n");
         #if defined(__MANUVR_DEBUG)
           event->printDebug(&local_log);
         #endif
@@ -886,7 +886,7 @@ int8_t LegendManager::callback_proc(ManuvrMsg* event) {
 
 
 
-int8_t LegendManager::notify(ManuvrMsg* active_event) {
+int8_t ManuManager::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
   uint8_t temp_uint_8 = 0;
 
@@ -1010,7 +1010,7 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
-void LegendManager::printIMURollCall(StringBuilder *output) {
+void ManuManager::printIMURollCall(StringBuilder *output) {
   EventReceiver::printDebug(output);
   output->concat("-- Intertial integration units: id(M/I)\n--\n-- Dgt      Prx        Imt        Dst        Reports\n");
   // TODO: Audit usage of length-specified integers as iterators. Cut where not
@@ -1053,7 +1053,7 @@ void LegendManager::printIMURollCall(StringBuilder *output) {
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
-void LegendManager::printTemperatures(StringBuilder *output) {
+void ManuManager::printTemperatures(StringBuilder *output) {
   EventReceiver::printDebug(output);
   output->concat("-- Intertial integration units: id(deg-C)\n--\n-- Dgt      Prx        Imt        Dst\n");
   // TODO: Audit usage of length-specified integers as iterators. Cut where not
@@ -1098,7 +1098,7 @@ void LegendManager::printTemperatures(StringBuilder *output) {
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
-void LegendManager::printDebug(StringBuilder *output) {
+void ManuManager::printDebug(StringBuilder *output) {
   if (output == nullptr) return;
   EventReceiver::printDebug(output);
   if (getVerbosity() > 0) {
@@ -1150,7 +1150,7 @@ void LegendManager::printDebug(StringBuilder *output) {
 
 
 #if defined(MANUVR_CONSOLE_SUPPORT)
-void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
+void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
   uint8_t temp_byte = 0;
@@ -1631,10 +1631,10 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
 
 
 /*******************************************************************************
-* LegendManager is doing too much.
+* ManuManager is doing too much.
 *******************************************************************************/
 
-int8_t LegendManager::read_identities() {
+int8_t ManuManager::read_identities() {
   // Zero the space so we ensure no false positives.
   bzero(&_imu_ids[0], (2 * LEGEND_DATASET_IIU_COUNT));
 
@@ -1648,7 +1648,7 @@ int8_t LegendManager::read_identities() {
 
 
 
-int8_t LegendManager::read_fifo_depth() {
+int8_t ManuManager::read_fifo_depth() {
   SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
   op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
   op->setBuffer(&_imu_ids[0], LEGEND_DATASET_IIU_COUNT);

@@ -1,9 +1,9 @@
 /*
-File:   IIU.cpp
+File:   Integrator.cpp
 Author: J. Ian Lindsay
-Date:   2014.03.31
+Date:   2017.01.18
 
-Copyright 2016 Manuvr, Inc
+Copyright 2017 Manuvr, Inc
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,40 +17,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-
-An IIU is a non-abstract class that tracks measurements from an IMU and
-  maintains positional data (by integrating the readings from the IMU).
-
-This class will work with what data it is given. But in the most-leveraged case, this
-  class would be fed one of each sensor type supported. The GPS would be used to correct
-  gross drift over time, and the dead-reckoning sensors would be used to ignore GPS
-  jitter.
-In the case where only one sensor is fed to this class (suppose it's a gyro), only the
-  orientation would be integratable, so that is all that would be reported in such a case.
-
-
-An IIU can be fed any number of these data:
-  1) Rotation (via a gyro)
-  2) Acceleration (via an accelerometer)
-  3) Magnetic field vector
-  4) GPS data
-
-Data from magnetometers and GPS devices is used to establish error-rates
-  and divergence data (and optionally correction).
-
-
 */
 
+#include "Integrator.h"
 
-#include "IIU.h"
-#include <stdarg.h>
-
-#include "ManuLegend/ManuManager.h"
-
-
-const Vector3<float> ZERO_VECTOR;
-
-/****************************************************************************************************
+/*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
 *     /       |           |   /   \  |           ||  |  /      |   /       |
 *    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
@@ -58,31 +29,24 @@ const Vector3<float> ZERO_VECTOR;
 * .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
 * |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
 *
-* Static members and initializers should be located here. Initializers first, functions second.
-****************************************************************************************************/
-uint8_t  IIU::max_quats_per_event    = 2;
-float    IIU::mag_discard_threshold  = 0.8f;  // In Gauss.
+* Static members and initializers should be located here.
+*******************************************************************************/
 
-/****************************************************************************************************
-* Class-management functions...                                                                     *
-****************************************************************************************************/
+static const Vector3<float> ZERO_VECTOR;
+uint8_t  Integrator::max_quats_per_event    = 2;
+float    Integrator::mag_discard_threshold  = 0.8f;  // In Gauss.
 
-IIU::IIU() {
-}
+/*******************************************************************************
+*   ___ _              ___      _ _              _      _
+*  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
+* | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
+*  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
+*                                          |_|
+* Constructors/destructors, class initialization functions and so-forth...
+*******************************************************************************/
 
-
-IIU::~IIU() {
-  while (quat_queue.hasNext()) {
-    // We need to return the preallocated measurements we are holding.
-    ManuManager::reclaimMeasurement(quat_queue.dequeue());
-  }
-}
-
-void IIU::class_init(uint8_t idx) {
+Integrator::Integrator(uint8_t idx) {
   pos_id = idx;
-  imu_ag.class_init(CPLD_REG_IMU_DM_P_I + idx, this);    // Inertial aspect.
-  imu_m.class_init(CPLD_REG_IMU_DM_P_M + idx, this);     // Magnetic aspect.
-  //TODO: Refugees from setPositionAndAddress(uint8_t nu_pos).
   if (quat_crunch_event.argCount() > 0) {
     quat_crunch_event.clearArgs();
   }
@@ -99,40 +63,19 @@ void IIU::class_init(uint8_t idx) {
   quat_crunch_event.incRefs();
   //quat_crunch_event.priority(4);
   quat_crunch_event.addArg((uint8_t) pos_id);
-
-  //TODO: End of Refugees from setPositionAndAddress(uint8_t nu_pos).
 }
 
 
-/*
-* This init() function will call all downstream init() functions. Because of that fact, we need to know a priori
-*   which logical sensors are in the same physical package, and they need to have been passed in by now. Note that
-*   this does not apply to EC devs, as those are typically added as an indirect result of this call.
-*/
-int8_t IIU::init() {
-  int8_t return_value = 0;
-
-  if (!imu_ag.initComplete()) {
-    return_value = -1;
+Integrator::~Integrator() {
+  while (quat_queue.hasNext()) {
+    // We need to return the preallocated measurements we are holding.
+    ManuManager::reclaimMeasurement(quat_queue.dequeue());
   }
-  else if (!imu_m.initComplete()) {
-    return_value = -1;
-  }
-
-  if (! imu_m.present()) {
-    imu_m.setDesiredState(State::STAGE_1);
-  }
-
-  if (! imu_ag.present()) {
-    imu_ag.setDesiredState(State::STAGE_1);
-  }
-  return return_value;
 }
 
 
-void IIU::reset() {
-  imu_m.reset();
-  imu_ag.reset();
+
+void Integrator::reset() {
   delta_t   = 0;
   dirty_mag = 0;
   dirty_acc = 0;
@@ -155,33 +98,17 @@ void IIU::reset() {
   grav_scalar = 0.0f;
   offset_angle_y = 0.0f;
   offset_angle_z = 0.0f;
-
-  irq_count_1 = 0;
-  irq_count_2 = 0;
-  irq_count_m = 0;
 }
 
 
-void IIU::sync() {
-  imu_ag.bulk_refresh();
-  imu_m.bulk_refresh();
-}
-
-
-void IIU::setOperatingState(uint8_t nu) {
-  imu_m.setDesiredState(LSM9DSx_Common::getStateByIndex(nu));
-  imu_ag.setDesiredState(LSM9DSx_Common::getStateByIndex(nu));
-}
-
-
-uint32_t IIU::totalSamples() {
+uint32_t Integrator::totalSamples() {
   return *(_ptr_s_count_gyr) + *(_ptr_s_count_acc) + *(_ptr_s_count_mag);
 }
 
 
 /*
 */
-int8_t IIU::pushMeasurement(uint8_t data_type, float x, float y, float z, float d_t) {
+int8_t Integrator::pushMeasurement(uint8_t data_type, float x, float y, float z, float d_t) {
   uint32_t read_time = micros();
   switch (data_type) {
     case IMU_FLAG_GYRO_DATA:
@@ -258,7 +185,7 @@ int8_t IIU::pushMeasurement(uint8_t data_type, float x, float y, float z, float 
 
     default:
       if (verbosity > 3) {
-        local_log.concatf("%d\t IIU::pushMeasurement(): \t Unhandled Measurement type.\n", pos_id);
+        local_log.concatf("%d\t Integrator::pushMeasurement(): \t Unhandled Measurement type.\n", pos_id);
         Kernel::log(&local_log);
       }
       break;
@@ -282,25 +209,7 @@ int8_t IIU::pushMeasurement(uint8_t data_type, float x, float y, float z, float 
 }
 
 
-int8_t IIU::state_change_notice(LSM9DSx_Common* imu_ptr, State p_state, State c_state) {
-  switch (c_state) {
-    case State::STAGE_3:
-      if (_ptr_vel)  _ptr_vel->set(0.0f, 0.0f, 0.0f);
-      if (_ptr_quat) _ptr_quat->set(0.0f, 0.0f, 0.0f, 1.0f);
-      break;
-    case State::UNDEF:
-      // Mistake.
-      break;
-    default:
-      // No action.
-      break;
-  }
-  return 0;
-}
-
-
-
-void IIU::assign_legend_pointers(void* a, void* g, void* m,
+void Integrator::assign_legend_pointers(void* a, void* g, void* m,
                                  void* v, void* n_g, void* pos,
                                  void* q, void* t, void* sc_acc,
                                  void* sc_gyr, void* sc_mag, void* sc_temp)
@@ -329,98 +238,8 @@ void IIU::assign_legend_pointers(void* a, void* g, void* m,
 }
 
 
-void IIU::assign_register_pointers(IMURegisterPointers* _reg) {
-  for (size_t i = 0; i < sizeof(IMURegisterPointers); i+=4) {
-    *(&_reg_ptrs + i) = *(_reg + i);
-  }
-}
 
-
-/*
-* For now:
-* 0: Off  (Implies other register activity)
-* 1: Lowest rate while still collecting data.
-* 2: Low-accuracy rate. ~100Hz from each FIFO'd sensor.
-* 3: Moderate rate.
-* 4: Highest rate supported.
-*/
-void IIU::setSampleRateProfile(uint8_t profile_idx) {
-  switch (profile_idx) {
-    case 0:
-      delta_t = 0.0f;
-      imu_ag.set_sample_rate_acc(0);
-      imu_ag.set_sample_rate_gyr(0);
-      imu_m.set_sample_rate_mag(0);
-      break;
-    case 1:
-      delta_t = 0.0f;
-      imu_ag.set_sample_rate_acc(1);
-      imu_ag.set_sample_rate_gyr(1);
-      imu_m.set_sample_rate_mag(1);
-      break;
-    case 2:
-      delta_t = 0.0f;
-      imu_ag.set_sample_rate_acc(6);
-      imu_ag.set_sample_rate_gyr(2);
-      imu_m.set_sample_rate_mag(5);
-      break;
-    case 3:
-      delta_t = 0.0f;
-      imu_ag.set_sample_rate_acc(8);
-      imu_ag.set_sample_rate_gyr(3);
-      imu_m.set_sample_rate_mag(5);
-      break;
-    case 4:
-      delta_t = 0.0f;
-      imu_ag.set_sample_rate_acc(10);
-      imu_ag.set_sample_rate_gyr(4);
-      imu_m.set_sample_rate_mag(6);
-      break;
-    default:
-      break;
-  }
-}
-
-
-int8_t IIU::setParameter(uint16_t reg, int len, uint8_t *data) {
-  switch (reg) {
-    case IIU_PARAM_FRAME_QUEUE_LENGTH:
-      return 0;
-  }
-  return -1;
-}
-
-
-int8_t IIU::getParameter(uint16_t reg, int len, uint8_t*) {
-  return -1;
-}
-
-
-
-bool IIU::state_pass_through(uint8_t nu) {
-  imu_m.setDesiredState(LSM9DSx_Common::getStateByIndex(nu));
-  imu_ag.setDesiredState(LSM9DSx_Common::getStateByIndex(nu));
-
-  return (imu_m.desired_state_attained() & imu_ag.desired_state_attained());
-}
-
-
-
-int8_t IIU::readSensor(void) {
-  if (State::STAGE_3 <= imu_m.getState()) {
-    imu_m.setDesiredState(State::STAGE_5);
-    imu_m.readSensor();
-  }
-
-  if (State::STAGE_3 <= imu_ag.getState()) {
-    imu_ag.setDesiredState(State::STAGE_5);
-    imu_ag.readSensor();
-  }
-  return 0;
-}
-
-
-bool IIU::enableProfiling(bool en) {
+bool Integrator::enableProfiling(bool en) {
   if (enableProfiling() != en) {
     data_handling_flags = (en) ? (data_handling_flags | IIU_DATA_HANDLING_PROFILING) : (data_handling_flags & ~(IIU_DATA_HANDLING_PROFILING));
     imu_m.profile(en);
@@ -430,7 +249,7 @@ bool IIU::enableProfiling(bool en) {
 }
 
 
-bool IIU::nullGyroError(bool en) {
+bool Integrator::nullGyroError(bool en) {
   if (nullGyroError() != en) {
     data_handling_flags = (en) ? (data_handling_flags | IIU_DATA_HANDLING_NULL_GYRO_ERROR) : (data_handling_flags & ~(IIU_DATA_HANDLING_NULL_GYRO_ERROR));
     imu_m.cancel_error(en);
@@ -439,7 +258,7 @@ bool IIU::nullGyroError(bool en) {
 }
 
 
-bool IIU::nullifyGravity(bool en) {
+bool Integrator::nullifyGravity(bool en) {
   if (nullifyGravity() != en) {
     data_handling_flags = (en) ? (data_handling_flags | IIU_DATA_HANDLING_NULLIFY_GRAVITY) : (data_handling_flags & ~(IIU_DATA_HANDLING_NULLIFY_GRAVITY));
     if (en && !processQuats()) {
@@ -453,7 +272,7 @@ bool IIU::nullifyGravity(bool en) {
 
 
 
-void IIU::deposit_log(StringBuilder* _log) {
+void Integrator::deposit_log(StringBuilder* _log) {
   local_log.concatHandoff(_log);
   Kernel::log(&local_log);
 };
@@ -461,73 +280,43 @@ void IIU::deposit_log(StringBuilder* _log) {
 
 
 
-/*
-* TODO: These are on borrowed time. I am likely to inline them.
-*/
-    int8_t IIU::irq_ag0() {
-      irq_count_2++;
-      if (verbosity > 4) {
-        local_log.concatf("IIU %d \t irq_ag0\n", pos_id);
-        Kernel::log(&local_log);
-      }
-      /* Hard-coding the tap to the secondary IRQ pin for now. */
-      ManuvrMsg* event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_TAP);
-      event->addArg((uint8_t) pos_id);  // We must cast this, because it is *really* an int8.
-      event->setOriginator(ManuManager::getInstance());
-      Kernel::staticRaiseEvent(event);
-      //return imu_ag.irq_0();
-      return 0;
-    }
-
-    int8_t IIU::irq_ag1() {
-      irq_count_1++;
-      if (verbosity > 4) {
-        local_log.concatf("IIU %d \t irq_ag1\n", pos_id);
-        Kernel::log(&local_log);
-      }
-      return imu_ag.irq_1();
-    }
-
-    int8_t IIU::irq_m() {
-      irq_count_m++;
-      if (verbosity > 4) {
-        local_log.concatf("IIU %d \t irq_m\n", pos_id);
-        Kernel::log(&local_log);
-      }
-      return imu_m.irq();
-    }
-
-
-
-
-void IIU::setTemperature(float nu) {
+void Integrator::setTemperature(float nu) {
   if (_ptr_temperature)  *(_ptr_temperature) = nu;
   if (_ptr_s_count_temp) *(_ptr_s_count_temp) = *(_ptr_s_count_temp)+1;
 }
 
 
-void IIU::enableAutoscale(uint8_t s_type, bool enabled) {
-  if (s_type & IMU_FLAG_GYRO_DATA) {
-    imu_ag.autoscale_gyr(enabled);
-  }
-  if (s_type & IMU_FLAG_MAG_DATA) {
-    imu_m.autoscale_mag(enabled);
-  }
-  if (s_type & IMU_FLAG_ACCEL_DATA) {
-    imu_ag.autoscale_acc(enabled);
+void Integrator::enableAutoscale(SampleType s_type, bool enabled) {
+  switch (s_type) {
+    case SampleType::ACCEL:
+      imu_ag.autoscale_acc(enabled);
+      break;
+    case SampleType::GYRO:
+      imu_ag.autoscale_gyr(enabled);
+      break;
+    case SampleType::MAG:
+      imu_m.autoscale_mag(enabled);
+      break;
+    case SampleType::ALL:
+      imu_ag.autoscale_acc(enabled);
+      imu_ag.autoscale_gyr(enabled);
+      imu_m.autoscale_mag(enabled);
+      break;
+    default:
+      break;
   }
 }
 
 
 
-void IIU::setVerbosity(int8_t nu) {
+void Integrator::setVerbosity(int8_t nu) {
   imu_m.setVerbosity(nu);
   imu_ag.setVerbosity(nu);
   verbosity = nu;
 }
 
 
-void IIU::printLastFrame(StringBuilder *output) {
+void Integrator::printLastFrame(StringBuilder *output) {
   if (nullptr == output) return;
   output->concatf("--- (MAG) (%.4f, %.4f, %.4f)",  (double)(_ptr_mag->x), (double)(_ptr_mag->y), (double)(_ptr_mag->z));
   output->concatf("\t(ACCEL) (%.4f, %.4f, %.4f)",  (double)(_ptr_acc->x), (double)(_ptr_acc->y), (double)(_ptr_acc->z));
@@ -540,9 +329,9 @@ void IIU::printLastFrame(StringBuilder *output) {
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
-void IIU::printDebug(StringBuilder* output) {
+void Integrator::printDebug(StringBuilder* output) {
   if (nullptr == output) return;
-  output->concatf("\n-------------------------------------------------------\n--- IIU %d\n-------------------------------------------------------\n--- %s legend\n--- Samples:\t ", pos_id, (legend_writable()?"writable":"invalid"));
+  output->concatf("\n-------------------------------------------------------\n--- Integrator %d\n-------------------------------------------------------\n--- %s legend\n--- Samples:\t ", pos_id, (legend_writable()?"writable":"invalid"));
   printBrief(output);  // OK
   output->concatf("--- measurements\n--- quat_queue:\t %d measurements\n", quat_queue.size());
   output->concatf("--- temperature: %.2fC\n--- delta_t:\t %.4fms\n--- Quat:\t ", ((double) delta_t * 1000), (double)*(_ptr_temperature));
@@ -557,18 +346,11 @@ void IIU::printDebug(StringBuilder* output) {
     output->concatf("--- offset_angle_z      %5.2f\n", (double) offset_angle_z);
     printLastFrame(output);
   }
-
-  output->concatf("--- IRQ hits: \t xm_1: %u \t xm_2: %u \t gyr_1: %u \n", irq_count_1, irq_count_2, irq_count_m);
-  if (verbosity > 0) {
-    imu_m.dumpDevRegs(output);
-    output->concat("\n");
-    imu_ag.dumpDevRegs(output);
-  }
   output->concat("\n\n");
 }
 
 
-void IIU::printBrief(StringBuilder* output) {
+void Integrator::printBrief(StringBuilder* output) {
   if (imu_m.initComplete() && imu_ag.initComplete()) {
     output->concatf("%8u acc  %8u gyr  %8u mag  %8u temp\n", (unsigned long) *(_ptr_s_count_acc), (unsigned long) *(_ptr_s_count_gyr), (unsigned long) *(_ptr_s_count_mag), (unsigned long) *(_ptr_s_count_temp));
   }
@@ -578,9 +360,9 @@ void IIU::printBrief(StringBuilder* output) {
 }
 
 
-void IIU::dumpPreformedElements(StringBuilder* output) {
+void Integrator::dumpPreformedElements(StringBuilder* output) {
   if (nullptr == output) return;
-  output->concat("\n-------------------------------------------------------\n--- IIU \n-------------------------------------------------------\n");
+  output->concat("\n-------------------------------------------------------\n--- Integrator \n-------------------------------------------------------\n");
   output->concat("--- Quat-crunch event\n");
   #if defined(__MANUVR_DEBUG)
     quat_crunch_event.printDebug(output);
@@ -593,7 +375,7 @@ void IIU::dumpPreformedElements(StringBuilder* output) {
 }
 
 
-void IIU::dumpPointers(StringBuilder* output) {
+void Integrator::dumpPointers(StringBuilder* output) {
   output->concatf("\t _ptr_quat         \t 0x%08x\n",    (unsigned long)  _ptr_quat        );
   output->concatf("\t _ptr_acc          \t 0x%08x\n",    (unsigned long)  _ptr_acc         );
   output->concatf("\t _ptr_gyr          \t 0x%08x\n",    (unsigned long)  _ptr_gyr         );
@@ -609,12 +391,7 @@ void IIU::dumpPointers(StringBuilder* output) {
 }
 
 
-void IIU::dumpRegisterPointers(StringBuilder* output) {
-}
-
-
-
-const char* IIU::getSourceTypeString(uint8_t t) {
+const char* Integrator::getSourceTypeString(uint8_t t) {
   switch (t) {
     case IMU_FLAG_ACCEL_DATA:          return "ACCEL_DATA";
     case IMU_FLAG_GYRO_DATA:           return "GYRO_DATA";
@@ -638,14 +415,14 @@ const char* IIU::getSourceTypeString(uint8_t t) {
 // I haven't noticed any reduction in solution accuracy. This is essentially the I coefficient in a PID control sense;
 // the bigger the feedback coefficient, the faster the solution converges, usually at the expense of accuracy.
 // In any case, this is the free parameter in the Madgwick filtering and fusion scheme.
-//const float IIU::beta = ((float)sqrt(3.0f / 4.0f)) * IIU::GyroMeasError;   // compute beta
+//const float Integrator::beta = ((float)sqrt(3.0f / 4.0f)) * Integrator::GyroMeasError;   // compute beta
 
 
 /**
 * This ought to be the only place where we promote vectors into the last_read position. Otherwise, there
 *   shall be chaos as several different systems rely on that data member being synchronized WRT to the _ptr_quat->
 */
-uint8_t IIU::MadgwickQuaternionUpdate() {
+uint8_t Integrator::MadgwickQuaternionUpdate() {
   uint8_t quats_procd_this_run = 0;
 
   InertialMeasurement* measurement;
@@ -807,7 +584,7 @@ uint8_t IIU::MadgwickQuaternionUpdate() {
 //---------------------------------------------------------------------------------------------------
 // IMU algorithm update
 
-void IIU::MadgwickAHRSupdateIMU(InertialMeasurement* measurement) {
+void Integrator::MadgwickAHRSupdateIMU(InertialMeasurement* measurement) {
   float norm;
   float s0, s1, s2, s3;
   float qDot1, qDot2, qDot3, qDot4;

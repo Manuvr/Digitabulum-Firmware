@@ -204,3 +204,16 @@ Took a few weeks to do hardware stuff. Digit and metacarpals flex units arrive a
     286988    2728   43144  332860   Tonight's baseline.
     287892    2728   43184  333804   Expanded IRQ work.
     287284    2728   43152  333164   Fixed SPI1 for the moment.
+
+_---J. Ian Lindsay_
+
+------
+
+### 2016.01.18:
+
+Bus is fixed (enough). DMA handler still broken on every-other transfer. Code needs to migrate inward from the IMU driver classes, toward ManuManager, and ManuManager need to undergo mitosis to isolate the hardware layer from data concerns. The CPLD in r1 allows us to (in principle) run a single class instance for all the sensor handling that operates on aggregates, rather than r0's one-instance-per-physical-device.
+
+IIU's connective role is vestigial, and its data processing role is no longer confined to individual IMUs. Given that it already has an established relationship with ManuManager, it will (for now) be retained as the front-end of the data pipeline (as it was before), but will be fed by ManuManager, rather than the existing driver classes.
+
+    make DEBUG=1
+    287284    2728   43152  333164   Tonight's baseline.

@@ -57,7 +57,7 @@ This graph is distinct from the control flow. The sensor data is scaled, upgrade
     j(LSM9DS1_M)
     k(LSM9DSx)
     m(InertialMeasurement)
-    n(LegendManager)
+    n(ManuManager)
     o(IIU)
     p(ManuLegend)
 

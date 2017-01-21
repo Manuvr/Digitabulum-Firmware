@@ -91,7 +91,7 @@ int8_t LSM9DS1_M::collect_reading_mag() {
        Until then, it will cause us strange bugs, and possibly even a crash at the wrap.
   */
 
-  Vector3<int16_t> reflection_vector_mag(LegendManager::reflection_mag.x, LegendManager::reflection_mag.y, LegendManager::reflection_mag.z);
+  Vector3<int16_t> reflection_vector_mag(ManuManager::reflection_mag.x, ManuManager::reflection_mag.y, ManuManager::reflection_mag.z);
 
   float scaler = error_map_mag[scale_mag].per_lsb;
   //float x = ((((int16_t)regValue(LSM9DS1_AG_DATA_X_M) - noise_floor_mag_mag.x) * reflection_vector_mag.x) * scaler);

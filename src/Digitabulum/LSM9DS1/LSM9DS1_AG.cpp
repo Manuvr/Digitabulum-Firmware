@@ -110,7 +110,7 @@ int8_t LSM9DS1_AG::collect_reading_acc() {
   float y;
   float z;
 
-  Vector3<int16_t> reflection_vector_acc(LegendManager::reflection_acc.x, LegendManager::reflection_acc.y, LegendManager::reflection_acc.z);
+  Vector3<int16_t> reflection_vector_acc(ManuManager::reflection_acc.x, ManuManager::reflection_acc.y, ManuManager::reflection_acc.z);
 
   if (cancel_error()) {
     x = ((((int16_t)regValue(LSM9DS1_A_DATA_X) - noise_floor_acc.x) * reflection_vector_acc.x) * scaler);
@@ -210,7 +210,7 @@ int8_t LSM9DS1_AG::collect_reading_gyr() {
   float y;
   float z;
 
-  Vector3<int16_t> reflection_vector_gyr(LegendManager::reflection_gyr.x, LegendManager::reflection_gyr.y, LegendManager::reflection_gyr.z);
+  Vector3<int16_t> reflection_vector_gyr(ManuManager::reflection_gyr.x, ManuManager::reflection_gyr.y, ManuManager::reflection_gyr.z);
 
   if (cancel_error()) {
     x = ((((int16_t)regValue(LSM9DS1_G_DATA_X)) - noise_floor_gyr.x) * reflection_vector_gyr.x * scaler);
@@ -666,7 +666,7 @@ int8_t LSM9DS1_AG::calibrate_from_data() {
   //}
   //writeRegister(LSM9DS1_AG_INT_THS_L_M, (register_pool + 12),   8, true);
   scaler = error_map_gyr[scale_gyr].per_lsb;
-  Vector3<int16_t> reflection_vector_gyr(LegendManager::reflection_gyr.x, LegendManager::reflection_gyr.y, LegendManager::reflection_gyr.z);
+  Vector3<int16_t> reflection_vector_gyr(ManuManager::reflection_gyr.x, ManuManager::reflection_gyr.y, ManuManager::reflection_gyr.z);
 
   x = ((int16_t) regValue(LSM9DS1_G_DATA_X)) * scaler * reflection_vector_gyr.x;
   y = ((int16_t) regValue(LSM9DS1_G_DATA_Y)) * scaler * reflection_vector_gyr.y;

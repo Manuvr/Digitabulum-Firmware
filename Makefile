@@ -95,11 +95,11 @@ SOURCES_C    += src/stm32f7xx_it.c
 SOURCES_C    += src/system_stm32f7xx.c
 
 SOURCES_CPP   = src/Digitabulum/CPLDDriver/CPLDDriver.cpp
-SOURCES_CPP  += src/Digitabulum/LSM9DS1/IIU.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1_AG.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1_M.cpp
-SOURCES_CPP  += src/Digitabulum/ManuLegend/LegendManager.cpp
+SOURCES_CPP  += src/Digitabulum/ManuLegend/Integrator.cpp
+SOURCES_CPP  += src/Digitabulum/ManuLegend/ManuManager.cpp
 SOURCES_CPP  += src/Digitabulum/ManuLegend/ManuLegend.cpp
 SOURCES_CPP  += src/Digitabulum/SDCard/SDCard.cpp
 SOURCES_CPP  += src/Digitabulum/RovingNetworks/RNBase.cpp

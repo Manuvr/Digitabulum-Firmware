@@ -1,9 +1,9 @@
 /*
-File:   IIU.h
+File:   Integrator.h
 Author: J. Ian Lindsay
-Date:   2014.03.31
+Date:   2017.01.18
 
-Copyright 2016 Manuvr, Inc
+Copyright 2017 Manuvr, Inc
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,194 +18,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-IIU == "Intertial Integration Unit"
+The Integrator tracks measurements from an IMU and produces integal data such as
+  velocity, position, and orientation.
 
-An IIU is a non-abstract class that tracks measurements from an IMU and
-  maintains positional data (by integrating the readings from the IMU).
+This class was derived from the IIU class in Digitabulum r0, but has been
+  stripped of its generality and connective role.
 
-This class will work with what data it is given. But in the most-leveraged case, this
-  class would be fed one of each sensor type supported. The GPS would be used to correct
-  gross drift over time, and the dead-reckoning sensors would be used to ignore GPS
-  jitter.
-In the case where only one sensor is fed to this class (suppose it's a gyro), only the
-  orientation would be integratable, so that is all that would be reported in such a case.
-
-
-An IIU can be fed any number of these data:
-  1) Rotation (via a gyro)
+Integrator expects to be fed measured values of...
+  1) Angular rate (via a gyro)
   2) Acceleration (via an accelerometer)
   3) Magnetic field vector
-  4) GPS data
+  4) Instrumentation-induced error, expressed as a relative value.
 
-Data from magnetometers and GPS devices is used to establish error-rates
-  and divergence data (and optionally correction).
-
-
+Error should be integrated here as well to form a set of limit error values for
+  down-stream software. IE, datasets produced by this class ought to come with
+  a quantitative measure of our confidence in it.
 
 */
 
+#ifndef __INTEGRATOR_CLASS_H__
+#define __INTEGRATOR_CLASS_H__
 
-#ifndef __IIU_CLASS_H__
-#define __IIU_CLASS_H__
-
-#include "LSM9DS1_M.h"
-#include "LSM9DS1_AG.h"
-#include <stdarg.h>
-#include <Kernel.h>
+#include <Platform/Platform.h>
 #include <DataStructures/InertialMeasurement.h>
 #include <DataStructures/Quaternion.h>
-
-class LSM9DSx_Common;   // Forward declaration of the LSM9DSx_Common class.
-
-
-/*
-* push_measurement() takes a flag that is used to store important qualifications about the sample.
-* These flags are stored as bitwise flags so we can note many things at once.
-*/
-#define IMU_FLAG_UNSPECIFIED_DATA  0b11111111  // Matches capabilities flag for magnetometer data.
-#define IMU_FLAG_ACCEL_DATA        0b00000000  // Matches capabilities flag for accelerometer data.
-#define IMU_FLAG_GYRO_DATA         0b00000001  // Matches capabilities flag for gyro data.
-#define IMU_FLAG_MAG_DATA          0b00000010  // Matches capabilities flag for magnetometer data.
-#define IMU_FLAG_GRAVITY_DATA      0b00000100  // Matches capabilities flag for gravity data.
-#define IMU_FLAG_BEARING_DATA      0b00001000  // Matches capabilities flag for bearing at calibration.
-
-// TODO: Transition to this....
-//enum class SampleType {
-//  UNSPECIFIED,
-//  ACCEL,        // Accelerometer vector.
-//  GYRO,         // Gyro vector.
-//  MAG,          // Magnetometer vector.
-//  GRAVITY,      // Gravity vector.
-//  BEARING,      // Bearing at calibration.
-//  ALTITUDE,     // Altitude.
-//};
-
-
-/*
-* This is a big mess of pointers to our representations of the registers for a
-*   complete sensor. We do things like this because we need this space allocated
-*   contiguously.
-* This should be 107 bytes if allocated contiguously.
-*/
-typedef struct {
-  uint8_t* AG_ACT_THS;
-  uint8_t* AG_ACT_DUR;
-  uint8_t* A_INT_GEN_CFG;
-  uint8_t* A_INT_GEN_THS_X;     // 8-bit threshold registers
-  uint8_t* A_INT_GEN_THS_Y;     // 8-bit threshold registers
-  uint8_t* A_INT_GEN_THS_Z;     // 8-bit threshold registers
-  uint8_t* A_INT_GEN_DURATION;
-  uint8_t* G_REFERENCE;
-  uint8_t* AG_INT1_CTRL;
-  uint8_t* AG_INT2_CTRL;
-  uint8_t* AG_WHO_AM_I;
-  uint8_t* G_CTRL_REG1;
-  uint8_t* G_CTRL_REG2;
-  uint8_t* G_CTRL_REG3;
-  uint8_t* G_ORIENT_CFG;
-  uint8_t* G_INT_GEN_SRC;
-  uint8_t* AG_DATA_TEMP;        // 16-bit temperature register (11-bit)
-  uint8_t* AG_STATUS_REG;
-  uint8_t* G_DATA_X;            // 16-bit gyro data registers
-  uint8_t* G_DATA_Y;            // 16-bit gyro data registers
-  uint8_t* G_DATA_Z;            // 16-bit gyro data registers
-  uint8_t* AG_CTRL_REG4;
-  uint8_t* A_CTRL_REG5;
-  uint8_t* A_CTRL_REG6;
-  uint8_t* A_CTRL_REG7;
-  uint8_t* AG_CTRL_REG8;
-  uint8_t* AG_CTRL_REG9;
-  uint8_t* AG_CTRL_REG10;
-  uint8_t* A_INT_GEN_SRC;
-  uint8_t* AG_STATUS_REG_ALT;
-  uint8_t* A_DATA_X;            // 16-bit accelerometer data registers
-  uint8_t* A_DATA_Y;            // 16-bit accelerometer data registers
-  uint8_t* A_DATA_Z;            // 16-bit accelerometer data registers
-  uint8_t* AG_FIFO_CTRL;
-  uint8_t* AG_FIFO_SRC;
-  uint8_t* G_INT_GEN_CFG;
-  uint8_t* G_INT_GEN_THS_X;     // 16-bit threshold registers
-  uint8_t* G_INT_GEN_THS_Y;     // 16-bit threshold registers
-  uint8_t* G_INT_GEN_THS_Z;     // 16-bit threshold registers
-  uint8_t* G_INT_GEN_DURATION;
-  uint8_t* M_OFFSET_X;          // 16-bit offset registers
-  uint8_t* M_OFFSET_Y;          // 16-bit offset registers
-  uint8_t* M_OFFSET_Z;          // 16-bit offset registers
-  uint8_t* M_WHO_AM_I;
-  uint8_t* M_CTRL_REG1;
-  uint8_t* M_CTRL_REG2;
-  uint8_t* M_CTRL_REG3;
-  uint8_t* M_CTRL_REG4;
-  uint8_t* M_CTRL_REG5;
-  uint8_t* M_STATUS_REG;
-  uint8_t* M_DATA_X;            // 16-bit data registers
-  uint8_t* M_DATA_Y;            // 16-bit data registers
-  uint8_t* M_DATA_Z;            // 16-bit data registers
-  uint8_t* M_INT_CFG;
-  uint8_t* M_INT_SRC;
-  uint8_t* M_INT_TSH;           // 16-bit threshold register
-} IMURegisterPointers;
-
-
-
-/*
-* This class exist to encapsulate knowledge of address offsets in a giant pool
-*   of memory that represent only this IMU.
-*/
-class AGRegPntrs {
-  public:
-    AGRegPntrs(uint8_t* b0, uint8_t* b1, uint8_t* b2, uint8_t* b3) :
-      _base0(b0), _base1(b1), _base2(b2), _base3(b3) {};
-
-  private:
-    uint8_t* _base0;
-    uint8_t* _base1;
-    uint8_t* _base2;
-    uint8_t* _base3;
-
-    uint8_t* __ag_status;
-    uint8_t* __fifo_levels;
-    uint8_t* __temperatures;
-};
-
-/*
-* This class exist to encapsulate knowledge of address offsets in a giant pool
-*   of memory that represent only this IMU.
-*/
-class MagRegPntrs {
-  public:
-    MagRegPntrs(uint8_t* base) : _base(base) {};
-
-  private:
-    const uint8_t* _base;
-};
-
-
-
-
-/*
-* Sometimes we need to flag a sample to indicate that some important event happened.
-* We do this with bitwise flags so that we can use the same field to store many events.
-*/
-#define IIU_NO_EVENT           0b0000000000000000            // Nothing special about this sample.
-#define IIU_INFLECTION_POINT   0b0000000000000001            // When the sensor reading indicates a direction change.
-#define IIU_GAIN_SHIFT         0b0000000000001000            // When this sample was taken with a gain that differed from the last.
-
-#define IIU_CO_IIU_CORRECTION  0b0010000000000000            // When this sample was corrected from an consensus of redundant IMU/IIUs.
-#define IIU_MAG_CORRECTION     0b0100000000000000            // When this sample was corrected from magneteometer data.
-#define IIU_GPS_CORRECTION     0b1000000000000000            // When this sample was corrected by a GPS fix.
-
-
-/*
-* List of parameters (software defined registers) that this sensor can deal with.
-*/
-#define IIU_PARAM_EC_DEV_GPS           0x1000   // This class can take a GPS device to correct for error.
-#define IIU_PARAM_TEMPERATURE          0x1001   // This class can use temperature data to predict its error.
-#define IIU_PARAM_EC_DEV_MAGNETOMETER  0x1002   // This class can take a magnetometer to correct for error.
-#define IIU_PARAM_FRAME_QUEUE_LENGTH   0x1010   // How many frames should we delay for the sake of DrifCor, or feeding to a host-bound buffer?
-#define IIU_PARAM_3SPACE_POSITION      0x1011   // This register sets the IIU's position in 3-space.
-#define IIU_PARAM_REPORTING_MODE       0x1012   // The IIU can report in absolute terms, or in relative terms.
-
 
 
 #define IIU_DATA_HANDLING_UNITS_METRIC     0x00010000
@@ -231,29 +67,30 @@ class MagRegPntrs {
 #define IIU_DEG_TO_RAD_SCALAR   (3.14159f / 180.0f)
 
 
-/**
-* This is the Inertial Integration Unit class. It has the following responsibilities:
-*   1) Bind together several discrete logical IMU sensors (gyro / accelerometer / mag) into a
-*        unified representation.
-*   2) Manage the low-level activities of those sensors according to legend specification.
-*   3) Accumulate and track error rates to inform the drift corrector.
-*   4) Integrate inertial changes into an idea of position and orientation.
-*/
-class IIU {
+enum class SampleType {
+  UNSPECIFIED  = 0x00,
+  ACCEL        = 0x01,  // Accelerometer vector.
+  GYRO         = 0x02,  // Gyro vector.
+  MAG          = 0x04,  // Magnetometer vector.
+  GRAVITY      = 0x08,  // Gravity vector.
+  BEARING      = 0x10,  // Bearing at calibration.
+  ALTITUDE     = 0x20,  // Altitude.
+  LOCATION     = 0x40,  // Location.
+  ALL          = 0xFF  // All data available.
+};
+
+
+
+class Integrator {
   public:
     float beta;
     float grav_scalar = 0.0f;
 
 
-    IIU();
-    ~IIU();
-    void class_init(uint8_t idx);
+    Integrator(uint8_t idx);
+    ~Integrator();
 
     int8_t init();
-    int8_t readSensor();
-
-    int8_t setParameter(uint16_t reg, int len, uint8_t*);  // Used to set operational parameters for the sensor.
-    int8_t getParameter(uint16_t reg, int len, uint8_t*);  // Used to read operational parameters from the sensor.
 
     /* Specific to this class */
     inline float getTemperature() {      return *(_ptr_temperature);  }
@@ -263,33 +100,21 @@ class IIU {
     inline int8_t position() {  return pos_id;   }
 
     void reset();
-    void sync();
-
-    int8_t irq_ag0();
-    int8_t irq_ag1();
-    int8_t irq_m();
 
     void setSampleRate(uint8_t idx);
 
     bool state_pass_through(uint8_t);
 
-    void setVerbosity(int8_t);
-    inline int8_t getVerbosity() { return verbosity; };
     void printDebug(StringBuilder*);
     void printBrief(StringBuilder*);
 
-
     /* These are meant to be called from the IMUs. */
     int8_t pushMeasurement(uint8_t, float x, float y, float z, float delta_t);
-    int8_t state_change_notice(LSM9DSx_Common* imu_ptr, State p_state, State c_state);
     void deposit_log(StringBuilder*);
 
     /* These are meant to be called from a Legend. */
-    void setOperatingState(uint8_t);
     void printLastFrame(StringBuilder *output);
     void dumpPreformedElements(StringBuilder*);
-
-    void setSampleRateProfile(uint8_t);
 
     void assign_legend_pointers(
       void* acc,
@@ -306,12 +131,9 @@ class IIU {
       void* sample_count_temp
     );
 
-    void assign_register_pointers(IMURegisterPointers* _reg);
-
     uint8_t MadgwickQuaternionUpdate();
 
     void dumpPointers(StringBuilder*);
-    void dumpRegisterPointers(StringBuilder*);
 
     inline bool isDirty() {         return (dirty_acc||dirty_gyr||dirty_mag); }
     inline bool isQuatDirty() {     return (dirty_acc & dirty_gyr);           }
@@ -321,9 +143,9 @@ class IIU {
     /*
     * Accessors for autoscaling.
     */
-    void enableAutoscale(uint8_t s_type, bool enabled);
+    void enableAutoscale(SampleType, bool enabled);
     inline void enableAutoscale(bool enabled) {
-      enableAutoscale((IMU_FLAG_MAG_DATA | IMU_FLAG_ACCEL_DATA | IMU_FLAG_GYRO_DATA), enabled);
+      enableAutoscale(SampleType::ALL, enabled);
     };
 
     /*
@@ -430,7 +252,6 @@ class IIU {
 
 
   private:
-    IMURegisterPointers _reg_ptrs;
     float delta_t      = 0.0f;
 
     //float GyroMeasError;
@@ -443,16 +264,9 @@ class IIU {
 
     PriorityQueue<InertialMeasurement*> quat_queue;   // This is the queue for quat operations.
 
-    uint32_t irq_count_1 = 0;
-    uint32_t irq_count_2 = 0;
-    uint32_t irq_count_m = 0;
-
     uint32_t dirty_acc = 0;
     uint32_t dirty_gyr = 0;
     uint32_t dirty_mag = 0;
-
-    LSM9DS1_AG imu_ag;
-    LSM9DS1_M imu_m;
 
     /* Pointers to our exported data. These should all point to a pool in the ManuManager
          that instantiated us. See that header file for more information. */
@@ -478,7 +292,6 @@ class IIU {
 
     ManuvrMsg quat_crunch_event;
 
-    int8_t verbosity            =  1; // How chatty should this class be?
     int8_t pos_id               = -1; // We may find it convenient to lookup by sensor position.
     uint8_t madgwick_iterations =  1; //
 
@@ -501,5 +314,4 @@ class IIU {
     void MadgwickAHRSupdateIMU(InertialMeasurement*);
 };
 
-
-#endif
+#endif  // __INTEGRATOR_CLASS_H__

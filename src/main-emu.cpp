@@ -121,7 +121,7 @@ int main(int argc, const char *argv[]) {
   CPLDDriver _cpld(&cpld_pins);
   kernel->subscribe(&_cpld);
 
-  LegendManager _legend_manager(&_cpld);
+  ManuManager _legend_manager(&_cpld);
   kernel->subscribe(&_legend_manager);
 
   I2CAdapter i2c(&i2c_opts);
