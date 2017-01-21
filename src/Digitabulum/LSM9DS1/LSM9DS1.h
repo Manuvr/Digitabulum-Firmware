@@ -91,8 +91,8 @@ enum class IMUState {
 * In addition to the natural ADC error, the sensor accuracy worsens at these rates for
 * every degree C deviant of 25C...
 */
-const float ACC_TEMPERATURE_DERATE = 0.015f;
 const float MAG_TEMPERATURE_DERATE = 0.03f;
+const float ACC_TEMPERATURE_DERATE = 0.015f;
 const float GYR_TEMPERATURE_DERATE = 0.02f;
 
 
@@ -113,6 +113,67 @@ typedef struct {
 } GainErrorMap;
 
 
+// BIG FAT WARNING: These values are NOT register addresses, they are
+//   indicies. This is the order of the register's occurance in the device.
+enum class RegID {
+  M_OFFSET_X = 0x00,  // 16-bit offset registers
+  M_OFFSET_Y,         // 16-bit offset registers
+  M_OFFSET_Z,         // 16-bit offset registers
+  M_WHO_AM_I,
+  M_CTRL_REG1,
+  M_CTRL_REG2,
+  M_CTRL_REG3,
+  M_CTRL_REG4,
+  M_CTRL_REG5,
+  M_STATUS_REG,
+  M_DATA_X,           // 16-bit data registers
+  M_DATA_Y,           // 16-bit data registers
+  M_DATA_Z,           // 16-bit data registers
+  M_INT_CFG,
+  M_INT_SRC,
+  M_INT_TSH,          // 16-bit threshold register
+  AG_ACT_THS,
+  AG_ACT_DUR,
+  A_INT_GEN_CFG,
+  A_INT_GEN_THS_X,    // 8-bit threshold registers
+  A_INT_GEN_THS_Y,    // 8-bit threshold registers
+  A_INT_GEN_THS_Z,    // 8-bit threshold registers
+  A_INT_GEN_DURATION,
+  G_REFERENCE,
+  AG_INT1_CTRL,
+  AG_INT2_CTRL,
+  AG_WHO_AM_I,
+  G_CTRL_REG1,
+  G_CTRL_REG2,
+  G_CTRL_REG3,
+  G_ORIENT_CFG,
+  G_INT_GEN_SRC,
+  AG_DATA_TEMP,       // 16-bit temperature register (11-bit)
+  AG_STATUS_REG,
+  G_DATA_X,           // 16-bit gyro data registers
+  G_DATA_Y,           // 16-bit gyro data registers
+  G_DATA_Z,           // 16-bit gyro data registers
+  AG_CTRL_REG4,
+  A_CTRL_REG5,
+  A_CTRL_REG6,
+  A_CTRL_REG7,
+  AG_CTRL_REG8,
+  AG_CTRL_REG9,
+  AG_CTRL_REG10,
+  A_INT_GEN_SRC,
+  AG_STATUS_REG_ALT,
+  A_DATA_X,           // 16-bit accelerometer data registers
+  A_DATA_Y,           // 16-bit accelerometer data registers
+  A_DATA_Z,           // 16-bit accelerometer data registers
+  AG_FIFO_CTRL,
+  AG_FIFO_SRC,
+  G_INT_GEN_CFG,
+  G_INT_GEN_THS_X,    // 16-bit threshold registers
+  G_INT_GEN_THS_Y,    // 16-bit threshold registers
+  G_INT_GEN_THS_Z,    // 16-bit threshold registers
+  G_INT_GEN_DURATION
+};
+
 
 /*******************************************************************************
 * Common members of the class...                                               *
@@ -125,9 +186,14 @@ typedef struct {
 */
 class LSM9DSx_Common : public BusOpCallback {
   public:
+    LSM9DS1();
+    ~LSM9DS1();
+
+    void class_init(uint8_t bus_addr, IIU* _integrator);
+
     /* Overrides from the BusOpCallback interface */
     int8_t io_op_callahead(BusOp*);
-    virtual int8_t io_op_callback(BusOp*)  = 0;
+    int8_t io_op_callback(BusOp*);
     int8_t queue_io_job(BusOp*);
 
     int8_t setDesiredState(State);   // Used to set the state the OS wants the IMU class to acheive.
@@ -135,16 +201,16 @@ class LSM9DSx_Common : public BusOpCallback {
     bool   step_state();      // Used internally to move between states. TODO: Should be private.
 
     int8_t  init();
-    virtual void reset();           // Reset our state without causing a re-init.
+    void   reset();           // Reset our state without causing a re-init.
 
-    virtual int8_t bulk_refresh();    // Read all the non-identity/non-FIFO registers in the device.
+    int8_t bulk_refresh();    // Read all the non-identity/non-FIFO registers in the device.
 
     /* Debug stuff... */
-    virtual void dumpDevRegs(StringBuilder*);
-    virtual void dumpPreformedElements(StringBuilder*);
+    void dumpDevRegs(StringBuilder*);
+    void dumpPreformedElements(StringBuilder*);
 
     /* Functions called by the IIU */
-    virtual int8_t readSensor() =0;      // Call to poll the sensor's registers and take any appropriate action.
+    int8_t readSensor();      // Call to poll the sensor's registers and take any appropriate action.
     //virtual int8_t enable(bool);             // Pass a boolean to turn the sensor on or off.
     //virtual int8_t set_base_filter_param(uint8_t nu_bw_idx) =0;
 
@@ -165,6 +231,31 @@ class LSM9DSx_Common : public BusOpCallback {
     inline bool cancel_error() {    return _check_flags(IMU_COMMON_FLAG_CANCEL_ERROR);  };
     inline void profile(bool x) {       _alter_flags(x, IMU_COMMON_FLAG_PROFILING);     };
     inline void cancel_error(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_CANCEL_ERROR);  };
+
+    inline bool autoscale_mag() {   return _check_flags(IMU_COMMON_FLAG_AUTOSCALE_0);   };
+    inline void autoscale_mag(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_AUTOSCALE_0);  };
+    inline bool autoscale_acc() {   return _check_flags(IMU_COMMON_FLAG_AUTOSCALE_0);   };
+    inline void autoscale_acc(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_AUTOSCALE_0);  };
+    inline bool autoscale_gyr() {   return _check_flags(IMU_COMMON_FLAG_AUTOSCALE_1);   };
+    inline void autoscale_gyr(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_AUTOSCALE_1);  };
+
+    int8_t request_rescale_mag(uint8_t nu_scale_idx);     // Call to rescale the sensor.
+    int8_t set_sample_rate_mag(uint8_t nu_srate_idx);     // Call to alter sample rate.
+    int8_t set_base_filter_param_mag(uint8_t nu_bw_idx);  // Call to change the bandwidth of the AA filter.
+
+    int8_t request_rescale_acc(uint8_t nu_scale_idx);     // Call to rescale the sensor.
+    int8_t set_sample_rate_acc(uint8_t nu_srate_idx);     // Call to alter sample rate.
+    int8_t set_base_filter_param_acc(uint8_t nu_bw_idx);  // Call to change the bandwidth of the AA filter.
+
+    int8_t request_rescale_gyr(uint8_t nu_scale_idx);     // Call to rescale the sensor.
+    int8_t set_sample_rate_gyr(uint8_t nu_srate_idx);     // Call to alter sample rate.
+    int8_t set_base_filter_param_gyr(uint8_t nu_bw_idx);  // Call to change the bandwidth of the AA filter.
+
+    int8_t irq_0();    // When an IRQ signal fires, find the cause and service it.
+    int8_t irq_1();    // When an IRQ signal fires, find the cause and service it.
+    int8_t irq_2();    // When an IRQ signal fires, find the cause and service it.
+    int8_t irq_3();    // When an IRQ signal fires, find the cause and service it.
+
 
     /* Inlines for the specialized flag duty of get/set class verbosity. */
     inline uint8_t getVerbosity() {
@@ -202,10 +293,11 @@ class LSM9DSx_Common : public BusOpCallback {
     static const UpdateRate2Hertz rate_settings_gyr[MAXIMUM_RATE_INDEX_AG];
 
 
-  protected:
+  private:
     IIU* integrator = nullptr;
 
     uint8_t BUS_ADDR;  // What is our address on the bus? TODO: const
+
     // TODO: r1 simplified things a great deal. All these members can probably DIAF.
     uint8_t IDX_T0; // TODO: Ought to be const if here at all.
     uint8_t IDX_T1; // TODO: Ought to be const if here at all.
@@ -237,6 +329,41 @@ class LSM9DSx_Common : public BusOpCallback {
     StringBuilder local_log;
 
 
+    uint8_t scale_mag            = 0;     // What scale is the sensor operating at? This is an index.
+    uint8_t scale_acc            = 0;     // What scale is the sensor operating at? This is an index.
+    uint8_t scale_gyr            = 0;     // What scale is the sensor operating at? This is an index.
+
+    uint8_t update_rate_mag      = 0;     // Index to the update-rate array.
+    uint8_t update_rate_acc      = 0;     // Index to the update-rate array.
+    uint8_t update_rate_gyr      = 0;     // Index to the update-rate array.
+
+    uint16_t discards_remain_mag = 0;     // If we know we need to discard samples...
+    uint16_t discards_remain_acc = 0;     // If we know we need to discard samples...
+    uint16_t discards_remain_gyr = 0;     // If we know we need to discard samples...
+    uint32_t discards_total_mag  = 0;     // Track how many discards we've ASKED for.
+    uint32_t discards_total_acc  = 0;     // Track how many discards we've ASKED for.
+    uint32_t discards_total_gyr  = 0;     // Track how many discards we've ASKED for.
+
+    SPIBusOp preformed_busop_irq_mag;
+    SPIBusOp preformed_busop_irq_0;
+    SPIBusOp preformed_busop_irq_1;
+    SPIBusOp preformed_busop_read_mag;
+    SPIBusOp preformed_busop_read_acc;
+    SPIBusOp preformed_busop_read_gyr;
+
+    Vector3<float> last_val_mag;
+    Vector3<float> last_val_acc;
+    Vector3<float> last_val_gyr;
+
+    Vector3<int16_t> sample_backlog_mag[32];
+    Vector3<int16_t> sample_backlog_acc[32];
+    Vector3<int16_t> sample_backlog_gyr[32];
+
+    Vector3<int16_t> noise_floor_mag;
+    Vector3<int16_t> noise_floor_acc;
+    Vector3<int16_t> noise_floor_gyr;
+
+
     LSM9DSx_Common();
 
     /* These are higher-level fxns that are used as "macros" for specific patterns of */
@@ -259,9 +386,8 @@ class LSM9DSx_Common : public BusOpCallback {
     bool fire_preformed_bus_op(SPIBusOp* op);
     bool integrity_check();
 
-    virtual bool is_setup_completed() =0;
-    virtual int8_t configure_sensor() =0;
-    virtual const char* imu_type()    =0;
+    bool is_setup_completed();
+    int8_t configure_sensor();
 
     /**
     * Sets the current IMU state without blowing away the high bits in the state member.
@@ -276,9 +402,21 @@ class LSM9DSx_Common : public BusOpCallback {
       return (mask == (_imu_flags & mask));
     };
 
+    inline bool power_to_mag() {   return _check_flags(IMU_COMMON_FLAG_MAG_POWERED);   };
+    inline void power_to_mag(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_MAG_POWERED);  };
+    inline bool power_to_acc() {   return _check_flags(IMU_COMMON_FLAG_ACC_POWERED);   };
+    inline void power_to_acc(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_ACC_POWERED);  };
+    inline bool power_to_gyr() {   return _check_flags(IMU_COMMON_FLAG_GYR_POWERED);   };
+    inline void power_to_gyr(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_GYR_POWERED);  };
+
+    int8_t calibrate_from_data();
+    int8_t collect_reading_mag();
+    int8_t collect_reading_acc();
+    int8_t collect_reading_gyr();
+    int8_t collect_reading_temperature();
 
 
-  private:
+  //private:
     bool reset_preformed_queue_item(SPIBusOp* op);
 };
 
