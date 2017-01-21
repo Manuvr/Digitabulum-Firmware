@@ -19,7 +19,7 @@ limitations under the License.
 
 */
 
-#include "LSM9DSx.h"
+#include "LSM9DS1.h"
 #include "../CPLDDriver/CPLDDriver.h"
 #include "../ManuLegend/ManuManager.h"
 
