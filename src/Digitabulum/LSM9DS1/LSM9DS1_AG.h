@@ -119,12 +119,6 @@ class LSM9DS1_AG : public LSM9DSx_Common {
     virtual void dumpPreformedElements(StringBuilder*);
 
 
-    static const float max_range_vect_acc;
-    static const float max_range_vect_gyr;
-
-    static const GainErrorMap error_map_acc[];
-    static const GainErrorMap error_map_gyr[];
-
 
 
   protected:
@@ -173,14 +167,6 @@ class LSM9DS1_AG : public LSM9DSx_Common {
     int8_t collect_reading_temperature();
 
     int8_t calibrate_from_data();
-
-
-    static const uint8_t MAXIMUM_GAIN_INDEX_ACC = 5;
-    static const uint8_t MAXIMUM_GAIN_INDEX_GYR = 3;
-
-    static const uint8_t MAXIMUM_RATE_INDEX_AG  = 7;
-    static const UpdateRate2Hertz rate_settings_acc[MAXIMUM_RATE_INDEX_AG];
-    static const UpdateRate2Hertz rate_settings_gyr[MAXIMUM_RATE_INDEX_AG];
 };
 
 #endif  // __LSM9DS1_AG_H

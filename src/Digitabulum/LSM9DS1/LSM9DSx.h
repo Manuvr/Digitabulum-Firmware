@@ -36,8 +36,8 @@ IMUs need to be aware of their own bus addresses so that bus access can be encap
 
 
 
-#ifndef __LSM9DS1_COMMON_H
-#define __LSM9DS1_COMMON_H
+#ifndef __LSM9DS1_MERGED_H__
+#define __LSM9DS1_MERGED_H__
 
 #include <DataStructures/InertialMeasurement.h>
 #include <Platform/Peripherals/SPI/SPIBusOp.h>
@@ -45,31 +45,35 @@ IMUs need to be aware of their own bus addresses so that bus access can be encap
 class CPLDDriver;
 
 /*
-* There are three mutually-exclusive ways to talk to this chip. The choice
-* can only be made by hardware. So this class needs to be initialized with
-* the choice appropriate to your hardware configuration.
-* If the device is to be used via i2c, there are 4 possible address permutations
-* that must be provided after construction.
-*/
-#define LSM9DS1_BUS_MODES_I2C        0x00
-#define LSM9DS1_BUS_MODES_SPI_4_WIRE 0x01
-#define LSM9DS1_BUS_MODES_SPI_3_WIRE 0x02
-
-
-/*
 * These are possible error states for the IMU state-machine.
 */
-#define IMU_ERROR_NO_ERROR                  0
-#define IMU_ERROR_WRONG_IDENTITY            1
-#define IMU_ERROR_INVALID_PARAM_ID          2
-#define IMU_ERROR_NOT_CALIBRATED            3
-#define IMU_ERROR_NOT_WRITABLE              4
-#define IMU_ERROR_DATA_EXHAUSTED            5
-#define IMU_ERROR_NOT_INITIALIZED           6
-#define IMU_ERROR_BUS_INSERTION_FAILED      7
-#define IMU_ERROR_BUS_OPERATION_FAILED_R    8
-#define IMU_ERROR_BUS_OPERATION_FAILED_W    9
-#define IMU_ERROR_REGISTER_UNDEFINED       10
+enum class IMUFault {
+  NO_ERROR               =  0,
+  WRONG_IDENTITY         =  1,
+  INVALID_PARAM_ID       =  2,
+  NOT_CALIBRATED         =  3,
+  NOT_WRITABLE           =  4,  // TODO: Cut. Should no longer be possible.
+  DATA_EXHAUSTED         =  5,
+  NOT_INITIALIZED        =  6,
+  BUS_INSERTION_FAILED   =  7,  // TODO: Cut. Should no longer be possible.
+  BUS_OPERATION_FAILED_R =  8,  // TODO: Cut. Should no longer be possible.
+  BUS_OPERATION_FAILED_W =  9,  // TODO: Cut. Should no longer be possible.
+  REGISTER_UNDEFINED     = 10   // TODO: Cut. Should no longer be possible.
+};
+
+/*
+* These are the sensor states.
+*/
+enum class IMUState {
+  STAGE_0 = 0,  // Undiscovered. Maybe absent.
+  STAGE_1,      // Discovered, but not init'd.
+  STAGE_2,      // Discovered and initiallized, but unknown register values.
+  STAGE_3,      // Fully initialized and sync'd. Un-calibrated.
+  STAGE_4,      // Calibrated and idle.
+  STAGE_5,      // Calibrated and reading.
+  FAULT,        // Fault.
+  UNDEF         // Not a state-machine value. A return code to simplifiy error-checks.
+};
 
 
 #define IMU_COMMON_FLAG_VERBOSITY_MASK 0x0007
@@ -93,6 +97,7 @@ const float GYR_TEMPERATURE_DERATE = 0.02f;
 
 
 /* We use this struct to map between update rates and timestamp deltas. */
+// TODO: Ne3ds mo4r const.
 typedef struct {
   float hertz;      // Frequency
   float ts_delta;   // Period (in seconds)
@@ -100,31 +105,12 @@ typedef struct {
 
 
 /* We use the struct to map between scales and error-rates. */
+// TODO: Ne3ds mo4r const.
 typedef struct {
   uint16_t scale;     // This is the maximum magnatude of the sensor reading at the given gain.
   float    per_lsb;   // Each LSB counts for this many of whatever unit.
   float    error;     // Given in the sensor's native unit. Each reading at this scale has this error.
 } GainErrorMap;
-
-
-
-class LSM9DSx_Common;   // Forward declaration
-class IIU;              // Forward declaration of the IIU class.
-
-
-/*
-* These are the sensor states.
-*/
-enum class State {
-  STAGE_0 = 0,  // Undiscovered. Maybe absent.
-  STAGE_1,      // Discovered, but not init'd.
-  STAGE_2,      // Discovered and initiallized, but unknown register values.
-  STAGE_3,      // Fully initialized and sync'd. Un-calibrated.
-  STAGE_4,      // Calibrated and idle.
-  STAGE_5,      // Calibrated and reading.
-  FAULT,        // Fault.
-  UNDEF         // Not a state-machine value. A return code to simplifiy error-checks.
-};
 
 
 
@@ -163,16 +149,16 @@ class LSM9DSx_Common : public BusOpCallback {
     //virtual int8_t set_base_filter_param(uint8_t nu_bw_idx) =0;
 
     /* State-check functions. Inlined where practical. */
-    inline State getState() {               return imu_state;                             }
-    inline State desiredState() {           return desired_state;                         }
+    inline IMUState getState() {            return imu_state;                             }
+    inline IMUState desiredState() {        return desired_state;                         }
 
-    inline bool present() {                 return (State::STAGE_0 != getState());        }
-    inline bool initPending() {             return ((State::STAGE_1 == getState()) || (State::STAGE_2 == getState()));  }
-    inline bool initReadback() {            return (State::STAGE_2 == getState());        }
-    inline bool initComplete() {            return (State::STAGE_3 <= getState());        }
-    inline bool calibrated() {              return (State::STAGE_4 <= getState());        }
-    inline bool idle() {                    return (State::STAGE_4 == getState());        }
-    inline bool reading() {                 return (State::STAGE_5 == getState());        }
+    inline bool present() {                 return (IMUState::STAGE_0 != getState());        }
+    inline bool initPending() {             return ((IMUState::STAGE_1 == getState()) || (IMUState::STAGE_2 == getState()));  }
+    inline bool initReadback() {            return (IMUState::STAGE_2 == getState());        }
+    inline bool initComplete() {            return (IMUState::STAGE_3 <= getState());        }
+    inline bool calibrated() {              return (IMUState::STAGE_4 <= getState());        }
+    inline bool idle() {                    return (IMUState::STAGE_4 == getState());        }
+    inline bool reading() {                 return (IMUState::STAGE_5 == getState());        }
     inline bool desired_state_attained() {  return (getState() == desiredState());        }
 
     inline bool profile() {         return _check_flags(IMU_COMMON_FLAG_PROFILING);     };
@@ -191,10 +177,29 @@ class LSM9DSx_Common : public BusOpCallback {
     inline const char* getStateString() {    return getStateString(imu_state);        }
     inline const char* getErrorString() {    return getErrorString(error_condition);  }
 
-    static State getStateByIndex(uint8_t state_idx);
-    static const char* getStateString(State state);
+    static IMUState getStateByIndex(uint8_t state_idx);
+    static const char* getStateString(IMUState state);
     static const char* getErrorString(uint8_t fault_code);
 
+
+    static const GainErrorMap error_map_mag[];
+    static const GainErrorMap error_map_acc[];
+    static const GainErrorMap error_map_gyr[];
+
+    static const float max_range_vect_mag;
+    static const float max_range_vect_acc;
+    static const float max_range_vect_gyr;
+
+    static const uint8_t MAXIMUM_GAIN_INDEX_MAG = 4;
+    static const uint8_t MAXIMUM_GAIN_INDEX_ACC = 5;
+    static const uint8_t MAXIMUM_GAIN_INDEX_GYR = 3;
+
+    static const uint8_t MAXIMUM_RATE_INDEX_MAG = 8;
+    static const uint8_t MAXIMUM_RATE_INDEX_AG  = 7;
+
+    static const UpdateRate2Hertz rate_settings_mag[MAXIMUM_RATE_INDEX_MAG];
+    static const UpdateRate2Hertz rate_settings_acc[MAXIMUM_RATE_INDEX_AG];
+    static const UpdateRate2Hertz rate_settings_gyr[MAXIMUM_RATE_INDEX_AG];
 
 
   protected:
@@ -224,8 +229,8 @@ class LSM9DSx_Common : public BusOpCallback {
     uint8_t   sb_next_write    = 0;
     uint8_t   error_condition  = 0;
 
-    State     imu_state        = State::STAGE_0;
-    State     desired_state    = State::STAGE_0;
+    IMUState  imu_state        = IMUState::STAGE_0;
+    IMUState  desired_state    = IMUState::STAGE_0;
 
     SPIBusOp full_register_refresh;
 
@@ -277,4 +282,4 @@ class LSM9DSx_Common : public BusOpCallback {
     bool reset_preformed_queue_item(SPIBusOp* op);
 };
 
-#endif // __LSM9DS1_COMMON_H
+#endif // __LSM9DS1_MERGED_H__

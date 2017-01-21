@@ -24,61 +24,6 @@ limitations under the License.
 #include "../ManuLegend/ManuManager.h"
 
 /*******************************************************************************
-*      _______.___________.    ___   .___________. __    ______     _______.
-*     /       |           |   /   \  |           ||  |  /      |   /       |
-*    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
-*     \   \       |  |      /  /_\  \    |  |     |  | |  |        \   \
-* .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
-* |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
-*
-* Static members and initializers should be located here.
-*******************************************************************************/
-/*
-* This is a table of frequencies versus period (in micros).
-*/
-const UpdateRate2Hertz LSM9DS1_AG::rate_settings_acc[MAXIMUM_RATE_INDEX_AG] = {
-  {0.0,  0.0f},
-  {14.9, (1/14.9f)},
-  {59.5, (1/59.5f)},
-  {119,  (1/119.0f)},
-  {238,  (1/238.0f)},
-  {476,  (1/476.0f)},
-  {952,  (1/952.0f)}
-};
-
-const UpdateRate2Hertz LSM9DS1_AG::rate_settings_gyr[MAXIMUM_RATE_INDEX_AG] = {
-  {0.0,  0.0f},
-  {10.0, (1/10.0f)},
-  {50.0, (1/50.0f)},
-  {119,  (1/119.0f)},
-  {238,  (1/238.0f)},
-  {476,  (1/476.0f)},
-  {952,  (1/952.0f)}
-};
-
-/*
-* This is a generic table of scales versus unit-per-bit for 16-bit types.
-* This needs to be updated with actual datasheet values.
-*/
-const GainErrorMap LSM9DS1_AG::error_map_acc[MAXIMUM_GAIN_INDEX_ACC] = {
-  {2,  (2/32768.0f),  0.000030},
-  {4,  (4/32768.0f),  0.000061},
-  {6,  (6/32768.0f),  0.000092},
-  {8,  (8/32768.0f),  0.000122},
-  {16, (16/32768.0f), 0.000244}
-};
-
-const GainErrorMap LSM9DS1_AG::error_map_gyr[MAXIMUM_GAIN_INDEX_GYR] = {
-  {245,   (245/32768.0f),  0.00437 * 0.0174532777778},
-  {500,   (500/32768.0f),  0.00875 * 0.0174532777778},
-  {2000,  (2000/32768.0f), 0.03500 * 0.0174532777778}
-};
-
-const float LSM9DS1_AG::max_range_vect_acc  = 16.0;
-const float LSM9DS1_AG::max_range_vect_gyr  = 2000.0;
-
-
-/*******************************************************************************
 *                       _                               _
 *     /\               | |                             | |
 *    /  \   ___ ___ ___| | ___ _ __ ___  _ __ ___   ___| |_ ___ _ __

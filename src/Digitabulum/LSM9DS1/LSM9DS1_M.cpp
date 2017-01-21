@@ -23,46 +23,6 @@ limitations under the License.
 #include "IIU.h"
 #include "../ManuLegend/ManuManager.h"
 
-/*******************************************************************************
-*      _______.___________.    ___   .___________. __    ______     _______.
-*     /       |           |   /   \  |           ||  |  /      |   /       |
-*    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
-*     \   \       |  |      /  /_\  \    |  |     |  | |  |        \   \
-* .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
-* |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
-*
-* Static members and initializers should be located here.
-*******************************************************************************/
-/*
-* This is a table of frequencies versus period (in micros).
-*/
-const UpdateRate2Hertz LSM9DS1_M::rate_settings_mag[MAXIMUM_RATE_INDEX_MAG] = {
-  {0.625, (1/0.625f)},
-  {1.25,  (1/1.25f)},
-  {2.5,   (1/2.5f)},
-  {5.0,   (1/5.0f)},
-  {10.0,  (1/10.0f)},
-  {20.0,  (1/20.0f)},
-  {40.0,  (1/40.0f)},
-  {80.0,  (1/80.0f)}
-};
-
-/*
-* This is a generic table of scales versus unit-per-bit for 16-bit types.
-* This needs to be updated with actual datasheet values.
-*/
-const GainErrorMap LSM9DS1_M::error_map_mag[MAXIMUM_GAIN_INDEX_MAG] = {
-  {4,  (4/32768.0f),  0.000061},
-  {8,  (8/32768.0f),  0.000122},
-  {12, (12/32768.0f), 0.00032},
-  {16, (16/32768.0f), 0.000244}
-};
-
-
-const float LSM9DS1_M::max_range_vect_mag   = 16.0;
-
-
-
 
 /*******************************************************************************
 *  __  __                        _                       _

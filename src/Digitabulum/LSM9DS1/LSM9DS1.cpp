@@ -20,7 +20,6 @@ limitations under the License.
 */
 
 #include "LSM9DSx.h"
-#include "IIU.h"
 #include "../CPLDDriver/CPLDDriver.h"
 
 extern unsigned long micros(void);
@@ -38,27 +37,95 @@ extern volatile CPLDDriver* cpld;
 * Static members and initializers should be located here. Initializers first, functions second.
 ****************************************************************************************************/
 
-State _state_indicies[] = {
-  State::STAGE_0,   // Undiscovered. Maybe absent.
-  State::STAGE_1,   // Discovered, but not init'd.
-  State::STAGE_2,   // Discovered and initiallized, but unknown register values.
-  State::STAGE_3,   // Fully initialized and sync'd. Un-calibrated.
-  State::STAGE_4,   // Calibrated and idle.
-  State::STAGE_5,   // Calibrated and reading.
-  State::FAULT,     // Fault.
-  State::UNDEF      // Not a state-machine value. A return code to simplifiy error-checks.
+const IMUState _state_indicies[] = {
+  IMUState::STAGE_0,   // Undiscovered. Maybe absent.
+  IMUState::STAGE_1,   // Discovered, but not init'd.
+  IMUState::STAGE_2,   // Discovered and initiallized, but unknown register values.
+  IMUState::STAGE_3,   // Fully initialized and sync'd. Un-calibrated.
+  IMUState::STAGE_4,   // Calibrated and idle.
+  IMUState::STAGE_5,   // Calibrated and reading.
+  IMUState::FAULT,     // Fault.
+  IMUState::UNDEF      // Not a state-machine value. A return code to simplifiy error-checks.
 };
+
+
+/*
+* These are tables of frequencies versus periods (in micros). Lookup is faster
+*   than calculation, typically.
+*/
+const UpdateRate2Hertz LSM9DSx_Common::rate_settings_acc[MAXIMUM_RATE_INDEX_AG] = {
+  {0.0,  0.0f},
+  {14.9, (1/14.9f)},
+  {59.5, (1/59.5f)},
+  {119,  (1/119.0f)},
+  {238,  (1/238.0f)},
+  {476,  (1/476.0f)},
+  {952,  (1/952.0f)}
+};
+
+const UpdateRate2Hertz LSM9DSx_Common::rate_settings_gyr[MAXIMUM_RATE_INDEX_AG] = {
+  {0.0,  0.0f},
+  {10.0, (1/10.0f)},
+  {50.0, (1/50.0f)},
+  {119,  (1/119.0f)},
+  {238,  (1/238.0f)},
+  {476,  (1/476.0f)},
+  {952,  (1/952.0f)}
+};
+
+const UpdateRate2Hertz LSM9DSx_Common::rate_settings_mag[MAXIMUM_RATE_INDEX_MAG] = {
+  {0.625, (1/0.625f)},
+  {1.25,  (1/1.25f)},
+  {2.5,   (1/2.5f)},
+  {5.0,   (1/5.0f)},
+  {10.0,  (1/10.0f)},
+  {20.0,  (1/20.0f)},
+  {40.0,  (1/40.0f)},
+  {80.0,  (1/80.0f)}
+};
+
+
+/*
+* These are generic table of scales versus unit-per-bit for 16-bit types.
+* TODO: These need to be validated against actual datasheet values.
+*/
+const GainErrorMap LSM9DSx_Common::error_map_acc[MAXIMUM_GAIN_INDEX_ACC] = {
+  {2,  (2/32768.0f),  0.000030},
+  {4,  (4/32768.0f),  0.000061},
+  {6,  (6/32768.0f),  0.000092},
+  {8,  (8/32768.0f),  0.000122},
+  {16, (16/32768.0f), 0.000244}
+};
+
+const GainErrorMap LSM9DSx_Common::error_map_gyr[MAXIMUM_GAIN_INDEX_GYR] = {
+  {245,   (245/32768.0f),  0.00437 * 0.0174532777778},
+  {500,   (500/32768.0f),  0.00875 * 0.0174532777778},
+  {2000,  (2000/32768.0f), 0.03500 * 0.0174532777778}
+};
+
+const GainErrorMap LSM9DSx_Common::error_map_mag[MAXIMUM_GAIN_INDEX_MAG] = {
+  {4,  (4/32768.0f),  0.000061},
+  {8,  (8/32768.0f),  0.000122},
+  {12, (12/32768.0f), 0.00032},
+  {16, (16/32768.0f), 0.000244}
+};
+
+
+const float LSM9DSx_Common::max_range_vect_acc  = 16.0;
+const float LSM9DSx_Common::max_range_vect_gyr  = 2000.0;
+const float LSM9DSx_Common::max_range_vect_mag   = 16.0;
+
 
 /**
 * Return an enumerator given the state index.
 *
 * @return enum State
 */
-State LSM9DSx_Common::getStateByIndex(uint8_t state_idx) {
+IMUState LSM9DSx_Common::getStateByIndex(uint8_t state_idx) {
   if (state_idx < sizeof(_state_indicies)) {
     return _state_indicies[state_idx];
   }
-  return State::UNDEF;
+  return IMUState::UNDEF;
 }
 
 
@@ -67,18 +134,18 @@ State LSM9DSx_Common::getStateByIndex(uint8_t state_idx) {
 *
 * @return const char*
 */
-const char* LSM9DSx_Common::getErrorString(uint8_t fault_code) {
+const char* LSM9DSx_Common::getErrorString(IMUFault fault_code) {
   switch (fault_code) {
-    case IMU_ERROR_NO_ERROR               :  return "NO_ERROR";
-    case IMU_ERROR_WRONG_IDENTITY         :  return "WRONG_IDENTITY";
-    case IMU_ERROR_INVALID_PARAM_ID       :  return "INVALID_PARAM_ID";
-    case IMU_ERROR_NOT_CALIBRATED         :  return "NOT_CALIBRATED";
-    case IMU_ERROR_NOT_WRITABLE           :  return "NOT_WRITABLE";
-    case IMU_ERROR_DATA_EXHAUSTED         :  return "DATA_EXHAUSTED";
-    case IMU_ERROR_NOT_INITIALIZED        :  return "NOT_INITIALIZED";
-    case IMU_ERROR_BUS_INSERTION_FAILED   :  return "INSERTION_FAILED";
-    case IMU_ERROR_BUS_OPERATION_FAILED_R :  return "OPERATION_FAILED_R";
-    case IMU_ERROR_BUS_OPERATION_FAILED_W :  return "OPERATION_FAILED_W";
+    case IMUFault::NO_ERROR               :  return "NO_ERROR";
+    case IMUFault::WRONG_IDENTITY         :  return "WRONG_IDENTITY";
+    case IMUFault::INVALID_PARAM_ID       :  return "INVALID_PARAM_ID";
+    case IMUFault::NOT_CALIBRATED         :  return "NOT_CALIBRATED";
+    case IMUFault::NOT_WRITABLE           :  return "NOT_WRITABLE";
+    case IMUFault::DATA_EXHAUSTED         :  return "DATA_EXHAUSTED";
+    case IMUFault::NOT_INITIALIZED        :  return "NOT_INITIALIZED";
+    case IMUFault::BUS_INSERTION_FAILED   :  return "INSERTION_FAILED";
+    case IMUFault::BUS_OPERATION_FAILED_R :  return "OPERATION_FAILED_R";
+    case IMUFault::BUS_OPERATION_FAILED_W :  return "OPERATION_FAILED_W";
   }
   return "<UNKNOWN>";
 }
@@ -89,16 +156,16 @@ const char* LSM9DSx_Common::getErrorString(uint8_t fault_code) {
 *
 * @return const char*
 */
-const char* LSM9DSx_Common::getStateString(State state) {
+const char* LSM9DSx_Common::getStateString(IMUState state) {
   switch (state) {
-    case State::UNDEF:    return "UNDEF";
-    case State::FAULT:    return "FAULT";
-    case State::STAGE_0:  return "STAGE_0";
-    case State::STAGE_1:  return "STAGE_1";
-    case State::STAGE_2:  return "STAGE_2";
-    case State::STAGE_3:  return "STAGE_3";
-    case State::STAGE_4:  return "STAGE_4";
-    case State::STAGE_5:  return "STAGE_5";
+    case IMUState::UNDEF:    return "UNDEF";
+    case IMUState::FAULT:    return "FAULT";
+    case IMUState::STAGE_0:  return "STAGE_0";
+    case IMUState::STAGE_1:  return "STAGE_1";
+    case IMUState::STAGE_2:  return "STAGE_2";
+    case IMUState::STAGE_3:  return "STAGE_3";
+    case IMUState::STAGE_4:  return "STAGE_4";
+    case IMUState::STAGE_5:  return "STAGE_5";
   }
   return "<UNKNOWN>";
 }

@@ -82,9 +82,6 @@ class LSM9DS1_M : public LSM9DSx_Common {
     virtual void dumpPreformedElements(StringBuilder*);
 
 
-    static const GainErrorMap error_map_mag[];
-    static const float max_range_vect_mag;
-
 
 
   protected:
@@ -117,10 +114,6 @@ class LSM9DS1_M : public LSM9DSx_Common {
     int8_t collect_reading_mag();
 
     int8_t calibrate_from_data();
-
-    static const uint8_t MAXIMUM_RATE_INDEX_MAG = 8;
-    static const uint8_t MAXIMUM_GAIN_INDEX_MAG = 4;
-    static const UpdateRate2Hertz rate_settings_mag[MAXIMUM_RATE_INDEX_MAG];
 };
 
 #endif  // __LSM9DS1_MAG_H
