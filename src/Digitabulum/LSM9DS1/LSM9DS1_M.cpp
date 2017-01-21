@@ -105,7 +105,7 @@ int8_t LSM9DS1::set_sample_rate_mag(uint8_t nu_srate_idx) {
 
 
 int8_t LSM9DS1::irq_2() {
-  int8_t return_value = IMU_ERROR_NO_ERROR;
+  int8_t return_value = IMUFault::NO_ERROR;
   if (getVerbosity() > 3) Kernel::log("LSM9DS1::irq_2()\n");
   if (initComplete()) {
     if ( !fire_preformed_bus_op(&preformed_busop_irq_mag) ) {
@@ -117,7 +117,7 @@ int8_t LSM9DS1::irq_2() {
 
 
 int8_t LSM9DS1::irq_3() {
-  int8_t return_value = IMU_ERROR_NO_ERROR;
+  int8_t return_value = IMUFault::NO_ERROR;
   if (getVerbosity() > 3) Kernel::log("LSM9DS1::irq_3()\n");
   return return_value;
 }
@@ -168,7 +168,7 @@ int8_t LSM9DS1::io_op_callback_mag(SPIBusOp* op) {
       if (initPending()) {
         if (IDX_T1 == access_idx) {
           if (integrity_check()) {
-            set_state(State::STAGE_3);
+            set_state(IMUState::STAGE_3);
             if (step_state()) {
               integrator->init();
             }
@@ -180,7 +180,7 @@ int8_t LSM9DS1::io_op_callback_mag(SPIBusOp* op) {
         case LSM9DS1_M_WHO_AM_I:
           if (0x3D == value) {
             if (!present()) {
-              set_state(State::STAGE_1);
+              set_state(IMUState::STAGE_1);
               if (step_state()) {
                 //integrator->init();   // Call this to kick the integrator into noticing our state change.
               }
@@ -188,8 +188,8 @@ int8_t LSM9DS1::io_op_callback_mag(SPIBusOp* op) {
           }
           else {
             // We lost the IMU, perhaps...
-            set_state(State::STAGE_0);
-            error_condition = IMU_ERROR_WRONG_IDENTITY;
+            set_state(IMUState::STAGE_0);
+            error_condition = IMUFault::WRONG_IDENTITY;
           }
           break;
 
@@ -244,7 +244,7 @@ int8_t LSM9DS1::io_op_callback_mag(SPIBusOp* op) {
 
       if (initPending()) {
         if (IDX_T1 == access_idx) {
-        set_state(State::STAGE_2);
+        set_state(IMUState::STAGE_2);
           if (step_state()) {
              //integrator->init();
           }

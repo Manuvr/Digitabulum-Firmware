@@ -147,6 +147,7 @@ const char* LSM9DS1::getErrorString(IMUFault fault_code) {
     case IMUFault::BUS_INSERTION_FAILED   :  return "INSERTION_FAILED";
     case IMUFault::BUS_OPERATION_FAILED_R :  return "OPERATION_FAILED_R";
     case IMUFault::BUS_OPERATION_FAILED_W :  return "OPERATION_FAILED_W";
+    case IMUFault::REGISTER_UNDEFINED     :  return "REGISTER_UNDEFINED";
   }
   return "<UNKNOWN>";
 }
@@ -183,10 +184,9 @@ const char* LSM9DS1::getStateString(IMUState state) {
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 //TODO: I'll work back up to this once it isn't in the way.
-//LSM9DS1::LSM9DS1(uint8_t addr, uint8_t ident_idx, uint8_t idx_test_0, uint8_t idx_test_1, IIU* _integrator) :
+//LSM9DS1::LSM9DS1(uint8_t addr, uint8_t ident_idx, uint8_t idx_test_0, uint8_t idx_test_1) :
 //  IDX_T0(idx_test_0), IDX_T1(idx_test_1), BUS_ADDR(addr), IDX_ID(ident_idx)
 //{
-//  integrator = _integrator;
 //  init();
 //}
 
@@ -198,7 +198,7 @@ LSM9DS1::~LSM9DS1() {
 }
 
 
-void LSM9DS1::class_init(uint8_t address, IIU* _integrator) {
+void LSM9DS1::class_init(uint8_t address) {
   // First, we should define our registers....
   // Mag has 16 registers. 23 bytes...
   // AG has 40 registers.
@@ -344,19 +344,6 @@ void LSM9DS1::class_init(uint8_t address, IIU* _integrator) {
     (LSM9DS1_A_INT_GEN_SRC | 0x80)
   );
 
-  full_register_refresh.shouldReap(false);
-  full_register_refresh.devRegisterAdvance(true);
-  full_register_refresh.set_opcode(BusOpcode::RX);
-  full_register_refresh.callback = (BusOpCallback*) this;
-  full_register_refresh.buf      = regPtr(LSM9DS1_AG_FIFO_CTRL);
-  full_register_refresh.buf_len  = 18;
-  full_register_refresh.setParams(
-    BUS_ADDR|0x80,
-    full_register_refresh.buf_len,
-    1,
-    (LSM9DS1_AG_FIFO_CTRL | 0x80)
-  );
-
   last_val_mag(0.0f, 0.0f, 0.0f);
   last_val_acc(0.0f, 0.0f, 0.0f);
   last_val_gyr(0.0f, 0.0f, 0.0f);
@@ -380,8 +367,6 @@ void LSM9DS1::class_init(uint8_t address, IIU* _integrator) {
   discards_remain_gyr = 0;
   discards_total_gyr  = 0;
 
-
-  integrator = _integrator;
   BUS_ADDR = address;
   IDX_T0 = LSM9DS1_M_OFFSET_X;
   IDX_T1 = LSM9DS1_M_OFFSET_Y;
@@ -393,13 +378,13 @@ void LSM9DS1::class_init(uint8_t address, IIU* _integrator) {
 /**
 * Called to init the common boilerplate for this sensor.
 *
-* @return  IMU_ERROR_NO_ERROR or appropriate failure code.
+* @return  IMUFault::NO_ERROR or appropriate failure code.
 */
-int8_t LSM9DS1::init() {
+IMUFault LSM9DS1::init() {
   // Force our states back to reset.
-  imu_state          = State::STAGE_0;
-  desired_state      = State::STAGE_0;
-  error_condition    = IMU_ERROR_NO_ERROR;
+  imu_state          = IMUState::STAGE_0;
+  desired_state      = IMUState::STAGE_0;
+  error_condition    = IMUFault::NO_ERROR;
 
   _imu_flags = 1;
   sample_count       = 0;
@@ -407,7 +392,7 @@ int8_t LSM9DS1::init() {
   if (pending_samples) {
     *pending_samples = 0;
   }
-  return IMU_ERROR_NO_ERROR;
+  return IMUFault::NO_ERROR;
 }
 
 
@@ -447,9 +432,8 @@ void LSM9DS1::reset() {
 
 
 
-int8_t LSM9DS1::identity_check() {
-  if (present()) return IMU_ERROR_NO_ERROR;
-  return readRegister(IDX_ID);
+IMUFault LSM9DS1::identity_check() {
+  return (present() ? IMUFault::NO_ERROR : IMUFault::WRONG_IDENTITY);
 }
 
 
@@ -459,7 +443,7 @@ int8_t LSM9DS1::readSensor() {
     return -1;
   }
   if (!calibrated()) {
-    //return IMU_ERROR_NOT_CALIBRATED;
+    //return IMUFault::NOT_CALIBRATED;
   }
 
   if (initComplete()) {
@@ -476,36 +460,6 @@ int8_t LSM9DS1::readSensor() {
     fire_preformed_bus_op(&preformed_busop_irq_1);
   }
   return return_value;
-}
-
-
-/*
-* Reads every register in the sensor with maximum bus efficiency.
-*/
-int8_t LSM9DS1::bulk_refresh() {
-  if (getVerbosity() > 3) Kernel::log("LSM9DS1::bulk_refresh()\n");
-  if (!present()) {
-    return readRegister((uint8_t) LSM9DS1_M_WHO_AM_I);
-    return readRegister((uint8_t) LSM9DS1_AG_WHO_AM_I);
-  }
-
-  if (fire_preformed_bus_op(&preformed_busop_irq_mag)) {
-    if (fire_preformed_bus_op(&preformed_busop_irq_0)) {
-      if (fire_preformed_bus_op(&preformed_busop_irq_1)) {
-        return LSM9DSx_Common::bulk_refresh();
-      }
-      else {
-        if (getVerbosity() > 2) Kernel::log("\t Failed to fire preform irq_xm1\n");
-      }
-    }
-    else {
-      if (getVerbosity() > 2) Kernel::log("\t Failed to fire preform irq_xm0\n");
-    }
-  }
-  else {
-    if (getVerbosity() > 2) Kernel::log("\t Failed to fire preform irq_mag\n");
-  }
-  return IMU_ERROR_BUS_OPERATION_FAILED_R;
 }
 
 
@@ -647,7 +601,7 @@ bool LSM9DS1::integrity_check() {
     }
   }
 
-  error_condition = IMU_ERROR_NOT_WRITABLE;
+  error_condition = IMUFault::NOT_WRITABLE;
   return false;
 }
 
@@ -662,7 +616,7 @@ bool LSM9DS1::integrity_check() {
 * @return non-zero on error.
 */
 int8_t LSM9DS1::setDesiredState(State nu) {
-  if (present() && (nu < State::STAGE_1)) {
+  if (present() && (nu < IMUState::STAGE_1)) {
     // If we already know the sensor is there, why go back further than this?
     local_log.concatf("%s Trying to move to a state lower than allowed.\n", imu_type());
     Kernel::log(&local_log);
@@ -685,7 +639,7 @@ int8_t LSM9DS1::setDesiredState(State nu) {
     desired_state = nu;
     step_state();
   }
-  return IMU_ERROR_NO_ERROR;
+  return IMUFault::NO_ERROR;
 }
 
 
@@ -707,57 +661,57 @@ bool LSM9DS1::step_state() {
     }
 
     switch (getState()) {
-      case State::STAGE_0:  // We think the IIU might be physicaly absent.
+      case IMUState::STAGE_0:  // We think the IIU might be physicaly absent.
         //reset(); ?
         identity_check();
         break;
 
-      case State::STAGE_1:  // We are sure the IMU is present, but we haven't done anything with it.
+      case IMUState::STAGE_1:  // We are sure the IMU is present, but we haven't done anything with it.
         configure_sensor();
         break;
 
-      case State::STAGE_2:  // Discovered and initiallized, but unknown register values.
+      case IMUState::STAGE_2:  // Discovered and initiallized, but unknown register values.
         if (is_setup_completed()) {
-          bulk_refresh();
+          //bulk_refresh();
         }
         else {
-          set_state(State::STAGE_1);
+          set_state(IMUState::STAGE_1);
           return true;
         }
         break;
 
-      case State::STAGE_3:  // Fully initialized and sync'd. Un-calibrated.
-        integrator->state_change_notice(this, State::STAGE_3, State::STAGE_3);  // TODO: Wrong.
+      case IMUState::STAGE_3:  // Fully initialized and sync'd. Un-calibrated.
+        integrator->state_change_notice(this, IMUState::STAGE_3, IMUState::STAGE_3);  // TODO: Wrong.
         sb_next_write = 0;
         readSensor();
         break;                                                       // TODO: Stop skipping calibrate().
 
-      case State::STAGE_4:  // Calibrated and idle.
-        if (desiredState() == State::STAGE_5) {
+      case IMUState::STAGE_4:  // Calibrated and idle.
+        if (desiredState() == IMUState::STAGE_5) {
           // Enable the chained reads, and start the process rolling.
           readSensor();
         }
         else {
           // Downgrading to init state 3 (recalibrate).
-          set_state(State::STAGE_3);
+          set_state(IMUState::STAGE_3);
           sb_next_write = 0;
           readSensor();
           return true;
         }
         break;
 
-      case State::STAGE_5:  // Calibrated and reading.
+      case IMUState::STAGE_5:  // Calibrated and reading.
         switch (desiredState()) {
-          case State::STAGE_4:   // Stop reads.
-            set_state(State::STAGE_4);
+          case IMUState::STAGE_4:   // Stop reads.
+            set_state(IMUState::STAGE_4);
             return false;   /// Note the slight break from convention... Careful...
 
-          case State::STAGE_3:  // Downgrading to init state 3 (recalibrate).
-            set_state(State::STAGE_3);
+          case IMUState::STAGE_3:  // Downgrading to init state 3 (recalibrate).
+            set_state(IMUState::STAGE_3);
             sb_next_write = 0;
             readSensor();
             return true;
-          case State::STAGE_5:  // Keep reading.
+          case IMUState::STAGE_5:  // Keep reading.
             return true;
           default:
             break;
@@ -774,28 +728,18 @@ bool LSM9DS1::step_state() {
 
 
 
-/**
-* Reads every register in the sensor with maximum bux efficiency.
-*
-* @return non-zero if there was a problem inserting the read job.
-*/
-int8_t LSM9DS1::bulk_refresh() {
-  return (fire_preformed_bus_op(&full_register_refresh) ? IMU_ERROR_NO_ERROR : IMU_ERROR_BUS_INSERTION_FAILED);
-}
-
-
 int8_t LSM9DS1::writeRegister(uint8_t reg_index, uint8_t nu_val) {
   if (regExists(reg_index) && regWritable(reg_index)) {
     uint8_t* tmp = regPtr(reg_index);
     *tmp = nu_val;
     return writeRegister(reg_index, tmp, 1, false);
   }
-  return IMU_ERROR_REGISTER_UNDEFINED;
+  return IMUFault::REGISTER_UNDEFINED;
 }
 int8_t LSM9DS1::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t len) {     return writeRegister(reg_index, buf, len, (len > 1)); }
 int8_t LSM9DS1::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t len, bool advance_regs) {
   if (!regWritable(reg_index)) {
-    return IMU_ERROR_NOT_WRITABLE;
+    return IMUFault::NOT_WRITABLE;
   }
   else {
     uint8_t first_byte = reg_index;
@@ -808,17 +752,17 @@ int8_t LSM9DS1::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t len, bool
       Kernel::log(&_log);
       #endif
       if (regExists(reg_index + len)) {  // TODO: Sketchy.... might be unnecessary.
-        return IMU_ERROR_REGISTER_UNDEFINED;
+        return IMUFault::REGISTER_UNDEFINED;
       }
       // ...and is the entire range writable? Fail if not.
         for (uint8_t i = 0; i < len; i++) {
           if (regWritable(reg_index)) {
             #ifdef __MANUVR_DEBUG
               StringBuilder _log;
-              _log.concatf("IMU_ERROR_NOT_WRITABLE %d\n", BUS_ADDR);
+              _log.concatf("IMUFault::NOT_WRITABLE %d\n", BUS_ADDR);
               Kernel::log(&_log);
             #endif
-            return IMU_ERROR_NOT_WRITABLE;
+            return IMUFault::NOT_WRITABLE;
           }
         }
         first_byte |= 0x40;
@@ -837,7 +781,7 @@ int8_t LSM9DS1::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t len, bool
     }
     ((CPLDDriver*)cpld)->queue_io_job(op);
   }
-  return IMU_ERROR_NO_ERROR;
+  return IMUFault::NO_ERROR;
 }
 
 
@@ -884,7 +828,7 @@ int8_t LSM9DS1::readRegister(uint8_t reg_index, uint8_t *buf, uint8_t len, bool 
   }
   ((CPLDDriver*)cpld)->queue_io_job(op);
 
-  return IMU_ERROR_NO_ERROR;
+  return IMUFault::NO_ERROR;
 }
 
 
@@ -1013,9 +957,6 @@ bool LSM9DS1::reset_preformed_queue_item(SPIBusOp* op) {
 * NULL-checked upstream.
 */
 void LSM9DS1::dumpPreformedElements(StringBuilder *output) {
-  output->concat("--- Full refresh\n");
-  full_register_refresh.printDebug(output);
-
   output->concat("--- Vector read (Mag)\n");
   preformed_busop_read_mag.printDebug(output);
   output->concat("--- Vector read (Accel)\n");
@@ -1115,7 +1056,7 @@ int8_t LSM9DS1::io_op_callback(BusOp* _op) {
       op->printDebug(&local_log);
       Kernel::log(&local_log);
     }
-    error_condition = (BusOpcode::RX == op->get_opcode()) ? IMU_ERROR_BUS_OPERATION_FAILED_R : IMU_ERROR_BUS_OPERATION_FAILED_W;
+    error_condition = (BusOpcode::RX == op->get_opcode()) ? IMUFault::BUS_OPERATION_FAILED_R : IMUFault::BUS_OPERATION_FAILED_W;
 
     // TODO: Should think carefully, and...   return_value = SPI_CALLBACK_RECYCLE;   // Re-run the job.
     return SPI_CALLBACK_ERROR;

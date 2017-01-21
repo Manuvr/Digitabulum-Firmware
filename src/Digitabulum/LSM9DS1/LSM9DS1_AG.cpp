@@ -251,7 +251,7 @@ int8_t LSM9DS1::collect_reading_temperature() {
 *   Failure
 */
 int8_t LSM9DS1::irq_0() {
-  int8_t return_value = IMU_ERROR_NO_ERROR;
+  int8_t return_value = IMUFault::NO_ERROR;
 
   if (getVerbosity() > 3) Kernel::log("XM::irq_0()\n");
   if (initComplete()) {
@@ -263,7 +263,7 @@ int8_t LSM9DS1::irq_0() {
 }
 
 int8_t LSM9DS1::irq_1() {
-  int8_t return_value = IMU_ERROR_NO_ERROR;
+  int8_t return_value = IMUFault::NO_ERROR;
 
   if (getVerbosity() > 3) Kernel::log("XM::irq_1()\n");
   if (initComplete()) {
@@ -361,7 +361,7 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
       if (initPending()) {
         if (IDX_T1 == access_idx) {
           if (integrity_check()) {
-            set_state(State::STAGE_3);
+            set_state(IMUStateSTAGE_3);
             if (step_state()) {
               integrator->init();
             }
@@ -375,10 +375,10 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
           if (pending_samples > 0) {
             pending_samples--;
             switch (getState()) {
-              case State::STAGE_5:
+              case IMUStateSTAGE_5:
                 collect_reading_acc();
                 if (0 == pending_samples) {
-                  set_state(State::STAGE_4);
+                  set_state(IMUStateSTAGE_4);
                   step_state();
                 }
                 else {
@@ -386,7 +386,7 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
                 }
                 break;
 
-              case State::STAGE_3:
+              case IMUStateSTAGE_3:
                 sample_backlog_acc[sb_next_write++ % 32]((int16_t)regValue(LSM9DS1_A_DATA_X), (int16_t)regValue(LSM9DS1_A_DATA_Y), (int16_t)regValue(LSM9DS1_A_DATA_Z));
                 if (0 == pending_samples) {
                   // If we have received the last expected sample, see how many more there are.
@@ -394,7 +394,7 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
                     sb_next_write    = 0;
                     // Solidify calibration.
                     if (0 == calibrate_from_data()) {
-                      set_state(State::STAGE_4);
+                      set_state(IMUState::STAGE_4);
                       step_state();
                     }
                     else {
@@ -425,10 +425,10 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
           if (pending_samples > 0) {
             pending_samples--;
             switch (getState()) {
-              case State::STAGE_5:
+              case IMUState::STAGE_5:
                 collect_reading_gyr();
                 if (0 == pending_samples) {
-                  set_state(State::STAGE_4);
+                  set_state(IMUState::STAGE_4);
                   step_state();
                 }
                 else {
@@ -436,7 +436,7 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
                 }
                 break;
 
-              case State::STAGE_3:
+              case IMUState::STAGE_3:
                 sample_backlog_gyr[sb_next_write++ % 32]((int16_t)regValue(LSM9DS1_G_DATA_X), (int16_t)regValue(LSM9DS1_G_DATA_Y), (int16_t)regValue(LSM9DS1_G_DATA_Z));
                 if (0 == pending_samples) {
                   // If we have received the last expected sample, see how many more there are.
@@ -444,7 +444,7 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
                     sb_next_write    = 0;
                     // Solidify calibration.
                     if (0 == calibrate_from_data()) {
-                      set_state(State::STAGE_4);
+                      set_state(IMUState::STAGE_4);
                       step_state();
                     }
                     else {
@@ -479,7 +479,7 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
         case LSM9DS1_AG_WHO_AM_I:
           if (0x68 == value) {
             if (!present()) {
-              set_state(State::STAGE_1);
+              set_state(IMUState::STAGE_1);
               if (step_state()) {
                 //integrator->init();   // Call this to kick the integrator into noticing our state change.
               }
@@ -490,8 +490,8 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
           }
           else {
             // We lost the IMU, perhaps...
-            set_state(State::STAGE_0);
-            error_condition = IMU_ERROR_WRONG_IDENTITY;
+            set_state(IMUState::STAGE_0);
+            error_condition = IMUFault::WRONG_IDENTITY;
           }
           break;
 
@@ -543,23 +543,23 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
             *pending_samples = value & 0x1F;
             if (!(value & 0x20)) {              // If the FIFO watermark is set and the FIFO is not empty...
               switch (getState()) {
-                case State::STAGE_4:
-                case State::STAGE_5:
-                  if (State::STAGE_5 != desiredState()) {
+                case IMUState::STAGE_4:
+                case IMUState::STAGE_5:
+                  if (IMUState::STAGE_5 != desiredState()) {
                     break;
                   }
                   // Note: no break; on purpose.
-                case State::STAGE_3:
+                case IMUState::STAGE_3:
                   if (preformed_busop_read_acc.isIdle()) {
                     if (!fire_preformed_bus_op(&preformed_busop_read_acc) ) {
                       if (getVerbosity() > 2) local_log.concat("\tFailed to fast-read accel vector\n");
-                      error_condition = IMU_ERROR_BUS_INSERTION_FAILED;
-                      if (getState() == State::STAGE_5) {
-                        set_state(State::STAGE_4);
+                      error_condition = IMUFault::BUS_INSERTION_FAILED;
+                      if (getState() == IMUState::STAGE_5) {
+                        set_state(IMUState::STAGE_4);
                       }
                     }
-                    else if (State::STAGE_4 == getState()) {
-                      set_state(State::STAGE_5);
+                    else if (IMUState::STAGE_4 == getState()) {
+                      set_state(IMUState::STAGE_5);
                       if (step_state()) {
                         integrator->init();
                       }
@@ -571,7 +571,7 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
                   break;
               }
             }
-            else if (getState() == State::STAGE_3) {
+            else if (getState() == IMUState::STAGE_3) {
               readRegister((uint8_t) LSM9DS1_AG_FIFO_SRC);
             }
           }
@@ -608,7 +608,7 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
 
       if (initPending()) {
         if (IDX_T1 == access_idx) {
-        set_state(State::STAGE_2);
+        set_state(IMUState::STAGE_2);
           if (step_state()) {
              //integrator->init();
           }

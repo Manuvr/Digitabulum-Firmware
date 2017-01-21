@@ -175,6 +175,8 @@ enum class RegID {
 };
 
 
+
+
 /*******************************************************************************
 * Common members of the class...                                               *
 *******************************************************************************/
@@ -189,21 +191,19 @@ class LSM9DS1 : public BusOpCallback {
     LSM9DS1();
     ~LSM9DS1();
 
-    void class_init(uint8_t bus_addr, IIU* _integrator);
+    void class_init(uint8_t bus_addr);
 
     /* Overrides from the BusOpCallback interface */
     int8_t io_op_callahead(BusOp*);
     int8_t io_op_callback(BusOp*);
     int8_t queue_io_job(BusOp*);
 
-    int8_t setDesiredState(State);   // Used to set the state the OS wants the IMU class to acheive.
+    int8_t setDesiredState(IMUState);   // Used to set the state the OS wants the IMU class to acheive.
     void   write_test_bytes();
     bool   step_state();      // Used internally to move between states. TODO: Should be private.
 
-    int8_t  init();
+    IMUFault init();
     void   reset();           // Reset our state without causing a re-init.
-
-    int8_t bulk_refresh();    // Read all the non-identity/non-FIFO registers in the device.
 
     /* Debug stuff... */
     void dumpDevRegs(StringBuilder*);
@@ -269,8 +269,8 @@ class LSM9DS1 : public BusOpCallback {
     inline const char* getErrorString() {    return getErrorString(error_condition);  }
 
     static IMUState getStateByIndex(uint8_t state_idx);
-    static const char* getStateString(IMUState state);
-    static const char* getErrorString(uint8_t fault_code);
+    static const char* getStateString(IMUState);
+    static const char* getErrorString(IMUFault);
 
 
     static const GainErrorMap error_map_mag[];
@@ -294,8 +294,6 @@ class LSM9DS1 : public BusOpCallback {
 
 
   private:
-    IIU* integrator = nullptr;
-
     uint8_t BUS_ADDR;  // What is our address on the bus? TODO: const
 
     // TODO: r1 simplified things a great deal. All these members can probably DIAF.
@@ -319,12 +317,10 @@ class LSM9DS1 : public BusOpCallback {
 
     uint8_t   sb_next_read     = 0;
     uint8_t   sb_next_write    = 0;
-    uint8_t   error_condition  = 0;
+    IMUFault  error_condition  = IMUFault::NO_ERROR;
 
     IMUState  imu_state        = IMUState::STAGE_0;
     IMUState  desired_state    = IMUState::STAGE_0;
-
-    SPIBusOp full_register_refresh;
 
     StringBuilder local_log;
 
@@ -366,8 +362,6 @@ class LSM9DS1 : public BusOpCallback {
 
     /* These are higher-level fxns that are used as "macros" for specific patterns of */
     /*   register access. Common large-scale operations should go here.               */
-    void   reset(uint8_t reg_idx);   // Reset our state without causing a re-init.
-
     int8_t writeRegister(uint8_t base_index, uint8_t nu_val);
     int8_t writeRegister(uint8_t base_index, uint8_t *buf, uint8_t len);
     int8_t writeRegister(uint8_t base_index, uint8_t *buf, uint8_t len, bool advance_regs);
@@ -380,7 +374,7 @@ class LSM9DS1 : public BusOpCallback {
     uint8_t* regPtr(uint8_t idx);
     /* This is the end of the low-level functions.                                    */
 
-    int8_t identity_check();
+    IMUFault identity_check();
     bool fire_preformed_bus_op(SPIBusOp* op);
     bool integrity_check();
 
@@ -393,7 +387,7 @@ class LSM9DS1 : public BusOpCallback {
     /**
     * Sets the current IMU state without blowing away the high bits in the state member.
     */
-    inline void set_state(State nu) {     imu_state = nu;   }
+    inline void set_state(IMUState nu) {     imu_state = nu;   }
 
     /* Inlines for altering and reading the flags. */
     inline void _alter_flags(bool en, uint16_t mask) {
