@@ -41,8 +41,8 @@ This graph is distinct from the control flow. The sensor data is scaled, upgrade
   graph TD
     subgraph Color Key
     key0[Asynchronous break]
-    key2[Data abstraction point]
-    key1[Sensor-specific]
+    key2[Data copy]
+    key1[Data processing]
     end
 
     style key0 fill:#8Cf,stroke:#222,stroke-width:2px;
@@ -52,38 +52,50 @@ This graph is distinct from the control flow. The sensor data is scaled, upgrade
 
   ```{mermaid}
   graph TD
+    a(Scaling, Float upgrade,<br />and application of error)
+    b(Scaling, Float upgrade,<br />and application of error)
     h(SPIBusOp)
-    i(LSM9DS1_AG)
-    j(LSM9DS1_M)
-    k(LSM9DSx)
+    i(Bias de-sat)
+    j(Spherical aberration<br />correction)
+    k(Orientation)
     m(InertialMeasurement)
+    u(Gravity nullification)
+    v(Velocity)
+    w(Position)
     n(ManuManager)
-    o(Integrator)
     p(ManuLegend)
 
     q(Session driver)
     r(Transport driver)
-    s(Internal condition triggers,<br /> power-management, etc)
     t(Error measurement<br /> and compensation)
 
     z{Data type}
 
-    subgraph Replicated per-datum
+    subgraph Integrator
+    m --> z
     z -->|Inertial| i
     z -->|Magnetic| j
-    i --> k
-    j --> k
-    k --> m
-    m --> o
+    z -->|Temperature| t
+    z -->|Scale| t
+    i --> a
+    a --> k
+    j --> b
+    b --> k
+    k --> u
+    u --> v
+    v --> w
+    k --> p
+
+    k --> p
+    u --> p
+    v --> p
+    w --> p
     end
 
     subgraph Single read
-    t --> m
     p --> t
     h --> n
-    n --> z
-    o --> p
-    p -.-> s
+    n --> m
     p -.-> q
     q --> r
     end
@@ -95,14 +107,45 @@ This graph is distinct from the control flow. The sensor data is scaled, upgrade
     style m fill:#e95,stroke:#222,stroke-width:2px;
     style n fill:#fff,stroke:#222,stroke-width:2px;
 
-    style o fill:#8Cf,stroke:#222,stroke-width:2px;
     style p fill:#e95,stroke:#222,stroke-width:2px;
     style q fill:#8Cf,stroke:#222,stroke-width:2px;
     style r fill:#8Cf,stroke:#222,stroke-width:2px;
-    style s fill:#8Cf,stroke:#222,stroke-width:2px;
     style t fill:#fff,stroke:#222,stroke-width:2px;
 
-    style z fill:#fac,stroke:#222,stroke-width:2px;
+    style a fill:#fac,stroke:#222,stroke-width:2px;
+    style b fill:#fac,stroke:#222,stroke-width:2px;
+    style u fill:#fac,stroke:#222,stroke-width:2px;
+    style v fill:#fac,stroke:#222,stroke-width:2px;
+    style w fill:#fac,stroke:#222,stroke-width:2px;
+  ```
+
+-----
+#### Software (Control path)
+
+Data-driven demands from the integrator need to ultimately result in register changes in the IMUs.
+
+
+  ```{mermaid}
+  graph TD
+    a(LSM9DS1)
+    b(ManuManager)
+    c(Integrator)
+    d(ManuLegend)
+    e(Client software)
+
+    subgraph Control relationships
+    a --- b
+    b --- c
+    c --- d
+    d --- e
+    end
+
+    style a fill:#ccc,stroke:#222,stroke-width:2px;
+    style b fill:#ccc,stroke:#222,stroke-width:2px;
+    style c fill:#ccc,stroke:#222,stroke-width:2px;
+    style d fill:#ccc,stroke:#222,stroke-width:2px;
+    style e fill:#ccc,stroke:#222,stroke-width:2px;
+
   ```
 
 -----

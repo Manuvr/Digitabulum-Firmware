@@ -57,18 +57,18 @@ int8_t LSM9DS1::collect_reading_acc() {
   Vector3<int16_t> reflection_vector_acc(ManuManager::reflection_acc.x, ManuManager::reflection_acc.y, ManuManager::reflection_acc.z);
 
   if (cancel_error()) {
-    x = ((((int16_t)regValue(LSM9DS1_A_DATA_X) - noise_floor_acc.x) * reflection_vector_acc.x) * scaler);
-    y = ((((int16_t)regValue(LSM9DS1_A_DATA_Y) - noise_floor_acc.y) * reflection_vector_acc.y) * scaler);
-    z = ((((int16_t)regValue(LSM9DS1_A_DATA_Z) - noise_floor_acc.z) * reflection_vector_acc.z) * scaler);
+    x = ((((int16_t)regValue(RegID::A_DATA_X) - noise_floor_acc.x) * reflection_vector_acc.x) * scaler);
+    y = ((((int16_t)regValue(RegID::A_DATA_Y) - noise_floor_acc.y) * reflection_vector_acc.y) * scaler);
+    z = ((((int16_t)regValue(RegID::A_DATA_Z) - noise_floor_acc.z) * reflection_vector_acc.z) * scaler);
   }
   else {
-    x = (((int16_t)regValue(LSM9DS1_A_DATA_X)) * reflection_vector_acc.x * scaler);
-    y = (((int16_t)regValue(LSM9DS1_A_DATA_Y)) * reflection_vector_acc.y * scaler);
-    z = (((int16_t)regValue(LSM9DS1_A_DATA_Z)) * reflection_vector_acc.z * scaler);
+    x = (((int16_t)regValue(RegID::A_DATA_X)) * reflection_vector_acc.x * scaler);
+    y = (((int16_t)regValue(RegID::A_DATA_Y)) * reflection_vector_acc.y * scaler);
+    z = (((int16_t)regValue(RegID::A_DATA_Z)) * reflection_vector_acc.z * scaler);
   }
 
   last_val_acc(x, y, z);
-  integrator->pushMeasurement(IMU_FLAG_ACCEL_DATA, x, y, z, rate_settings_acc[update_rate_acc].ts_delta);
+  //integrator->pushMeasurement(IMU_FLAG_ACCEL_DATA, x, y, z, rate_settings_acc[update_rate_acc].ts_delta);
 
   return 1;
 }
@@ -77,45 +77,45 @@ int8_t LSM9DS1::collect_reading_acc() {
 /**
 * Call to rescale the sensor.
 */
-int8_t LSM9DS1::request_rescale_acc(uint8_t nu_scale_idx) {
+IMUFault LSM9DS1::request_rescale_acc(uint8_t nu_scale_idx) {
   if (nu_scale_idx < MAXIMUM_GAIN_INDEX_ACC) {
     if (scale_acc != nu_scale_idx) {
-      uint8_t temp8 = regValue(LSM9DS1_A_CTRL_REG6);
+      uint8_t temp8 = regValue(RegID::A_CTRL_REG6);
       temp8 =  (temp8 & 0xE7) | (nu_scale_idx << 3);
-      return writeRegister(LSM9DS1_A_CTRL_REG6, temp8);
+      return writeRegister(RegID::A_CTRL_REG6, temp8);
     }
-    return -2;
+    return IMUFault::NO_ERROR;
   }
-  return -1;
+  return IMUFault::INVALID_PARAM_ID;
 }
 
 
 /**
 * Call to alter sample rate.
 */
-int8_t LSM9DS1::set_sample_rate_acc(uint8_t nu_srate_idx) {
+IMUFault LSM9DS1::set_sample_rate_acc(uint8_t nu_srate_idx) {
   if (nu_srate_idx < MAXIMUM_RATE_INDEX_AG) {
     if (update_rate_acc != nu_srate_idx) {
-      uint8_t temp8 = regValue(LSM9DS1_A_CTRL_REG6);
+      uint8_t temp8 = regValue(RegID::A_CTRL_REG6);
       temp8 =  (temp8 & 0x1F) | (nu_srate_idx << 5);
       update_rate_acc = nu_srate_idx;
-      return writeRegister(LSM9DS1_A_CTRL_REG6, temp8);
+      return writeRegister(RegID::A_CTRL_REG6, temp8);
     }
-    return -2;
+    return IMUFault::NO_ERROR;
   }
-  return -1;
+  return IMUFault::INVALID_PARAM_ID;
 }
 
 
 // Call to change the bandwidth of the AA filter.
-int8_t LSM9DS1::set_base_filter_param_acc(uint8_t nu_bw_idx) {
+IMUFault LSM9DS1::set_base_filter_param_acc(uint8_t nu_bw_idx) {
   if ((nu_bw_idx < 4) && (nu_bw_idx != base_filter_param)) {
     base_filter_param = nu_bw_idx;
-    uint8_t temp8 = regValue(LSM9DS1_A_CTRL_REG6);
+    uint8_t temp8 = regValue(RegID::A_CTRL_REG6);
     temp8 =  (temp8 & 0xFC) | (nu_bw_idx & 0x03);
-    return writeRegister(LSM9DS1_A_CTRL_REG6, temp8);
+    return writeRegister(RegID::A_CTRL_REG6, temp8);
   }
-  return -1;
+  return IMUFault::INVALID_PARAM_ID;
 }
 
 
@@ -157,18 +157,18 @@ int8_t LSM9DS1::collect_reading_gyr() {
   Vector3<int16_t> reflection_vector_gyr(ManuManager::reflection_gyr.x, ManuManager::reflection_gyr.y, ManuManager::reflection_gyr.z);
 
   if (cancel_error()) {
-    x = ((((int16_t)regValue(LSM9DS1_G_DATA_X)) - noise_floor_gyr.x) * reflection_vector_gyr.x * scaler);
-    y = ((((int16_t)regValue(LSM9DS1_G_DATA_Y)) - noise_floor_gyr.y) * reflection_vector_gyr.y * scaler);
-    z = ((((int16_t)regValue(LSM9DS1_G_DATA_Z)) - noise_floor_gyr.z) * reflection_vector_gyr.z * scaler);
+    x = ((((int16_t)regValue(RegID::G_DATA_X)) - noise_floor_gyr.x) * reflection_vector_gyr.x * scaler);
+    y = ((((int16_t)regValue(RegID::G_DATA_Y)) - noise_floor_gyr.y) * reflection_vector_gyr.y * scaler);
+    z = ((((int16_t)regValue(RegID::G_DATA_Z)) - noise_floor_gyr.z) * reflection_vector_gyr.z * scaler);
   }
   else {
-    x = ((((int16_t)regValue(LSM9DS1_G_DATA_X)) * reflection_vector_gyr.x) * scaler);
-    y = ((((int16_t)regValue(LSM9DS1_G_DATA_Y)) * reflection_vector_gyr.y) * scaler);
-    z = ((((int16_t)regValue(LSM9DS1_G_DATA_Z)) * reflection_vector_gyr.z) * scaler);
+    x = ((((int16_t)regValue(RegID::G_DATA_X)) * reflection_vector_gyr.x) * scaler);
+    y = ((((int16_t)regValue(RegID::G_DATA_Y)) * reflection_vector_gyr.y) * scaler);
+    z = ((((int16_t)regValue(RegID::G_DATA_Z)) * reflection_vector_gyr.z) * scaler);
   }
 
   last_val_gyr(x, y, z);
-  integrator->pushMeasurement(IMU_FLAG_GYRO_DATA, x, y, z, rate_settings_gyr[update_rate_gyr].ts_delta);
+  //integrator->pushMeasurement(IMU_FLAG_GYRO_DATA, x, y, z, rate_settings_gyr[update_rate_gyr].ts_delta);
   return 1;
 }
 
@@ -176,42 +176,42 @@ int8_t LSM9DS1::collect_reading_gyr() {
 /**
 * Call to rescale the sensor.
 */
-int8_t LSM9DS1::request_rescale_gyr(uint8_t nu_scale_idx) {
+IMUFault LSM9DS1::request_rescale_gyr(uint8_t nu_scale_idx) {
   if (nu_scale_idx < MAXIMUM_GAIN_INDEX_ACC) {
     if (scale_acc != nu_scale_idx) {
       if (getVerbosity() > 2) Kernel::log("request_rescale_gyr():\tRescaling Gyro.\n");
-      uint8_t temp8 = regValue(LSM9DS1_G_CTRL_REG1);
+      uint8_t temp8 = regValue(RegID::G_CTRL_REG1);
       temp8 =  (temp8 & 0xE7) | (nu_scale_idx << 3);
-      return writeRegister(LSM9DS1_G_CTRL_REG1, temp8);
+      return writeRegister(RegID::G_CTRL_REG1, temp8);
     }
-    return -2;
+    return IMUFault::NO_ERROR;
   }
-  return -1;
+  return IMUFault::INVALID_PARAM_ID;
 }
 
 
 /**
 * Call to alter sample rate.
 */
-int8_t LSM9DS1::set_sample_rate_gyr(uint8_t nu_srate_idx) {
+IMUFault LSM9DS1::set_sample_rate_gyr(uint8_t nu_srate_idx) {
   if (nu_srate_idx < MAXIMUM_RATE_INDEX_AG) {
     if (update_rate_acc != nu_srate_idx) {
       if (getVerbosity() > 2) Kernel::log("set_sample_rate_gyr():\t\n");
-      uint8_t temp8 = regValue(LSM9DS1_G_CTRL_REG1);
+      uint8_t temp8 = regValue(RegID::G_CTRL_REG1);
       temp8 =  (temp8 & 0x1F) | (nu_srate_idx << 5);
       update_rate_gyr = nu_srate_idx;
-      return writeRegister(LSM9DS1_G_CTRL_REG1, temp8);
+      return writeRegister(RegID::G_CTRL_REG1, temp8);
     }
-    return -2;
+    return IMUFault::NO_ERROR;
   }
-  return -1;
+  return IMUFault::INVALID_PARAM_ID;
 }
 
 
 
 // Call to change the cutoff of the gyro's base filter.
-int8_t LSM9DS1::set_base_filter_param_gyr(uint8_t nu_bw_idx) {
-  return -1;
+IMUFault LSM9DS1::set_base_filter_param_gyr(uint8_t nu_bw_idx) {
+  return IMUFault::INVALID_PARAM_ID;
 }
 
 
@@ -226,7 +226,7 @@ int8_t LSM9DS1::set_base_filter_param_gyr(uint8_t nu_bw_idx) {
 */
 int8_t LSM9DS1::collect_reading_temperature() {
   int8_t return_value = 1;
-  integrator->setTemperature(((int16_t)regValue(LSM9DS1_AG_DATA_TEMP)) / 1.0f);
+  //integrator->setTemperature(((int16_t)regValue(RegID::AG_DATA_TEMP)) / 1.0f);
   //integrator->setTemperature(((int16_t) value) / 4.0f);
   return return_value;
 }
@@ -250,30 +250,14 @@ int8_t LSM9DS1::collect_reading_temperature() {
 *   Success, no IRQ service
 *   Failure
 */
-int8_t LSM9DS1::irq_0() {
-  int8_t return_value = IMUFault::NO_ERROR;
-
-  if (getVerbosity() > 3) Kernel::log("XM::irq_0()\n");
-  if (initComplete()) {
-    if (!fire_preformed_bus_op(&preformed_busop_irq_0) ) {
-      // Take corrective action.
-    }
-  }
-  return return_value;
+IMUFault LSM9DS1::irq_2() {
+  if (getVerbosity() > 3) Kernel::log("LSM9DS1::irq_2()\n");
+  return IMUFault::NO_ERROR;
 }
 
-int8_t LSM9DS1::irq_1() {
-  int8_t return_value = IMUFault::NO_ERROR;
-
-  if (getVerbosity() > 3) Kernel::log("XM::irq_1()\n");
-  if (initComplete()) {
-    //readRegister((uint8_t) LSM9DS1_AG_STATUS_REG_M);
-    //readRegister((uint8_t) LSM9DS1_AG_FIFO_SRC_REG);
-    if (!fire_preformed_bus_op(&preformed_busop_irq_1) ) {
-      // Take corrective action.
-    }
-  }
-  return return_value;
+IMUFault LSM9DS1::irq_1() {
+  if (getVerbosity() > 3) Kernel::log("LSM9DS1::irq_1()\n");
+  return IMUFault::NO_ERROR;
 }
 
 
@@ -305,19 +289,19 @@ int8_t LSM9DS1::calibrate_from_data_ag() {
   float y = ((noise_floor_acc.y) * scaler);
   float z = ((noise_floor_acc.z) * scaler);
 
-  integrator->pushMeasurement(IMU_FLAG_GRAVITY_DATA, x, y, z, 0);
+  //integrator->pushMeasurement(IMU_FLAG_GRAVITY_DATA, x, y, z, 0);
 
   // This is our idea of magentic North. Write it to the offset registers.
   //for (int i = 0; i < 8; i++) {
   //  *(register_pool + 14 + i) = *(register_pool + 3 + i);
   //}
-  //writeRegister(LSM9DS1_AG_INT_THS_L_M, (register_pool + 12),   8, true);
+  //writeRegister(RegID::AG_INT_THS_L_M, (register_pool + 12),   8, true);
   scaler = error_map_gyr[scale_gyr].per_lsb;
   Vector3<int16_t> reflection_vector_gyr(ManuManager::reflection_gyr.x, ManuManager::reflection_gyr.y, ManuManager::reflection_gyr.z);
 
-  x = ((int16_t) regValue(LSM9DS1_G_DATA_X)) * scaler * reflection_vector_gyr.x;
-  y = ((int16_t) regValue(LSM9DS1_G_DATA_Y)) * scaler * reflection_vector_gyr.y;
-  z = ((int16_t) regValue(LSM9DS1_G_DATA_Z)) * scaler * reflection_vector_gyr.z;
+  x = ((int16_t) regValue(RegID::G_DATA_X)) * scaler * reflection_vector_gyr.x;
+  y = ((int16_t) regValue(RegID::G_DATA_Y)) * scaler * reflection_vector_gyr.y;
+  z = ((int16_t) regValue(RegID::G_DATA_Z)) * scaler * reflection_vector_gyr.z;
 
   //Vector3<float> proj_xy(x, y, 0);
   //Vector3<float> proj_xz(x, 0, z);
@@ -327,7 +311,7 @@ int8_t LSM9DS1::calibrate_from_data_ag() {
   //float offset_angle_z = Vector3<float>::angle(&proj_xz, &x_axis);
 
   //integrator->pushMeasurement(IMU_FLAG_BEARING_DATA, 0, offset_angle_y, offset_angle_z, 0);
-  integrator->pushMeasurement(IMU_FLAG_BEARING_DATA, x, y, z, 0);
+  //integrator->pushMeasurement(IMU_FLAG_BEARING_DATA, x, y, z, 0);
 
   return 0;
 }
@@ -350,7 +334,7 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
   /* Our first choice is: Did we just finish a WRITE or a READ? */
   /* READ Case-offs */
   if (BusOpcode::RX == op->get_opcode()) {
-    while ((access_len > 0) && regExists(access_idx)) {
+    while (access_len > 0) {
       value = regValue(access_idx);
       access_len -= 1;   // Subtract the length.
 
@@ -361,24 +345,22 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
       if (initPending()) {
         if (IDX_T1 == access_idx) {
           if (integrity_check()) {
-            set_state(IMUStateSTAGE_3);
-            if (step_state()) {
-              integrator->init();
-            }
+            set_state(IMUState::STAGE_3);
+            step_state();
           }
         }
       }
 
 
       switch (access_idx) {
-        case LSM9DS1_A_DATA_X:
+        case RegID::A_DATA_X:
           if (pending_samples > 0) {
             pending_samples--;
             switch (getState()) {
-              case IMUStateSTAGE_5:
+              case IMUState::STAGE_5:
                 collect_reading_acc();
                 if (0 == pending_samples) {
-                  set_state(IMUStateSTAGE_4);
+                  set_state(IMUState::STAGE_4);
                   step_state();
                 }
                 else {
@@ -386,8 +368,8 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
                 }
                 break;
 
-              case IMUStateSTAGE_3:
-                sample_backlog_acc[sb_next_write++ % 32]((int16_t)regValue(LSM9DS1_A_DATA_X), (int16_t)regValue(LSM9DS1_A_DATA_Y), (int16_t)regValue(LSM9DS1_A_DATA_Z));
+              case IMUState::STAGE_3:
+                sample_backlog_acc[sb_next_write++ % 32]((int16_t)regValue(RegID::A_DATA_X), (int16_t)regValue(RegID::A_DATA_Y), (int16_t)regValue(RegID::A_DATA_Z));
                 if (0 == pending_samples) {
                   // If we have received the last expected sample, see how many more there are.
                   if (32 >= sb_next_write) {
@@ -399,11 +381,11 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
                     }
                     else {
                       // Failed a pass through INIT-3.
-                      readRegister((uint8_t) LSM9DS1_AG_FIFO_SRC);
+                      readRegister((uint8_t) RegID::AG_FIFO_SRC);
                     }
                   }
                   else {
-                    readRegister((uint8_t) LSM9DS1_AG_FIFO_SRC);
+                    readRegister((uint8_t) RegID::AG_FIFO_SRC);
                   }
                 }
                 else {
@@ -418,10 +400,10 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
           break;
 
         /* We don't address these registers byte-wise. Empty case for documentation's sake. */
-        case LSM9DS1_A_DATA_Y:  break;
-        case LSM9DS1_A_DATA_Z:  break;
+        case RegID::A_DATA_Y:  break;
+        case RegID::A_DATA_Z:  break;
 
-        case LSM9DS1_G_DATA_X:
+        case RegID::G_DATA_X:
           if (pending_samples > 0) {
             pending_samples--;
             switch (getState()) {
@@ -437,7 +419,7 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
                 break;
 
               case IMUState::STAGE_3:
-                sample_backlog_gyr[sb_next_write++ % 32]((int16_t)regValue(LSM9DS1_G_DATA_X), (int16_t)regValue(LSM9DS1_G_DATA_Y), (int16_t)regValue(LSM9DS1_G_DATA_Z));
+                sample_backlog_gyr[sb_next_write++ % 32]((int16_t)regValue(RegID::G_DATA_X), (int16_t)regValue(RegID::G_DATA_Y), (int16_t)regValue(RegID::G_DATA_Z));
                 if (0 == pending_samples) {
                   // If we have received the last expected sample, see how many more there are.
                   if (32 >= sb_next_write) {
@@ -449,11 +431,11 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
                     }
                     else {
                       // Failed a pass through INIT-3.
-                      readRegister((uint8_t) LSM9DS1_AG_FIFO_SRC);
+                      readRegister((uint8_t) RegID::AG_FIFO_SRC);
                     }
                   }
                   else {
-                    readRegister((uint8_t) LSM9DS1_AG_FIFO_SRC);
+                    readRegister((uint8_t) RegID::AG_FIFO_SRC);
                   }
                 }
                 else {
@@ -468,21 +450,19 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
           break;
 
         /* We don't address these registers byte-wise. Empty case for documentation's sake. */
-        case LSM9DS1_G_DATA_Y:   break;
-        case LSM9DS1_G_DATA_Z:   break;
+        case RegID::G_DATA_Y:   break;
+        case RegID::G_DATA_Z:   break;
 
         // Since this data is only valid when the mag data is, we'll heed it in that block.
-        case LSM9DS1_AG_DATA_TEMP:
+        case RegID::AG_DATA_TEMP:
           collect_reading_temperature();
           break;
 
-        case LSM9DS1_AG_WHO_AM_I:
+        case RegID::AG_WHO_AM_I:
           if (0x68 == value) {
             if (!present()) {
               set_state(IMUState::STAGE_1);
-              if (step_state()) {
-                //integrator->init();   // Call this to kick the integrator into noticing our state change.
-              }
+              step_state();
             }
             else {
               // Nominal condition. Maybe we bulk-read? Nice to have verification....
@@ -495,7 +475,7 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
           }
           break;
 
-        case LSM9DS1_G_INT_GEN_SRC:     /* The gyroscope interrupt status register. */
+        case RegID::G_INT_GEN_SRC:     /* The gyroscope interrupt status register. */
           if (value & 0x01) {                 // An interrupt was seen because we crossed a threshold we set.
             if (value & 0xE0) {               // Did we exceed our set threshold?
               if (autoscale_gyr()) request_rescale_gyr(scale_gyr+1);
@@ -509,7 +489,7 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
           }
           break;
         // TODO: We need to implement these....
-        case LSM9DS1_AG_STATUS_REG:      /* Status of the gyr data registers on the sensor. */
+        case RegID::AG_STATUS_REG:      /* Status of the gyr data registers on the sensor. */
           if (value & 0x08) {                 // We have fresh data to fetch.
             if (!fire_preformed_bus_op(&preformed_busop_read_gyr) ) {
               // Take corrective action.
@@ -518,26 +498,26 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
           }
           break;
 
-        case LSM9DS1_AG_STATUS_REG_ALT:
-          if (getVerbosity() > 5) local_log.concatf("\t LSM9DS1_AG_STATUS_REG_ALT: 0x%02x\n", (uint8_t) value);
+        case RegID::AG_STATUS_REG_ALT:
+          if (getVerbosity() > 5) local_log.concatf("\t RegID::AG_STATUS_REG_ALT: 0x%02x\n", (uint8_t) value);
           break;
-        case LSM9DS1_AG_FIFO_CTRL:
+        case RegID::AG_FIFO_CTRL:
           if (getVerbosity() > 5) local_log.concatf("\t XM_FIFO Control: 0x%02x\n", (uint8_t) value);
           break;
-        case LSM9DS1_G_CTRL_REG1:
-          if (getVerbosity() > 5) local_log.concatf("\t LSM9DS1_G_CTRL_REG1: 0x%02x\n", (uint8_t) value);
+        case RegID::G_CTRL_REG1:
+          if (getVerbosity() > 5) local_log.concatf("\t RegID::G_CTRL_REG1: 0x%02x\n", (uint8_t) value);
           if ((value >> 4) < MAXIMUM_RATE_INDEX_AG)  update_rate_acc = (value >> 4) & 0x0F;
           break;
-        case LSM9DS1_AG_CTRL_REG4:
-          if (getVerbosity() > 5) local_log.concatf("\t LSM9DS1_AG_CTRL_REG4: 0x%02x\n", (uint8_t) value);
+        case RegID::AG_CTRL_REG4:
+          if (getVerbosity() > 5) local_log.concatf("\t RegID::AG_CTRL_REG4: 0x%02x\n", (uint8_t) value);
           if (((value >> 3) & 0x07) < MAXIMUM_GAIN_INDEX_ACC)  scale_acc = (value >> 3) & 0x07;
           base_filter_param = (value >> 6) & 0x03;
           break;
-        case LSM9DS1_A_CTRL_REG6:
-          if (getVerbosity() > 5) local_log.concatf("\t LSM9DS1_A_CTRL_REG6: 0x%02x\n", (uint8_t) value);
+        case RegID::A_CTRL_REG6:
+          if (getVerbosity() > 5) local_log.concatf("\t RegID::A_CTRL_REG6: 0x%02x\n", (uint8_t) value);
           if (((value >> 3) & 0x03) < MAXIMUM_GAIN_INDEX_GYR)  scale_gyr = (value >> 3) & 0x03;
           break;
-        case LSM9DS1_AG_FIFO_SRC:     /* The FIFO status register. */
+        case RegID::AG_FIFO_SRC:     /* The FIFO status register. */
           //if (getVerbosity() > 5) local_log.concatf("\t XM FIFO Status: 0x%02x\n", (uint8_t) value);
           if (initComplete()) {
             *pending_samples = value & 0x1F;
@@ -560,9 +540,7 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
                     }
                     else if (IMUState::STAGE_4 == getState()) {
                       set_state(IMUState::STAGE_5);
-                      if (step_state()) {
-                        integrator->init();
-                      }
+                      step_state();
                     }
                   }
                   break;
@@ -572,7 +550,7 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
               }
             }
             else if (getState() == IMUState::STAGE_3) {
-              readRegister((uint8_t) LSM9DS1_AG_FIFO_SRC);
+              readRegister((uint8_t) RegID::AG_FIFO_SRC);
             }
           }
           break;
@@ -582,19 +560,12 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
       }
       if (op->devRegisterAdvance()) access_idx++;
     }
-
-    if (profile()) {
-      profiler_read_end = micros();
-      if (getVerbosity() > 6) {
-        local_log.concatf("\t Operation took %uus\n", (unsigned long) profiler_read_end);
-      }
-    }
   }
 
 
   /* WRITE Case-offs */
   else if (BusOpcode::TX == op->get_opcode()) {
-    while ((access_len > 0) && regExists(access_idx)) {
+    while (access_len > 0) {
       value = regValue(access_idx);
       access_len -= 1;   // Subtract the length.
 
@@ -608,33 +579,31 @@ int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
 
       if (initPending()) {
         if (IDX_T1 == access_idx) {
-        set_state(IMUState::STAGE_2);
-          if (step_state()) {
-             //integrator->init();
-          }
+          set_state(IMUState::STAGE_2);
+          step_state();
         }
       }
 
       switch (access_idx) {
         // TODO: We need to implement these....
-        case LSM9DS1_AG_INT1_CTRL:
+        case RegID::AG_INT1_CTRL:
           break;
-        case LSM9DS1_AG_INT2_CTRL:
+        case RegID::AG_INT2_CTRL:
           break;
 
-        case LSM9DS1_G_CTRL_REG1:
+        case RegID::G_CTRL_REG1:
           //if ((value >> 4) < MAXIMUM_RATE_INDEX_AG)  update_rate_acc = (value >> 4) & 0x0F;
           break;
-        case LSM9DS1_G_CTRL_REG2:
+        case RegID::G_CTRL_REG2:
           if (((value >> 3) & 0x07) < MAXIMUM_GAIN_INDEX_ACC)  scale_acc = (value >> 3) & 0x07;
           break;
-        case LSM9DS1_A_CTRL_REG5:
+        case RegID::A_CTRL_REG5:
           //if (((value >> 2) & 0x07) < MAXIMUM_RATE_INDEX_MAG)  update_rate_mag = ((value >> 2) & 0x07) + 1;
           break;
-        case LSM9DS1_A_CTRL_REG6:
+        case RegID::A_CTRL_REG6:
           if (((value >> 5) & 0x03) < MAXIMUM_GAIN_INDEX_GYR)  scale_gyr = (value >> 5) & 0x03;
           break;
-        case LSM9DS1_AG_CTRL_REG8:
+        case RegID::AG_CTRL_REG8:
           if (value & 0x01) { // Did we write here to reset?
             if (!present()) {
               integrator->init();

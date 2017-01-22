@@ -23,7 +23,7 @@ limitations under the License.
 #include "../CPLDDriver/CPLDDriver.h"
 #include "../ManuLegend/ManuManager.h"
 
-extern unsigned long micros(void);
+extern unsigned long micros();
 extern volatile CPLDDriver* cpld;
 
 
@@ -112,9 +112,91 @@ const GainErrorMap LSM9DS1::error_map_mag[MAXIMUM_GAIN_INDEX_MAG] = {
 };
 
 
+/* The addresses of the registers named in the enum class RegID. */
+const uint8_t _imu_address_map[] = {
+  0x05, 0x07, 0x09,  // M: 16-bit offset registers
+  0x0f, 0x20,
+  0x21, 0x22, 0x23, 0x24, 0x27,
+  0x28, 0x2a, 0x2c,  // M: 16-bit data registers
+  0x30, 0x31,
+  0x32,              // M: 16-bit threshold register
+  // This is where the AG registers start.
+  0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b,
+  0x0c, 0x0d, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14,
+  0x15,              // I: 16-bit temperature register (11-bit)
+  0x17,
+  0x18, 0x1a, 0x1c,  // G: 16-bit gyro data registers
+  0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23, 0x24,
+  0x26, 0x27,
+  0x28, 0x2a, 0x2c,  // A: 16-bit acc data registers
+  0x2e, 0x2f, 0x30,
+  0x31, 0x33, 0x35,  // G: 16-bit threshold registers
+  0x37
+};
+
+
+/* The widths of the registers named in the enum class RegID. */
+const uint8_t _imu_register_width_map[] = {
+  2, 2, 2,  // M: 16-bit offset registers
+  1, 1,
+  1, 1, 1, 1, 1,
+  2, 2, 2,  // M: 16-bit data registers
+  1, 1,
+  2,        // M: 16-bit threshold register
+  // This is where the AG registers start.
+  1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1,
+  2,        // I: 16-bit temperature register (11-bit)
+  1,
+  2, 2, 2,  // G: 16-bit gyro data registers
+  1, 1, 1, 1, 1, 1, 1,
+  1, 1,
+  2, 2, 2,  // A: 16-bit acc data registers
+  1, 1, 1,
+  2, 2, 2,  // G: 16-bit threshold registers
+  1
+};
+
+
+/* The widths of the registers named in the enum class RegID. */
+const bool _imu_register_writable_map[] = {
+  true,  true,  true,   // M: 16-bit offset registers
+  false, true,
+  true,  true,  true,  true,  false,
+  false, false, false,  // M: 16-bit data registers
+  true,  false,
+  true,                 // M: 16-bit threshold register
+  // This is where the AG registers start.
+  true,  true,  true,  true,  true,  true,  true,  true,
+  true,  true,  false, true,  true,  true,  true,  false,
+  false,                // I: 16-bit temperature register (11-bit)
+  false,
+  false, false, false,  // G: 16-bit gyro data registers
+  true,  true,  true,  true,  true,  true,  true,
+  false, false,
+  false, false, false,  // A: 16-bit acc data registers
+  true,  false, true,
+  true,  true,  true,   // G: 16-bit threshold registers
+  true
+};
+
+
+const uint8_t LSM9DS1::regAddr(RegID id) {
+  return _imu_address_map[(uint8_t) id];
+}
+
+const uint8_t LSM9DS1::regWidth(RegID id) {
+  return _imu_register_width_map[(uint8_t) id];
+}
+
+const bool LSM9DS1::regWritable(RegID id) {
+  return _imu_register_writable_map[(uint8_t) id];
+}
+
+
 const float LSM9DS1::max_range_vect_acc  = 16.0;
 const float LSM9DS1::max_range_vect_gyr  = 2000.0;
-const float LSM9DS1::max_range_vect_mag   = 16.0;
+const float LSM9DS1::max_range_vect_mag  = 16.0;
 
 
 /**
@@ -174,7 +256,6 @@ const char* LSM9DS1::getStateString(IMUState state) {
 
 
 
-
 /*******************************************************************************
 *   ___ _              ___      _ _              _      _
 *  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
@@ -205,144 +286,63 @@ void LSM9DS1::class_init(uint8_t address) {
 
   // Now we should give them initial definitions. This is our chance to set default configs.
   // Any config which we want written during init() should have dirty set to true.
-  //reg_defs[LSM9DS1_M_OFFSET_X]      = DeviceRegister((BUS_ADDR + 0x05), (uint16_t) 0x00, (register_pool +  0), false, false, true);
-  //reg_defs[LSM9DS1_M_OFFSET_Y]      = DeviceRegister((BUS_ADDR + 0x07), (uint16_t) 0x00, (register_pool +  2), false, false, true);
-  //reg_defs[LSM9DS1_M_OFFSET_Z]      = DeviceRegister((BUS_ADDR + 0x09), (uint16_t) 0x00, (register_pool +  4), false, false, true);
-  //reg_defs[LSM9DS1_M_WHO_AM_I]      = DeviceRegister((BUS_ADDR + 0x0F), (uint8_t)  0x00, (register_pool +  6), false, false, false);
-  //reg_defs[LSM9DS1_M_CTRL_REG1]     = DeviceRegister((BUS_ADDR + 0x20), (uint8_t)  0x10, (register_pool +  7), false, false, true );  //
-  //reg_defs[LSM9DS1_M_CTRL_REG2]     = DeviceRegister((BUS_ADDR + 0x21), (uint8_t)  0x00, (register_pool +  8), false, false, true );  //
-  //reg_defs[LSM9DS1_M_CTRL_REG3]     = DeviceRegister((BUS_ADDR + 0x22), (uint8_t)  0x03, (register_pool +  9), false, false, true );  //
-  //reg_defs[LSM9DS1_M_CTRL_REG4]     = DeviceRegister((BUS_ADDR + 0x23), (uint8_t)  0x00, (register_pool + 10), false, false, true );  //
-  //reg_defs[LSM9DS1_M_CTRL_REG5]     = DeviceRegister((BUS_ADDR + 0x24), (uint8_t)  0x00, (register_pool + 11), false, false, true );  //
-  //reg_defs[LSM9DS1_M_STATUS_REG]    = DeviceRegister((BUS_ADDR + 0x27), (uint8_t)  0x00, (register_pool + 12), false, false, true );  //
-  //reg_defs[LSM9DS1_M_DATA_X]        = DeviceRegister((BUS_ADDR + 0x28), (uint16_t) 0x00, (register_pool + 13), false, false, false);
-  //reg_defs[LSM9DS1_M_DATA_Y]        = DeviceRegister((BUS_ADDR + 0x2A), (uint16_t) 0x00, (register_pool + 15), false, false, false);
-  //reg_defs[LSM9DS1_M_DATA_Z]        = DeviceRegister((BUS_ADDR + 0x2C), (uint16_t) 0x00, (register_pool + 17), false, false, false);
-  //reg_defs[LSM9DS1_M_INT_CFG]       = DeviceRegister((BUS_ADDR + 0x30), (uint8_t)  0x08, (register_pool + 19), false, false, true);
-  //reg_defs[LSM9DS1_M_INT_SRC]       = DeviceRegister((BUS_ADDR + 0x31), (uint8_t)  0x00, (register_pool + 20), false, false, false);
-  //reg_defs[LSM9DS1_M_INT_TSH]       = DeviceRegister((BUS_ADDR + 0x32), (uint16_t) 0x00, (register_pool + 21), false, false, true);
+  //reg_defs[RegID::M_OFFSET_X]      = DeviceRegister((BUS_ADDR + 0x05), (uint16_t) 0x00, (register_pool +  0), false, false, true);
+  //reg_defs[RegID::M_OFFSET_Y]      = DeviceRegister((BUS_ADDR + 0x07), (uint16_t) 0x00, (register_pool +  2), false, false, true);
+  //reg_defs[RegID::M_OFFSET_Z]      = DeviceRegister((BUS_ADDR + 0x09), (uint16_t) 0x00, (register_pool +  4), false, false, true);
+  //reg_defs[RegID::M_WHO_AM_I]      = DeviceRegister((BUS_ADDR + 0x0F), (uint8_t)  0x00, (register_pool +  6), false, false, false);
+  //reg_defs[RegID::M_CTRL_REG1]     = DeviceRegister((BUS_ADDR + 0x20), (uint8_t)  0x10, (register_pool +  7), false, false, true );  //
+  //reg_defs[RegID::M_CTRL_REG2]     = DeviceRegister((BUS_ADDR + 0x21), (uint8_t)  0x00, (register_pool +  8), false, false, true );  //
+  //reg_defs[RegID::M_CTRL_REG3]     = DeviceRegister((BUS_ADDR + 0x22), (uint8_t)  0x03, (register_pool +  9), false, false, true );  //
+  //reg_defs[RegID::M_CTRL_REG4]     = DeviceRegister((BUS_ADDR + 0x23), (uint8_t)  0x00, (register_pool + 10), false, false, true );  //
+  //reg_defs[RegID::M_CTRL_REG5]     = DeviceRegister((BUS_ADDR + 0x24), (uint8_t)  0x00, (register_pool + 11), false, false, true );  //
+  //reg_defs[RegID::M_STATUS_REG]    = DeviceRegister((BUS_ADDR + 0x27), (uint8_t)  0x00, (register_pool + 12), false, false, true );  //
+  //reg_defs[RegID::M_DATA_X]        = DeviceRegister((BUS_ADDR + 0x28), (uint16_t) 0x00, (register_pool + 13), false, false, false);
+  //reg_defs[RegID::M_DATA_Y]        = DeviceRegister((BUS_ADDR + 0x2A), (uint16_t) 0x00, (register_pool + 15), false, false, false);
+  //reg_defs[RegID::M_DATA_Z]        = DeviceRegister((BUS_ADDR + 0x2C), (uint16_t) 0x00, (register_pool + 17), false, false, false);
+  //reg_defs[RegID::M_INT_CFG]       = DeviceRegister((BUS_ADDR + 0x30), (uint8_t)  0x08, (register_pool + 19), false, false, true);
+  //reg_defs[RegID::M_INT_SRC]       = DeviceRegister((BUS_ADDR + 0x31), (uint8_t)  0x00, (register_pool + 20), false, false, false);
+  //reg_defs[RegID::M_INT_TSH]       = DeviceRegister((BUS_ADDR + 0x32), (uint16_t) 0x00, (register_pool + 21), false, false, true);
 
-  //reg_defs[LSM9DS1_AG_ACT_THS]         = DeviceRegister((BUS_ADDR + 0x04), (uint8_t)  0x00, (register_pool +  0), false, false, true);
-  //reg_defs[LSM9DS1_AG_ACT_DUR]         = DeviceRegister((BUS_ADDR + 0x05), (uint8_t)  0x00, (register_pool +  1), false, false, true);
-  //reg_defs[LSM9DS1_A_INT_GEN_CFG]      = DeviceRegister((BUS_ADDR + 0x06), (uint8_t)  0x00, (register_pool +  2), false, false, true);
-  //reg_defs[LSM9DS1_A_INT_GEN_THS_X]    = DeviceRegister((BUS_ADDR + 0x07), (uint8_t)  0x00, (register_pool +  3), false, false, true);
-  //reg_defs[LSM9DS1_A_INT_GEN_THS_Y]    = DeviceRegister((BUS_ADDR + 0x08), (uint8_t)  0x00, (register_pool +  4), false, false, true);
-  //reg_defs[LSM9DS1_A_INT_GEN_THS_Z]    = DeviceRegister((BUS_ADDR + 0x09), (uint8_t)  0x00, (register_pool +  5), false, false, true);
-  //reg_defs[LSM9DS1_A_INT_GEN_DURATION] = DeviceRegister((BUS_ADDR + 0x0A), (uint8_t)  0x00, (register_pool +  6), false, false, true);
-  //reg_defs[LSM9DS1_G_REFERENCE]        = DeviceRegister((BUS_ADDR + 0x0B), (uint8_t)  0x00, (register_pool +  7), false, false, true);
-  //reg_defs[LSM9DS1_AG_INT1_CTRL]       = DeviceRegister((BUS_ADDR + 0x0C), (uint8_t)  0x00, (register_pool +  8), false, false, true);
-  //reg_defs[LSM9DS1_AG_INT2_CTRL]       = DeviceRegister((BUS_ADDR + 0x0D), (uint8_t)  0x00, (register_pool +  9), false, false, true);
-  //reg_defs[LSM9DS1_AG_WHO_AM_I]        = DeviceRegister((BUS_ADDR + 0x0F), (uint8_t)  0x00, (register_pool + 10), false, false, true);
-  //reg_defs[LSM9DS1_G_CTRL_REG1]        = DeviceRegister((BUS_ADDR + 0x10), (uint8_t)  0x00, (register_pool + 11), false, false, true);
-  //reg_defs[LSM9DS1_G_CTRL_REG2]        = DeviceRegister((BUS_ADDR + 0x11), (uint8_t)  0x00, (register_pool + 12), false, false, true);
-  //reg_defs[LSM9DS1_G_CTRL_REG3]        = DeviceRegister((BUS_ADDR + 0x12), (uint8_t)  0x00, (register_pool + 13), false, false, true);
-  //reg_defs[LSM9DS1_G_ORIENT_CFG]       = DeviceRegister((BUS_ADDR + 0x13), (uint8_t)  0x00, (register_pool + 14), false, false, true);
-  //reg_defs[LSM9DS1_G_INT_GEN_SRC]      = DeviceRegister((BUS_ADDR + 0x14), (uint8_t)  0x00, (register_pool + 15), false, false, true);
-  //reg_defs[LSM9DS1_AG_DATA_TEMP]       = DeviceRegister((BUS_ADDR + 0x15), (uint16_t) 0x00, (register_pool + 16), false, false, true);
-  //reg_defs[LSM9DS1_AG_STATUS_REG]      = DeviceRegister((BUS_ADDR + 0x17), (uint8_t)  0x00, (register_pool + 18), false, false, true);
-  //reg_defs[LSM9DS1_G_DATA_X]           = DeviceRegister((BUS_ADDR + 0x18), (uint16_t) 0x00, (register_pool + 19), false, false, true);
-  //reg_defs[LSM9DS1_G_DATA_Y]           = DeviceRegister((BUS_ADDR + 0x1A), (uint16_t) 0x00, (register_pool + 21), false, false, true);
-  //reg_defs[LSM9DS1_G_DATA_Z]           = DeviceRegister((BUS_ADDR + 0x1C), (uint16_t) 0x00, (register_pool + 23), false, false, true);
-  //reg_defs[LSM9DS1_AG_CTRL_REG4]       = DeviceRegister((BUS_ADDR + 0x1E), (uint8_t)  0x38, (register_pool + 25), false, false, true);
-  //reg_defs[LSM9DS1_A_CTRL_REG5]        = DeviceRegister((BUS_ADDR + 0x1F), (uint8_t)  0x38, (register_pool + 26), false, false, true);
-  //reg_defs[LSM9DS1_A_CTRL_REG6]        = DeviceRegister((BUS_ADDR + 0x20), (uint8_t)  0x00, (register_pool + 27), false, false, true);
-  //reg_defs[LSM9DS1_A_CTRL_REG7]        = DeviceRegister((BUS_ADDR + 0x21), (uint8_t)  0x00, (register_pool + 28), false, false, true);
-  //reg_defs[LSM9DS1_AG_CTRL_REG8]       = DeviceRegister((BUS_ADDR + 0x22), (uint8_t)  0x04, (register_pool + 29), false, false, true);
-  //reg_defs[LSM9DS1_AG_CTRL_REG9]       = DeviceRegister((BUS_ADDR + 0x23), (uint8_t)  0x00, (register_pool + 30), false, false, true);
-  //reg_defs[LSM9DS1_AG_CTRL_REG10]      = DeviceRegister((BUS_ADDR + 0x24), (uint8_t)  0x00, (register_pool + 31), false, false, true);
-  //reg_defs[LSM9DS1_A_INT_GEN_SRC]      = DeviceRegister((BUS_ADDR + 0x26), (uint8_t)  0x00, (register_pool + 32), false, false, true);
-  //reg_defs[LSM9DS1_AG_STATUS_REG_ALT]  = DeviceRegister((BUS_ADDR + 0x27), (uint8_t)  0x00, (register_pool + 33), false, false, true);
-  //reg_defs[LSM9DS1_A_DATA_X]           = DeviceRegister((BUS_ADDR + 0x28), (uint16_t) 0x00, (register_pool + 34), false, false, true);
-  //reg_defs[LSM9DS1_A_DATA_Y]           = DeviceRegister((BUS_ADDR + 0x2A), (uint16_t) 0x00, (register_pool + 36), false, false, true);
-  //reg_defs[LSM9DS1_A_DATA_Z]           = DeviceRegister((BUS_ADDR + 0x2C), (uint16_t) 0x00, (register_pool + 38), false, false, true);
-  //reg_defs[LSM9DS1_AG_FIFO_CTRL]       = DeviceRegister((BUS_ADDR + 0x2E), (uint8_t)  0x00, (register_pool + 40), false, false, true);
-  //reg_defs[LSM9DS1_AG_FIFO_SRC]        = DeviceRegister((BUS_ADDR + 0x2F), (uint8_t)  0x00, (register_pool + 41), false, false, true);
-  //reg_defs[LSM9DS1_G_INT_GEN_CFG]      = DeviceRegister((BUS_ADDR + 0x30), (uint8_t)  0x00, (register_pool + 42), false, false, true);
-  //reg_defs[LSM9DS1_G_INT_GEN_THS_X]    = DeviceRegister((BUS_ADDR + 0x31), (uint16_t) 0x00, (register_pool + 43), false, false, true);
-  //reg_defs[LSM9DS1_G_INT_GEN_THS_Y]    = DeviceRegister((BUS_ADDR + 0x33), (uint16_t) 0x00, (register_pool + 45), false, false, true);
-  //reg_defs[LSM9DS1_G_INT_GEN_THS_Z]    = DeviceRegister((BUS_ADDR + 0x35), (uint16_t) 0x00, (register_pool + 47), false, false, true);
-  //reg_defs[LSM9DS1_G_INT_GEN_DURATION] = DeviceRegister((BUS_ADDR + 0x37), (uint8_t)  0x00, (register_pool + 49), false, false, true);
-
-  // Preform our most commonly-used bus operations to minimize thrash and other kinds of overhead.
-  /* Interrupt discovery. */
-  preformed_busop_irq_mag.shouldReap(false);
-  preformed_busop_irq_mag.devRegisterAdvance(false);
-  preformed_busop_irq_mag.set_opcode(BusOpcode::RX);
-  preformed_busop_irq_mag.callback = (BusOpCallback*) this;
-  preformed_busop_irq_mag.buf      = regPtr(LSM9DS1_M_INT_SRC);
-  preformed_busop_irq_mag.buf_len  = 1;
-  preformed_busop_irq_mag.setParams(
-    BUS_ADDR|0x80,
-    preformed_busop_irq_mag.buf_len,
-    1,
-    (LSM9DS1_M_INT_SRC | 0xC0)
-  );
-
-  preformed_busop_read_mag.shouldReap(false);
-  preformed_busop_read_mag.devRegisterAdvance(true);
-  preformed_busop_read_mag.set_opcode(BusOpcode::RX);
-  preformed_busop_read_mag.callback = (BusOpCallback*) this;
-  preformed_busop_read_mag.buf      = regPtr(LSM9DS1_M_DATA_X);
-  preformed_busop_read_mag.buf_len  = 6;
-  preformed_busop_read_mag.setParams(
-    BUS_ADDR|0x80,
-    preformed_busop_read_mag.buf_len,
-    1,
-    (LSM9DS1_M_DATA_X | 0xC0)
-  );
-
-  // Preform our most commonly-used bus operations to minimize thrash and other kinds of overhead.
-  preformed_busop_read_acc.shouldReap(false);
-  preformed_busop_read_acc.devRegisterAdvance(true);
-  preformed_busop_read_acc.set_opcode(BusOpcode::RX);
-  preformed_busop_read_acc.callback = (BusOpCallback*) this;
-  preformed_busop_read_acc.buf      = regPtr(LSM9DS1_A_DATA_X);
-  preformed_busop_read_acc.buf_len  = 6;
-  preformed_busop_read_acc.setParams(
-    BUS_ADDR|0x80,
-    preformed_busop_read_acc.buf_len,
-    1,
-    (LSM9DS1_A_DATA_X | 0x80)
-  );
-
-  preformed_busop_read_gyr.shouldReap(false);
-  preformed_busop_read_gyr.devRegisterAdvance(true);
-  preformed_busop_read_gyr.set_opcode(BusOpcode::RX);
-  preformed_busop_read_gyr.callback = (BusOpCallback*) this;
-  preformed_busop_read_gyr.buf      = regPtr(LSM9DS1_G_DATA_X);
-  preformed_busop_read_gyr.buf_len  = 6;
-  preformed_busop_read_gyr.setParams(
-    BUS_ADDR|0x80,
-    preformed_busop_read_gyr.buf_len,
-    1,
-    (LSM9DS1_G_DATA_X | 0x80)
-  );
-
-  preformed_busop_irq_0.shouldReap(false);
-  preformed_busop_irq_0.devRegisterAdvance(true);
-  preformed_busop_irq_0.set_opcode(BusOpcode::RX);
-  preformed_busop_irq_0.callback = (BusOpCallback*) this;
-  preformed_busop_irq_0.buf      = regPtr(LSM9DS1_G_INT_GEN_SRC);
-  preformed_busop_irq_0.buf_len  = 22;
-  preformed_busop_irq_0.setParams(
-    BUS_ADDR|0x80,
-    preformed_busop_irq_0.buf_len,
-    1,
-    (LSM9DS1_G_INT_GEN_SRC | 0x80)
-  );
-
-  preformed_busop_irq_1.shouldReap(false);
-  preformed_busop_irq_1.devRegisterAdvance(true);
-  preformed_busop_irq_1.set_opcode(BusOpcode::RX);
-  preformed_busop_irq_1.callback = (BusOpCallback*) this;
-  preformed_busop_irq_1.buf      = regPtr(LSM9DS1_A_INT_GEN_SRC);
-  preformed_busop_irq_1.buf_len  = 3;
-  preformed_busop_irq_1.setParams(
-    BUS_ADDR|0x80,
-    preformed_busop_irq_1.buf_len,
-    1,
-    (LSM9DS1_A_INT_GEN_SRC | 0x80)
-  );
+  //reg_defs[RegID::AG_ACT_THS]         = DeviceRegister((BUS_ADDR + 0x04), (uint8_t)  0x00, (register_pool +  0), false, false, true);
+  //reg_defs[RegID::AG_ACT_DUR]         = DeviceRegister((BUS_ADDR + 0x05), (uint8_t)  0x00, (register_pool +  1), false, false, true);
+  //reg_defs[RegID::A_INT_GEN_CFG]      = DeviceRegister((BUS_ADDR + 0x06), (uint8_t)  0x00, (register_pool +  2), false, false, true);
+  //reg_defs[RegID::A_INT_GEN_THS_X]    = DeviceRegister((BUS_ADDR + 0x07), (uint8_t)  0x00, (register_pool +  3), false, false, true);
+  //reg_defs[RegID::A_INT_GEN_THS_Y]    = DeviceRegister((BUS_ADDR + 0x08), (uint8_t)  0x00, (register_pool +  4), false, false, true);
+  //reg_defs[RegID::A_INT_GEN_THS_Z]    = DeviceRegister((BUS_ADDR + 0x09), (uint8_t)  0x00, (register_pool +  5), false, false, true);
+  //reg_defs[RegID::A_INT_GEN_DURATION] = DeviceRegister((BUS_ADDR + 0x0A), (uint8_t)  0x00, (register_pool +  6), false, false, true);
+  //reg_defs[RegID::G_REFERENCE]        = DeviceRegister((BUS_ADDR + 0x0B), (uint8_t)  0x00, (register_pool +  7), false, false, true);
+  //reg_defs[RegID::AG_INT1_CTRL]       = DeviceRegister((BUS_ADDR + 0x0C), (uint8_t)  0x00, (register_pool +  8), false, false, true);
+  //reg_defs[RegID::AG_INT2_CTRL]       = DeviceRegister((BUS_ADDR + 0x0D), (uint8_t)  0x00, (register_pool +  9), false, false, true);
+  //reg_defs[RegID::AG_WHO_AM_I]        = DeviceRegister((BUS_ADDR + 0x0F), (uint8_t)  0x00, (register_pool + 10), false, false, true);
+  //reg_defs[RegID::G_CTRL_REG1]        = DeviceRegister((BUS_ADDR + 0x10), (uint8_t)  0x00, (register_pool + 11), false, false, true);
+  //reg_defs[RegID::G_CTRL_REG2]        = DeviceRegister((BUS_ADDR + 0x11), (uint8_t)  0x00, (register_pool + 12), false, false, true);
+  //reg_defs[RegID::G_CTRL_REG3]        = DeviceRegister((BUS_ADDR + 0x12), (uint8_t)  0x00, (register_pool + 13), false, false, true);
+  //reg_defs[RegID::G_ORIENT_CFG]       = DeviceRegister((BUS_ADDR + 0x13), (uint8_t)  0x00, (register_pool + 14), false, false, true);
+  //reg_defs[RegID::G_INT_GEN_SRC]      = DeviceRegister((BUS_ADDR + 0x14), (uint8_t)  0x00, (register_pool + 15), false, false, true);
+  //reg_defs[RegID::AG_DATA_TEMP]       = DeviceRegister((BUS_ADDR + 0x15), (uint16_t) 0x00, (register_pool + 16), false, false, true);
+  //reg_defs[RegID::AG_STATUS_REG]      = DeviceRegister((BUS_ADDR + 0x17), (uint8_t)  0x00, (register_pool + 18), false, false, true);
+  //reg_defs[RegID::G_DATA_X]           = DeviceRegister((BUS_ADDR + 0x18), (uint16_t) 0x00, (register_pool + 19), false, false, true);
+  //reg_defs[RegID::G_DATA_Y]           = DeviceRegister((BUS_ADDR + 0x1A), (uint16_t) 0x00, (register_pool + 21), false, false, true);
+  //reg_defs[RegID::G_DATA_Z]           = DeviceRegister((BUS_ADDR + 0x1C), (uint16_t) 0x00, (register_pool + 23), false, false, true);
+  //reg_defs[RegID::AG_CTRL_REG4]       = DeviceRegister((BUS_ADDR + 0x1E), (uint8_t)  0x38, (register_pool + 25), false, false, true);
+  //reg_defs[RegID::A_CTRL_REG5]        = DeviceRegister((BUS_ADDR + 0x1F), (uint8_t)  0x38, (register_pool + 26), false, false, true);
+  //reg_defs[RegID::A_CTRL_REG6]        = DeviceRegister((BUS_ADDR + 0x20), (uint8_t)  0x00, (register_pool + 27), false, false, true);
+  //reg_defs[RegID::A_CTRL_REG7]        = DeviceRegister((BUS_ADDR + 0x21), (uint8_t)  0x00, (register_pool + 28), false, false, true);
+  //reg_defs[RegID::AG_CTRL_REG8]       = DeviceRegister((BUS_ADDR + 0x22), (uint8_t)  0x04, (register_pool + 29), false, false, true);
+  //reg_defs[RegID::AG_CTRL_REG9]       = DeviceRegister((BUS_ADDR + 0x23), (uint8_t)  0x00, (register_pool + 30), false, false, true);
+  //reg_defs[RegID::AG_CTRL_REG10]      = DeviceRegister((BUS_ADDR + 0x24), (uint8_t)  0x00, (register_pool + 31), false, false, true);
+  //reg_defs[RegID::A_INT_GEN_SRC]      = DeviceRegister((BUS_ADDR + 0x26), (uint8_t)  0x00, (register_pool + 32), false, false, true);
+  //reg_defs[RegID::AG_STATUS_REG_ALT]  = DeviceRegister((BUS_ADDR + 0x27), (uint8_t)  0x00, (register_pool + 33), false, false, true);
+  //reg_defs[RegID::A_DATA_X]           = DeviceRegister((BUS_ADDR + 0x28), (uint16_t) 0x00, (register_pool + 34), false, false, true);
+  //reg_defs[RegID::A_DATA_Y]           = DeviceRegister((BUS_ADDR + 0x2A), (uint16_t) 0x00, (register_pool + 36), false, false, true);
+  //reg_defs[RegID::A_DATA_Z]           = DeviceRegister((BUS_ADDR + 0x2C), (uint16_t) 0x00, (register_pool + 38), false, false, true);
+  //reg_defs[RegID::AG_FIFO_CTRL]       = DeviceRegister((BUS_ADDR + 0x2E), (uint8_t)  0x00, (register_pool + 40), false, false, true);
+  //reg_defs[RegID::AG_FIFO_SRC]        = DeviceRegister((BUS_ADDR + 0x2F), (uint8_t)  0x00, (register_pool + 41), false, false, true);
+  //reg_defs[RegID::G_INT_GEN_CFG]      = DeviceRegister((BUS_ADDR + 0x30), (uint8_t)  0x00, (register_pool + 42), false, false, true);
+  //reg_defs[RegID::G_INT_GEN_THS_X]    = DeviceRegister((BUS_ADDR + 0x31), (uint16_t) 0x00, (register_pool + 43), false, false, true);
+  //reg_defs[RegID::G_INT_GEN_THS_Y]    = DeviceRegister((BUS_ADDR + 0x33), (uint16_t) 0x00, (register_pool + 45), false, false, true);
+  //reg_defs[RegID::G_INT_GEN_THS_Z]    = DeviceRegister((BUS_ADDR + 0x35), (uint16_t) 0x00, (register_pool + 47), false, false, true);
+  //reg_defs[RegID::G_INT_GEN_DURATION] = DeviceRegister((BUS_ADDR + 0x37), (uint8_t)  0x00, (register_pool + 49), false, false, true);
 
   last_val_mag(0.0f, 0.0f, 0.0f);
   last_val_acc(0.0f, 0.0f, 0.0f);
@@ -368,9 +368,9 @@ void LSM9DS1::class_init(uint8_t address) {
   discards_total_gyr  = 0;
 
   BUS_ADDR = address;
-  IDX_T0 = LSM9DS1_M_OFFSET_X;
-  IDX_T1 = LSM9DS1_M_OFFSET_Y;
-  IDX_ID = LSM9DS1_M_WHO_AM_I;
+  IDX_T0 = RegID::M_OFFSET_X;
+  IDX_T1 = RegID::M_OFFSET_Y;
+  IDX_ID = RegID::M_WHO_AM_I;
   init();
 }
 
@@ -416,9 +416,6 @@ void LSM9DS1::reset() {
   discards_remain_gyr = 0;
   discards_total_gyr  = 0;
 
-  preformed_busop_irq_0.set_state(XferState::IDLE);
-  preformed_busop_irq_1.set_state(XferState::IDLE);
-
   noise_floor_mag.set(0.0f, 0.0f, 0.0f);
   noise_floor_acc.set(0.0f, 0.0f, 0.0f);
   noise_floor_gyr.set(0.0f, 0.0f, 0.0f);
@@ -426,8 +423,8 @@ void LSM9DS1::reset() {
   // TODO: Blow away our idea of what is in the registers.
   // mark_it_zero();
   init();
-  writeRegister(LSM9DS1_AG_CTRL_REG8, 0x01);
-  writeRegister(LSM9DS1_M_CTRL_REG2, 0x04);
+  writeRegister(RegID::AG_CTRL_REG8, 0x01);
+  writeRegister(RegID::M_CTRL_REG2, 0x04);
 }
 
 
@@ -447,17 +444,6 @@ int8_t LSM9DS1::readSensor() {
   }
 
   if (initComplete()) {
-    // If there is more data on the way, we will let the callback do this for us.
-    if (preformed_busop_read_acc.isIdle()) {
-      readRegister((uint8_t) LSM9DS1_AG_FIFO_SRC);
-    }
-    if (preformed_busop_read_mag.isIdle()) {
-      fire_preformed_bus_op(&preformed_busop_read_mag);
-    }
-  }
-
-  if (preformed_busop_irq_1.isIdle()) {
-    fire_preformed_bus_op(&preformed_busop_irq_1);
   }
   return return_value;
 }
@@ -505,7 +491,7 @@ uint8_t bulk_init_block_ag_1[6] = {
   0b01100000   // No self-tests.
 };
 
-// Init parameters for the inertial aspect. Starting at LSM9DS1_G_INT_GEN_CFG.
+// Init parameters for the inertial aspect. Starting at RegID::G_INT_GEN_CFG.
 uint8_t bulk_init_block_ag_2[8] = {
   0b01111111,  // Gyro OR IRQ conditions, latched, all axes.
   0b00000000,  // Gyro IRQ thresholds.
@@ -518,29 +504,6 @@ uint8_t bulk_init_block_ag_2[8] = {
 };
 
 
-/*
-*
-*/
-int8_t LSM9DS1::configure_sensor() {
-  if (getVerbosity() > 3) Kernel::log("XM::configure_sensor()\n");
-
-  writeRegister(LSM9DS1_M_CTRL_REG1,   (uint8_t*) &bulk_init_block_ag_0, 4);
-  writeRegister(LSM9DS1_M_CTRL_REG5,   (uint8_t*) &bulk_init_block_ag_1, 6);
-  writeRegister(LSM9DS1_G_INT_GEN_CFG, (uint8_t*) &bulk_init_block_ag_2, 8);
-  writeRegister(LSM9DS1_M_CTRL_REG1,   (uint8_t*) &bulk_init_block_m, 5);
-
-  // Latched active-high interrupt enabled on INT_M pin for all axes.
-  writeRegister(LSM9DS1_M_INT_TSH, (uint8_t) 0x28);
-  writeRegister(LSM9DS1_M_INT_CFG, (uint8_t) 0b11100101);
-
-  // Continuous FIFO. Half-full (16) is threshold.
-  writeRegister(LSM9DS1_AG_FIFO_CTRL, (uint8_t)  0b11010000);
-
-  // If we are "init-pending", but not in readback phase, we need to dispatch the test writes.
-  write_test_bytes();
-  return 0;
-}
-
 
 /*
 *
@@ -550,10 +513,10 @@ bool LSM9DS1::is_setup_completed() {
 
   if (!initComplete()) {   // TODO: Redundant.
     if (initPending()) {   // TODO: Redundant.
-      //if (reg_defs[LSM9DS1_M_CTRL_REG1].dirty) return false;
-      //if (reg_defs[LSM9DS1_M_CTRL_REG5].dirty) return false;
-      //if (reg_defs[LSM9DS1_G_INT_GEN_CFG].dirty) return false;
-      //if (reg_defs[LSM9DS1_AG_FIFO_CTRL].dirty) return false;
+      //if (reg_defs[RegID::M_CTRL_REG1].dirty) return false;
+      //if (reg_defs[RegID::M_CTRL_REG5].dirty) return false;
+      //if (reg_defs[RegID::G_INT_GEN_CFG].dirty) return false;
+      //if (reg_defs[RegID::AG_FIFO_CTRL].dirty) return false;
     }
   }
 
@@ -578,7 +541,7 @@ bool LSM9DS1::integrity_check() {
         if (getVerbosity() > 5) {
           StringBuilder local_log;
           local_log.concat("Successful readback!");
-          integrator->deposit_log(&local_log);
+          Kernel::log(&local_log);
         }
         // Rewrite valid values to those registers if necessary.
         //writeDirtyRegisters();
@@ -588,16 +551,16 @@ bool LSM9DS1::integrity_check() {
     else {
       if (getVerbosity() > 2) {
         StringBuilder local_log;
-        local_log.concatf("%s failed integrity check (index 0x%02x). Found 0x%02x. Expected 0x%02x.\n", imu_type(), IDX_T1, regValue(IDX_T1), io_test_val_1);
-        integrator->deposit_log(&local_log);
+        local_log.concatf("Failed integrity check (index 0x%02x). Found 0x%02x. Expected 0x%02x.\n", IDX_T1, regValue(IDX_T1), io_test_val_1);
+        Kernel::log(&local_log);
       }
     }
   }
   else {
     if (getVerbosity() > 2) {
       StringBuilder local_log;
-      local_log.concatf("%s failed integrity check (index 0x%02x). Found 0x%02x. Expected 0x%02x.\n", imu_type(), IDX_T0, regValue(IDX_T0), io_test_val_0);
-      integrator->deposit_log(&local_log);
+      local_log.concatf("Failed integrity check (index 0x%02x). Found 0x%02x. Expected 0x%02x.\n", IDX_T0, regValue(IDX_T0), io_test_val_0);
+      Kernel::log(&local_log);
     }
   }
 
@@ -615,12 +578,12 @@ bool LSM9DS1::integrity_check() {
 * @param  uint8_t The new state desired by the firmware (the Legend).
 * @return non-zero on error.
 */
-int8_t LSM9DS1::setDesiredState(State nu) {
+IMUFault LSM9DS1::setDesiredState(IMUState nu) {
   if (present() && (nu < IMUState::STAGE_1)) {
     // If we already know the sensor is there, why go back further than this?
-    local_log.concatf("%s Trying to move to a state lower than allowed.\n", imu_type());
+    local_log.concat("Trying to move to a state lower than allowed.\n");
     Kernel::log(&local_log);
-    return -1;
+    return IMUFault::INVALID_PARAM_ID;
   }
 
   if (desired_state != nu) {
@@ -630,7 +593,7 @@ int8_t LSM9DS1::setDesiredState(State nu) {
       //   bus operations pending.
       if (getVerbosity() > 2) {
         //local_log.concatf("%s tried to move to state %s while the IMU is off-balance (%s --> %s). Rejecting request.\n", imu_type(), getStateString(nu), getStateString(), getStateString(desired_state));
-        local_log.concatf("%s tried to move to state %s while the IMU is off-balance (%s --> %s). We will allow this for now.\n", imu_type(), getStateString(nu), getStateString(), getStateString(desired_state));
+        local_log.concatf("Tried to move to state %s while the IMU is off-balance (%s --> %s). We will allow this for now.\n", getStateString(nu), getStateString(), getStateString(desired_state));
         Kernel::log(&local_log);
       }
       //return -2;
@@ -650,11 +613,11 @@ int8_t LSM9DS1::setDesiredState(State nu) {
 */
 bool LSM9DS1::step_state() {
   if (!desired_state_attained()) {
-    if (error_condition) {
+    if (IMUFault::NO_ERROR != error_condition) {
       // We shouldn't be changing states if there is an error condition.
       // Reset is the only way to exit the condition at present.
       if (getVerbosity() > 2) {
-        local_log.concatf("%s step_state() was called while we are in an error condition: %s\n", imu_type(), getErrorString());
+        local_log.concatf("Step_state() was called while we are in an error condition: %s\n",  getErrorString());
         Kernel::log(&local_log);
       }
       return true;
@@ -667,7 +630,7 @@ bool LSM9DS1::step_state() {
         break;
 
       case IMUState::STAGE_1:  // We are sure the IMU is present, but we haven't done anything with it.
-        configure_sensor();
+        //configure_sensor();
         break;
 
       case IMUState::STAGE_2:  // Discovered and initiallized, but unknown register values.
@@ -681,21 +644,21 @@ bool LSM9DS1::step_state() {
         break;
 
       case IMUState::STAGE_3:  // Fully initialized and sync'd. Un-calibrated.
-        integrator->state_change_notice(this, IMUState::STAGE_3, IMUState::STAGE_3);  // TODO: Wrong.
         sb_next_write = 0;
-        readSensor();
-        break;                                                       // TODO: Stop skipping calibrate().
+        //readSensor();
+        // TODO: Stop skipping calibrate().
+        break;
 
       case IMUState::STAGE_4:  // Calibrated and idle.
         if (desiredState() == IMUState::STAGE_5) {
           // Enable the chained reads, and start the process rolling.
-          readSensor();
+          //readSensor();
         }
         else {
           // Downgrading to init state 3 (recalibrate).
           set_state(IMUState::STAGE_3);
           sb_next_write = 0;
-          readSensor();
+          //readSensor();
           return true;
         }
         break;
@@ -709,7 +672,7 @@ bool LSM9DS1::step_state() {
           case IMUState::STAGE_3:  // Downgrading to init state 3 (recalibrate).
             set_state(IMUState::STAGE_3);
             sb_next_write = 0;
-            readSensor();
+            //readSensor();
             return true;
           case IMUState::STAGE_5:  // Keep reading.
             return true;
@@ -727,165 +690,50 @@ bool LSM9DS1::step_state() {
 }
 
 
-
-int8_t LSM9DS1::writeRegister(uint8_t reg_index, uint8_t nu_val) {
-  if (regExists(reg_index) && regWritable(reg_index)) {
-    uint8_t* tmp = regPtr(reg_index);
-    *tmp = nu_val;
-    return writeRegister(reg_index, tmp, 1, false);
+IMUFault LSM9DS1::writeRegister(RegID idx, unsigned int nu_val) {
+  uint8_t* ptr = regPtr(idx);
+  if (ptr) {
+    if (regWritable(idx)) {
+      switch (regWidth(idx)) {
+        // These are the only two widths in the sensor.
+        case 2:
+          *((uint16_t*)ptr) = (uint16_t)nu_val;
+          break;
+        case 1:
+          *((uint8_t*) ptr) = (uint8_t) nu_val;
+          break;
+        default:
+          return IMUFault::NOT_WRITABLE;
+      }
+      return IMUFault::NO_ERROR;
+    }
+    return IMUFault::NOT_WRITABLE;
   }
   return IMUFault::REGISTER_UNDEFINED;
 }
-int8_t LSM9DS1::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t len) {     return writeRegister(reg_index, buf, len, (len > 1)); }
-int8_t LSM9DS1::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t len, bool advance_regs) {
-  if (!regWritable(reg_index)) {
-    return IMUFault::NOT_WRITABLE;
-  }
-  else {
-    uint8_t first_byte = reg_index;
-    if (advance_regs) {
-      // If we are advancing the register address,..
-      // ..does the device even have that many...
-      #ifdef __MANUVR_DEBUG
-      StringBuilder _log;
-      _log.concatf("SENSOR_ERROR_REG_NOT_DEFINED %d, LEN %d, idx = %d\n", BUS_ADDR, len, reg_index);
-      Kernel::log(&_log);
-      #endif
-      if (regExists(reg_index + len)) {  // TODO: Sketchy.... might be unnecessary.
-        return IMUFault::REGISTER_UNDEFINED;
-      }
-      // ...and is the entire range writable? Fail if not.
-        for (uint8_t i = 0; i < len; i++) {
-          if (regWritable(reg_index)) {
-            #ifdef __MANUVR_DEBUG
-              StringBuilder _log;
-              _log.concatf("IMUFault::NOT_WRITABLE %d\n", BUS_ADDR);
-              Kernel::log(&_log);
-            #endif
-            return IMUFault::NOT_WRITABLE;
-          }
-        }
-        first_byte |= 0x40;
-    }
-
-    SPIBusOp* op = ((CPLDDriver*)cpld)->new_op();
-    op->devRegisterAdvance(advance_regs);
-    op->set_opcode(BusOpcode::TX);
-    op->buf             = buf;
-    op->buf_len         = len;
-    op->callback        = (BusOpCallback*) this;
-    op->setParams(BUS_ADDR, len, 1, first_byte);
-
-    if (profile()) {
-      op->profile(true);
-    }
-    ((CPLDDriver*)cpld)->queue_io_job(op);
-  }
-  return IMUFault::NO_ERROR;
-}
-
-
-/*
-* Behavior:
-* -----------------------------------------------------------------------
-* reg_index     Device access will begin at the specified register index.
-* buf           Pointer where read data will be deposited.
-* len           How much data will we read?
-* advance_regs  Are we reading x bytes from sequential registers?
-*                 If false, will read the (reg_index) (len) times.
-* (return)      IMU error code.
-*
-* Override rules:
-* -----------------------------------------------------------------------
-* 2 parameters   Length of one is assumed.
-* 3 parameters   Lengths of more than 1 will be assumed to draw
-*                  from sequential registers in the device.
-*/
-int8_t LSM9DS1::readRegister(uint8_t reg_index, uint8_t *buf, uint8_t len) {   return readRegister(reg_index, buf, len, (len > 1)); }
-int8_t LSM9DS1::readRegister(uint8_t reg_index, uint8_t *buf, uint8_t len, bool advance_regs) {
-  uint8_t first_byte = reg_index | 0x80;
-  if (advance_regs) {
-    // Mark all the registers covered by the range as being unread.
-    int temp_len = len;
-    int temp_idx = reg_index;
-    while ((temp_len < len) && regExists(temp_idx)) {
-      temp_len++;
-      temp_idx++;
-    }
-    first_byte |= 0x40;
-  }
-
-  SPIBusOp* op = ((CPLDDriver*)cpld)->new_op();
-  op->devRegisterAdvance(advance_regs);
-  op->set_opcode(BusOpcode::RX);
-  op->buf             = buf;
-  op->buf_len         = len;
-  op->callback        = (BusOpCallback*) this;
-  op->setParams(BUS_ADDR|0x80, len, 1, first_byte);
-
-  if (profile()) {
-    op->profile(true);
-  }
-  ((CPLDDriver*)cpld)->queue_io_job(op);
-
-  return IMUFault::NO_ERROR;
-}
-
-
-int8_t LSM9DS1::readRegister(uint8_t idx) {
-  return readRegister(idx, regPtr(idx), 1, false);
-}
 
 
 /*
 * Convenience fxn. Returns 0 if register index is out of bounds.
 */
-unsigned int LSM9DS1::regValue(uint8_t idx) {
-  switch (idx) {
-    case 2:
-    case 4:
-      return 0;
-    case 1:
-    default:
-      return 1;
+unsigned int LSM9DS1::regValue(RegID idx) {
+  uint8_t* ptr = regPtr(idx);
+  if (ptr) {
+    switch (regWidth(idx)) {
+      // These are the only two widths in the sensor.
+      case 2: return *((uint16_t*)ptr);
+      case 1: return *((uint8_t*) ptr);
+    }
   }
+  return 0;
 }
 
 
 /*
-*
+* Looks at our local offset table to obtain value. This was set at instantiation
+*   by ManaManager.
 */
-bool LSM9DS1::regWritable(uint8_t idx) {
-  switch (idx) {
-    case 2:
-    case 4:
-      return true;
-    case 1:
-    default:
-      return false;
-  }
-}
-
-
-/*
-* Convenience fxn. Returns 0 if register index is out of bounds.
-*/
-bool LSM9DS1::regExists(uint8_t idx) {
-  switch (idx) {
-    case 2:
-    case 4:
-      return true;
-    case 1:
-    default:
-      return false;
-  }
-}
-
-
-/*
-*
-*/
-uint8_t* LSM9DS1::regPtr(uint8_t idx) {
+uint8_t* LSM9DS1::regPtr(RegID idx) {
   switch (idx) {
     case 2:
     case 4:
@@ -894,83 +742,6 @@ uint8_t* LSM9DS1::regPtr(uint8_t idx) {
     default:
       return &io_test_val_1;
   }
-}
-
-
-/**
-* This is the means by which the class sends one of its pre-formed bus operations to the bus
-*   manager.
-*
-* @param  A pointer to the pre-formed bus operation that the class wishes dispatched.
-* @return true on success. False on failure.
-*/
-bool LSM9DS1::fire_preformed_bus_op(SPIBusOp* op) {
-  if (reset_preformed_queue_item(op) ) {
-    if (profile()) profiler_read_begin = micros();
-
-    if (0 != ((CPLDDriver*)cpld)->queue_io_job(op)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-
-
-
-
-/**
-* We need to control for multiple-insertion conditions at this point. The passed-in
-*   parameter is the bus operation that is about to be inserted into the bus queue.
-* If we see that the bus op is not IDLE (IE, it is already waiting to be run, or is BEING run),
-*   we return false without changing the operation. Otherwise, we reset it and give the "GO"
-*   for insertion.
-*
-* @return true on success. False on failure.
-*/
-bool LSM9DS1::reset_preformed_queue_item(SPIBusOp* op) {
-  switch (op->get_state()) {
-    case XferState::IDLE:
-      break;
-    case XferState::INITIATE:
-    case XferState::ADDR:
-    case XferState::TX_WAIT:
-    case XferState::RX_WAIT:
-    case XferState::STOP:
-    case XferState::COMPLETE:
-    default:   // Functions like a primitive semaphore.
-      if (getVerbosity() > 2) {
-        local_log.concatf("reset_preformed_queue_item() failed because it had state %s\n", op->getStateString());
-        op->printDebug(&local_log);
-        Kernel::log(&local_log);
-      }
-      return false;
-  }
-
-  op->set_state(XferState::IDLE);
-  return true;
-}
-
-
-
-/**
-* NULL-checked upstream.
-*/
-void LSM9DS1::dumpPreformedElements(StringBuilder *output) {
-  output->concat("--- Vector read (Mag)\n");
-  preformed_busop_read_mag.printDebug(output);
-  output->concat("--- Vector read (Accel)\n");
-  preformed_busop_read_acc.printDebug(output);
-  output->concat("--- Vector read (Gyr)\n");
-  preformed_busop_read_gyr.printDebug(output);
-
-  output->concat("--- IRQ mag\n");
-  preformed_busop_irq_mag.printDebug(output);
-  output->concat("--- IRQ pin1\n");
-  preformed_busop_irq_0.printDebug(output);
-  output->concat("--- IRQ pin2\n");
-  preformed_busop_irq_1.printDebug(output);
-  output->concat("\n");
 }
 
 
@@ -1004,38 +775,6 @@ void LSM9DS1::dumpDevRegs(StringBuilder *output) {
     output->concatf("--- noise_floor_acc     (%d, %d, %d)\n", noise_floor_acc.x, noise_floor_acc.y, noise_floor_acc.z);
     output->concatf("--- noise_floor_gyr     (%d, %d, %d)\n", noise_floor_gyr.x, noise_floor_gyr.y, noise_floor_gyr.z);
   }
-}
-
-
-/*******************************************************************************
-* ___     _       _                      These members are mandatory overrides
-*  |   / / \ o   | \  _     o  _  _      for implementing I/O callbacks. They
-* _|_ /  \_/ o   |_/ (/_ \/ | (_ (/_     are also implemented by Adapters.
-*******************************************************************************/
-
-/**
-* Called prior to the given bus operation beginning.
-* Returning 0 will allow the operation to continue.
-* Returning anything else will fail the operation with IO_RECALL.
-*   Operations failed this way will have their callbacks invoked as normal.
-*
-* @param  _op  The bus operation that was completed.
-* @return 0 to run the op, or non-zero to cancel it.
-*/
-int8_t LSM9DS1::io_op_callahead(BusOp* _op) {
-  return 0;
-}
-
-
-/*
-* Ultimately, all bus access this class does passes to this function as its last-stop
-*   before becoming folded into the SPI bus queue.
-*/
-int8_t LSM9DS1::queue_io_job(BusOp* _op) {
-  if (nullptr == _op) return -1;   // This should never happen.
-  SPIBusOp* op = (SPIBusOp*) _op;
-  op->callback = (BusOpCallback*) this;         // Notify us of the results.
-  return ((CPLDDriver*)cpld)->queue_io_job(op);     // Pass it to the CPLD for bus access.
 }
 
 

@@ -37,6 +37,68 @@ static const Vector3<float> ZERO_VECTOR;
 uint8_t  Integrator::max_quats_per_event    = 2;
 float    Integrator::mag_discard_threshold  = 0.8f;  // In Gauss.
 
+uint32_t Integrator::measurement_heap_instantiated = 0;
+uint32_t Integrator::measurement_heap_freed        = 0;
+uint32_t Integrator::prealloc_starves              = 0;
+uint32_t Integrator::minimum_prealloc_level        = PREALLOCATED_IIU_MEASUREMENTS;
+PriorityQueue<InertialMeasurement*>  Integrator::preallocd_measurements;
+InertialMeasurement Integrator::__prealloc[PREALLOCATED_IIU_MEASUREMENTS];
+
+
+
+InertialMeasurement* Integrator::fetchMeasurement(SampleType type_code) {
+  InertialMeasurement* return_value;
+
+  if (0 == preallocd_measurements.size()) {
+    // We have exhausted our preallocated measurements. Note it.
+    prealloc_starves++;
+    return_value = new InertialMeasurement();
+    measurement_heap_instantiated++;
+    minimum_prealloc_level = 0;
+  }
+  else {
+    return_value = preallocd_measurements.dequeue();
+    minimum_prealloc_level = strict_min((uint32_t) preallocd_measurements.size(), minimum_prealloc_level);
+  }
+  return return_value;
+}
+
+
+/**
+* Reclaims the given InertialMeasurement so its memory can be re-used.
+*
+* At present, our criteria for preallocation is if the pointer address passed in
+*   falls within the range of our __prealloc array. I see nothing "non-portable"
+*   about this, it doesn't require a flag or class member, and it is fast to check.
+* However, this strategy only works for types that are never used in DMA or code
+*   execution on the STM32F4. It may work for other architectures (PIC32, x86?).
+*   I also feel like it ought to be somewhat slower than a flag or member, but not
+*   by such an amount that the memory savings are not worth the CPU trade-off.
+* Consider writing all new cyclical queues with preallocated members to use this
+*   strategy. Also, consider converting the most time-critical types to this strategy
+*   up until we hit the boundaries of the STM32 CCM.
+*                                 ---J. Ian Lindsay   Mon Apr 13 10:51:54 MST 2015
+*
+* @param InertialMeasurement* obj is the pointer to the object to be reclaimed.
+*/
+void Integrator::reclaimMeasurement(InertialMeasurement* obj) {
+  uintptr_t obj_addr = ((uintptr_t) obj);
+  uintptr_t pre_min  = ((uintptr_t) __prealloc);
+  uintptr_t pre_max  = pre_min + (sizeof(InertialMeasurement) * PREALLOCATED_IIU_MEASUREMENTS);
+
+  if ((obj_addr < pre_max) && (obj_addr >= pre_min)) {
+    // If we are in this block, it means obj was preallocated. wipe and reclaim it.
+    obj->wipe();
+    preallocd_measurements.insert(obj);
+  }
+  else {
+    // We were created because our prealloc was starved. we are therefore a transient heap object.
+    measurement_heap_freed++;
+    delete obj;
+  }
+}
+
+
 /*******************************************************************************
 *   ___ _              ___      _ _              _      _
 *  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
@@ -46,31 +108,25 @@ float    Integrator::mag_discard_threshold  = 0.8f;  // In Gauss.
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 
-Integrator::Integrator(uint8_t idx) {
-  pos_id = idx;
-  if (quat_crunch_event.argCount() > 0) {
-    quat_crunch_event.clearArgs();
-  }
-
+Integrator::Integrator() {
   // Values for 9 DoF fusion and AHRS (Attitude and Heading Reference System)
   //GyroMeasError = 3.1415926535f * (40.0f / 180.0f);  // gyroscope measurement error in rads/s (shown as 3 deg/s)
   GyroMeasDrift = 3.1415926535f * (0.0f / 180.0f);   // gyroscope measurement drift in rad/s/s (shown as 0.0 deg/s/s)
   //beta = 0.866025404f * (3.1415926535f * GyroMeasError);   // compute beta
   beta = 0.2f;
 
-  /* Setup our pre-formed quat crunch event. */
-  quat_crunch_event.repurpose(DIGITABULUM_MSG_IMU_QUAT_CRUNCH, (EventReceiver*) ManuManager::getInstance());
-  quat_crunch_event.specific_target = (EventReceiver*) ManuManager::getInstance();
-  quat_crunch_event.incRefs();
-  //quat_crunch_event.priority(4);
-  quat_crunch_event.addArg((uint8_t) pos_id);
+  /* Populate all the static preallocation slots for measurements. */
+  for (uint16_t i = 0; i < PREALLOCATED_IIU_MEASUREMENTS; i++) {
+    __prealloc[i].wipe();
+    preallocd_measurements.insert(&__prealloc[i]);
+  }
 }
 
 
 Integrator::~Integrator() {
   while (quat_queue.hasNext()) {
     // We need to return the preallocated measurements we are holding.
-    ManuManager::reclaimMeasurement(quat_queue.dequeue());
+    reclaimMeasurement(quat_queue.dequeue());
   }
 }
 
@@ -109,10 +165,10 @@ uint32_t Integrator::totalSamples() {
 
 /*
 */
-int8_t Integrator::pushMeasurement(uint8_t data_type, float x, float y, float z, float d_t) {
+int8_t Integrator::pushMeasurement(SampleType data_type, float x, float y, float z, float d_t) {
   uint32_t read_time = micros();
   switch (data_type) {
-    case IMU_FLAG_GYRO_DATA:
+    case SampleType::GYRO:
       if (_ptr_gyr) _ptr_gyr->set(x, y, z);
       //if (rangeBind()) {
       //  last_value_gyr /= LSM9DS1_M::max_range_vect_gyr;
@@ -122,7 +178,7 @@ int8_t Integrator::pushMeasurement(uint8_t data_type, float x, float y, float z,
       delta_t = (d_t > delta_t) ? d_t : delta_t;   // We want the smaller of the two, since it sets the quat rate.
       break;
 
-    case IMU_FLAG_ACCEL_DATA:
+    case SampleType::ACCEL:
       //if (_ptr_acc) _ptr_acc->set(x, y, z);
       if (_ptr_acc && !nullifyGravity()) _ptr_acc->set(x, y, z);  // If we are nulling gravity, can't do this.
       //if (rangeBind()) {
@@ -133,7 +189,7 @@ int8_t Integrator::pushMeasurement(uint8_t data_type, float x, float y, float z,
       delta_t = (d_t > delta_t) ? d_t : delta_t;   // We want the smaller of the two, since it sets the quat rate.
       break;
 
-    case IMU_FLAG_MAG_DATA:
+    case SampleType::MAG:
       //if (rangeBind()) {
       //  last_value_mag /=  LSM9DS1_AG::max_range_vect_mag;
       //}
@@ -163,7 +219,7 @@ int8_t Integrator::pushMeasurement(uint8_t data_type, float x, float y, float z,
       dirty_mag = read_time;
       break;
 
-    case IMU_FLAG_GRAVITY_DATA:
+    case SampleType::GRAVITY:
       _grav.set(x, y, z);
       grav_scalar = _grav.length();
       _grav.normalize();
@@ -172,7 +228,7 @@ int8_t Integrator::pushMeasurement(uint8_t data_type, float x, float y, float z,
       if (_ptr_quat) _ptr_quat->setDown(x, y, z);
       break;
 
-    case IMU_FLAG_BEARING_DATA:
+    case SampleType::BEARING:
       if (grav_scalar != 0.0f) {  // We need the gravity vector to do this trick.
         Vector3<float> mag_original_bearing(x, y, z);
         mag_original_bearing.normalize();
@@ -186,7 +242,7 @@ int8_t Integrator::pushMeasurement(uint8_t data_type, float x, float y, float z,
 
     default:
       if (verbosity > 3) {
-        local_log.concatf("%d\t Integrator::pushMeasurement(): \t Unhandled Measurement type.\n", pos_id);
+        local_log.concat("Integrator::pushMeasurement(): \t Unhandled Measurement type.\n");
         Kernel::log(&local_log);
       }
       break;
@@ -195,9 +251,8 @@ int8_t Integrator::pushMeasurement(uint8_t data_type, float x, float y, float z,
   if (processQuats() && isQuatDirty()) {
     if (0 == quat_queue.size()) {
       // There was nothing in this queue, but there is about to be.
-      Kernel::staticRaiseEvent(&quat_crunch_event);
     }
-    InertialMeasurement* nu_measurement = ManuManager::fetchMeasurement(data_type);
+    InertialMeasurement* nu_measurement = fetchMeasurement(data_type);
     nu_measurement->set(_ptr_gyr, ((!dirty_mag && cleanMagZero()) ? (Vector3<float>*)&ZERO_VECTOR : _ptr_mag), _ptr_acc, delta_t);
     if (dirty_mag) dirty_mag = 0;
     dirty_acc = 0;
@@ -243,8 +298,6 @@ void Integrator::assign_legend_pointers(void* a, void* g, void* m,
 bool Integrator::enableProfiling(bool en) {
   if (enableProfiling() != en) {
     data_handling_flags = (en) ? (data_handling_flags | IIU_DATA_HANDLING_PROFILING) : (data_handling_flags & ~(IIU_DATA_HANDLING_PROFILING));
-    imu_m.profile(en);
-    imu_ag.profile(en);
   }
   return enableProfiling();
 }
@@ -287,32 +340,7 @@ void Integrator::setTemperature(float nu) {
 }
 
 
-void Integrator::enableAutoscale(SampleType s_type, bool enabled) {
-  switch (s_type) {
-    case SampleType::ACCEL:
-      imu_ag.autoscale_acc(enabled);
-      break;
-    case SampleType::GYRO:
-      imu_ag.autoscale_gyr(enabled);
-      break;
-    case SampleType::MAG:
-      imu_m.autoscale_mag(enabled);
-      break;
-    case SampleType::ALL:
-      imu_ag.autoscale_acc(enabled);
-      imu_ag.autoscale_gyr(enabled);
-      imu_m.autoscale_mag(enabled);
-      break;
-    default:
-      break;
-  }
-}
-
-
-
 void Integrator::setVerbosity(int8_t nu) {
-  imu_m.setVerbosity(nu);
-  imu_ag.setVerbosity(nu);
   verbosity = nu;
 }
 
@@ -332,7 +360,7 @@ void Integrator::printLastFrame(StringBuilder *output) {
 */
 void Integrator::printDebug(StringBuilder* output) {
   if (nullptr == output) return;
-  output->concatf("\n-------------------------------------------------------\n--- Integrator %d\n-------------------------------------------------------\n--- %s legend\n--- Samples:\t ", pos_id, (legend_writable()?"writable":"invalid"));
+  output->concatf("\n-------------------------------------------------------\n--- Integrator\n-------------------------------------------------------\n--- %s legend\n--- Samples:\t ", (legend_writable()?"writable":"invalid"));
   printBrief(output);  // OK
   output->concatf("--- measurements\n--- quat_queue:\t %d measurements\n", quat_queue.size());
   output->concatf("--- temperature: %.2fC\n--- delta_t:\t %.4fms\n--- Quat:\t ", ((double) delta_t * 1000), (double)*(_ptr_temperature));
@@ -347,7 +375,22 @@ void Integrator::printDebug(StringBuilder* output) {
     output->concatf("--- offset_angle_z      %5.2f\n", (double) offset_angle_z);
     printLastFrame(output);
   }
-  output->concat("\n\n");
+
+  if (getVerbosity() > 3) {
+    //output->concatf("-- __dataset location  %p\n", (uintptr_t) __dataset);
+    output->concatf("-- __prealloc location %p\n", (uintptr_t) __prealloc);
+  }
+
+  float grav_consensus = 0.0;
+  for (uint8_t i = 0; i < 17; i++) {
+    grav_consensus += imus[i].grav_scalar;
+  }
+  grav_consensus /= 17;
+  output->concatf("-- Gravity consensus:  %.4fg\n",  (double) grav_consensus);
+  output->concatf("-- Max quat proc       %u\n",    Integrator::max_quats_per_event);
+  output->concatf("-- prealloc starves    %u\n-- minimum_prealloc    %u\n", (unsigned long) prealloc_starves, (unsigned long) minimum_prealloc_level);
+  output->concatf("-- Measurement queue info\n--\t Instantiated %u \t Freed: %u \t Prealloc queue depth: %d\n--\n", measurement_heap_instantiated, measurement_heap_freed, preallocd_measurements.size());
+  output->concat("\n");
 }
 
 
@@ -358,21 +401,6 @@ void Integrator::printBrief(StringBuilder* output) {
   else {
     output->concatf("XM state: %s  \t  G state: %s\n", imu_ag.getStateString(), imu_m.getStateString());
   }
-}
-
-
-void Integrator::dumpPreformedElements(StringBuilder* output) {
-  if (nullptr == output) return;
-  output->concat("\n-------------------------------------------------------\n--- Integrator \n-------------------------------------------------------\n");
-  output->concat("--- Quat-crunch event\n");
-  #if defined(__MANUVR_DEBUG)
-    quat_crunch_event.printDebug(output);
-  #endif
-
-  imu_m.dumpPreformedElements(output);
-  output->concat("\n");
-  imu_ag.dumpPreformedElements(output);
-  output->concat("\n\n");
 }
 
 
@@ -392,14 +420,18 @@ void Integrator::dumpPointers(StringBuilder* output) {
 }
 
 
-const char* Integrator::getSourceTypeString(uint8_t t) {
+const char* Integrator::getSourceTypeString(SampleType t) {
   switch (t) {
-    case IMU_FLAG_ACCEL_DATA:          return "ACCEL_DATA";
-    case IMU_FLAG_GYRO_DATA:           return "GYRO_DATA";
-    case IMU_FLAG_MAG_DATA:            return "MAG_DATA";
-    case IMU_FLAG_GRAVITY_DATA:        return "GRAVITY_DATA";
-    case IMU_FLAG_UNSPECIFIED_DATA:    return "UNSPECIFIED";
-    default:                           return "<UNDEFINED>";
+    case SampleType::ACCEL:          return "ACCEL";
+    case SampleType::GYRO:           return "GYRO";
+    case SampleType::MAG:            return "MAG";
+    case SampleType::GRAVITY:        return "GRAVITY";
+    case SampleType::BEARING:        return "BEARING";
+    case SampleType::ALTITUDE:       return "ALTITUDE";
+    case SampleType::LOCATION:       return "LOCATION";
+    case SampleType::ALL:            return "ALL";
+    case SampleType::UNSPECIFIED:    return "UNSPECIFIED";
+    default:                         return "<UNDEFINED>";
   }
 }
 
@@ -575,7 +607,7 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
     }
 
     quats_procd_this_run++;          // Bailout still counts as proc.
-    ManuManager::reclaimMeasurement(measurement); // Release the memory. Even on bailout.
+    reclaimMeasurement(measurement); // Release the memory. Even on bailout.
   }
 
   if (local_log.length() > 0) Kernel::log(&local_log);

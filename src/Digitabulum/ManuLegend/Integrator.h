@@ -67,6 +67,9 @@ Error should be integrated here as well to form a set of limit error values for
 #define IIU_DEG_TO_RAD_SCALAR   (3.14159f / 180.0f)
 
 
+#define PREALLOCATED_IIU_MEASUREMENTS           180
+
+
 enum class SampleType {
   UNSPECIFIED  = 0x00,
   ACCEL        = 0x01,  // Accelerometer vector.
@@ -87,8 +90,10 @@ class Integrator {
     float grav_scalar = 0.0f;
 
 
-    Integrator(uint8_t idx);
+    Integrator();
     ~Integrator();
+
+    void printDebug(StringBuilder*);
 
     int8_t init();
 
@@ -97,24 +102,20 @@ class Integrator {
     void setTemperature(float);
     uint32_t totalSamples();
 
-    inline int8_t position() {  return pos_id;   }
-
     void reset();
 
     void setSampleRate(uint8_t idx);
 
     bool state_pass_through(uint8_t);
 
-    void printDebug(StringBuilder*);
     void printBrief(StringBuilder*);
 
     /* These are meant to be called from the IMUs. */
-    int8_t pushMeasurement(uint8_t, float x, float y, float z, float delta_t);
+    int8_t pushMeasurement(SampleType, float x, float y, float z, float delta_t);
     void deposit_log(StringBuilder*);
 
     /* These are meant to be called from a Legend. */
     void printLastFrame(StringBuilder *output);
-    void dumpPreformedElements(StringBuilder*);
 
     void assign_legend_pointers(
       void* acc,
@@ -139,14 +140,6 @@ class Integrator {
     inline bool isQuatDirty() {     return (dirty_acc & dirty_gyr);           }
     inline bool has_quats_left() {  return (quat_queue.size() > 0);           }
 
-
-    /*
-    * Accessors for autoscaling.
-    */
-    void enableAutoscale(SampleType, bool enabled);
-    inline void enableAutoscale(bool enabled) {
-      enableAutoscale(SampleType::ALL, enabled);
-    };
 
     /*
     * Accessors for profiling.
@@ -232,10 +225,6 @@ class Integrator {
     }
 
 
-    inline void setAccelBaseFiler(uint8_t nu) {  imu_ag.set_base_filter_param_acc(nu);  };
-    inline void setGyroBaseFiler(uint8_t nu) {   imu_ag.set_base_filter_param_gyr(nu);  };
-
-
     /*
     * Accessors for setting and discovering the iteration count of the Madgwick filter.
     */
@@ -247,7 +236,7 @@ class Integrator {
 
     static float    mag_discard_threshold;
     static uint8_t  max_quats_per_event;   // Cut's down on overhead if load is high.
-    static const char* getSourceTypeString(uint8_t);
+    static const char* getSourceTypeString(SampleType);
 
 
 
@@ -290,10 +279,8 @@ class Integrator {
     //Vector3<float> gravity;        // If we need gravity, but the Legend doesn't want it.
     StringBuilder local_log;
 
-    ManuvrMsg quat_crunch_event;
-
-    int8_t pos_id               = -1; // We may find it convenient to lookup by sensor position.
-    uint8_t madgwick_iterations =  1; //
+    int8_t verbosity            = 3;
+    uint8_t madgwick_iterations = 1;
 
     /* Is the class configured? Can we write our data to a pool?
     *  Used to trust the validity of our pointers.
@@ -312,6 +299,19 @@ class Integrator {
 
     // This is a privately-scoped override that does not consider the magnetometer.
     void MadgwickAHRSupdateIMU(InertialMeasurement*);
+
+    static InertialMeasurement* fetchMeasurement(SampleType);
+    static void reclaimMeasurement(InertialMeasurement*);
+
+
+    // Preallocated frames.
+    // TODO: These things should not be static.
+    static uint32_t prealloc_starves;
+    static uint32_t measurement_heap_instantiated;
+    static uint32_t measurement_heap_freed;
+    static uint32_t minimum_prealloc_level;
+    static PriorityQueue<InertialMeasurement*>  preallocd_measurements;
+    static InertialMeasurement __prealloc[PREALLOCATED_IIU_MEASUREMENTS];
 };
 
 #endif  // __INTEGRATOR_CLASS_H__

@@ -113,8 +113,19 @@ typedef struct {
 } GainErrorMap;
 
 
-// BIG FAT WARNING: These values are NOT register addresses, they are
-//   indicies. This is the order of the register's occurance in the device.
+/*
+* Internally-used register IDs. We need this abstraction because the addresses
+*   within a given package are not disjoint sets.
+* The order corrosponds to the order of the named register's occurance in the device.
+*
+* NOTE: These values are NOT register addresses, they are indicies. The given
+*   order, and the fact that the first valid register starts at 0 is an
+*   assumption made throughout this class.
+*   Magnetometer registers occur first because the CPLD is organized that way.
+* NOTE: In order to get away with using the restricted list, the sensors MUST be
+*   configured to allow multiple sequential register access. The means for doing
+*   this vary between mag/ag.
+*/
 enum class RegID {
   M_OFFSET_X = 0x00,  // 16-bit offset registers
   M_OFFSET_Y,         // 16-bit offset registers
@@ -176,17 +187,72 @@ enum class RegID {
 
 
 
+/*******************************************************************************
+* This is the const object that is passed into the LSM9DS1 constructor. Its
+*   values are pointers to the memory that represents the LSM9DS1 registers.
+*******************************************************************************/
+class RegPtrMap {
+  // Because the data frames come in so fast, we need to double buffer them.
+  // Some registers are not included in this list if their function can be
+  //   handled entirely within ManuManager.
+  uint16_t* AG_DATA_TEMP;  // 16-bit temperature register (11-bit)
+  //M_OFFSET_X = 0x00,  // 16-bit offset registers
+  //M_OFFSET_Y,         // 16-bit offset registers
+  //M_OFFSET_Z,         // 16-bit offset registers
+  //M_CTRL_REG1,
+  //M_CTRL_REG2,
+  //M_CTRL_REG3,
+  //M_CTRL_REG4,
+  //M_CTRL_REG5,
+  //M_STATUS_REG,
+  //M_DATA_X,           // 16-bit data registers
+  //M_DATA_Y,           // 16-bit data registers
+  //M_DATA_Z,           // 16-bit data registers
+  //M_INT_CFG,
+  //M_INT_SRC,
+  //M_INT_TSH,          // 16-bit threshold register
+
+  //AG_ACT_THS,
+  //AG_ACT_DUR,
+  //A_INT_GEN_CFG,
+  //A_INT_GEN_THS_X,    // 8-bit threshold registers
+  //A_INT_GEN_THS_Y,    // 8-bit threshold registers
+  //A_INT_GEN_THS_Z,    // 8-bit threshold registers
+  //A_INT_GEN_DURATION,
+  //G_REFERENCE,
+  //AG_INT1_CTRL,
+  //AG_INT2_CTRL,
+  //AG_WHO_AM_I,
+  //G_CTRL_REG1,
+  //G_CTRL_REG2,
+  //G_CTRL_REG3,
+  //G_ORIENT_CFG,
+  //G_INT_GEN_SRC,
+  //AG_STATUS_REG,
+  //AG_CTRL_REG4,
+  //A_CTRL_REG5,
+  //A_CTRL_REG6,
+  //A_CTRL_REG7,
+  //AG_CTRL_REG8,
+  //AG_CTRL_REG9,
+  //AG_CTRL_REG10,
+  //A_INT_GEN_SRC,
+  //AG_STATUS_REG_ALT,
+  //AG_FIFO_CTRL,
+  //AG_FIFO_SRC,
+  //G_INT_GEN_CFG,
+  //G_INT_GEN_THS_X,    // 16-bit threshold registers
+  //G_INT_GEN_THS_Y,    // 16-bit threshold registers
+  //G_INT_GEN_THS_Z,    // 16-bit threshold registers
+  //G_INT_GEN_DURATION
+};
+
 
 /*******************************************************************************
-* Common members of the class...                                               *
+* The LSM9DS1 class. Acc, Gyr, and Mag are all handled here, and the work of
+*   distinguishing between them falls on the CPLD hardware and ManuManager.
 *******************************************************************************/
-
-/**
-* The hardware driver for the LSM9DSx.
-* This class is purely for abstraction, and is never instatntiated. It is only
-*   intended to hold functions and members common to a single device package.
-*/
-class LSM9DS1 : public BusOpCallback {
+class LSM9DS1 {
   public:
     LSM9DS1();
     ~LSM9DS1();
@@ -198,16 +264,15 @@ class LSM9DS1 : public BusOpCallback {
     int8_t io_op_callback(BusOp*);
     int8_t queue_io_job(BusOp*);
 
-    int8_t setDesiredState(IMUState);   // Used to set the state the OS wants the IMU class to acheive.
-    void   write_test_bytes();
-    bool   step_state();      // Used internally to move between states. TODO: Should be private.
+    IMUFault setDesiredState(IMUState);   // Used to set the state the OS wants the IMU class to acheive.
+    void     write_test_bytes();
+    bool     step_state();      // Used internally to move between states. TODO: Should be private.
 
     IMUFault init();
     void   reset();           // Reset our state without causing a re-init.
 
     /* Debug stuff... */
     void dumpDevRegs(StringBuilder*);
-    void dumpPreformedElements(StringBuilder*);
 
     /* Functions called by the IIU */
     int8_t readSensor();      // Call to poll the sensor's registers and take any appropriate action.
@@ -239,22 +304,22 @@ class LSM9DS1 : public BusOpCallback {
     inline bool autoscale_gyr() {   return _check_flags(IMU_COMMON_FLAG_AUTOSCALE_1);   };
     inline void autoscale_gyr(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_AUTOSCALE_1);  };
 
-    int8_t request_rescale_mag(uint8_t nu_scale_idx);     // Call to rescale the sensor.
-    int8_t set_sample_rate_mag(uint8_t nu_srate_idx);     // Call to alter sample rate.
-    int8_t set_base_filter_param_mag(uint8_t nu_bw_idx);  // Call to change the bandwidth of the AA filter.
+    IMUFault request_rescale_mag(uint8_t nu_scale_idx);     // Call to rescale the sensor.
+    IMUFault set_sample_rate_mag(uint8_t nu_srate_idx);     // Call to alter sample rate.
+    IMUFault set_base_filter_param_mag(uint8_t nu_bw_idx);  // Call to change the bandwidth of the AA filter.
 
-    int8_t request_rescale_acc(uint8_t nu_scale_idx);     // Call to rescale the sensor.
-    int8_t set_sample_rate_acc(uint8_t nu_srate_idx);     // Call to alter sample rate.
-    int8_t set_base_filter_param_acc(uint8_t nu_bw_idx);  // Call to change the bandwidth of the AA filter.
+    IMUFault request_rescale_acc(uint8_t nu_scale_idx);     // Call to rescale the sensor.
+    IMUFault set_sample_rate_acc(uint8_t nu_srate_idx);     // Call to alter sample rate.
+    IMUFault set_base_filter_param_acc(uint8_t nu_bw_idx);  // Call to change the bandwidth of the AA filter.
 
-    int8_t request_rescale_gyr(uint8_t nu_scale_idx);     // Call to rescale the sensor.
-    int8_t set_sample_rate_gyr(uint8_t nu_srate_idx);     // Call to alter sample rate.
-    int8_t set_base_filter_param_gyr(uint8_t nu_bw_idx);  // Call to change the bandwidth of the AA filter.
+    IMUFault request_rescale_gyr(uint8_t nu_scale_idx);     // Call to rescale the sensor.
+    IMUFault set_sample_rate_gyr(uint8_t nu_srate_idx);     // Call to alter sample rate.
+    IMUFault set_base_filter_param_gyr(uint8_t nu_bw_idx);  // Call to change the bandwidth of the AA filter.
 
-    int8_t irq_0();    // When an IRQ signal fires, find the cause and service it.
-    int8_t irq_1();    // When an IRQ signal fires, find the cause and service it.
-    int8_t irq_2();    // When an IRQ signal fires, find the cause and service it.
-    int8_t irq_3();    // When an IRQ signal fires, find the cause and service it.
+    IMUFault irq_drdy(); // When an IRQ signal fires, find the cause and service it.
+    IMUFault irq_m();    // When an IRQ signal fires, find the cause and service it.
+    IMUFault irq_1();    // When an IRQ signal fires, find the cause and service it.
+    IMUFault irq_2();    // When an IRQ signal fires, find the cause and service it.
 
 
     /* Inlines for the specialized flag duty of get/set class verbosity. */
@@ -271,6 +336,10 @@ class LSM9DS1 : public BusOpCallback {
     static IMUState getStateByIndex(uint8_t state_idx);
     static const char* getStateString(IMUState);
     static const char* getErrorString(IMUFault);
+
+    static const uint8_t regAddr(RegID);
+    static const uint8_t regWidth(RegID);
+    static const bool    regWritable(RegID);
 
 
     static const GainErrorMap error_map_mag[];
@@ -297,12 +366,10 @@ class LSM9DS1 : public BusOpCallback {
     uint8_t BUS_ADDR;  // What is our address on the bus? TODO: const
 
     // TODO: r1 simplified things a great deal. All these members can probably DIAF.
-    uint8_t IDX_T0; // TODO: Ought to be const if here at all.
-    uint8_t IDX_T1; // TODO: Ought to be const if here at all.
-    uint8_t IDX_ID; // TODO: Ought to be const if here at all.
+    RegID IDX_T0; // TODO: Ought to be const if here at all.
+    RegID IDX_T1; // TODO: Ought to be const if here at all.
+    RegID IDX_ID; // TODO: Ought to be const if here at all.
 
-    uint32_t  profiler_read_begin = 0;    // Profiling member.
-    uint32_t  profiler_read_end   = 0;    // Profiling member.
     uint32_t  time_stamp_base  = 0;       // What time was it when we first started taking samples?
     uint32_t  last_sample_time = 0;       // What time was it when we first started taking samples?
     uint32_t  sample_count     = 0;       // How many samples have we read since init?
@@ -340,13 +407,6 @@ class LSM9DS1 : public BusOpCallback {
     uint32_t discards_total_acc  = 0;     // Track how many discards we've ASKED for.
     uint32_t discards_total_gyr  = 0;     // Track how many discards we've ASKED for.
 
-    SPIBusOp preformed_busop_irq_mag;
-    SPIBusOp preformed_busop_irq_0;
-    SPIBusOp preformed_busop_irq_1;
-    SPIBusOp preformed_busop_read_mag;
-    SPIBusOp preformed_busop_read_acc;
-    SPIBusOp preformed_busop_read_gyr;
-
     Vector3<float> last_val_mag;
     Vector3<float> last_val_acc;
     Vector3<float> last_val_gyr;
@@ -359,27 +419,18 @@ class LSM9DS1 : public BusOpCallback {
     Vector3<int16_t> noise_floor_acc;
     Vector3<int16_t> noise_floor_gyr;
 
-
     /* These are higher-level fxns that are used as "macros" for specific patterns of */
     /*   register access. Common large-scale operations should go here.               */
-    int8_t writeRegister(uint8_t base_index, uint8_t nu_val);
-    int8_t writeRegister(uint8_t base_index, uint8_t *buf, uint8_t len);
-    int8_t writeRegister(uint8_t base_index, uint8_t *buf, uint8_t len, bool advance_regs);
-    int8_t readRegister(uint8_t base_index, uint8_t *buf, uint8_t len);  // Overrides above fxn with advance_regs = false
-    int8_t readRegister(uint8_t base_index, uint8_t *buf, uint8_t len, bool advance_regs);
-    int8_t readRegister(uint8_t index);
-    unsigned int regValue(uint8_t idx);
-    bool regWritable(uint8_t idx);
-    bool regExists(uint8_t idx);
-    uint8_t* regPtr(uint8_t idx);
+    IMUFault writeRegister(RegID idx, unsigned int nu_val);
+
+    unsigned int regValue(RegID);
+    uint8_t* regPtr(RegID);
     /* This is the end of the low-level functions.                                    */
 
     IMUFault identity_check();
-    bool fire_preformed_bus_op(SPIBusOp* op);
     bool integrity_check();
 
     bool is_setup_completed();
-    int8_t configure_sensor();
 
     int8_t io_op_callback_mag(SPIBusOp*);
     int8_t io_op_callback_ag(SPIBusOp*);
@@ -411,10 +462,6 @@ class LSM9DS1 : public BusOpCallback {
     int8_t collect_reading_acc();
     int8_t collect_reading_gyr();
     int8_t collect_reading_temperature();
-
-
-  //private:
-    bool reset_preformed_queue_item(SPIBusOp* op);
 };
 
 #endif // __LSM9DS1_MERGED_H__
