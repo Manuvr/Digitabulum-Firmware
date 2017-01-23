@@ -320,304 +320,285 @@ int8_t LSM9DS1::calibrate_from_data_ag() {
 /**
 * When a bus operation completes, it is passed back to its issuing class.
 *
-* @param  _op  The bus operation that was completed.
-* @return SPI_CALLBACK_NOMINAL on success, or appropriate error code.
+* @param  idx    The register index that was updated.
+* @param  value  The newest available value.
+* @return IMUFault code.
 */
-int8_t LSM9DS1::io_op_callback_ag(SPIBusOp* op) {
-  int8_t return_value = SPI_CALLBACK_NOMINAL;
+IMUFault LSM9DS1::io_op_callback_ag_read(RegID idx, unsigned int value) {
+  IMUFault return_value = IMUFault::NO_ERROR;
+  if (getVerbosity() > 6) local_log.concatf("io_op_callback_ag_read(%s, %u)\n", regNameString(idx), value);
 
-  unsigned int access_len = op->buf_len;  // The access length lets us know how many things changed.
-  uint8_t access_idx = op->getTransferParam(3);
-  unsigned int value = regValue(access_idx);
-  if (getVerbosity() > 6) local_log.concatf("%s  XM::io_op_callback(%p): value: %d \t access_idx  %d \t access_len: %d\n", op->getOpcodeString(), (uintptr_t)((BusOpCallback*) this), value, access_idx, access_len);
-
-  /* Our first choice is: Did we just finish a WRITE or a READ? */
   /* READ Case-offs */
-  if (BusOpcode::RX == op->get_opcode()) {
-    while (access_len > 0) {
-      value = regValue(access_idx);
-      access_len -= 1;   // Subtract the length.
-
-      if (getVerbosity() > 3) {
-        local_log.concatf("\t XM R: access_idx  0x%02x   (0x%04x)\n", access_idx, (uint16_t) value);
+  if (initPending()) {
+    if (IDX_T1 == idx) {
+      if (integrity_check()) {
+        set_state(IMUState::STAGE_3);
+        step_state();
       }
-
-      if (initPending()) {
-        if (IDX_T1 == access_idx) {
-          if (integrity_check()) {
-            set_state(IMUState::STAGE_3);
-            step_state();
-          }
-        }
-      }
-
-
-      switch (access_idx) {
-        case RegID::A_DATA_X:
-          if (pending_samples > 0) {
-            pending_samples--;
-            switch (getState()) {
-              case IMUState::STAGE_5:
-                collect_reading_acc();
-                if (0 == pending_samples) {
-                  set_state(IMUState::STAGE_4);
-                  step_state();
-                }
-                else {
-                  return_value = SPI_CALLBACK_RECYCLE;   // Nominal outcome. Re-run the job.
-                }
-                break;
-
-              case IMUState::STAGE_3:
-                sample_backlog_acc[sb_next_write++ % 32]((int16_t)regValue(RegID::A_DATA_X), (int16_t)regValue(RegID::A_DATA_Y), (int16_t)regValue(RegID::A_DATA_Z));
-                if (0 == pending_samples) {
-                  // If we have received the last expected sample, see how many more there are.
-                  if (32 >= sb_next_write) {
-                    sb_next_write    = 0;
-                    // Solidify calibration.
-                    if (0 == calibrate_from_data()) {
-                      set_state(IMUState::STAGE_4);
-                      step_state();
-                    }
-                    else {
-                      // Failed a pass through INIT-3.
-                      readRegister((uint8_t) RegID::AG_FIFO_SRC);
-                    }
-                  }
-                  else {
-                    readRegister((uint8_t) RegID::AG_FIFO_SRC);
-                  }
-                }
-                else {
-                  return_value = SPI_CALLBACK_RECYCLE;   // Nominal outcome. Re-run the job.
-                }
-                break;
-
-              default:
-                break;
-            }
-          }
-          break;
-
-        /* We don't address these registers byte-wise. Empty case for documentation's sake. */
-        case RegID::A_DATA_Y:  break;
-        case RegID::A_DATA_Z:  break;
-
-        case RegID::G_DATA_X:
-          if (pending_samples > 0) {
-            pending_samples--;
-            switch (getState()) {
-              case IMUState::STAGE_5:
-                collect_reading_gyr();
-                if (0 == pending_samples) {
-                  set_state(IMUState::STAGE_4);
-                  step_state();
-                }
-                else {
-                  return_value = SPI_CALLBACK_RECYCLE;   // Nominal outcome. Re-run the job.
-                }
-                break;
-
-              case IMUState::STAGE_3:
-                sample_backlog_gyr[sb_next_write++ % 32]((int16_t)regValue(RegID::G_DATA_X), (int16_t)regValue(RegID::G_DATA_Y), (int16_t)regValue(RegID::G_DATA_Z));
-                if (0 == pending_samples) {
-                  // If we have received the last expected sample, see how many more there are.
-                  if (32 >= sb_next_write) {
-                    sb_next_write    = 0;
-                    // Solidify calibration.
-                    if (0 == calibrate_from_data()) {
-                      set_state(IMUState::STAGE_4);
-                      step_state();
-                    }
-                    else {
-                      // Failed a pass through INIT-3.
-                      readRegister((uint8_t) RegID::AG_FIFO_SRC);
-                    }
-                  }
-                  else {
-                    readRegister((uint8_t) RegID::AG_FIFO_SRC);
-                  }
-                }
-                else {
-                  return_value = SPI_CALLBACK_RECYCLE;   // Nominal outcome. Re-run the job.
-                }
-                break;
-
-              default:
-                break;
-            }
-          }
-          break;
-
-        /* We don't address these registers byte-wise. Empty case for documentation's sake. */
-        case RegID::G_DATA_Y:   break;
-        case RegID::G_DATA_Z:   break;
-
-        // Since this data is only valid when the mag data is, we'll heed it in that block.
-        case RegID::AG_DATA_TEMP:
-          collect_reading_temperature();
-          break;
-
-        case RegID::AG_WHO_AM_I:
-          if (0x68 == value) {
-            if (!present()) {
-              set_state(IMUState::STAGE_1);
-              step_state();
-            }
-            else {
-              // Nominal condition. Maybe we bulk-read? Nice to have verification....
-            }
-          }
-          else {
-            // We lost the IMU, perhaps...
-            set_state(IMUState::STAGE_0);
-            error_condition = IMUFault::WRONG_IDENTITY;
-          }
-          break;
-
-        case RegID::G_INT_GEN_SRC:     /* The gyroscope interrupt status register. */
-          if (value & 0x01) {                 // An interrupt was seen because we crossed a threshold we set.
-            if (value & 0xE0) {               // Did we exceed our set threshold?
-              if (autoscale_gyr()) request_rescale_gyr(scale_gyr+1);
-            }
-            else if (value & 0x1C) {          // Did we drop below our set threshold?
-              if (autoscale_gyr()) request_rescale_gyr(scale_gyr-1);
-            }
-          }
-          else if (value & 0x02) {            // We had a range overflow. Means we need to autoscale...
-            if (autoscale_gyr()) request_rescale_gyr(scale_gyr+1);
-          }
-          break;
-        // TODO: We need to implement these....
-        case RegID::AG_STATUS_REG:      /* Status of the gyr data registers on the sensor. */
-          if (value & 0x08) {                 // We have fresh data to fetch.
-            if (!fire_preformed_bus_op(&preformed_busop_read_gyr) ) {
-              // Take corrective action.
-              if (getVerbosity() > 1) local_log.concat("\tFailed to fast-read gyr vector\n");
-            }
-          }
-          break;
-
-        case RegID::AG_STATUS_REG_ALT:
-          if (getVerbosity() > 5) local_log.concatf("\t RegID::AG_STATUS_REG_ALT: 0x%02x\n", (uint8_t) value);
-          break;
-        case RegID::AG_FIFO_CTRL:
-          if (getVerbosity() > 5) local_log.concatf("\t XM_FIFO Control: 0x%02x\n", (uint8_t) value);
-          break;
-        case RegID::G_CTRL_REG1:
-          if (getVerbosity() > 5) local_log.concatf("\t RegID::G_CTRL_REG1: 0x%02x\n", (uint8_t) value);
-          if ((value >> 4) < MAXIMUM_RATE_INDEX_AG)  update_rate_acc = (value >> 4) & 0x0F;
-          break;
-        case RegID::AG_CTRL_REG4:
-          if (getVerbosity() > 5) local_log.concatf("\t RegID::AG_CTRL_REG4: 0x%02x\n", (uint8_t) value);
-          if (((value >> 3) & 0x07) < MAXIMUM_GAIN_INDEX_ACC)  scale_acc = (value >> 3) & 0x07;
-          base_filter_param = (value >> 6) & 0x03;
-          break;
-        case RegID::A_CTRL_REG6:
-          if (getVerbosity() > 5) local_log.concatf("\t RegID::A_CTRL_REG6: 0x%02x\n", (uint8_t) value);
-          if (((value >> 3) & 0x03) < MAXIMUM_GAIN_INDEX_GYR)  scale_gyr = (value >> 3) & 0x03;
-          break;
-        case RegID::AG_FIFO_SRC:     /* The FIFO status register. */
-          //if (getVerbosity() > 5) local_log.concatf("\t XM FIFO Status: 0x%02x\n", (uint8_t) value);
-          if (initComplete()) {
-            *pending_samples = value & 0x1F;
-            if (!(value & 0x20)) {              // If the FIFO watermark is set and the FIFO is not empty...
-              switch (getState()) {
-                case IMUState::STAGE_4:
-                case IMUState::STAGE_5:
-                  if (IMUState::STAGE_5 != desiredState()) {
-                    break;
-                  }
-                  // Note: no break; on purpose.
-                case IMUState::STAGE_3:
-                  if (preformed_busop_read_acc.isIdle()) {
-                    if (!fire_preformed_bus_op(&preformed_busop_read_acc) ) {
-                      if (getVerbosity() > 2) local_log.concat("\tFailed to fast-read accel vector\n");
-                      error_condition = IMUFault::BUS_INSERTION_FAILED;
-                      if (getState() == IMUState::STAGE_5) {
-                        set_state(IMUState::STAGE_4);
-                      }
-                    }
-                    else if (IMUState::STAGE_4 == getState()) {
-                      set_state(IMUState::STAGE_5);
-                      step_state();
-                    }
-                  }
-                  break;
-
-                default:
-                  break;
-              }
-            }
-            else if (getState() == IMUState::STAGE_3) {
-              readRegister((uint8_t) RegID::AG_FIFO_SRC);
-            }
-          }
-          break;
-
-        default:
-          break;
-      }
-      if (op->devRegisterAdvance()) access_idx++;
     }
   }
 
 
-  /* WRITE Case-offs */
-  else if (BusOpcode::TX == op->get_opcode()) {
-    while (access_len > 0) {
-      value = regValue(access_idx);
-      access_len -= 1;   // Subtract the length.
+  switch (idx) {
+    case RegID::A_DATA_X:
+      if (pending_samples > 0) {
+        pending_samples--;
+        switch (getState()) {
+          case IMUState::STAGE_5:
+            collect_reading_acc();
+            if (0 == pending_samples) {
+              set_state(IMUState::STAGE_4);
+              step_state();
+            }
+            else {
+              return_value = SPI_CALLBACK_RECYCLE;   // Nominal outcome. Re-run the job.
+            }
+            break;
 
-      if (getVerbosity() > 3) {
-        local_log.concatf("\t XM W: access_idx  0x%02x   (0x%04x)\n", access_idx, (uint16_t) value);
-      }
+          case IMUState::STAGE_3:
+            sample_backlog_acc[sb_next_write++ % 32]((int16_t)regValue(RegID::A_DATA_X), (int16_t)regValue(RegID::A_DATA_Y), (int16_t)regValue(RegID::A_DATA_Z));
+            if (0 == pending_samples) {
+              // If we have received the last expected sample, see how many more there are.
+              if (32 >= sb_next_write) {
+                sb_next_write    = 0;
+                // Solidify calibration.
+                if (0 == calibrate_from_data()) {
+                  set_state(IMUState::STAGE_4);
+                  step_state();
+                }
+                else {
+                  // Failed a pass through INIT-3.
+                  readRegister((uint8_t) RegID::AG_FIFO_SRC);
+                }
+              }
+              else {
+                readRegister((uint8_t) RegID::AG_FIFO_SRC);
+              }
+            }
+            else {
+              return_value = SPI_CALLBACK_RECYCLE;   // Nominal outcome. Re-run the job.
+            }
+            break;
 
-      /* If we are doing a WRITE, most likey, we will only case to set some variable
-           or parameter in the class now that we know the value is in the sensor.  */
-      //reg_defs[access_idx].dirty = false;
-
-      if (initPending()) {
-        if (IDX_T1 == access_idx) {
-          set_state(IMUState::STAGE_2);
-          step_state();
+          default:
+            break;
         }
       }
+      break;
 
-      switch (access_idx) {
-        // TODO: We need to implement these....
-        case RegID::AG_INT1_CTRL:
-          break;
-        case RegID::AG_INT2_CTRL:
-          break;
+    /* We don't address these registers byte-wise. Empty case for documentation's sake. */
+    case RegID::A_DATA_Y:  break;
+    case RegID::A_DATA_Z:  break;
 
-        case RegID::G_CTRL_REG1:
-          //if ((value >> 4) < MAXIMUM_RATE_INDEX_AG)  update_rate_acc = (value >> 4) & 0x0F;
-          break;
-        case RegID::G_CTRL_REG2:
-          if (((value >> 3) & 0x07) < MAXIMUM_GAIN_INDEX_ACC)  scale_acc = (value >> 3) & 0x07;
-          break;
-        case RegID::A_CTRL_REG5:
-          //if (((value >> 2) & 0x07) < MAXIMUM_RATE_INDEX_MAG)  update_rate_mag = ((value >> 2) & 0x07) + 1;
-          break;
-        case RegID::A_CTRL_REG6:
-          if (((value >> 5) & 0x03) < MAXIMUM_GAIN_INDEX_GYR)  scale_gyr = (value >> 5) & 0x03;
-          break;
-        case RegID::AG_CTRL_REG8:
-          if (value & 0x01) { // Did we write here to reset?
-            if (!present()) {
-              integrator->init();
+    case RegID::G_DATA_X:
+      if (pending_samples > 0) {
+        pending_samples--;
+        switch (getState()) {
+          case IMUState::STAGE_5:
+            collect_reading_gyr();
+            if (0 == pending_samples) {
+              set_state(IMUState::STAGE_4);
+              step_state();
             }
-          }
-          break;
+            else {
+              return_value = SPI_CALLBACK_RECYCLE;   // Nominal outcome. Re-run the job.
+            }
+            break;
 
+          case IMUState::STAGE_3:
+            sample_backlog_gyr[sb_next_write++ % 32]((int16_t)regValue(RegID::G_DATA_X), (int16_t)regValue(RegID::G_DATA_Y), (int16_t)regValue(RegID::G_DATA_Z));
+            if (0 == pending_samples) {
+              // If we have received the last expected sample, see how many more there are.
+              if (32 >= sb_next_write) {
+                sb_next_write    = 0;
+                // Solidify calibration.
+                if (0 == calibrate_from_data()) {
+                  set_state(IMUState::STAGE_4);
+                  step_state();
+                }
+                else {
+                  // Failed a pass through INIT-3.
+                  readRegister((uint8_t) RegID::AG_FIFO_SRC);
+                }
+              }
+              else {
+                readRegister((uint8_t) RegID::AG_FIFO_SRC);
+              }
+            }
+            else {
+              return_value = SPI_CALLBACK_RECYCLE;   // Nominal outcome. Re-run the job.
+            }
+            break;
 
-        default:
-          if (getVerbosity() > 5) local_log.concatf("\t XM Wrote an unimplemented register.\n");
-          break;
+          default:
+            break;
+        }
       }
-      if (op->devRegisterAdvance()) access_idx++;
+      break;
+    /* We don't address these registers byte-wise. Empty case for documentation's sake. */
+    case RegID::G_DATA_Y:   break;
+    case RegID::G_DATA_Z:   break;
+
+    // Since this data is only valid when the mag data is, we'll heed it in that block.
+    case RegID::AG_DATA_TEMP:
+      collect_reading_temperature();
+      break;
+
+    case RegID::AG_WHO_AM_I:
+      if (0x68 == value) {
+        if (!present()) {
+          set_state(IMUState::STAGE_1);
+          step_state();
+        }
+        else {
+          // Nominal condition. Maybe we bulk-read? Nice to have verification....
+        }
+      }
+      else {
+        // We lost the IMU, perhaps...
+        set_state(IMUState::STAGE_0);
+        error_condition = IMUFault::WRONG_IDENTITY;
+      }
+      break;
+
+    case RegID::G_INT_GEN_SRC:     /* The gyroscope interrupt status register. */
+      if (value & 0x01) {                 // An interrupt was seen because we crossed a threshold we set.
+        if (value & 0xE0) {               // Did we exceed our set threshold?
+          if (autoscale_gyr()) request_rescale_gyr(scale_gyr+1);
+        }
+        else if (value & 0x1C) {          // Did we drop below our set threshold?
+          if (autoscale_gyr()) request_rescale_gyr(scale_gyr-1);
+        }
+      }
+      else if (value & 0x02) {            // We had a range overflow. Means we need to autoscale...
+        if (autoscale_gyr()) request_rescale_gyr(scale_gyr+1);
+      }
+      break;
+    // TODO: We need to implement these....
+    case RegID::AG_STATUS_REG:      /* Status of the gyr data registers on the sensor. */
+      if (value & 0x08) {                 // We have fresh data to fetch.
+        if (!fire_preformed_bus_op(&preformed_busop_read_gyr) ) {
+          // Take corrective action.
+          if (getVerbosity() > 1) local_log.concat("\tFailed to fast-read gyr vector\n");
+        }
+      }
+      break;
+
+    case RegID::AG_STATUS_REG_ALT:
+      if (getVerbosity() > 5) local_log.concatf("\t RegID::AG_STATUS_REG_ALT: 0x%02x\n", (uint8_t) value);
+      break;
+    case RegID::AG_FIFO_CTRL:
+      if (getVerbosity() > 5) local_log.concatf("\t AG_FIFO Control: 0x%02x\n", (uint8_t) value);
+      break;
+    case RegID::G_CTRL_REG1:
+      if (getVerbosity() > 5) local_log.concatf("\t RegID::G_CTRL_REG1: 0x%02x\n", (uint8_t) value);
+      if ((value >> 4) < MAXIMUM_RATE_INDEX_AG)  update_rate_acc = (value >> 4) & 0x0F;
+      break;
+    case RegID::AG_CTRL_REG4:
+      if (getVerbosity() > 5) local_log.concatf("\t RegID::AG_CTRL_REG4: 0x%02x\n", (uint8_t) value);
+      if (((value >> 3) & 0x07) < MAXIMUM_GAIN_INDEX_ACC)  scale_acc = (value >> 3) & 0x07;
+      base_filter_param = (value >> 6) & 0x03;
+      break;
+    case RegID::A_CTRL_REG6:
+      if (getVerbosity() > 5) local_log.concatf("\t RegID::A_CTRL_REG6: 0x%02x\n", (uint8_t) value);
+      if (((value >> 3) & 0x03) < MAXIMUM_GAIN_INDEX_GYR)  scale_gyr = (value >> 3) & 0x03;
+      break;
+    case RegID::AG_FIFO_SRC:     /* The FIFO status register. */
+      //if (getVerbosity() > 5) local_log.concatf("\t AG FIFO Status: 0x%02x\n", (uint8_t) value);
+      if (initComplete()) {
+        *pending_samples = value & 0x1F;
+        if (!(value & 0x20)) {              // If the FIFO watermark is set and the FIFO is not empty...
+          switch (getState()) {
+            case IMUState::STAGE_4:
+            case IMUState::STAGE_5:
+              if (IMUState::STAGE_5 != desiredState()) {
+                break;
+              }
+              // Note: no break; on purpose.
+            case IMUState::STAGE_3:
+              if (preformed_busop_read_acc.isIdle()) {
+                if (!fire_preformed_bus_op(&preformed_busop_read_acc) ) {
+                  if (getVerbosity() > 2) local_log.concat("\tFailed to fast-read accel vector\n");
+                  error_condition = IMUFault::BUS_INSERTION_FAILED;
+                  if (getState() == IMUState::STAGE_5) {
+                    set_state(IMUState::STAGE_4);
+                  }
+                }
+                else if (IMUState::STAGE_4 == getState()) {
+                  set_state(IMUState::STAGE_5);
+                  step_state();
+                }
+              }
+              break;
+
+            default:
+              break;
+          }
+        }
+        else if (getState() == IMUState::STAGE_3) {
+          readRegister((uint8_t) RegID::AG_FIFO_SRC);
+        }
+      }
+      break;
+
+    default:
+      break;
+  }
+
+  if (local_log.length() > 0) Kernel::log(&local_log);
+  return return_value;
+}
+
+
+/**
+* When a bus operation completes, it is passed back to its issuing class.
+*
+* @param  idx    The register index that was updated.
+* @param  value  The newest available value.
+* @return IMUFault code.
+*/
+IMUFault LSM9DS1::io_op_callback_ag_write(RegID idx, unsigned int value) {
+  IMUFault return_value = IMUFault::NO_ERROR;
+  if (getVerbosity() > 6) local_log.concatf("io_op_callback_ag_write(%s, %u)\n", regNameString(idx), value);
+
+  /* WRITE Case-offs */
+  if (initPending()) {
+    if (IDX_T1 == idx) {
+      set_state(IMUState::STAGE_2);
+      step_state();
     }
+  }
+
+  switch (idx) {
+    // TODO: We need to implement these....
+    case RegID::AG_INT1_CTRL:
+      break;
+    case RegID::AG_INT2_CTRL:
+      break;
+
+    case RegID::G_CTRL_REG1:
+      //if ((value >> 4) < MAXIMUM_RATE_INDEX_AG)  update_rate_acc = (value >> 4) & 0x0F;
+      break;
+    case RegID::G_CTRL_REG2:
+      if (((value >> 3) & 0x07) < MAXIMUM_GAIN_INDEX_ACC)  scale_acc = (value >> 3) & 0x07;
+      break;
+    case RegID::A_CTRL_REG5:
+      //if (((value >> 2) & 0x07) < MAXIMUM_RATE_INDEX_MAG)  update_rate_mag = ((value >> 2) & 0x07) + 1;
+      break;
+    case RegID::A_CTRL_REG6:
+      if (((value >> 5) & 0x03) < MAXIMUM_GAIN_INDEX_GYR)  scale_gyr = (value >> 5) & 0x03;
+      break;
+    case RegID::AG_CTRL_REG8:
+      if (value & 0x01) { // Did we write here to reset?
+        if (!present()) {
+          integrator->init();
+        }
+      }
+      break;
+
+    default:
+      if (getVerbosity() > 5) local_log.concatf("\t AG Wrote an unimplemented register.\n");
+      break;
   }
 
   if (local_log.length() > 0) Kernel::log(&local_log);

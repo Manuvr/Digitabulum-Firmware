@@ -624,6 +624,7 @@ int8_t ManuManager::io_op_callahead(BusOp* _op) {
 */
 int8_t ManuManager::io_op_callback(BusOp* _op) {
   SPIBusOp* op = (SPIBusOp*) _op;
+  int8_t return_value = SPI_CALLBACK_NOMINAL;
   // There is zero chance this object will be a null pointer unless it was done on purpose.
   if (op->hasFault()) {
     if (getVerbosity() > 3) {
@@ -633,7 +634,11 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
     return SPI_CALLBACK_ERROR;
   }
 
-  switch (op->getTransferParam(3)) {
+  uint8_t cpld_addr = op->getTransferParam(1);
+  uint8_t reg_addr = op->getTransferParam(3);
+
+  // These checks we can do regardless of target sensor aspect.
+  switch (reg_addr) {
     case 0x8F:  // This is a bulk identity check.
       // Set the IMU states appropriately.
       for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
@@ -650,6 +655,7 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
   }
   else if (op == &_preformed_read_g) {
     Kernel::staticRaiseEvent(&quat_crunch_event);
+    return_value = SPI_CALLBACK_RECYCLE;
   }
   else if (op == &_preformed_read_m) {
   }
@@ -660,7 +666,7 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
   }
 
   flushLocalLog();
-  return SPI_CALLBACK_NOMINAL;
+  return return_value;
 }
 
 

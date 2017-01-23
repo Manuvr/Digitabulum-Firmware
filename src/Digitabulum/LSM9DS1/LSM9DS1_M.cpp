@@ -138,128 +138,110 @@ int8_t LSM9DS1::calibrate_from_data_mag() {
 /**
 * When a bus operation completes, it is passed back to its issuing class.
 *
-* @param  _op  The bus operation that was completed.
-* @return SPI_CALLBACK_NOMINAL on success, or appropriate error code.
+* @param  idx    The register index that was updated.
+* @param  value  The newest available value.
+* @return IMUFault code.
 */
-int8_t LSM9DS1::io_op_callback_mag(SPIBusOp* op) {
-  int8_t return_value = SPI_CALLBACK_NOMINAL;
+IMUFault LSM9DS1::io_op_callback_mag_read(RegID idx, unsigned int value) {
+  IMUFault return_value = IMUFault::NO_ERROR;
+  if (getVerbosity() > 6) local_log.concatf("io_op_callback_mag_read(%s, %u)\n", regNameString(idx), value);
 
-  unsigned int access_len = op->buf_len;  // The access length lets us know how many things changed.
-  uint8_t access_idx = op->getTransferParam(3);
-  unsigned int value = regValue(access_idx);
-  if (getVerbosity() > 6) local_log.concatf("%s  G::io_op_callback(%p): value: %d \t access_idx  %d \t access_len: %d\n", op->getOpcodeString(), (uintptr_t)((BusOpCallback*) this), value, access_idx, access_len);
-
-  /* Our first choice is: Did we just finish a WRITE or a READ? */
   /* READ Case-offs */
-  if (BusOpcode::RX == op->get_opcode()) {
-    while (access_len > 0) {
-      value = regValue(access_idx);
-      access_len -= 1;   // Subtract the length.
-
-      if (getVerbosity() > 3) {
-        local_log.concatf("\t GY R: access_idx  0x%02x   (0x%04x)\n", access_idx, (uint16_t) value);
+  if (initPending()) {
+    if (IDX_T1 == idx) {
+      if (integrity_check()) {
+        set_state(IMUState::STAGE_3);
+        step_state();
       }
-
-      if (initPending()) {
-        if (IDX_T1 == access_idx) {
-          if (integrity_check()) {
-            set_state(IMUState::STAGE_3);
-            step_state();
-          }
-        }
-      }
-
-      switch (access_idx) {
-        case RegID::M_WHO_AM_I:
-          if (0x3D == value) {
-            if (!present()) {
-              set_state(IMUState::STAGE_1);
-              step_state();
-            }
-          }
-          else {
-            // We lost the IMU, perhaps...
-            set_state(IMUState::STAGE_0);
-            error_condition = IMUFault::WRONG_IDENTITY;
-          }
-          break;
-
-        case RegID::M_DATA_X:
-          collect_reading_mag();
-        /* We don't address these registers byte-wise. Empty case for documentation's sake. */
-        case RegID::M_DATA_Y:  break;
-        case RegID::M_DATA_Z:  break;
-
-
-        case RegID::M_CTRL_REG1:
-          if (((value >> 2) & 0x07) < MAXIMUM_RATE_INDEX_MAG)  update_rate_mag = ((value >> 6) & 0x03)+1;
-          break;
-
-        case RegID::M_CTRL_REG2:
-          if (((value >> 4) & 0x03) < MAXIMUM_GAIN_INDEX_MAG)  scale_mag = (value >> 5) & 0x03;
-          break;
-
-        case RegID::M_CTRL_REG3:
-          power_to_mag(value & 0x02);
-          break;
-
-        case RegID::M_CTRL_REG4:
-          break;
-
-        case RegID::M_CTRL_REG5:
-          break;
-
-        default:
-          break;
-      }
-      if (op->devRegisterAdvance()) access_idx++;
     }
   }
 
-
-  /* WRITE Case-offs */
-  else if (BusOpcode::TX == op->get_opcode()) {
-    while (access_len > 0) {
-      value = regValue(access_idx);
-      access_len -= 1;   // Subtract the length.
-      if (getVerbosity() > 3) {
-        local_log.concatf("\t G  W: access_idx  0x%02x   (0x%04x)\n", access_idx, (uint16_t) value);
-      }
-
-      if (initPending()) {
-        if (IDX_T1 == access_idx) {
-          set_state(IMUState::STAGE_2);
+  switch (idx) {
+    case RegID::M_WHO_AM_I:
+      if (0x3D == value) {
+        if (!present()) {
+          set_state(IMUState::STAGE_1);
           step_state();
         }
       }
-
-      switch (access_idx) {
-        case RegID::M_CTRL_REG1:
-          if (((value >> 2) & 0x07) < MAXIMUM_RATE_INDEX_MAG)  update_rate_mag = ((value >> 6) & 0x03)+1;
-          break;
-
-        case RegID::M_CTRL_REG2:
-          if (((value >> 4) & 0x03) < MAXIMUM_GAIN_INDEX_MAG)  scale_mag = (value >> 5) & 0x03;
-          if (value & 0x04) { // Did we write here to reset?
-            if (!present()) {
-              //integrator->init();
-            }
-          }
-          break;
-
-        case RegID::M_CTRL_REG3:
-          power_to_mag(value & 0x02);
-          break;
-
-        case RegID::M_CTRL_REG5:
-          break;
-
-        default:
-          if (getVerbosity() > 5) local_log.concatf("\t G Wrote an unimplemented register.\n");
-          break;
+      else {
+        // We lost the IMU, perhaps...
+        set_state(IMUState::STAGE_0);
+        error_condition = IMUFault::WRONG_IDENTITY;
       }
-      if (op->devRegisterAdvance()) access_idx++;
+      break;
+
+    case RegID::M_DATA_X:
+      collect_reading_mag();
+    /* We don't address these registers byte-wise. Empty case for documentation's sake. */
+    case RegID::M_DATA_Y:  break;
+    case RegID::M_DATA_Z:  break;
+
+    case RegID::M_CTRL_REG1:
+      if (((value >> 2) & 0x07) < MAXIMUM_RATE_INDEX_MAG)  update_rate_mag = ((value >> 6) & 0x03)+1;
+      break;
+    case RegID::M_CTRL_REG2:
+      if (((value >> 4) & 0x03) < MAXIMUM_GAIN_INDEX_MAG)  scale_mag = (value >> 5) & 0x03;
+      break;
+    case RegID::M_CTRL_REG3:
+      power_to_mag(value & 0x02);
+      break;
+    case RegID::M_CTRL_REG4:
+      break;
+    case RegID::M_CTRL_REG5:
+      break;
+    default:
+      break;
+  }
+
+  if (local_log.length() > 0) Kernel::log(&local_log);
+  return return_value;
+}
+
+
+/**
+* When a bus operation completes, it is passed back to its issuing class.
+*
+* @param  idx    The register index that was updated.
+* @param  value  The newest available value.
+* @return IMUFault code.
+*/
+IMUFault LSM9DS1::io_op_callback_mag_write(RegID idx, unsigned int value) {
+  IMUFault return_value = IMUFault::NO_ERROR;
+  if (getVerbosity() > 6) local_log.concatf("io_op_callback_mag_write(%s, %u)\n", regNameString(idx), value);
+
+  /* WRITE Case-offs */
+  if (initPending()) {
+    if (IDX_T1 == idx) {
+      set_state(IMUState::STAGE_2);
+      step_state();
     }
+  }
+
+  switch (idx) {
+    case RegID::M_CTRL_REG1:
+      if (((value >> 2) & 0x07) < MAXIMUM_RATE_INDEX_MAG)  update_rate_mag = ((value >> 6) & 0x03)+1;
+      break;
+
+    case RegID::M_CTRL_REG2:
+      if (((value >> 4) & 0x03) < MAXIMUM_GAIN_INDEX_MAG)  scale_mag = (value >> 5) & 0x03;
+      if (value & 0x04) { // Did we write here to reset?
+        if (!present()) {
+          //integrator->init();
+        }
+      }
+      break;
+
+    case RegID::M_CTRL_REG3:
+      power_to_mag(value & 0x02);
+      break;
+
+    case RegID::M_CTRL_REG5:
+      break;
+
+    default:
+      if (getVerbosity() > 5) local_log.concatf("\t M Wrote an unimplemented register.\n");
+      break;
   }
 
   if (local_log.length() > 0) Kernel::log(&local_log);

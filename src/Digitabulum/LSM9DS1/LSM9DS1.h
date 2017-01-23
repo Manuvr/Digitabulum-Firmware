@@ -336,6 +336,7 @@ class LSM9DS1 {
     static IMUState getStateByIndex(uint8_t state_idx);
     static const char* getStateString(IMUState);
     static const char* getErrorString(IMUFault);
+    static const char* regNameString(RegID);
 
     static const uint8_t regAddr(RegID);
     static const uint8_t regWidth(RegID);
@@ -432,8 +433,10 @@ class LSM9DS1 {
 
     bool is_setup_completed();
 
-    int8_t io_op_callback_mag(SPIBusOp*);
-    int8_t io_op_callback_ag(SPIBusOp*);
+    IMUFault io_op_callback_mag_read(RegID idx, unsigned int value);
+    IMUFault io_op_callback_mag_write(RegID idx, unsigned int value);
+    IMUFault io_op_callback_ag_read(RegID idx, unsigned int value);
+    IMUFault io_op_callback_ag_write(RegID idx, unsigned int value);
 
     /**
     * Sets the current IMU state without blowing away the high bits in the state member.

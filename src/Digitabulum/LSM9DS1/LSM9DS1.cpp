@@ -255,6 +255,73 @@ const char* LSM9DS1::getStateString(IMUState state) {
 }
 
 
+/**
+* Print the IMU register name.
+*
+* @return const char*
+*/
+const char* LSM9DS1::regNameString(RegID idx) {
+  switch (idx) {
+    case RegID::M_OFFSET_X:          return "M_OFFSET_X";
+    case RegID::M_OFFSET_Y:          return "M_OFFSET_Y";
+    case RegID::M_OFFSET_Z:          return "M_OFFSET_Z";
+    case RegID::M_WHO_AM_I:          return "M_WHO_AM_I";
+    case RegID::M_CTRL_REG1:         return "M_CTRL_REG1";
+    case RegID::M_CTRL_REG2:         return "M_CTRL_REG2";
+    case RegID::M_CTRL_REG3:         return "M_CTRL_REG3";
+    case RegID::M_CTRL_REG4:         return "M_CTRL_REG4";
+    case RegID::M_CTRL_REG5:         return "M_CTRL_REG5";
+    case RegID::M_STATUS_REG:        return "M_STATUS_REG";
+    case RegID::M_DATA_X:            return "M_DATA_X";
+    case RegID::M_DATA_Y:            return "M_DATA_Y";
+    case RegID::M_DATA_Z:            return "M_DATA_Z";
+    case RegID::M_INT_CFG:           return "M_INT_CFG";
+    case RegID::M_INT_SRC:           return "M_INT_SRC";
+    case RegID::M_INT_TSH:           return "M_INT_TSH";
+    case RegID::AG_ACT_THS:          return "AG_ACT_THS";
+    case RegID::AG_ACT_DUR:          return "AG_ACT_DUR";
+    case RegID::A_INT_GEN_CFG:       return "A_INT_GEN_CFG";
+    case RegID::A_INT_GEN_THS_X:     return "A_INT_GEN_THS_X";
+    case RegID::A_INT_GEN_THS_Y:     return "A_INT_GEN_THS_Y";
+    case RegID::A_INT_GEN_THS_Z:     return "A_INT_GEN_THS_Z";
+    case RegID::A_INT_GEN_DURATION:  return "A_INT_GEN_DURATION";
+    case RegID::G_REFERENCE:         return "G_REFERENCE";
+    case RegID::AG_INT1_CTRL:        return "AG_INT1_CTRL";
+    case RegID::AG_INT2_CTRL:        return "AG_INT2_CTRL";
+    case RegID::AG_WHO_AM_I:         return "AG_WHO_AM_I";
+    case RegID::G_CTRL_REG1:         return "G_CTRL_REG1";
+    case RegID::G_CTRL_REG2:         return "G_CTRL_REG2";
+    case RegID::G_CTRL_REG3:         return "G_CTRL_REG3";
+    case RegID::G_ORIENT_CFG:        return "G_ORIENT_CFG";
+    case RegID::G_INT_GEN_SRC:       return "G_INT_GEN_SRC";
+    case RegID::AG_DATA_TEMP:        return "AG_DATA_TEMP";
+    case RegID::AG_STATUS_REG:       return "AG_STATUS_REG";
+    case RegID::G_DATA_X:            return "G_DATA_X";
+    case RegID::G_DATA_Y:            return "G_DATA_Y";
+    case RegID::G_DATA_Z:            return "G_DATA_Z";
+    case RegID::AG_CTRL_REG4:        return "AG_CTRL_REG4";
+    case RegID::A_CTRL_REG5:         return "A_CTRL_REG5";
+    case RegID::A_CTRL_REG6:         return "A_CTRL_REG6";
+    case RegID::A_CTRL_REG7:         return "A_CTRL_REG7";
+    case RegID::AG_CTRL_REG8:        return "AG_CTRL_REG8";
+    case RegID::AG_CTRL_REG9:        return "AG_CTRL_REG9";
+    case RegID::AG_CTRL_REG10:       return "AG_CTRL_REG10";
+    case RegID::A_INT_GEN_SRC:       return "A_INT_GEN_SRC";
+    case RegID::AG_STATUS_REG_ALT:   return "AG_STATUS_REG_ALT";
+    case RegID::A_DATA_X:            return "A_DATA_X";
+    case RegID::A_DATA_Y:            return "A_DATA_Y";
+    case RegID::A_DATA_Z:            return "A_DATA_Z";
+    case RegID::AG_FIFO_CTRL:        return "AG_FIFO_CTRL";
+    case RegID::AG_FIFO_SRC:         return "AG_FIFO_SRC";
+    case RegID::G_INT_GEN_CFG:       return "G_INT_GEN_CFG";
+    case RegID::G_INT_GEN_THS_X:     return "G_INT_GEN_THS_X";
+    case RegID::G_INT_GEN_THS_Y:     return "G_INT_GEN_THS_Y";
+    case RegID::G_INT_GEN_THS_Z:     return "G_INT_GEN_THS_Z";
+    case RegID::G_INT_GEN_DURATION:  return "G_INT_GEN_DURATIO";
+  }
+  return "<UNKNOWN>";
+}
+
 
 /*******************************************************************************
 *   ___ _              ___      _ _              _      _
