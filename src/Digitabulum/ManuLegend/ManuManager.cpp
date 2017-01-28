@@ -33,7 +33,6 @@ limitations under the License.
 *
 * Static members and initializers should be located here.
 *******************************************************************************/
-LSM9DS1 imus[LEGEND_DATASET__COUNT];  // TODO: Shouldn't be static.
 
 SPIBusOp ManuManager::_preformed_read_a;
 SPIBusOp ManuManager::_preformed_read_g;
@@ -198,6 +197,47 @@ uint16_t _reg_block_m_thresholds[LEGEND_DATASET_IIU_COUNT];
 /* ---------------------- */
 /* End of register memory */
 /* ---------------------- */
+
+const RegPtrMap _reg_ptrs[] = {
+  RegPtrMap(0 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
+  RegPtrMap(1 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
+  RegPtrMap(2 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
+  RegPtrMap(3 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
+  RegPtrMap(4 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
+  RegPtrMap(5 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
+  RegPtrMap(6 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
+  RegPtrMap(7 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
+  RegPtrMap(8 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
+  RegPtrMap(9 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
+  RegPtrMap(10, &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
+  RegPtrMap(11, &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
+  RegPtrMap(12, &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
+  RegPtrMap(13, &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
+  RegPtrMap(14, &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
+  RegPtrMap(15, &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
+  RegPtrMap(16, &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0])
+};
+
+
+LSM9DS1 imus[LEGEND_DATASET_IIU_COUNT] = {
+  LSM9DS1(&_reg_ptrs[0 ]).
+  LSM9DS1(&_reg_ptrs[1 ]).
+  LSM9DS1(&_reg_ptrs[2 ]).
+  LSM9DS1(&_reg_ptrs[3 ]).
+  LSM9DS1(&_reg_ptrs[4 ]).
+  LSM9DS1(&_reg_ptrs[5 ]).
+  LSM9DS1(&_reg_ptrs[6 ]).
+  LSM9DS1(&_reg_ptrs[7 ]).
+  LSM9DS1(&_reg_ptrs[8 ]).
+  LSM9DS1(&_reg_ptrs[9 ]).
+  LSM9DS1(&_reg_ptrs[10]).
+  LSM9DS1(&_reg_ptrs[11]).
+  LSM9DS1(&_reg_ptrs[12]).
+  LSM9DS1(&_reg_ptrs[13]).
+  LSM9DS1(&_reg_ptrs[14]).
+  LSM9DS1(&_reg_ptrs[15]).
+  LSM9DS1(&_reg_ptrs[16])
+};
 
 
 /*
@@ -636,6 +676,57 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
 
   uint8_t cpld_addr = op->getTransferParam(1);
   uint8_t reg_addr = op->getTransferParam(3);
+  RegID idx = RegPtrMap::regIdFromAddr(op->getTransferParam(3));
+
+  switch (cpld_addr) {
+    case CPLD_REG_IMU_DM_P_M:
+    case CPLD_REG_IMU_DM_D_M:
+    case CPLD_REG_IMU_D1_P_M:
+    case CPLD_REG_IMU_D1_I_M:
+    case CPLD_REG_IMU_D1_D_M:
+    case CPLD_REG_IMU_D2_P_M:
+    case CPLD_REG_IMU_D2_I_M:
+    case CPLD_REG_IMU_D2_D_M:
+    case CPLD_REG_IMU_D3_P_M:
+    case CPLD_REG_IMU_D3_I_M:
+    case CPLD_REG_IMU_D3_D_M:
+    case CPLD_REG_IMU_D4_P_M:
+    case CPLD_REG_IMU_D4_I_M:
+    case CPLD_REG_IMU_D4_D_M:
+    case CPLD_REG_IMU_D5_P_M:
+    case CPLD_REG_IMU_D5_I_M:
+    case CPLD_REG_IMU_D5_D_M:
+    case CPLD_REG_IMU_DM_P_I:
+    case CPLD_REG_IMU_DM_D_I:
+    case CPLD_REG_IMU_D1_P_I:
+    case CPLD_REG_IMU_D1_I_I:
+    case CPLD_REG_IMU_D1_D_I:
+    case CPLD_REG_IMU_D2_P_I:
+    case CPLD_REG_IMU_D2_I_I:
+    case CPLD_REG_IMU_D2_D_I:
+    case CPLD_REG_IMU_D3_P_I:
+    case CPLD_REG_IMU_D3_I_I:
+    case CPLD_REG_IMU_D3_D_I:
+    case CPLD_REG_IMU_D4_P_I:
+    case CPLD_REG_IMU_D4_I_I:
+    case CPLD_REG_IMU_D4_D_I:
+    case CPLD_REG_IMU_D5_P_I:
+    case CPLD_REG_IMU_D5_I_I:
+    case CPLD_REG_IMU_D5_D_I:
+      {
+        RegID idx = RegPtrMap::regIdFromAddr(op->getTransferParam(3));
+      }
+      break;
+    case CPLD_REG_RANK_P_I:
+    case CPLD_REG_RANK_I_I:
+    case CPLD_REG_RANK_D_I:
+    case CPLD_REG_RANK_P_M:
+    case CPLD_REG_RANK_I_M:
+    case CPLD_REG_RANK_D_M:
+      break;
+    default:
+      break;
+  }
 
   // These checks we can do regardless of target sensor aspect.
   switch (reg_addr) {

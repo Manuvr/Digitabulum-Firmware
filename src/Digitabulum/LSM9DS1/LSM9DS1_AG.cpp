@@ -350,9 +350,6 @@ IMUFault LSM9DS1::io_op_callback_ag_read(RegID idx, unsigned int value) {
               set_state(IMUState::STAGE_4);
               step_state();
             }
-            else {
-              return_value = SPI_CALLBACK_RECYCLE;   // Nominal outcome. Re-run the job.
-            }
             break;
 
           case IMUState::STAGE_3:
@@ -374,9 +371,6 @@ IMUFault LSM9DS1::io_op_callback_ag_read(RegID idx, unsigned int value) {
               else {
                 readRegister((uint8_t) RegID::AG_FIFO_SRC);
               }
-            }
-            else {
-              return_value = SPI_CALLBACK_RECYCLE;   // Nominal outcome. Re-run the job.
             }
             break;
 
@@ -400,9 +394,6 @@ IMUFault LSM9DS1::io_op_callback_ag_read(RegID idx, unsigned int value) {
               set_state(IMUState::STAGE_4);
               step_state();
             }
-            else {
-              return_value = SPI_CALLBACK_RECYCLE;   // Nominal outcome. Re-run the job.
-            }
             break;
 
           case IMUState::STAGE_3:
@@ -424,9 +415,6 @@ IMUFault LSM9DS1::io_op_callback_ag_read(RegID idx, unsigned int value) {
               else {
                 readRegister((uint8_t) RegID::AG_FIFO_SRC);
               }
-            }
-            else {
-              return_value = SPI_CALLBACK_RECYCLE;   // Nominal outcome. Re-run the job.
             }
             break;
 

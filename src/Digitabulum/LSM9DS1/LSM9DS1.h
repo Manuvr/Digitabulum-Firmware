@@ -187,6 +187,7 @@ enum class RegID {
 
 
 
+
 /*******************************************************************************
 * This is the const object that is passed into the LSM9DS1 constructor. Its
 *   values are pointers to the memory that represents the LSM9DS1 registers.
@@ -195,7 +196,12 @@ class RegPtrMap {
   // Because the data frames come in so fast, we need to double buffer them.
   // Some registers are not included in this list if their function can be
   //   handled entirely within ManuManager.
-  uint16_t* AG_DATA_TEMP;  // 16-bit temperature register (11-bit)
+  const uint8_t* AG_ACT;  // AG_ACT_THS, AG_ACT_DUR
+  const uint8_t* AG_BLOCK_0;  // A_INT_GEN_CFG, A_INT_GEN_THS_X, A_INT_GEN_THS_Y, A_INT_GEN_THS_Z, A_INT_GEN_DURATION, G_REFERENCE,
+  const uint8_t* AG_CTRL1_3;  // G_CTRL_REG1, G_CTRL_REG2, G_CTRL_REG3
+  const uint8_t* AG_CTRL6_7;  // A_CTRL_REG6, A_CTRL_REG7
+  const uint8_t* AG_STATUS;   // AG_STATUS_REG
+  const uint8_t* FIFO_LVLS;   // AG_FIFO_SRC
   //M_OFFSET_X = 0x00,  // 16-bit offset registers
   //M_OFFSET_Y,         // 16-bit offset registers
   //M_OFFSET_Z,         // 16-bit offset registers
@@ -245,6 +251,24 @@ class RegPtrMap {
   //G_INT_GEN_THS_Y,    // 16-bit threshold registers
   //G_INT_GEN_THS_Z,    // 16-bit threshold registers
   //G_INT_GEN_DURATION
+
+  RegPtrMap(
+    const uint8_t idx,
+    const uint8_t* ag_activity,
+    const uint8_t* ag_ctrl1_3,
+    const uint8_t* ag_ctrl6_7,
+    const uint8_t* ag_status,
+    const uint8_t* fifo_src
+  ) :
+    AG_ACT((idx * 2) + ag_activity),
+    AG_CTRL1_3((idx * 3) + ag_ctrl1_3),
+    AG_CTRL6_7((idx * 2) + ag_ctrl6_7),
+    AG_STATUS(idx + ag_status),
+    FIFO_LVLS(idx + fifo_src)
+  {};
+
+  const uint8_t* regPtr(RegID);
+  static RegID regIdFromAddr(uint8_t);
 };
 
 
@@ -254,7 +278,7 @@ class RegPtrMap {
 *******************************************************************************/
 class LSM9DS1 {
   public:
-    LSM9DS1();
+    LSM9DS1(const RegPtrMap*);
     ~LSM9DS1();
 
     void class_init(uint8_t bus_addr);
@@ -321,6 +345,11 @@ class LSM9DS1 {
     IMUFault irq_1();    // When an IRQ signal fires, find the cause and service it.
     IMUFault irq_2();    // When an IRQ signal fires, find the cause and service it.
 
+    IMUFault io_op_callback_mag_read(RegID idx, unsigned int value);
+    IMUFault io_op_callback_mag_write(RegID idx, unsigned int value);
+    IMUFault io_op_callback_ag_read(RegID idx, unsigned int value);
+    IMUFault io_op_callback_ag_write(RegID idx, unsigned int value);
+
 
     /* Inlines for the specialized flag duty of get/set class verbosity. */
     inline uint8_t getVerbosity() {
@@ -364,6 +393,7 @@ class LSM9DS1 {
 
 
   private:
+    const RegPtrMap* _ptr_map;
     uint8_t BUS_ADDR;  // What is our address on the bus? TODO: const
 
     // TODO: r1 simplified things a great deal. All these members can probably DIAF.
@@ -432,11 +462,6 @@ class LSM9DS1 {
     bool integrity_check();
 
     bool is_setup_completed();
-
-    IMUFault io_op_callback_mag_read(RegID idx, unsigned int value);
-    IMUFault io_op_callback_mag_write(RegID idx, unsigned int value);
-    IMUFault io_op_callback_ag_read(RegID idx, unsigned int value);
-    IMUFault io_op_callback_ag_write(RegID idx, unsigned int value);
 
     /**
     * Sets the current IMU state without blowing away the high bits in the state member.

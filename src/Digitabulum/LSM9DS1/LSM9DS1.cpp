@@ -323,6 +323,70 @@ const char* LSM9DS1::regNameString(RegID idx) {
 }
 
 
+RegID RegPtrMap::regIdFromAddr(uint8_t addr) {
+  switch (addr & 0x7F) {
+    // TODO: Fill with real values.
+    case 0:    return RegID::M_WHO_AM_I;
+    case 1:    return RegID::M_WHO_AM_I;
+    case 2:    return RegID::M_WHO_AM_I;
+    case 3:    return RegID::M_WHO_AM_I;
+    case 4:    return RegID::M_WHO_AM_I;
+    case 5:    return RegID::M_WHO_AM_I;
+    case 6:    return RegID::M_WHO_AM_I;
+    case 7:    return RegID::M_WHO_AM_I;
+    case 8:    return RegID::M_WHO_AM_I;
+    case 9:    return RegID::M_WHO_AM_I;
+    case 10:   return RegID::M_WHO_AM_I;
+    case 11:   return RegID::M_WHO_AM_I;
+    case 12:   return RegID::M_WHO_AM_I;
+    case 13:   return RegID::M_WHO_AM_I;
+    case 14:   return RegID::M_WHO_AM_I;
+    case 15:   return RegID::M_WHO_AM_I;
+    case 16:   return RegID::M_WHO_AM_I;
+    case 17:   return RegID::M_WHO_AM_I;
+    case 18:   return RegID::M_WHO_AM_I;
+    case 19:   return RegID::M_WHO_AM_I;
+    case 20:   return RegID::M_WHO_AM_I;
+    case 21:   return RegID::M_WHO_AM_I;
+    case 22:   return RegID::M_WHO_AM_I;
+    case 23:   return RegID::M_WHO_AM_I;
+    case 24:   return RegID::M_WHO_AM_I;
+    case 25:   return RegID::M_WHO_AM_I;
+    case 26:   return RegID::M_WHO_AM_I;
+    case 27:   return RegID::M_WHO_AM_I;
+    case 28:   return RegID::M_WHO_AM_I;
+    case 29:   return RegID::M_WHO_AM_I;
+    case 30:   return RegID::M_WHO_AM_I;
+    case 31:   return RegID::M_WHO_AM_I;
+    case 32:   return RegID::M_WHO_AM_I;
+    case 33:   return RegID::M_WHO_AM_I;
+    case 34:   return RegID::M_WHO_AM_I;
+    case 35:   return RegID::M_WHO_AM_I;
+    case 36:   return RegID::M_WHO_AM_I;
+    case 37:   return RegID::M_WHO_AM_I;
+    case 38:   return RegID::M_WHO_AM_I;
+    case 39:   return RegID::M_WHO_AM_I;
+    case 40:   return RegID::M_WHO_AM_I;
+    case 41:   return RegID::M_WHO_AM_I;
+    case 42:   return RegID::M_WHO_AM_I;
+    case 43:   return RegID::M_WHO_AM_I;
+    case 44:   return RegID::M_WHO_AM_I;
+    case 45:   return RegID::M_WHO_AM_I;
+    case 46:   return RegID::M_WHO_AM_I;
+    case 47:   return RegID::M_WHO_AM_I;
+    case 48:   return RegID::M_WHO_AM_I;
+    case 49:   return RegID::M_WHO_AM_I;
+    case 50:   return RegID::M_WHO_AM_I;
+    case 51:   return RegID::M_WHO_AM_I;
+    case 52:   return RegID::M_WHO_AM_I;
+    case 53:   return RegID::M_WHO_AM_I;
+    case 54:   return RegID::M_WHO_AM_I;
+    case 55:   return RegID::M_WHO_AM_I;
+  }
+}
+
+
+
 /*******************************************************************************
 *   ___ _              ___      _ _              _      _
 *  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
@@ -338,7 +402,7 @@ const char* LSM9DS1::regNameString(RegID idx) {
 //  init();
 //}
 
-LSM9DS1::LSM9DS1() {
+LSM9DS1::LSM9DS1(const RegPtrMap* pm) : _ptr_map(pm) {
 }
 
 
@@ -347,70 +411,6 @@ LSM9DS1::~LSM9DS1() {
 
 
 void LSM9DS1::class_init(uint8_t address) {
-  // First, we should define our registers....
-  // Mag has 16 registers. 23 bytes...
-  // AG has 40 registers.
-
-  // Now we should give them initial definitions. This is our chance to set default configs.
-  // Any config which we want written during init() should have dirty set to true.
-  //reg_defs[RegID::M_OFFSET_X]      = DeviceRegister((BUS_ADDR + 0x05), (uint16_t) 0x00, (register_pool +  0), false, false, true);
-  //reg_defs[RegID::M_OFFSET_Y]      = DeviceRegister((BUS_ADDR + 0x07), (uint16_t) 0x00, (register_pool +  2), false, false, true);
-  //reg_defs[RegID::M_OFFSET_Z]      = DeviceRegister((BUS_ADDR + 0x09), (uint16_t) 0x00, (register_pool +  4), false, false, true);
-  //reg_defs[RegID::M_WHO_AM_I]      = DeviceRegister((BUS_ADDR + 0x0F), (uint8_t)  0x00, (register_pool +  6), false, false, false);
-  //reg_defs[RegID::M_CTRL_REG1]     = DeviceRegister((BUS_ADDR + 0x20), (uint8_t)  0x10, (register_pool +  7), false, false, true );  //
-  //reg_defs[RegID::M_CTRL_REG2]     = DeviceRegister((BUS_ADDR + 0x21), (uint8_t)  0x00, (register_pool +  8), false, false, true );  //
-  //reg_defs[RegID::M_CTRL_REG3]     = DeviceRegister((BUS_ADDR + 0x22), (uint8_t)  0x03, (register_pool +  9), false, false, true );  //
-  //reg_defs[RegID::M_CTRL_REG4]     = DeviceRegister((BUS_ADDR + 0x23), (uint8_t)  0x00, (register_pool + 10), false, false, true );  //
-  //reg_defs[RegID::M_CTRL_REG5]     = DeviceRegister((BUS_ADDR + 0x24), (uint8_t)  0x00, (register_pool + 11), false, false, true );  //
-  //reg_defs[RegID::M_STATUS_REG]    = DeviceRegister((BUS_ADDR + 0x27), (uint8_t)  0x00, (register_pool + 12), false, false, true );  //
-  //reg_defs[RegID::M_DATA_X]        = DeviceRegister((BUS_ADDR + 0x28), (uint16_t) 0x00, (register_pool + 13), false, false, false);
-  //reg_defs[RegID::M_DATA_Y]        = DeviceRegister((BUS_ADDR + 0x2A), (uint16_t) 0x00, (register_pool + 15), false, false, false);
-  //reg_defs[RegID::M_DATA_Z]        = DeviceRegister((BUS_ADDR + 0x2C), (uint16_t) 0x00, (register_pool + 17), false, false, false);
-  //reg_defs[RegID::M_INT_CFG]       = DeviceRegister((BUS_ADDR + 0x30), (uint8_t)  0x08, (register_pool + 19), false, false, true);
-  //reg_defs[RegID::M_INT_SRC]       = DeviceRegister((BUS_ADDR + 0x31), (uint8_t)  0x00, (register_pool + 20), false, false, false);
-  //reg_defs[RegID::M_INT_TSH]       = DeviceRegister((BUS_ADDR + 0x32), (uint16_t) 0x00, (register_pool + 21), false, false, true);
-
-  //reg_defs[RegID::AG_ACT_THS]         = DeviceRegister((BUS_ADDR + 0x04), (uint8_t)  0x00, (register_pool +  0), false, false, true);
-  //reg_defs[RegID::AG_ACT_DUR]         = DeviceRegister((BUS_ADDR + 0x05), (uint8_t)  0x00, (register_pool +  1), false, false, true);
-  //reg_defs[RegID::A_INT_GEN_CFG]      = DeviceRegister((BUS_ADDR + 0x06), (uint8_t)  0x00, (register_pool +  2), false, false, true);
-  //reg_defs[RegID::A_INT_GEN_THS_X]    = DeviceRegister((BUS_ADDR + 0x07), (uint8_t)  0x00, (register_pool +  3), false, false, true);
-  //reg_defs[RegID::A_INT_GEN_THS_Y]    = DeviceRegister((BUS_ADDR + 0x08), (uint8_t)  0x00, (register_pool +  4), false, false, true);
-  //reg_defs[RegID::A_INT_GEN_THS_Z]    = DeviceRegister((BUS_ADDR + 0x09), (uint8_t)  0x00, (register_pool +  5), false, false, true);
-  //reg_defs[RegID::A_INT_GEN_DURATION] = DeviceRegister((BUS_ADDR + 0x0A), (uint8_t)  0x00, (register_pool +  6), false, false, true);
-  //reg_defs[RegID::G_REFERENCE]        = DeviceRegister((BUS_ADDR + 0x0B), (uint8_t)  0x00, (register_pool +  7), false, false, true);
-  //reg_defs[RegID::AG_INT1_CTRL]       = DeviceRegister((BUS_ADDR + 0x0C), (uint8_t)  0x00, (register_pool +  8), false, false, true);
-  //reg_defs[RegID::AG_INT2_CTRL]       = DeviceRegister((BUS_ADDR + 0x0D), (uint8_t)  0x00, (register_pool +  9), false, false, true);
-  //reg_defs[RegID::AG_WHO_AM_I]        = DeviceRegister((BUS_ADDR + 0x0F), (uint8_t)  0x00, (register_pool + 10), false, false, true);
-  //reg_defs[RegID::G_CTRL_REG1]        = DeviceRegister((BUS_ADDR + 0x10), (uint8_t)  0x00, (register_pool + 11), false, false, true);
-  //reg_defs[RegID::G_CTRL_REG2]        = DeviceRegister((BUS_ADDR + 0x11), (uint8_t)  0x00, (register_pool + 12), false, false, true);
-  //reg_defs[RegID::G_CTRL_REG3]        = DeviceRegister((BUS_ADDR + 0x12), (uint8_t)  0x00, (register_pool + 13), false, false, true);
-  //reg_defs[RegID::G_ORIENT_CFG]       = DeviceRegister((BUS_ADDR + 0x13), (uint8_t)  0x00, (register_pool + 14), false, false, true);
-  //reg_defs[RegID::G_INT_GEN_SRC]      = DeviceRegister((BUS_ADDR + 0x14), (uint8_t)  0x00, (register_pool + 15), false, false, true);
-  //reg_defs[RegID::AG_DATA_TEMP]       = DeviceRegister((BUS_ADDR + 0x15), (uint16_t) 0x00, (register_pool + 16), false, false, true);
-  //reg_defs[RegID::AG_STATUS_REG]      = DeviceRegister((BUS_ADDR + 0x17), (uint8_t)  0x00, (register_pool + 18), false, false, true);
-  //reg_defs[RegID::G_DATA_X]           = DeviceRegister((BUS_ADDR + 0x18), (uint16_t) 0x00, (register_pool + 19), false, false, true);
-  //reg_defs[RegID::G_DATA_Y]           = DeviceRegister((BUS_ADDR + 0x1A), (uint16_t) 0x00, (register_pool + 21), false, false, true);
-  //reg_defs[RegID::G_DATA_Z]           = DeviceRegister((BUS_ADDR + 0x1C), (uint16_t) 0x00, (register_pool + 23), false, false, true);
-  //reg_defs[RegID::AG_CTRL_REG4]       = DeviceRegister((BUS_ADDR + 0x1E), (uint8_t)  0x38, (register_pool + 25), false, false, true);
-  //reg_defs[RegID::A_CTRL_REG5]        = DeviceRegister((BUS_ADDR + 0x1F), (uint8_t)  0x38, (register_pool + 26), false, false, true);
-  //reg_defs[RegID::A_CTRL_REG6]        = DeviceRegister((BUS_ADDR + 0x20), (uint8_t)  0x00, (register_pool + 27), false, false, true);
-  //reg_defs[RegID::A_CTRL_REG7]        = DeviceRegister((BUS_ADDR + 0x21), (uint8_t)  0x00, (register_pool + 28), false, false, true);
-  //reg_defs[RegID::AG_CTRL_REG8]       = DeviceRegister((BUS_ADDR + 0x22), (uint8_t)  0x04, (register_pool + 29), false, false, true);
-  //reg_defs[RegID::AG_CTRL_REG9]       = DeviceRegister((BUS_ADDR + 0x23), (uint8_t)  0x00, (register_pool + 30), false, false, true);
-  //reg_defs[RegID::AG_CTRL_REG10]      = DeviceRegister((BUS_ADDR + 0x24), (uint8_t)  0x00, (register_pool + 31), false, false, true);
-  //reg_defs[RegID::A_INT_GEN_SRC]      = DeviceRegister((BUS_ADDR + 0x26), (uint8_t)  0x00, (register_pool + 32), false, false, true);
-  //reg_defs[RegID::AG_STATUS_REG_ALT]  = DeviceRegister((BUS_ADDR + 0x27), (uint8_t)  0x00, (register_pool + 33), false, false, true);
-  //reg_defs[RegID::A_DATA_X]           = DeviceRegister((BUS_ADDR + 0x28), (uint16_t) 0x00, (register_pool + 34), false, false, true);
-  //reg_defs[RegID::A_DATA_Y]           = DeviceRegister((BUS_ADDR + 0x2A), (uint16_t) 0x00, (register_pool + 36), false, false, true);
-  //reg_defs[RegID::A_DATA_Z]           = DeviceRegister((BUS_ADDR + 0x2C), (uint16_t) 0x00, (register_pool + 38), false, false, true);
-  //reg_defs[RegID::AG_FIFO_CTRL]       = DeviceRegister((BUS_ADDR + 0x2E), (uint8_t)  0x00, (register_pool + 40), false, false, true);
-  //reg_defs[RegID::AG_FIFO_SRC]        = DeviceRegister((BUS_ADDR + 0x2F), (uint8_t)  0x00, (register_pool + 41), false, false, true);
-  //reg_defs[RegID::G_INT_GEN_CFG]      = DeviceRegister((BUS_ADDR + 0x30), (uint8_t)  0x00, (register_pool + 42), false, false, true);
-  //reg_defs[RegID::G_INT_GEN_THS_X]    = DeviceRegister((BUS_ADDR + 0x31), (uint16_t) 0x00, (register_pool + 43), false, false, true);
-  //reg_defs[RegID::G_INT_GEN_THS_Y]    = DeviceRegister((BUS_ADDR + 0x33), (uint16_t) 0x00, (register_pool + 45), false, false, true);
-  //reg_defs[RegID::G_INT_GEN_THS_Z]    = DeviceRegister((BUS_ADDR + 0x35), (uint16_t) 0x00, (register_pool + 47), false, false, true);
-  //reg_defs[RegID::G_INT_GEN_DURATION] = DeviceRegister((BUS_ADDR + 0x37), (uint8_t)  0x00, (register_pool + 49), false, false, true);
-
   last_val_mag(0.0f, 0.0f, 0.0f);
   last_val_acc(0.0f, 0.0f, 0.0f);
   last_val_gyr(0.0f, 0.0f, 0.0f);
@@ -800,15 +800,66 @@ unsigned int LSM9DS1::regValue(RegID idx) {
 * Looks at our local offset table to obtain value. This was set at instantiation
 *   by ManaManager.
 */
-uint8_t* LSM9DS1::regPtr(RegID idx) {
+const uint8_t* RegPtrMap::regPtr(RegID idx) {
   switch (idx) {
-    case 2:
-    case 4:
-      return &io_test_val_0;
-    case 1:
-    default:
-      return &io_test_val_1;
+    case RegID::M_OFFSET_X:          return nullptr;
+    case RegID::M_OFFSET_Y:          return nullptr;
+    case RegID::M_OFFSET_Z:          return nullptr;
+    case RegID::M_WHO_AM_I:          return nullptr;
+    case RegID::M_CTRL_REG1:         return nullptr;
+    case RegID::M_CTRL_REG2:         return nullptr;
+    case RegID::M_CTRL_REG3:         return nullptr;
+    case RegID::M_CTRL_REG4:         return nullptr;
+    case RegID::M_CTRL_REG5:         return nullptr;
+    case RegID::M_STATUS_REG:        return nullptr;
+    case RegID::M_DATA_X:            return nullptr;
+    case RegID::M_DATA_Y:            return nullptr;
+    case RegID::M_DATA_Z:            return nullptr;
+    case RegID::M_INT_CFG:           return nullptr;
+    case RegID::M_INT_SRC:           return nullptr;
+    case RegID::M_INT_TSH:           return nullptr;
+    case RegID::AG_ACT_THS:          return AG_ACT+0;
+    case RegID::AG_ACT_DUR:          return AG_ACT+1;
+    case RegID::A_INT_GEN_CFG:       return AG_BLOCK_0+0;
+    case RegID::A_INT_GEN_THS_X:     return AG_BLOCK_0+1;
+    case RegID::A_INT_GEN_THS_Y:     return AG_BLOCK_0+2;
+    case RegID::A_INT_GEN_THS_Z:     return AG_BLOCK_0+3;
+    case RegID::A_INT_GEN_DURATION:  return AG_BLOCK_0+4;
+    case RegID::G_REFERENCE:         return AG_BLOCK_0+5;
+    case RegID::AG_INT1_CTRL:        return nullptr;
+    case RegID::AG_INT2_CTRL:        return nullptr;
+    case RegID::AG_WHO_AM_I:         return nullptr;
+    case RegID::G_CTRL_REG1:         return AG_CTRL1_3+0;
+    case RegID::G_CTRL_REG2:         return AG_CTRL1_3+1;
+    case RegID::G_CTRL_REG3:         return AG_CTRL1_3+2;
+    case RegID::G_ORIENT_CFG:        return nullptr;
+    case RegID::G_INT_GEN_SRC:       return nullptr;
+    case RegID::AG_DATA_TEMP:        return nullptr;
+    case RegID::AG_STATUS_REG:       return nullptr;
+    case RegID::G_DATA_X:            return nullptr;
+    case RegID::G_DATA_Y:            return nullptr;
+    case RegID::G_DATA_Z:            return nullptr;
+    case RegID::AG_CTRL_REG4:        return nullptr;
+    case RegID::A_CTRL_REG5:         return nullptr;
+    case RegID::A_CTRL_REG6:         return AG_CTRL6_7+0;
+    case RegID::A_CTRL_REG7:         return AG_CTRL6_7+1;
+    case RegID::AG_CTRL_REG8:        return nullptr;
+    case RegID::AG_CTRL_REG9:        return nullptr;
+    case RegID::AG_CTRL_REG10:       return nullptr;
+    case RegID::A_INT_GEN_SRC:       return nullptr;
+    case RegID::AG_STATUS_REG_ALT:   return nullptr;
+    case RegID::A_DATA_X:            return nullptr;
+    case RegID::A_DATA_Y:            return nullptr;
+    case RegID::A_DATA_Z:            return nullptr;
+    case RegID::AG_FIFO_CTRL:        return nullptr;
+    case RegID::AG_FIFO_SRC:         return nullptr;
+    case RegID::G_INT_GEN_CFG:       return nullptr;
+    case RegID::G_INT_GEN_THS_X:     return nullptr;
+    case RegID::G_INT_GEN_THS_Y:     return nullptr;
+    case RegID::G_INT_GEN_THS_Z:     return nullptr;
+    case RegID::G_INT_GEN_DURATION:  return nullptr;
   }
+  return nullptr;
 }
 
 
@@ -869,12 +920,14 @@ int8_t LSM9DS1::io_op_callback(BusOp* _op) {
   }
 
   //TODO: Switch/case for ag/mag register.
-  uint8_t access_idx = op->getTransferParam(3);
+  RegID idx = RegPtrMap::regIdFromAddr(op->getTransferParam(3));
+  unsigned int val =
+
   if (true) {  // TODO: Horrid. Wrong.
-    io_op_callback_mag(op);
+    error_condition = (BusOpcode::RX == op->get_opcode()) ? io_op_callback_mag_read(idx, 0) ? io_op_callback_mag_write(idx, 0);
   }
   else {
-    io_op_callback_ag(op);
+    error_condition = (BusOpcode::RX == op->get_opcode()) ? io_op_callback_ag_read(idx, 0) ? io_op_callback_ag_write(idx, 0);
   }
 
   if (local_log.length() > 0) Kernel::log(&local_log);
