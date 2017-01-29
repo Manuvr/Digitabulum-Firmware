@@ -452,9 +452,6 @@ int8_t ManuManager::send_map_event() {
 int8_t ManuManager::reconfigure_data_map() {
   uint16_t accumulated_offset = LEGEND_DATASET_GLOBAL_SIZE;
   for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
-    // Configure the IIU...
-    imus[i].class_init(i);
-
     /* Assign the ManuLegend specification to the IIU class, thereby giving the IIU class its pointers. */
     // TODO: This is broken. Integrator should emit the data?
     integrator.assign_legend_pointers(
@@ -678,7 +675,7 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
     return SPI_CALLBACK_ERROR;
   }
 
-  uint8_t cpld_addr = op->getTransferParam(1);
+  uint8_t cpld_addr = op->getTransferParam(0);
   uint8_t imu_count = op->getTransferParam(2);
   uint8_t reg_addr  = op->getTransferParam(3);
   RegID   idx       = RegPtrMap::regIdFromAddr(cpld_addr, reg_addr);
@@ -696,22 +693,44 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
       }
       //printIMURollCall(&local_log);
       break;
-
-    case RegID::M_OFFSET_X:
-      break;
-    case RegID::M_OFFSET_Y:
-      break;
-    case RegID::M_OFFSET_Z:
-      break;
     case RegID::M_CTRL_REG1:
-      break;
-    case RegID::M_CTRL_REG2:
       break;
     case RegID::M_CTRL_REG3:
       break;
     case RegID::M_CTRL_REG4:
       break;
     case RegID::M_CTRL_REG5:
+      break;
+    case RegID::M_INT_CFG:
+      break;
+    case RegID::AG_INT1_CTRL:
+      break;
+    case RegID::AG_INT2_CTRL:
+      break;
+    case RegID::G_ORIENT_CFG:
+      break;
+    case RegID::AG_CTRL_REG4:
+      break;
+    case RegID::A_CTRL_REG5:
+      break;
+    case RegID::AG_CTRL_REG8:
+      break;
+    case RegID::AG_CTRL_REG9:
+      break;
+    case RegID::AG_CTRL_REG10:
+      break;
+    case RegID::AG_FIFO_CTRL:
+      break;
+
+
+    /* These are exported to the IMU class. */
+    case RegID::M_OFFSET_X:
+      break;
+    case RegID::M_OFFSET_Y:
+      break;
+    case RegID::M_OFFSET_Z:
+      break;
+    case RegID::M_CTRL_REG2:
       break;
     case RegID::M_STATUS_REG:
       break;
@@ -720,8 +739,6 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
     case RegID::M_DATA_Y:
       break;
     case RegID::M_DATA_Z:
-      break;
-    case RegID::M_INT_CFG:
       break;
     case RegID::M_INT_SRC:
       break;
@@ -743,17 +760,11 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
       break;
     case RegID::G_REFERENCE:
       break;
-    case RegID::AG_INT1_CTRL:
-      break;
-    case RegID::AG_INT2_CTRL:
-      break;
     case RegID::G_CTRL_REG1:
       break;
     case RegID::G_CTRL_REG2:
       break;
     case RegID::G_CTRL_REG3:
-      break;
-    case RegID::G_ORIENT_CFG:
       break;
     case RegID::G_INT_GEN_SRC:
       break;
@@ -767,19 +778,9 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
       break;
     case RegID::G_DATA_Z:
       break;
-    case RegID::AG_CTRL_REG4:
-      break;
-    case RegID::A_CTRL_REG5:
-      break;
     case RegID::A_CTRL_REG6:
       break;
     case RegID::A_CTRL_REG7:
-      break;
-    case RegID::AG_CTRL_REG8:
-      break;
-    case RegID::AG_CTRL_REG9:
-      break;
-    case RegID::AG_CTRL_REG10:
       break;
     case RegID::A_INT_GEN_SRC:
       break;
@@ -790,8 +791,6 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
     case RegID::A_DATA_Y:
       break;
     case RegID::A_DATA_Z:
-      break;
-    case RegID::AG_FIFO_CTRL:
       break;
     case RegID::AG_FIFO_SRC:
       break;

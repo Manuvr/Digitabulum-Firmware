@@ -40,9 +40,7 @@ IMUs need to be aware of their own bus addresses so that bus access can be encap
 #define __LSM9DS1_MERGED_H__
 
 #include <DataStructures/InertialMeasurement.h>
-#include <Platform/Peripherals/SPI/SPIBusOp.h>
 
-class CPLDDriver;
 
 /*
 * These are possible error states for the IMU state-machine.
@@ -286,12 +284,6 @@ class LSM9DS1 {
     LSM9DS1(const RegPtrMap*);
     ~LSM9DS1();
 
-    void class_init(uint8_t bus_addr);
-
-    /* Overrides from the BusOpCallback interface */
-    int8_t io_op_callahead(BusOp*);
-    int8_t io_op_callback(BusOp*);
-    int8_t queue_io_job(BusOp*);
 
     void setSampleRateProfile(uint8_t);
     IMUFault setDesiredState(IMUState);   // Used to set the state the OS wants the IMU class to acheive.
@@ -405,12 +397,12 @@ class LSM9DS1 {
 
   private:
     const RegPtrMap* _ptr_map;
-    uint8_t BUS_ADDR;  // What is our address on the bus? TODO: const
 
     // TODO: r1 simplified things a great deal. All these members can probably DIAF.
     RegID IDX_T0; // TODO: Ought to be const if here at all.
     RegID IDX_T1; // TODO: Ought to be const if here at all.
-    RegID IDX_ID; // TODO: Ought to be const if here at all.
+    uint8_t   io_test_val_0    = 0;     //
+    uint8_t   io_test_val_1    = 0;     //
 
     uint32_t  time_stamp_base  = 0;       // What time was it when we first started taking samples?
     uint32_t  last_sample_time = 0;       // What time was it when we first started taking samples?
@@ -418,9 +410,6 @@ class LSM9DS1 {
     uint8_t*  pending_samples  = nullptr; // How many samples are we expecting to arrive?
 
     uint16_t _imu_flags        = 1;     // Default verbosity of 1.
-
-    uint8_t   io_test_val_0    = 0;     //
-    uint8_t   io_test_val_1    = 0;     //
 
     int8_t    base_filter_param = 0;
 

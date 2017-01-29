@@ -399,42 +399,12 @@ RegID RegPtrMap::regIdFromAddr(uint8_t dev_addr, uint8_t reg_addr) {
 //}
 
 LSM9DS1::LSM9DS1(const RegPtrMap* pm) : _ptr_map(pm) {
+  IDX_T0 = RegID::M_OFFSET_X;
+  IDX_T1 = RegID::M_OFFSET_Y;
 }
 
 
 LSM9DS1::~LSM9DS1() {
-}
-
-
-void LSM9DS1::class_init(uint8_t address) {
-  last_val_mag(0.0f, 0.0f, 0.0f);
-  last_val_acc(0.0f, 0.0f, 0.0f);
-  last_val_gyr(0.0f, 0.0f, 0.0f);
-  noise_floor_mag(0, 0, 0);
-  noise_floor_acc(0, 0, 0);
-  noise_floor_gyr(0, 0, 0);
-
-  // Local class stuff...
-  scale_mag           = 0;
-  update_rate_mag     = 0;
-  discards_remain_mag = 0;
-  discards_total_mag  = 0;
-
-  scale_acc           = 0;
-  update_rate_acc     = 0;
-  discards_remain_acc = 0;
-  discards_total_acc  = 0;
-
-  scale_gyr           = 0;
-  update_rate_gyr     = 0;
-  discards_remain_gyr = 0;
-  discards_total_gyr  = 0;
-
-  BUS_ADDR = address;
-  IDX_T0 = RegID::M_OFFSET_X;
-  IDX_T1 = RegID::M_OFFSET_Y;
-  IDX_ID = RegID::M_WHO_AM_I;
-  init();
 }
 
 
@@ -479,9 +449,12 @@ void LSM9DS1::reset() {
   discards_remain_gyr = 0;
   discards_total_gyr  = 0;
 
-  noise_floor_mag.set(0.0f, 0.0f, 0.0f);
-  noise_floor_acc.set(0.0f, 0.0f, 0.0f);
-  noise_floor_gyr.set(0.0f, 0.0f, 0.0f);
+  last_val_mag(0.0f, 0.0f, 0.0f);
+  last_val_acc(0.0f, 0.0f, 0.0f);
+  last_val_gyr(0.0f, 0.0f, 0.0f);
+  noise_floor_mag(0.0f, 0.0f, 0.0f);
+  noise_floor_acc(0.0f, 0.0f, 0.0f);
+  noise_floor_gyr(0.0f, 0.0f, 0.0f);
 
   // TODO: Blow away our idea of what is in the registers.
   // mark_it_zero();
@@ -870,7 +843,7 @@ const uint8_t* RegPtrMap::regPtr(RegID idx) const {
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
 void LSM9DS1::dumpDevRegs(StringBuilder *output) {
-  output->concatf("\n-------------------------------------------------------\n--- IMU 0x%04x  %s ==>  %s \n-------------------------------------------------------\n", BUS_ADDR, getStateString(imu_state), (desired_state_attained() ? "STABLE" : getStateString(desired_state)));
+  output->concatf("\n-------------------------------------------------------\n--- IMU  %s ==> %s \n-------------------------------------------------------\n", getStateString(imu_state), (desired_state_attained() ? "STABLE" : getStateString(desired_state)));
   output->concatf("--- sample_count        %d\n--- pending_samples     %d\n\n", sample_count, *pending_samples);
   if (getVerbosity() > 1) {
     output->concatf("--- calibration smpls   %d\n", sb_next_write);
@@ -906,6 +879,12 @@ void LSM9DS1::dumpDevRegs(StringBuilder *output) {
 IMUFault LSM9DS1::proc_register_read(RegID idx) {
   IMUFault return_value = IMUFault::NO_ERROR;
 
+  switch (idx) {
+    default:
+      if (getVerbosity() > 5) local_log.concatf("\t LSM9DS1 read an unimplemented register: %s.\n", regNameString(idx));
+      break;
+  }
+
   if (local_log.length() > 0) Kernel::log(&local_log);
   return return_value;
 }
@@ -919,6 +898,12 @@ IMUFault LSM9DS1::proc_register_read(RegID idx) {
 */
 IMUFault LSM9DS1::proc_register_write(RegID idx) {
   IMUFault return_value = IMUFault::NO_ERROR;
+
+  switch (idx) {
+    default:
+      if (getVerbosity() > 5) local_log.concatf("\t LSM9DS1 wrote an unimplemented register: %s.\n", regNameString(idx));
+      break;
+  }
 
   if (local_log.length() > 0) Kernel::log(&local_log);
   return return_value;
