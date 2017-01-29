@@ -34,8 +34,7 @@ limitations under the License.
 * Static members and initializers should be located here.
 *******************************************************************************/
 
-SPIBusOp ManuManager::_preformed_read_a;
-SPIBusOp ManuManager::_preformed_read_g;
+SPIBusOp ManuManager::_preformed_read_i;
 SPIBusOp ManuManager::_preformed_read_m;
 SPIBusOp ManuManager::_preformed_read_temp;
 SPIBusOp ManuManager::_preformed_fifo_read;
@@ -54,11 +53,22 @@ ManuManager* ManuManager::getInstance() {
 /*    Register memory     */
 /* ---------------------- */
 /* These are giant strips of DMA-capable memory that are used for raw frame
-     reads from the sensor package. Twice what we need for double-buffering. */
-int16_t __frame_buf_a[2 * 3 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
-int16_t __frame_buf_g[2 * 3 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
-int16_t __temperatures[LEGEND_DATASET_IIU_COUNT];         // Temperature data
-// TODO: Might consolidate these three. Sensor and CPLD allow for it.
+     reads from the sensor package. */
+
+/* Inertial data,
+    x2 because Acc+Gyr
+    x2 because double-buffered
+    x3 because 3-space vectors (of 16-bit ints)
+    X17 because that many sensors
+    = 204 int16's
+    = 408 bytes
+*/
+int16_t _frame_buf_i[2 * 2 * 3 * LEGEND_DATASET_IIU_COUNT];
+
+
+/* Temperature data. Single buffered. */
+// TODO: Might consolidate temp into inertial. Sensor and CPLD allow for it.
+int16_t __temperatures[LEGEND_DATASET_IIU_COUNT];
 
 /* Magnetometer data registers. Single buffered. */
 int16_t _reg_block_m_data[3 * LEGEND_DATASET_IIU_COUNT];
@@ -72,7 +82,7 @@ uint8_t _reg_block_ident[2 * LEGEND_DATASET_IIU_COUNT];
 
 
 /* Ranked-access registers below this line.*/
-  // TODO: Until the DMA apparatus is smart enough to know what we;re doing,
+  // TODO: Until the DMA apparatus is smart enough to know what we're doing,
   //   we actually need to define all 6 bytes. We should be able to loop the
   //   memory-side of the transaction if we want all bytes to be the same.
 
@@ -198,6 +208,13 @@ uint16_t _reg_block_m_thresholds[LEGEND_DATASET_IIU_COUNT];
 /* End of register memory */
 /* ---------------------- */
 
+/* These are the beginnings of a ring-buffer for whole inertial frames. */
+const int16_t* _frames_i[] = {
+  &_frame_buf_i[0],
+  &_frame_buf_i[102]
+};
+
+
 const RegPtrMap _reg_ptrs[] = {
   RegPtrMap(0 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
   RegPtrMap(1 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
@@ -294,31 +311,18 @@ ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") 
   reflection_gyr.y = 1;
   reflection_gyr.z = -1;
 
-  _preformed_read_a.shouldReap(false);
-  _preformed_read_a.devRegisterAdvance(true);
-  _preformed_read_a.set_opcode(BusOpcode::RX);
-  _preformed_read_a.callback = (BusOpCallback*) this;
+  _preformed_read_i.shouldReap(false);
+  _preformed_read_i.devRegisterAdvance(true);
+  _preformed_read_i.set_opcode(BusOpcode::RX);
+  _preformed_read_i.callback = (BusOpCallback*) this;
   // Starting from the first accelerometer...
-  // Read 6 bytes...
+  // Read 12 bytes...  (A and G vectors)
   // ...across 17 sensors...
   // ...from this base address...
-  _preformed_read_a.setParams(CPLD_REG_IMU_DM_P_I|0x80, 6, 17, LSM9DS1::regAddr(RegID::A_DATA_X)|0x80);
+  _preformed_read_i.setParams(CPLD_REG_IMU_DM_P_I|0x80, 12, 17, LSM9DS1::regAddr(RegID::A_DATA_X)|0x80);
   // ...and drop the results here.
-  _preformed_read_a.buf      = (uint8_t*) __frame_buf_a;
-  _preformed_read_a.buf_len  = 102;
-
-  _preformed_read_g.shouldReap(false);
-  _preformed_read_g.devRegisterAdvance(true);
-  _preformed_read_g.set_opcode(BusOpcode::RX);
-  _preformed_read_g.callback = (BusOpCallback*) this;
-  // Starting from the first gyro...
-  // Read 6 bytes...
-  // ...across 17 sensors...
-  // ...from this base address...
-  _preformed_read_g.setParams(CPLD_REG_IMU_DM_P_I|0x80, 6, 17, LSM9DS1::regAddr(RegID::G_DATA_X)|0x80);
-  // ...and drop the results here.
-  _preformed_read_g.buf      = (uint8_t*) __frame_buf_g;
-  _preformed_read_g.buf_len  = 102;
+  _preformed_read_i.buf      = (uint8_t*) _frame_buf_i;
+  _preformed_read_i.buf_len  = 204;
 
   _preformed_read_m.shouldReap(false);
   _preformed_read_m.devRegisterAdvance(true);
@@ -657,6 +661,8 @@ int8_t ManuManager::io_op_callahead(BusOp* _op) {
 
 /**
 * When a bus operation completes, it is passed back to its issuing class.
+* Unlike r0, all IMU traffic calls back to this function, and not the individual
+*   IMU drivers.
 *
 * @param  _op  The bus operation that was completed.
 * @return 0 on success, or appropriate error code.
@@ -664,7 +670,6 @@ int8_t ManuManager::io_op_callahead(BusOp* _op) {
 int8_t ManuManager::io_op_callback(BusOp* _op) {
   SPIBusOp* op = (SPIBusOp*) _op;
   int8_t return_value = SPI_CALLBACK_NOMINAL;
-  // There is zero chance this object will be a null pointer unless it was done on purpose.
   if (op->hasFault()) {
     if (getVerbosity() > 3) {
       local_log.concat("io_op_callback() rejected a callback because the bus op failed.\n");
@@ -674,85 +679,148 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
   }
 
   uint8_t cpld_addr = op->getTransferParam(1);
-  uint8_t reg_addr = op->getTransferParam(3);
-  RegID idx = RegPtrMap::regIdFromAddr(op->getTransferParam(3));
+  uint8_t imu_count = op->getTransferParam(2);
+  uint8_t reg_addr  = op->getTransferParam(3);
+  RegID   idx       = RegPtrMap::regIdFromAddr(cpld_addr, reg_addr);
 
-  switch (cpld_addr) {
-    case CPLD_REG_IMU_DM_P_M:
-    case CPLD_REG_IMU_DM_D_M:
-    case CPLD_REG_IMU_D1_P_M:
-    case CPLD_REG_IMU_D1_I_M:
-    case CPLD_REG_IMU_D1_D_M:
-    case CPLD_REG_IMU_D2_P_M:
-    case CPLD_REG_IMU_D2_I_M:
-    case CPLD_REG_IMU_D2_D_M:
-    case CPLD_REG_IMU_D3_P_M:
-    case CPLD_REG_IMU_D3_I_M:
-    case CPLD_REG_IMU_D3_D_M:
-    case CPLD_REG_IMU_D4_P_M:
-    case CPLD_REG_IMU_D4_I_M:
-    case CPLD_REG_IMU_D4_D_M:
-    case CPLD_REG_IMU_D5_P_M:
-    case CPLD_REG_IMU_D5_I_M:
-    case CPLD_REG_IMU_D5_D_M:
-    case CPLD_REG_IMU_DM_P_I:
-    case CPLD_REG_IMU_DM_D_I:
-    case CPLD_REG_IMU_D1_P_I:
-    case CPLD_REG_IMU_D1_I_I:
-    case CPLD_REG_IMU_D1_D_I:
-    case CPLD_REG_IMU_D2_P_I:
-    case CPLD_REG_IMU_D2_I_I:
-    case CPLD_REG_IMU_D2_D_I:
-    case CPLD_REG_IMU_D3_P_I:
-    case CPLD_REG_IMU_D3_I_I:
-    case CPLD_REG_IMU_D3_D_I:
-    case CPLD_REG_IMU_D4_P_I:
-    case CPLD_REG_IMU_D4_I_I:
-    case CPLD_REG_IMU_D4_D_I:
-    case CPLD_REG_IMU_D5_P_I:
-    case CPLD_REG_IMU_D5_I_I:
-    case CPLD_REG_IMU_D5_D_I:
-      {
-        RegID idx = RegPtrMap::regIdFromAddr(op->getTransferParam(3));
-      }
-      break;
-    case CPLD_REG_RANK_P_I:
-    case CPLD_REG_RANK_I_I:
-    case CPLD_REG_RANK_D_I:
-    case CPLD_REG_RANK_P_M:
-    case CPLD_REG_RANK_I_M:
-    case CPLD_REG_RANK_D_M:
-      break;
-    default:
-      break;
-  }
-
+  // Alright... we'll do the selection based on register address first
   // These checks we can do regardless of target sensor aspect.
-  switch (reg_addr) {
-    case 0x8F:  // This is a bulk identity check.
-      // Set the IMU states appropriately.
+  switch (idx) {
+    case RegID::M_WHO_AM_I:
+    case RegID::AG_WHO_AM_I:  // This is a bulk identity check.
       for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
-        fetchIMU(i)->setDesiredState(IMUState::STAGE_1);
+        if ((0x3d == _reg_block_ident[i]) && (0x68 == _reg_block_ident[i+LEGEND_DATASET_IIU_COUNT])) {
+          // If the identity bytes match, set the IMU state appropriately...
+          fetchIMU(i)->setDesiredState(IMUState::STAGE_1);
+        }
       }
       //printIMURollCall(&local_log);
       break;
+
+    case RegID::M_OFFSET_X:
+      break;
+    case RegID::M_OFFSET_Y:
+      break;
+    case RegID::M_OFFSET_Z:
+      break;
+    case RegID::M_CTRL_REG1:
+      break;
+    case RegID::M_CTRL_REG2:
+      break;
+    case RegID::M_CTRL_REG3:
+      break;
+    case RegID::M_CTRL_REG4:
+      break;
+    case RegID::M_CTRL_REG5:
+      break;
+    case RegID::M_STATUS_REG:
+      break;
+    case RegID::M_DATA_X:
+      break;
+    case RegID::M_DATA_Y:
+      break;
+    case RegID::M_DATA_Z:
+      break;
+    case RegID::M_INT_CFG:
+      break;
+    case RegID::M_INT_SRC:
+      break;
+    case RegID::M_INT_TSH:
+      break;
+    case RegID::AG_ACT_THS:
+      break;
+    case RegID::AG_ACT_DUR:
+      break;
+    case RegID::A_INT_GEN_CFG:
+      break;
+    case RegID::A_INT_GEN_THS_X:
+      break;
+    case RegID::A_INT_GEN_THS_Y:
+      break;
+    case RegID::A_INT_GEN_THS_Z:
+      break;
+    case RegID::A_INT_GEN_DURATION:
+      break;
+    case RegID::G_REFERENCE:
+      break;
+    case RegID::AG_INT1_CTRL:
+      break;
+    case RegID::AG_INT2_CTRL:
+      break;
+    case RegID::G_CTRL_REG1:
+      break;
+    case RegID::G_CTRL_REG2:
+      break;
+    case RegID::G_CTRL_REG3:
+      break;
+    case RegID::G_ORIENT_CFG:
+      break;
+    case RegID::G_INT_GEN_SRC:
+      break;
+    case RegID::AG_DATA_TEMP:
+      break;
+    case RegID::AG_STATUS_REG:
+      break;
+    case RegID::G_DATA_X:
+      break;
+    case RegID::G_DATA_Y:
+      break;
+    case RegID::G_DATA_Z:
+      break;
+    case RegID::AG_CTRL_REG4:
+      break;
+    case RegID::A_CTRL_REG5:
+      break;
+    case RegID::A_CTRL_REG6:
+      break;
+    case RegID::A_CTRL_REG7:
+      break;
+    case RegID::AG_CTRL_REG8:
+      break;
+    case RegID::AG_CTRL_REG9:
+      break;
+    case RegID::AG_CTRL_REG10:
+      break;
+    case RegID::A_INT_GEN_SRC:
+      break;
+    case RegID::AG_STATUS_REG_ALT:
+      break;
+    case RegID::A_DATA_X:
+      break;
+    case RegID::A_DATA_Y:
+      break;
+    case RegID::A_DATA_Z:
+      break;
+    case RegID::AG_FIFO_CTRL:
+      break;
+    case RegID::AG_FIFO_SRC:
+      break;
+    case RegID::G_INT_GEN_CFG:
+      break;
+    case RegID::G_INT_GEN_THS_X:
+      break;
+    case RegID::G_INT_GEN_THS_Y:
+      break;
+    case RegID::G_INT_GEN_THS_Z:
+      break;
+    case RegID::G_INT_GEN_DURATION:
+      break;
+
     default:
+      // For registers that are still handled via individual IMU classes, pass
+      //   control to them.
+      for (uint8_t i = (cpld_addr % LEGEND_DATASET_IIU_COUNT); i < imu_count; i++) {
+        // For each sensor involved in the transfer, notify it of new data.
+        LSM9DS1* imu = fetchIMU(i);
+        IMUFault error_condition = (BusOpcode::RX == op->get_opcode()) ? imu->proc_register_read(idx) : imu->proc_register_write(idx);
+      }
       break;
   }
 
-  if (op == &_preformed_read_a) {
+  if (op == &_preformed_read_i) {
     Kernel::staticRaiseEvent(&quat_crunch_event);
-  }
-  else if (op == &_preformed_read_g) {
-    Kernel::staticRaiseEvent(&quat_crunch_event);
+    // TODO: If the FIFO watermark IRQ signal is still asserted, read another batch.
     return_value = SPI_CALLBACK_RECYCLE;
-  }
-  else if (op == &_preformed_read_m) {
-  }
-  else if (op == &_preformed_read_temp) {
-    // Our pre-formed temperature read.
-  }
-  else if (op == &_preformed_fifo_read) {
   }
 
   flushLocalLog();
@@ -1495,11 +1563,8 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
     case '@':   // Mag
       queue_io_job(&_preformed_read_m);
       break;
-    case '#':   // Accel
-      queue_io_job(&_preformed_read_a);
-      break;
-    case '$':   // Gyro
-      queue_io_job(&_preformed_read_g);
+    case '#':   // Intertial
+      queue_io_job(&_preformed_read_i);
       break;
     case '%':   // FIFO
       queue_io_job(&_preformed_fifo_read);

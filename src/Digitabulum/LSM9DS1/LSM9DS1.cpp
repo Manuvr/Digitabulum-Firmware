@@ -204,6 +204,41 @@ const bool _imu_register_writable_map[] = {
 };
 
 
+/* The string representations of the registers named in the enum class RegID. */
+const char* _imu_register_names[] = {
+  "M_OFFSET_X", "M_OFFSET_Y", "M_OFFSET_Z",
+  "M_WHO_AM_I", "M_CTRL_REG1",
+  "M_CTRL_REG2", "M_CTRL_REG3", "M_CTRL_REG4", "M_CTRL_REG5", "M_STATUS_REG",
+  "M_DATA_X", "M_DATA_Y", "M_DATA_Z",
+  "M_INT_CFG", "M_INT_SRC",
+  "M_INT_TSH",
+  // This is where the AG registers start.
+  "AG_ACT_THS", "AG_ACT_DUR", "A_INT_GEN_CFG", "A_INT_GEN_THS_X",
+  "A_INT_GEN_THS_Y", "A_INT_GEN_THS_Z", "A_INT_GEN_DURATION", "G_REFERENCE",
+  "AG_INT1_CTRL", "AG_INT2_CTRL", "AG_WHO_AM_I", "G_CTRL_REG1",
+  "G_CTRL_REG2", "G_CTRL_REG3", "G_ORIENT_CFG", "G_INT_GEN_SRC",
+  "AG_DATA_TEMP",
+  "AG_STATUS_REG",
+  "G_DATA_X", "G_DATA_Y", "G_DATA_Z",
+  "AG_CTRL_REG4", "A_CTRL_REG5", "A_CTRL_REG6", "A_CTRL_REG7",
+  "AG_CTRL_REG8", "AG_CTRL_REG9", "AG_CTRL_REG10",
+  "A_INT_GEN_SRC", "AG_STATUS_REG_ALT",
+  "A_DATA_X", "A_DATA_Y", "A_DATA_Z",
+  "AG_FIFO_CTRL", "AG_FIFO_SRC", "G_INT_GEN_CFG",
+  "G_INT_GEN_THS_X", "G_INT_GEN_THS_Y", "G_INT_GEN_THS_Z",
+  "G_INT_GEN_DURATION"
+};
+
+
+/**
+* Print the IMU register name.
+*
+* @return const char*
+*/
+const char* LSM9DS1::regNameString(RegID id) {
+  return _imu_register_names[(uint8_t) id];
+}
+
 const uint8_t LSM9DS1::regAddr(RegID id) {
   return _imu_address_map[(uint8_t) id];
 }
@@ -278,133 +313,71 @@ const char* LSM9DS1::getStateString(IMUState state) {
 }
 
 
-/**
-* Print the IMU register name.
-*
-* @return const char*
-*/
-const char* LSM9DS1::regNameString(RegID idx) {
-  switch (idx) {
-    case RegID::M_OFFSET_X:          return "M_OFFSET_X";
-    case RegID::M_OFFSET_Y:          return "M_OFFSET_Y";
-    case RegID::M_OFFSET_Z:          return "M_OFFSET_Z";
-    case RegID::M_WHO_AM_I:          return "M_WHO_AM_I";
-    case RegID::M_CTRL_REG1:         return "M_CTRL_REG1";
-    case RegID::M_CTRL_REG2:         return "M_CTRL_REG2";
-    case RegID::M_CTRL_REG3:         return "M_CTRL_REG3";
-    case RegID::M_CTRL_REG4:         return "M_CTRL_REG4";
-    case RegID::M_CTRL_REG5:         return "M_CTRL_REG5";
-    case RegID::M_STATUS_REG:        return "M_STATUS_REG";
-    case RegID::M_DATA_X:            return "M_DATA_X";
-    case RegID::M_DATA_Y:            return "M_DATA_Y";
-    case RegID::M_DATA_Z:            return "M_DATA_Z";
-    case RegID::M_INT_CFG:           return "M_INT_CFG";
-    case RegID::M_INT_SRC:           return "M_INT_SRC";
-    case RegID::M_INT_TSH:           return "M_INT_TSH";
-    case RegID::AG_ACT_THS:          return "AG_ACT_THS";
-    case RegID::AG_ACT_DUR:          return "AG_ACT_DUR";
-    case RegID::A_INT_GEN_CFG:       return "A_INT_GEN_CFG";
-    case RegID::A_INT_GEN_THS_X:     return "A_INT_GEN_THS_X";
-    case RegID::A_INT_GEN_THS_Y:     return "A_INT_GEN_THS_Y";
-    case RegID::A_INT_GEN_THS_Z:     return "A_INT_GEN_THS_Z";
-    case RegID::A_INT_GEN_DURATION:  return "A_INT_GEN_DURATION";
-    case RegID::G_REFERENCE:         return "G_REFERENCE";
-    case RegID::AG_INT1_CTRL:        return "AG_INT1_CTRL";
-    case RegID::AG_INT2_CTRL:        return "AG_INT2_CTRL";
-    case RegID::AG_WHO_AM_I:         return "AG_WHO_AM_I";
-    case RegID::G_CTRL_REG1:         return "G_CTRL_REG1";
-    case RegID::G_CTRL_REG2:         return "G_CTRL_REG2";
-    case RegID::G_CTRL_REG3:         return "G_CTRL_REG3";
-    case RegID::G_ORIENT_CFG:        return "G_ORIENT_CFG";
-    case RegID::G_INT_GEN_SRC:       return "G_INT_GEN_SRC";
-    case RegID::AG_DATA_TEMP:        return "AG_DATA_TEMP";
-    case RegID::AG_STATUS_REG:       return "AG_STATUS_REG";
-    case RegID::G_DATA_X:            return "G_DATA_X";
-    case RegID::G_DATA_Y:            return "G_DATA_Y";
-    case RegID::G_DATA_Z:            return "G_DATA_Z";
-    case RegID::AG_CTRL_REG4:        return "AG_CTRL_REG4";
-    case RegID::A_CTRL_REG5:         return "A_CTRL_REG5";
-    case RegID::A_CTRL_REG6:         return "A_CTRL_REG6";
-    case RegID::A_CTRL_REG7:         return "A_CTRL_REG7";
-    case RegID::AG_CTRL_REG8:        return "AG_CTRL_REG8";
-    case RegID::AG_CTRL_REG9:        return "AG_CTRL_REG9";
-    case RegID::AG_CTRL_REG10:       return "AG_CTRL_REG10";
-    case RegID::A_INT_GEN_SRC:       return "A_INT_GEN_SRC";
-    case RegID::AG_STATUS_REG_ALT:   return "AG_STATUS_REG_ALT";
-    case RegID::A_DATA_X:            return "A_DATA_X";
-    case RegID::A_DATA_Y:            return "A_DATA_Y";
-    case RegID::A_DATA_Z:            return "A_DATA_Z";
-    case RegID::AG_FIFO_CTRL:        return "AG_FIFO_CTRL";
-    case RegID::AG_FIFO_SRC:         return "AG_FIFO_SRC";
-    case RegID::G_INT_GEN_CFG:       return "G_INT_GEN_CFG";
-    case RegID::G_INT_GEN_THS_X:     return "G_INT_GEN_THS_X";
-    case RegID::G_INT_GEN_THS_Y:     return "G_INT_GEN_THS_Y";
-    case RegID::G_INT_GEN_THS_Z:     return "G_INT_GEN_THS_Z";
-    case RegID::G_INT_GEN_DURATION:  return "G_INT_GEN_DURATIO";
+// TODO: Incurring two branches might be cheaper than a const map. Investigate.
+RegID RegPtrMap::regIdFromAddr(uint8_t dev_addr, uint8_t reg_addr) {
+  if (dev_addr < CPLD_REG_IMU_DM_P_I) {  // Magnetic aspect.
+    switch (reg_addr & 0x3F) {
+      case 0x05: return RegID::M_OFFSET_X;
+      case 0x07: return RegID::M_OFFSET_Y;
+      case 0x09: return RegID::M_OFFSET_Z;
+      case 0x0f: return RegID::M_WHO_AM_I;
+      case 0x20: return RegID::M_CTRL_REG1;
+      case 0x21: return RegID::M_CTRL_REG2;
+      case 0x22: return RegID::M_CTRL_REG3;
+      case 0x23: return RegID::M_CTRL_REG4;
+      case 0x24: return RegID::M_CTRL_REG5;
+      case 0x27: return RegID::M_STATUS_REG;
+      case 0x28: return RegID::M_DATA_X;
+      case 0x2a: return RegID::M_DATA_Y;
+      case 0x2c: return RegID::M_DATA_Z;
+      case 0x30: return RegID::M_INT_CFG;
+      case 0x31: return RegID::M_INT_SRC;
+      case 0x32: return RegID::M_INT_TSH;
+    }
   }
-  return "<UNKNOWN>";
-}
-
-
-RegID RegPtrMap::regIdFromAddr(uint8_t addr) {
-  switch (addr & 0x7F) {
-    // TODO: Fill with real values.
-    case 0:    return RegID::M_WHO_AM_I;
-    case 1:    return RegID::M_WHO_AM_I;
-    case 2:    return RegID::M_WHO_AM_I;
-    case 3:    return RegID::M_WHO_AM_I;
-    case 4:    return RegID::M_WHO_AM_I;
-    case 5:    return RegID::M_WHO_AM_I;
-    case 6:    return RegID::M_WHO_AM_I;
-    case 7:    return RegID::M_WHO_AM_I;
-    case 8:    return RegID::M_WHO_AM_I;
-    case 9:    return RegID::M_WHO_AM_I;
-    case 10:   return RegID::M_WHO_AM_I;
-    case 11:   return RegID::M_WHO_AM_I;
-    case 12:   return RegID::M_WHO_AM_I;
-    case 13:   return RegID::M_WHO_AM_I;
-    case 14:   return RegID::M_WHO_AM_I;
-    case 15:   return RegID::M_WHO_AM_I;
-    case 16:   return RegID::M_WHO_AM_I;
-    case 17:   return RegID::M_WHO_AM_I;
-    case 18:   return RegID::M_WHO_AM_I;
-    case 19:   return RegID::M_WHO_AM_I;
-    case 20:   return RegID::M_WHO_AM_I;
-    case 21:   return RegID::M_WHO_AM_I;
-    case 22:   return RegID::M_WHO_AM_I;
-    case 23:   return RegID::M_WHO_AM_I;
-    case 24:   return RegID::M_WHO_AM_I;
-    case 25:   return RegID::M_WHO_AM_I;
-    case 26:   return RegID::M_WHO_AM_I;
-    case 27:   return RegID::M_WHO_AM_I;
-    case 28:   return RegID::M_WHO_AM_I;
-    case 29:   return RegID::M_WHO_AM_I;
-    case 30:   return RegID::M_WHO_AM_I;
-    case 31:   return RegID::M_WHO_AM_I;
-    case 32:   return RegID::M_WHO_AM_I;
-    case 33:   return RegID::M_WHO_AM_I;
-    case 34:   return RegID::M_WHO_AM_I;
-    case 35:   return RegID::M_WHO_AM_I;
-    case 36:   return RegID::M_WHO_AM_I;
-    case 37:   return RegID::M_WHO_AM_I;
-    case 38:   return RegID::M_WHO_AM_I;
-    case 39:   return RegID::M_WHO_AM_I;
-    case 40:   return RegID::M_WHO_AM_I;
-    case 41:   return RegID::M_WHO_AM_I;
-    case 42:   return RegID::M_WHO_AM_I;
-    case 43:   return RegID::M_WHO_AM_I;
-    case 44:   return RegID::M_WHO_AM_I;
-    case 45:   return RegID::M_WHO_AM_I;
-    case 46:   return RegID::M_WHO_AM_I;
-    case 47:   return RegID::M_WHO_AM_I;
-    case 48:   return RegID::M_WHO_AM_I;
-    case 49:   return RegID::M_WHO_AM_I;
-    case 50:   return RegID::M_WHO_AM_I;
-    case 51:   return RegID::M_WHO_AM_I;
-    case 52:   return RegID::M_WHO_AM_I;
-    case 53:   return RegID::M_WHO_AM_I;
-    case 54:   return RegID::M_WHO_AM_I;
-    case 55:   return RegID::M_WHO_AM_I;
+  else {
+    switch (reg_addr & 0x3F) {
+      case 0x04: return RegID::AG_ACT_THS;
+      case 0x05: return RegID::AG_ACT_DUR;
+      case 0x06: return RegID::A_INT_GEN_CFG;
+      case 0x07: return RegID::A_INT_GEN_THS_X;
+      case 0x08: return RegID::A_INT_GEN_THS_Y;
+      case 0x09: return RegID::A_INT_GEN_THS_Z;
+      case 0x0a: return RegID::A_INT_GEN_DURATION;
+      case 0x0b: return RegID::G_REFERENCE;
+      case 0x0c: return RegID::AG_INT1_CTRL;
+      case 0x0d: return RegID::AG_INT2_CTRL;
+      case 0x0f: return RegID::AG_WHO_AM_I;
+      case 0x10: return RegID::G_CTRL_REG1;
+      case 0x11: return RegID::G_CTRL_REG2;
+      case 0x12: return RegID::G_CTRL_REG3;
+      case 0x13: return RegID::G_ORIENT_CFG;
+      case 0x14: return RegID::G_INT_GEN_SRC;
+      case 0x15: return RegID::AG_DATA_TEMP;
+      case 0x17: return RegID::AG_STATUS_REG;
+      case 0x18: return RegID::G_DATA_X;
+      case 0x1a: return RegID::G_DATA_Y;
+      case 0x1c: return RegID::G_DATA_Z;
+      case 0x1e: return RegID::AG_CTRL_REG4;
+      case 0x1f: return RegID::A_CTRL_REG5;
+      case 0x20: return RegID::A_CTRL_REG6;
+      case 0x21: return RegID::A_CTRL_REG7;
+      case 0x22: return RegID::AG_CTRL_REG8;
+      case 0x23: return RegID::AG_CTRL_REG9;
+      case 0x24: return RegID::AG_CTRL_REG10;
+      case 0x26: return RegID::A_INT_GEN_SRC;
+      case 0x27: return RegID::AG_STATUS_REG_ALT;
+      case 0x28: return RegID::A_DATA_X;
+      case 0x2a: return RegID::A_DATA_Y;
+      case 0x2c: return RegID::A_DATA_Z;
+      case 0x2e: return RegID::AG_FIFO_CTRL;
+      case 0x2f: return RegID::AG_FIFO_SRC;
+      case 0x30: return RegID::G_INT_GEN_CFG;
+      case 0x31: return RegID::G_INT_GEN_THS_X;
+      case 0x33: return RegID::G_INT_GEN_THS_Y;
+      case 0x35: return RegID::G_INT_GEN_THS_Z;
+      case 0x37: return RegID::G_INT_GEN_DURATION;
+    }
   }
 }
 
@@ -552,46 +525,6 @@ void LSM9DS1::write_test_bytes() {
   writeRegister(IDX_T0, io_test_val_0);
   writeRegister(IDX_T1, io_test_val_1);
 }
-
-
-// Init parameters for the magnetometer. Starting at CTRL_REG1.
-uint8_t bulk_init_block_m[5] = {
-  0b11011000,  // Temp compensated, mid-range X/Y performance, 40Hz output.
-  0b00000000,  // 4 gauss,
-  0b00000000,  // SPI read/write, continuous conversion. Normal power mode.
-  0b00001000,  // Mid-range Z-axis performance, little-endian,
-  0b00000000,  // Continuous (unblocked) data register update.
-};
-
-// Init parameters for the inertial aspect. Starting at CTRL_REG1_G.
-uint8_t bulk_init_block_ag_0[4] = {
-  0b10001000,  // 238Hz ODR, 14Hz cutoff, 500dps
-  0b00000000,  // Low-pass filer feeds FIFO and interrupt logic directly.
-  0b00000000,  // No high-pass parameters.
-  0b00000000   // Orientation default values.
-};
-
-// Init parameters for the inertial aspect. Starting at CTRL_REG5_XL.
-uint8_t bulk_init_block_ag_1[6] = {
-  0b00111000,  // No decimation, all axes enabled.
-  0b10010000,  // 238Hz ODR, 4g range, max AA bandwidth.
-  0b10000101,  // High-res, ODR/50 LP-cutoff, filter feeds FIFO and interrupt logic.
-  0b00000100,  // Non-blocked data reg update, IRQ pins push-pull and active-high,
-  0b00000110,  // No sleepy gyro, FIFO enabled, i2c disabled.
-  0b01100000   // No self-tests.
-};
-
-// Init parameters for the inertial aspect. Starting at RegID::G_INT_GEN_CFG.
-uint8_t bulk_init_block_ag_2[8] = {
-  0b01111111,  // Gyro OR IRQ conditions, latched, all axes.
-  0b00000000,  // Gyro IRQ thresholds.
-  0b10000000,  // Gyro IRQ thresholds.
-  0b00000000,  // Gyro IRQ thresholds.
-  0b10000000,  // Gyro IRQ thresholds.
-  0b00000000,  // Gyro IRQ thresholds.
-  0b10000000,  // Gyro IRQ thresholds.
-  0b10010100   // 20 samples above threshold required to trigger IRQ.
-};
 
 
 /*
@@ -967,36 +900,25 @@ void LSM9DS1::dumpDevRegs(StringBuilder *output) {
 /**
 * When a bus operation completes, it is passed back to its issuing class.
 *
-* @param  _op  The bus operation that was completed.
-* @return SPI_CALLBACK_NOMINAL on success, or appropriate error code.
+* @param  idx  The register that completed a read.
+* @return IMUFault code.
 */
-int8_t LSM9DS1::io_op_callback(BusOp* _op) {
-  SPIBusOp* op = (SPIBusOp*) _op;
-  int8_t return_value = SPI_CALLBACK_NOMINAL;
+IMUFault LSM9DS1::proc_register_read(RegID idx) {
+  IMUFault return_value = IMUFault::NO_ERROR;
 
-  // There is zero chance this object will be a null pointer unless it was done on purpose.
-  if (op->hasFault()) {
-    if (getVerbosity() > 3) {
-      local_log.concat("~~~~~~~~LSM9DS1::io_op_callback (ERROR CASE -1)\n");
-      op->printDebug(&local_log);
-      Kernel::log(&local_log);
-    }
-    error_condition = (BusOpcode::RX == op->get_opcode()) ? IMUFault::BUS_OPERATION_FAILED_R : IMUFault::BUS_OPERATION_FAILED_W;
+  if (local_log.length() > 0) Kernel::log(&local_log);
+  return return_value;
+}
 
-    // TODO: Should think carefully, and...   return_value = SPI_CALLBACK_RECYCLE;   // Re-run the job.
-    return SPI_CALLBACK_ERROR;
-  }
 
-  //TODO: Switch/case for ag/mag register.
-  RegID idx = RegPtrMap::regIdFromAddr(op->getTransferParam(3));
-  //unsigned int val =
-
-  if (true) {  // TODO: Horrid. Wrong.
-    error_condition = (BusOpcode::RX == op->get_opcode()) ? io_op_callback_mag_read(idx, 0) : io_op_callback_mag_write(idx, 0);
-  }
-  else {
-    error_condition = (BusOpcode::RX == op->get_opcode()) ? io_op_callback_ag_read(idx, 0) : io_op_callback_ag_write(idx, 0);
-  }
+/**
+* When a bus operation completes, it is passed back to its issuing class.
+*
+* @param  idx  The register that completed a write.
+* @return IMUFault code.
+*/
+IMUFault LSM9DS1::proc_register_write(RegID idx) {
+  IMUFault return_value = IMUFault::NO_ERROR;
 
   if (local_log.length() > 0) Kernel::log(&local_log);
   return return_value;

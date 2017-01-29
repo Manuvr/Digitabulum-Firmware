@@ -70,16 +70,6 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #define DIGITABULUM_MSG_IMU_DOUBLE_TAP       0x060B // The given IMU experienced a double tap.
 
 
-#define AG_BASE_0_SIZE      10
-#define AG_BASE_1_SIZE       5
-#define AG_BASE_2_SIZE       9
-#define AG_BASE_3_SIZE       8
-
-#define M_BASE_0_SIZE        6
-#define M_BASE_1_SIZE        6
-#define M_BASE_2_SIZE        4
-
-
 enum class Chirality {
   UNKNOWN = 0,   // Interpretable as a bitmask...
   RIGHT   = 1,   // Bit 0: Chirality known
@@ -209,8 +199,7 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     static ManuManager *INSTANCE;
 
     // These are preformed bus operations that address multiple IMUs...
-    static SPIBusOp _preformed_read_a;
-    static SPIBusOp _preformed_read_g;
+    static SPIBusOp _preformed_read_i;
     static SPIBusOp _preformed_read_m;
     static SPIBusOp _preformed_read_temp;
     static SPIBusOp _preformed_fifo_read;

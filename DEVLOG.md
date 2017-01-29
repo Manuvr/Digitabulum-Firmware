@@ -227,5 +227,12 @@ _---J. Ian Lindsay_
     make DEBUG=1
     287284    2728   43152  333164   Former baseline.
     280156    2656   30376  313188   Compiles again following memory re-org.
+    280092    2656   30336  313084   Consolidated acc and gyr read ops into one.
+    280132    2880   30336  313348   Removed stop-gap mem space. Cleaned up some TODO.
+
+Lots of things are broken. There are a few stubs, and much dead code. IMU pointer
+maps are contained within a const class and array'd out as non-static members.
+
+Debriding and suturing...
 
 _---J. Ian Lindsay_

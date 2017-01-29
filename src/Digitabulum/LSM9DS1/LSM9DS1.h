@@ -262,7 +262,7 @@ class RegPtrMap {
 
     const uint8_t* regPtr(RegID) const;
 
-    static RegID regIdFromAddr(uint8_t);
+    static RegID regIdFromAddr(uint8_t, uint8_t);
 
 
   private:
@@ -356,6 +356,10 @@ class LSM9DS1 {
     IMUFault io_op_callback_mag_write(RegID idx, unsigned int value);
     IMUFault io_op_callback_ag_read(RegID idx, unsigned int value);
     IMUFault io_op_callback_ag_write(RegID idx, unsigned int value);
+    // TODO: The 4 fxns above should be subsumed into the 2 below.
+
+    IMUFault proc_register_read(RegID idx);
+    IMUFault proc_register_write(RegID idx);
 
 
     /* Inlines for the specialized flag duty of get/set class verbosity. */
