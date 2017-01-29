@@ -199,43 +199,43 @@ uint16_t _reg_block_m_thresholds[LEGEND_DATASET_IIU_COUNT];
 /* ---------------------- */
 
 const RegPtrMap _reg_ptrs[] = {
-  RegPtrMap(0 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
-  RegPtrMap(1 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
-  RegPtrMap(2 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
-  RegPtrMap(3 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
-  RegPtrMap(4 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
-  RegPtrMap(5 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
-  RegPtrMap(6 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
-  RegPtrMap(7 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
-  RegPtrMap(8 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
-  RegPtrMap(9 , &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
-  RegPtrMap(10, &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
-  RegPtrMap(11, &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
-  RegPtrMap(12, &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
-  RegPtrMap(13, &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
-  RegPtrMap(14, &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
-  RegPtrMap(15, &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0]),
-  RegPtrMap(16, &_reg_block_ag_activity[0]. &_reg_block_ag_0[0]. &_reg_block_ag_ctrl1_3[0]. &_reg_block_ag_ctrl6_7[0]. &_reg_block_ag_status[0])
+  RegPtrMap(0 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
+  RegPtrMap(1 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
+  RegPtrMap(2 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
+  RegPtrMap(3 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
+  RegPtrMap(4 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
+  RegPtrMap(5 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
+  RegPtrMap(6 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
+  RegPtrMap(7 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
+  RegPtrMap(8 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
+  RegPtrMap(9 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
+  RegPtrMap(10, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
+  RegPtrMap(11, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
+  RegPtrMap(12, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
+  RegPtrMap(13, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
+  RegPtrMap(14, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
+  RegPtrMap(15, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
+  RegPtrMap(16, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0])
 };
 
 
 LSM9DS1 imus[LEGEND_DATASET_IIU_COUNT] = {
-  LSM9DS1(&_reg_ptrs[0 ]).
-  LSM9DS1(&_reg_ptrs[1 ]).
-  LSM9DS1(&_reg_ptrs[2 ]).
-  LSM9DS1(&_reg_ptrs[3 ]).
-  LSM9DS1(&_reg_ptrs[4 ]).
-  LSM9DS1(&_reg_ptrs[5 ]).
-  LSM9DS1(&_reg_ptrs[6 ]).
-  LSM9DS1(&_reg_ptrs[7 ]).
-  LSM9DS1(&_reg_ptrs[8 ]).
-  LSM9DS1(&_reg_ptrs[9 ]).
-  LSM9DS1(&_reg_ptrs[10]).
-  LSM9DS1(&_reg_ptrs[11]).
-  LSM9DS1(&_reg_ptrs[12]).
-  LSM9DS1(&_reg_ptrs[13]).
-  LSM9DS1(&_reg_ptrs[14]).
-  LSM9DS1(&_reg_ptrs[15]).
+  LSM9DS1(&_reg_ptrs[0 ]),
+  LSM9DS1(&_reg_ptrs[1 ]),
+  LSM9DS1(&_reg_ptrs[2 ]),
+  LSM9DS1(&_reg_ptrs[3 ]),
+  LSM9DS1(&_reg_ptrs[4 ]),
+  LSM9DS1(&_reg_ptrs[5 ]),
+  LSM9DS1(&_reg_ptrs[6 ]),
+  LSM9DS1(&_reg_ptrs[7 ]),
+  LSM9DS1(&_reg_ptrs[8 ]),
+  LSM9DS1(&_reg_ptrs[9 ]),
+  LSM9DS1(&_reg_ptrs[10]),
+  LSM9DS1(&_reg_ptrs[11]),
+  LSM9DS1(&_reg_ptrs[12]),
+  LSM9DS1(&_reg_ptrs[13]),
+  LSM9DS1(&_reg_ptrs[14]),
+  LSM9DS1(&_reg_ptrs[15]),
   LSM9DS1(&_reg_ptrs[16])
 };
 
@@ -452,7 +452,8 @@ int8_t ManuManager::reconfigure_data_map() {
     imus[i].class_init(i);
 
     /* Assign the ManuLegend specification to the IIU class, thereby giving the IIU class its pointers. */
-    imus[i].assign_legend_pointers(
+    // TODO: This is broken. Integrator should emit the data?
+    integrator.assign_legend_pointers(
       (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_ACC      ),
       (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_GYR      ),
       (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_MAG      ),
@@ -467,10 +468,9 @@ int8_t ManuManager::reconfigure_data_map() {
       (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_SC_TMEP  )
     );
     accumulated_offset += LEGEND_DATASET_PER_IMU_SIZE;
-
-    imus[i].nullGyroError(true);   // No reason to not do this...
-    imus[i].nullifyGravity(false);
   }
+  integrator.nullGyroError(true);   // No reason to not do this...
+  integrator.nullifyGravity(false);
   return 0;
 }
 
@@ -525,7 +525,7 @@ int8_t ManuManager::setLegend(ManuLegend* nu_legend) {
 uint32_t ManuManager::totalSamples() {
   uint32_t return_value = 0;
   for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
-    return_value += imus[i].totalSamples();
+    return_value += integrator.totalSamples();
   }
   return return_value;
 }
@@ -559,7 +559,6 @@ void ManuManager::enableAutoscale(SampleType s_type, bool enabled) {
       break;
   }
 }
-
 
 
 /*******************************************************************************
@@ -966,7 +965,7 @@ int8_t ManuManager::notify(ManuvrMsg* active_event) {
     case DIGITABULUM_MSG_CPLD_RESET_COMPLETE:
       if (getVerbosity() > 3) local_log.concatf("Initializing IMUs...\n");
       // Range-bind everything....
-      for (uint8_t i = 0; i < 17; i++) imus[i].rangeBind(true);
+      integrator.rangeBind(true);
 
       // Fire the event to put the IMUs into INIT-1.
       //raiseEvent(Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT));
@@ -988,7 +987,7 @@ int8_t ManuManager::notify(ManuvrMsg* active_event) {
           if (getVerbosity() > 1) local_log.concat("QUAT_CRUNCH had an IMU idx > 16.\n");
         }
         else {
-          imus[temp_uint_8].MadgwickQuaternionUpdate();
+          integrator.MadgwickQuaternionUpdate();
         }
         return_value++;
       }
@@ -1120,14 +1119,14 @@ void ManuManager::printDebug(StringBuilder *output) {
 
   if (getVerbosity() > 3) {
     output->concatf("-- __dataset location  %p\n", (uintptr_t) __dataset);
-    output->concatf("-- __IIU location      %p\n", (uintptr_t) iius);
+    output->concatf("-- __IIU location      %p\n", (uintptr_t) imus);
     output->concatf("-- INSTANCE location   %p\n--\n", (uintptr_t) INSTANCE);
   }
 
   float grav_consensus = 0.0;
   output->concat("-- Intertial integration units:\n");
   for (uint8_t i = 0; i < 17; i++) {
-    grav_consensus += imus[i].grav_scalar;
+    //grav_consensus += imus[i].grav_scalar;
   }
   grav_consensus /= 17;
   output->concatf("-- Gravity consensus:  %.4fg\n",  (double) grav_consensus);
@@ -1154,7 +1153,7 @@ void ManuManager::printDebug(StringBuilder *output) {
   output->concat("-- Intertial integration units:\n");
   for (uint8_t i = 0; i < 17; i++) {
     output->concatf("\tIIU %d\t ", i);
-    imus[i].printBrief(output);
+    imus[i].dumpDevRegs(output);
   }
   output->concat("\n");
 }
@@ -1188,6 +1187,10 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'i':
       switch (temp_byte) {
+        case 1:
+          dumpPreformedElements(&local_log);
+          break;
+
         case 2:
           if (operating_legend) {
             operating_legend->printDebug(&local_log);
@@ -1201,6 +1204,9 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           break;
         case 4:
           printIMURollCall(&local_log);   // Show us the results, JIC
+          break;
+        case 5:
+          integrator.dumpPointers(&local_log);   // Show us the results, JIC
           break;
         case 9:
           printTemperatures(&local_log);   // Show us the temperatures.
@@ -1223,30 +1229,15 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
         operating_legend->printDataset(&local_log);
       }
       break;
-    case '+':
-      if (temp_byte < 17) {
-        imus[temp_byte].dumpPointers(&local_log);
-      }
-      break;
-
 
     // IMU DEBUG //////////////////////////////////////////////////////////////////
     case 'c':
       if (temp_byte < 17) {
-        imus[temp_byte].printDebug(&local_log);
+        imus[temp_byte].dumpDevRegs(&local_log);
       }
       break;
 
     // IMU STATE CONTROL //////////////////////////////////////////////////////////
-    case 'g':
-      if (255 == temp_byte) {
-        local_log.concat("Syncing all IMUs...\n");
-      }
-      else if (temp_byte < 17) {
-        local_log.concatf("Syncing IMU %d.\n", temp_byte);
-      }
-      break;
-
     case 's':
       parse_mule.concat(str);
       parse_mule.split(",");
@@ -1256,12 +1247,12 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
 
         if (255 == temp_byte) {
           for (uint8_t i = 0; i < 17; i++) {
-            imus[i].setOperatingState(temp_int);
+            imus[i].setDesiredState((IMUState) temp_int);
           }
         }
         else if (temp_byte < 17) {
           local_log.concatf("Setting the state of IMU %d to %d\n", temp_byte, temp_int);
-          imus[temp_byte].setOperatingState(temp_int);
+          imus[temp_byte].setDesiredState((IMUState) temp_int);
         }
 
       }
@@ -1352,135 +1343,61 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
 
     case '[':
     case ']':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling spherical abberation correction on all IIUs.\n", ((*(str) == ']') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          imus[i].correctSphericalAbberation((*(str) == ']'));
-        }
-      }
-      else if (temp_byte < 17) {
-        imus[temp_byte].correctSphericalAbberation((*(str) == ']'));
-        local_log.concatf("%sabling spherical abberation correction on IIU %d.\n", ((*(str) == ']') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling spherical abberation correction on all IIUs.\n", ((*(str) == ']') ? "En":"Dis"));
+      integrator.correctSphericalAbberation((*(str) == ']'));
       break;
 
     case 'u':
     case 'U':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling (clean-mag-is-zero) on all IIUs.\n", ((*(str) == 'U') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          imus[i].cleanMagZero((*(str) == 'U'));
-        }
-      }
-      else if (temp_byte < 17) {
-        imus[temp_byte].cleanMagZero((*(str) == 'U'));
-        local_log.concatf("%sabling (clean-mag-is-zero) on IIU %d.\n", ((*(str) == 'U') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling (clean-mag-is-zero) on all IIUs.\n", ((*(str) == 'U') ? "En":"Dis"));
+      integrator.cleanMagZero((*(str) == 'U'));
       break;
 
     case 'w':
     case 'W':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling mag data scrutiny on all IIUs.\n", ((*(str) == 'Z') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          imus[i].dropObviousBadMag((*(str) == 'Z'));
-        }
-      }
-      else if (temp_byte < 17) {
-        imus[temp_byte].dropObviousBadMag((*(str) == 'Z'));
-        local_log.concatf("%sabling mag data scrutiny on IIU %d.\n", ((*(str) == 'Z') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling mag data scrutiny on all IIUs.\n", ((*(str) == 'Z') ? "En":"Dis"));
+      integrator.dropObviousBadMag((*(str) == 'Z'));
       break;
 
     case 'z':
     case 'Z':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling autoscale on all IIUs.\n", ((*(str) == 'Z') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          imus[i].enableAutoscale((*(str) == 'Z'));
-        }
-      }
-      else if (temp_byte < 17) {
-        imus[temp_byte].enableAutoscale((*(str) == 'Z'));
-        local_log.concatf("%sabling autoscale on IIU %d.\n", ((*(str) == 'Z') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling autoscale on all IMUs.\n", ((*(str) == 'Z') ? "En":"Dis"));
+      enableAutoscale(SampleType::ALL, (*(str) == 'Z'));
       break;
 
     case 'n':
     case 'N':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling range-binding on all IIUs.\n", ((*(str) == 'N') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          imus[i].rangeBind((*(str) == 'N'));
-        }
-      }
-      else if (temp_byte < 17) {
-        imus[temp_byte].rangeBind((*(str) == 'N'));
-        local_log.concatf("%sabling range-binding on IIU %d.\n", ((*(str) == 'N') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling range-binding on all IIUs.\n", ((*(str) == 'N') ? "En":"Dis"));
+      integrator.rangeBind((*(str) == 'N'));
       break;
 
     case 'h':
     case 'H':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling quats on all IIUs.\n", ((*(str) == 'H') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          imus[i].processQuats((*(str) == 'H'));
-        }
-      }
-      else if (temp_byte < 17) {
-        imus[temp_byte].processQuats((*(str) == 'H'));
-        local_log.concatf("%sabling quats on IIU %d.\n", ((*(str) == 'H') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling quats on all IIUs.\n", ((*(str) == 'H') ? "En":"Dis"));
+      integrator.processQuats((*(str) == 'H'));
       break;
 
     case 'x':
     case 'X':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling gyro error compensation on all IIUs.\n", ((*(str) == 'X') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          imus[i].nullGyroError((*(str) == 'X'));
-        }
-      }
-      else if (temp_byte < 17) {
-        imus[temp_byte].nullGyroError((*(str) == 'X'));
-        local_log.concatf("%sabling gyro error compensation on IIU %d.\n", ((*(str) == 'X') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling gyro error compensation on all IIUs.\n", ((*(str) == 'X') ? "En":"Dis"));
+      integrator.nullGyroError((*(str) == 'X'));
       break;
 
     case 'm':
     case 'M':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling gravity nullification on all IIUs.\n", ((*(str) == 'M') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          imus[i].nullifyGravity((*(str) == 'M'));
-        }
-      }
-      else if (temp_byte < 17) {
-        imus[temp_byte].nullifyGravity((*(str) == 'M'));
-        local_log.concatf("%sabling gravity nullification on IIU %d.\n", ((*(str) == 'M') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling gravity nullification on all IIUs.\n", ((*(str) == 'M') ? "En":"Dis"));
+      integrator.nullifyGravity((*(str) == 'M'));
       break;
 
     case 'y':
     case 'Y':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling bearing nullification on all IIUs.\n", ((*(str) == 'Y') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          imus[i].nullifyBearing((*(str) == 'Y'));
-        }
-      }
-      else if (temp_byte < 17) {
-        imus[temp_byte].nullifyBearing((*(str) == 'Y'));
-        local_log.concatf("%sabling bearing nullification on IIU %d.\n", ((*(str) == 'Y') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling bearing nullification on all IIUs.\n", ((*(str) == 'Y') ? "En":"Dis"));
+      integrator.nullifyBearing((*(str) == 'Y'));
       break;
 
     case 'Q':
       local_log.concatf("Madgwick iterations to %d on all IIUs.\n", temp_byte);
-      for (uint8_t i = 0; i < 17; i++) {
-        imus[i].madgwickIterations(temp_byte);
-      }
+      integrator.madgwickIterations(temp_byte);
       break;
 
 
@@ -1491,10 +1408,8 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     case 'b':
-      for (uint8_t i = 0; i < 17; i++) {
-        imus[i].beta = (float)temp_byte * 0.1;
-      }
-      local_log.concatf("Beta value is now %f.\n", (double) (temp_byte * 0.1f));
+      integrator.beta = (float)temp_byte * 0.1;
+      local_log.concatf("Beta value is now %f.\n", (double) integrator.beta);
       break;
 
     case 'L':
@@ -1570,29 +1485,6 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
             local_log.concat("Disabled periodic readback.\n");
           }
           break;
-      }
-      break;
-
-    case 'p':
-      {
-        parse_mule.concat(str);
-        parse_mule.split(",");
-        parse_mule.drop_position(0);
-        uint8_t start = (temp_byte < 17) ? temp_byte   : 0;
-        uint8_t stop  = (temp_byte < 17) ? temp_byte+1 : 17;
-        int temp_int  = (parse_mule.count() > 0) ? parse_mule.position_as_int(0) : 255;
-        for (uint8_t i = start; i < stop; i++) {
-          if (255 != temp_int) {  // The user wants to make a change..
-            imus[i].enableProfiling(temp_int ? true:false);
-          }
-          local_log.concatf("Profiling IIU %d: %sabled.\n", i, (imus[i].enableProfiling() ? "en":"dis"));
-        }
-      }
-      break;
-
-    case 'e':
-      if (temp_byte < 17) {
-        imus[temp_byte].dumpPreformedElements(&local_log);
       }
       break;
 

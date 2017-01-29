@@ -341,91 +341,14 @@ IMUFault LSM9DS1::io_op_callback_ag_read(RegID idx, unsigned int value) {
 
   switch (idx) {
     case RegID::A_DATA_X:
-      if (pending_samples > 0) {
-        pending_samples--;
-        switch (getState()) {
-          case IMUState::STAGE_5:
-            collect_reading_acc();
-            if (0 == pending_samples) {
-              set_state(IMUState::STAGE_4);
-              step_state();
-            }
-            break;
-
-          case IMUState::STAGE_3:
-            sample_backlog_acc[sb_next_write++ % 32]((int16_t)regValue(RegID::A_DATA_X), (int16_t)regValue(RegID::A_DATA_Y), (int16_t)regValue(RegID::A_DATA_Z));
-            if (0 == pending_samples) {
-              // If we have received the last expected sample, see how many more there are.
-              if (32 >= sb_next_write) {
-                sb_next_write    = 0;
-                // Solidify calibration.
-                if (0 == calibrate_from_data()) {
-                  set_state(IMUState::STAGE_4);
-                  step_state();
-                }
-                else {
-                  // Failed a pass through INIT-3.
-                  readRegister((uint8_t) RegID::AG_FIFO_SRC);
-                }
-              }
-              else {
-                readRegister((uint8_t) RegID::AG_FIFO_SRC);
-              }
-            }
-            break;
-
-          default:
-            break;
-        }
-      }
+    case RegID::A_DATA_Y:
+    case RegID::A_DATA_Z:
       break;
-
-    /* We don't address these registers byte-wise. Empty case for documentation's sake. */
-    case RegID::A_DATA_Y:  break;
-    case RegID::A_DATA_Z:  break;
 
     case RegID::G_DATA_X:
-      if (pending_samples > 0) {
-        pending_samples--;
-        switch (getState()) {
-          case IMUState::STAGE_5:
-            collect_reading_gyr();
-            if (0 == pending_samples) {
-              set_state(IMUState::STAGE_4);
-              step_state();
-            }
-            break;
-
-          case IMUState::STAGE_3:
-            sample_backlog_gyr[sb_next_write++ % 32]((int16_t)regValue(RegID::G_DATA_X), (int16_t)regValue(RegID::G_DATA_Y), (int16_t)regValue(RegID::G_DATA_Z));
-            if (0 == pending_samples) {
-              // If we have received the last expected sample, see how many more there are.
-              if (32 >= sb_next_write) {
-                sb_next_write    = 0;
-                // Solidify calibration.
-                if (0 == calibrate_from_data()) {
-                  set_state(IMUState::STAGE_4);
-                  step_state();
-                }
-                else {
-                  // Failed a pass through INIT-3.
-                  readRegister((uint8_t) RegID::AG_FIFO_SRC);
-                }
-              }
-              else {
-                readRegister((uint8_t) RegID::AG_FIFO_SRC);
-              }
-            }
-            break;
-
-          default:
-            break;
-        }
-      }
+    case RegID::G_DATA_Y:
+    case RegID::G_DATA_Z:
       break;
-    /* We don't address these registers byte-wise. Empty case for documentation's sake. */
-    case RegID::G_DATA_Y:   break;
-    case RegID::G_DATA_Z:   break;
 
     // Since this data is only valid when the mag data is, we'll heed it in that block.
     case RegID::AG_DATA_TEMP:
@@ -464,12 +387,6 @@ IMUFault LSM9DS1::io_op_callback_ag_read(RegID idx, unsigned int value) {
       break;
     // TODO: We need to implement these....
     case RegID::AG_STATUS_REG:      /* Status of the gyr data registers on the sensor. */
-      if (value & 0x08) {                 // We have fresh data to fetch.
-        if (!fire_preformed_bus_op(&preformed_busop_read_gyr) ) {
-          // Take corrective action.
-          if (getVerbosity() > 1) local_log.concat("\tFailed to fast-read gyr vector\n");
-        }
-      }
       break;
 
     case RegID::AG_STATUS_REG_ALT:
@@ -492,41 +409,6 @@ IMUFault LSM9DS1::io_op_callback_ag_read(RegID idx, unsigned int value) {
       if (((value >> 3) & 0x03) < MAXIMUM_GAIN_INDEX_GYR)  scale_gyr = (value >> 3) & 0x03;
       break;
     case RegID::AG_FIFO_SRC:     /* The FIFO status register. */
-      //if (getVerbosity() > 5) local_log.concatf("\t AG FIFO Status: 0x%02x\n", (uint8_t) value);
-      if (initComplete()) {
-        *pending_samples = value & 0x1F;
-        if (!(value & 0x20)) {              // If the FIFO watermark is set and the FIFO is not empty...
-          switch (getState()) {
-            case IMUState::STAGE_4:
-            case IMUState::STAGE_5:
-              if (IMUState::STAGE_5 != desiredState()) {
-                break;
-              }
-              // Note: no break; on purpose.
-            case IMUState::STAGE_3:
-              if (preformed_busop_read_acc.isIdle()) {
-                if (!fire_preformed_bus_op(&preformed_busop_read_acc) ) {
-                  if (getVerbosity() > 2) local_log.concat("\tFailed to fast-read accel vector\n");
-                  error_condition = IMUFault::BUS_INSERTION_FAILED;
-                  if (getState() == IMUState::STAGE_5) {
-                    set_state(IMUState::STAGE_4);
-                  }
-                }
-                else if (IMUState::STAGE_4 == getState()) {
-                  set_state(IMUState::STAGE_5);
-                  step_state();
-                }
-              }
-              break;
-
-            default:
-              break;
-          }
-        }
-        else if (getState() == IMUState::STAGE_3) {
-          readRegister((uint8_t) RegID::AG_FIFO_SRC);
-        }
-      }
       break;
 
     default:
@@ -578,9 +460,6 @@ IMUFault LSM9DS1::io_op_callback_ag_write(RegID idx, unsigned int value) {
       break;
     case RegID::AG_CTRL_REG8:
       if (value & 0x01) { // Did we write here to reset?
-        if (!present()) {
-          integrator->init();
-        }
       }
       break;
 

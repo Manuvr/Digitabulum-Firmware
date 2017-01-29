@@ -134,6 +134,29 @@ const uint8_t _imu_address_map[] = {
   0x37
 };
 
+/* The default values of the registers named in the enum class RegID. */
+// TODO: Make these match datasheet values.
+const uint8_t _imu_reg_defaults[] = {
+  0x00, 0x00, 0x00,  // M: 16-bit offset registers
+  0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00,  // M: 16-bit data registers
+  0x00, 0x00,
+  0x00,              // M: 16-bit threshold register
+  // This is where the AG registers start.
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00,              // I: 16-bit temperature register (11-bit)
+  0x00,
+  0x00, 0x00, 0x00,  // G: 16-bit gyro data registers
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00,
+  0x00, 0x00, 0x00,  // A: 16-bit acc data registers
+  0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00,  // G: 16-bit threshold registers
+  0x00
+};
+
 
 /* The widths of the registers named in the enum class RegID. */
 const uint8_t _imu_register_width_map[] = {
@@ -571,6 +594,51 @@ uint8_t bulk_init_block_ag_2[8] = {
 };
 
 
+/*
+* For now:
+* 0: Off  (Implies other register activity)
+* 1: Lowest rate while still collecting data.
+* 2: Low-accuracy rate. ~100Hz from each FIFO'd sensor.
+* 3: Moderate rate.
+* 4: Highest rate supported.
+*/
+void LSM9DS1::setSampleRateProfile(uint8_t profile_idx) {
+  switch (profile_idx) {
+    case 0:
+      //delta_t = 0.0f;
+      set_sample_rate_acc(0);
+      set_sample_rate_gyr(0);
+      set_sample_rate_mag(0);
+      break;
+    case 1:
+      //delta_t = 0.0f;
+      set_sample_rate_acc(1);
+      set_sample_rate_gyr(1);
+      set_sample_rate_mag(1);
+      break;
+    case 2:
+      //delta_t = 0.0f;
+      set_sample_rate_acc(6);
+      set_sample_rate_gyr(2);
+      set_sample_rate_mag(5);
+      break;
+    case 3:
+      //delta_t = 0.0f;
+      set_sample_rate_acc(8);
+      set_sample_rate_gyr(3);
+      set_sample_rate_mag(5);
+      break;
+    case 4:
+      //delta_t = 0.0f;
+      set_sample_rate_acc(10);
+      set_sample_rate_gyr(4);
+      set_sample_rate_mag(6);
+      break;
+    default:
+      break;
+  }
+}
+
 
 /*
 *
@@ -758,7 +826,7 @@ bool LSM9DS1::step_state() {
 
 
 IMUFault LSM9DS1::writeRegister(RegID idx, unsigned int nu_val) {
-  uint8_t* ptr = regPtr(idx);
+  const uint8_t* ptr = _ptr_map->regPtr(idx);
   if (ptr) {
     if (regWritable(idx)) {
       switch (regWidth(idx)) {
@@ -784,7 +852,7 @@ IMUFault LSM9DS1::writeRegister(RegID idx, unsigned int nu_val) {
 * Convenience fxn. Returns 0 if register index is out of bounds.
 */
 unsigned int LSM9DS1::regValue(RegID idx) {
-  uint8_t* ptr = regPtr(idx);
+  const uint8_t* ptr = _ptr_map->regPtr(idx);
   if (ptr) {
     switch (regWidth(idx)) {
       // These are the only two widths in the sensor.
@@ -800,7 +868,7 @@ unsigned int LSM9DS1::regValue(RegID idx) {
 * Looks at our local offset table to obtain value. This was set at instantiation
 *   by ManaManager.
 */
-const uint8_t* RegPtrMap::regPtr(RegID idx) {
+const uint8_t* RegPtrMap::regPtr(RegID idx) const {
   switch (idx) {
     case RegID::M_OFFSET_X:          return nullptr;
     case RegID::M_OFFSET_Y:          return nullptr;
@@ -921,13 +989,13 @@ int8_t LSM9DS1::io_op_callback(BusOp* _op) {
 
   //TODO: Switch/case for ag/mag register.
   RegID idx = RegPtrMap::regIdFromAddr(op->getTransferParam(3));
-  unsigned int val =
+  //unsigned int val =
 
   if (true) {  // TODO: Horrid. Wrong.
-    error_condition = (BusOpcode::RX == op->get_opcode()) ? io_op_callback_mag_read(idx, 0) ? io_op_callback_mag_write(idx, 0);
+    error_condition = (BusOpcode::RX == op->get_opcode()) ? io_op_callback_mag_read(idx, 0) : io_op_callback_mag_write(idx, 0);
   }
   else {
-    error_condition = (BusOpcode::RX == op->get_opcode()) ? io_op_callback_ag_read(idx, 0) ? io_op_callback_ag_write(idx, 0);
+    error_condition = (BusOpcode::RX == op->get_opcode()) ? io_op_callback_ag_read(idx, 0) : io_op_callback_ag_write(idx, 0);
   }
 
   if (local_log.length() > 0) Kernel::log(&local_log);

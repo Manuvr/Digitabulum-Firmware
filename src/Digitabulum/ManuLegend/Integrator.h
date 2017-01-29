@@ -94,6 +94,7 @@ class Integrator {
     ~Integrator();
 
     void printDebug(StringBuilder*);
+    void setVerbosity(int8_t);
 
     int8_t init();
 
@@ -249,7 +250,7 @@ class Integrator {
     float offset_angle_y = 0.0f;
     float offset_angle_z = 0.0f;
 
-    Vector3<float> _grav;                      // The Legend maintains an emirical value for gravity.
+    Vector3<float> _grav;   // The Integrator maintains an empirical value for gravity.
 
     PriorityQueue<InertialMeasurement*> quat_queue;   // This is the queue for quat operations.
 

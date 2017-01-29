@@ -306,7 +306,6 @@ bool Integrator::enableProfiling(bool en) {
 bool Integrator::nullGyroError(bool en) {
   if (nullGyroError() != en) {
     data_handling_flags = (en) ? (data_handling_flags | IIU_DATA_HANDLING_NULL_GYRO_ERROR) : (data_handling_flags & ~(IIU_DATA_HANDLING_NULL_GYRO_ERROR));
-    imu_m.cancel_error(en);
   }
   return nullGyroError();
 }
@@ -346,7 +345,6 @@ void Integrator::setVerbosity(int8_t nu) {
 
 
 void Integrator::printLastFrame(StringBuilder *output) {
-  if (nullptr == output) return;
   output->concatf("--- (MAG) (%.4f, %.4f, %.4f)",  (double)(_ptr_mag->x), (double)(_ptr_mag->y), (double)(_ptr_mag->z));
   output->concatf("\t(ACCEL) (%.4f, %.4f, %.4f)",  (double)(_ptr_acc->x), (double)(_ptr_acc->y), (double)(_ptr_acc->z));
   output->concatf("\t(GYRO) (%.4f, %.4f, %.4f)\n", (double)(_ptr_gyr->x), (double)(_ptr_gyr->y), (double)(_ptr_gyr->z));
@@ -376,14 +374,14 @@ void Integrator::printDebug(StringBuilder* output) {
     printLastFrame(output);
   }
 
-  if (getVerbosity() > 3) {
+  if (verbosity > 3) {
     //output->concatf("-- __dataset location  %p\n", (uintptr_t) __dataset);
     output->concatf("-- __prealloc location %p\n", (uintptr_t) __prealloc);
   }
 
   float grav_consensus = 0.0;
   for (uint8_t i = 0; i < 17; i++) {
-    grav_consensus += imus[i].grav_scalar;
+    //grav_consensus += imus[i].grav_scalar;
   }
   grav_consensus /= 17;
   output->concatf("-- Gravity consensus:  %.4fg\n",  (double) grav_consensus);
@@ -395,12 +393,7 @@ void Integrator::printDebug(StringBuilder* output) {
 
 
 void Integrator::printBrief(StringBuilder* output) {
-  if (imu_m.initComplete() && imu_ag.initComplete()) {
-    output->concatf("%8u acc  %8u gyr  %8u mag  %8u temp\n", (unsigned long) *(_ptr_s_count_acc), (unsigned long) *(_ptr_s_count_gyr), (unsigned long) *(_ptr_s_count_mag), (unsigned long) *(_ptr_s_count_temp));
-  }
-  else {
-    output->concatf("XM state: %s  \t  G state: %s\n", imu_ag.getStateString(), imu_m.getStateString());
-  }
+  output->concatf("%8u acc  %8u gyr  %8u mag  %8u temp\n", (unsigned long) *(_ptr_s_count_acc), (unsigned long) *(_ptr_s_count_gyr), (unsigned long) *(_ptr_s_count_mag), (unsigned long) *(_ptr_s_count_temp));
 }
 
 

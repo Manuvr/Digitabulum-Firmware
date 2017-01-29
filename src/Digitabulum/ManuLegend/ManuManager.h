@@ -158,9 +158,6 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     CPLDDriver* _bus = nullptr;   // This is the gateway to the hardware.
     Integrator integrator;
 
-    // TODO: These shouldn't be static.
-    static LSM9DS1 imus[LEGEND_DATASET_IIU_COUNT];  // This is the chirality-invarient list of IMUs.
-
     ManuLegend* operating_legend = nullptr;
     /* This is the dataset that we export. */
     uint8_t __dataset[LEGEND_MGR_MAX_DATASET_SIZE];
@@ -190,7 +187,6 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     inline void enableAutoscale(bool enabled) {
       enableAutoscale(SampleType::ALL, enabled);
     };
-
 
     LSM9DS1* fetchIMU(uint8_t idx);
 

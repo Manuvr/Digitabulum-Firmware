@@ -217,3 +217,15 @@ IIU's connective role is vestigial, and its data processing role is no longer co
 
     make DEBUG=1
     287284    2728   43152  333164   Tonight's baseline.
+
+_---J. Ian Lindsay_
+
+------
+
+### 2016.01.28:
+
+    make DEBUG=1
+    287284    2728   43152  333164   Former baseline.
+    280156    2656   30376  313188   Compiles again following memory re-org.
+
+_---J. Ian Lindsay_

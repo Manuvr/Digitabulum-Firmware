@@ -194,14 +194,6 @@ enum class RegID {
 *******************************************************************************/
 class RegPtrMap {
   // Because the data frames come in so fast, we need to double buffer them.
-  // Some registers are not included in this list if their function can be
-  //   handled entirely within ManuManager.
-  const uint8_t* AG_ACT;  // AG_ACT_THS, AG_ACT_DUR
-  const uint8_t* AG_BLOCK_0;  // A_INT_GEN_CFG, A_INT_GEN_THS_X, A_INT_GEN_THS_Y, A_INT_GEN_THS_Z, A_INT_GEN_DURATION, G_REFERENCE,
-  const uint8_t* AG_CTRL1_3;  // G_CTRL_REG1, G_CTRL_REG2, G_CTRL_REG3
-  const uint8_t* AG_CTRL6_7;  // A_CTRL_REG6, A_CTRL_REG7
-  const uint8_t* AG_STATUS;   // AG_STATUS_REG
-  const uint8_t* FIFO_LVLS;   // AG_FIFO_SRC
   //M_OFFSET_X = 0x00,  // 16-bit offset registers
   //M_OFFSET_Y,         // 16-bit offset registers
   //M_OFFSET_Z,         // 16-bit offset registers
@@ -252,23 +244,36 @@ class RegPtrMap {
   //G_INT_GEN_THS_Z,    // 16-bit threshold registers
   //G_INT_GEN_DURATION
 
-  RegPtrMap(
-    const uint8_t idx,
-    const uint8_t* ag_activity,
-    const uint8_t* ag_ctrl1_3,
-    const uint8_t* ag_ctrl6_7,
-    const uint8_t* ag_status,
-    const uint8_t* fifo_src
-  ) :
-    AG_ACT((idx * 2) + ag_activity),
-    AG_CTRL1_3((idx * 3) + ag_ctrl1_3),
-    AG_CTRL6_7((idx * 2) + ag_ctrl6_7),
-    AG_STATUS(idx + ag_status),
-    FIFO_LVLS(idx + fifo_src)
-  {};
+  public:
+    RegPtrMap(
+      const uint8_t idx,
+      const uint8_t* ag_activity,
+      const uint8_t* ag_ctrl1_3,
+      const uint8_t* ag_ctrl6_7,
+      const uint8_t* ag_status,
+      const uint8_t* fifo_src
+    ) :
+      AG_ACT((idx * 2) + ag_activity),
+      AG_CTRL1_3((idx * 3) + ag_ctrl1_3),
+      AG_CTRL6_7((idx * 2) + ag_ctrl6_7),
+      AG_STATUS(idx + ag_status),
+      FIFO_LVLS(idx + fifo_src)
+    {};
 
-  const uint8_t* regPtr(RegID);
-  static RegID regIdFromAddr(uint8_t);
+    const uint8_t* regPtr(RegID) const;
+
+    static RegID regIdFromAddr(uint8_t);
+
+
+  private:
+    // Some registers are not included in this list if their function can be
+    //   handled entirely within ManuManager.
+    const uint8_t* AG_ACT;  // AG_ACT_THS, AG_ACT_DUR
+    const uint8_t* AG_BLOCK_0;  // A_INT_GEN_CFG, A_INT_GEN_THS_X, A_INT_GEN_THS_Y, A_INT_GEN_THS_Z, A_INT_GEN_DURATION, G_REFERENCE,
+    const uint8_t* AG_CTRL1_3;  // G_CTRL_REG1, G_CTRL_REG2, G_CTRL_REG3
+    const uint8_t* AG_CTRL6_7;  // A_CTRL_REG6, A_CTRL_REG7
+    const uint8_t* AG_STATUS;   // AG_STATUS_REG
+    const uint8_t* FIFO_LVLS;   // AG_FIFO_SRC
 };
 
 
@@ -288,6 +293,7 @@ class LSM9DS1 {
     int8_t io_op_callback(BusOp*);
     int8_t queue_io_job(BusOp*);
 
+    void setSampleRateProfile(uint8_t);
     IMUFault setDesiredState(IMUState);   // Used to set the state the OS wants the IMU class to acheive.
     void     write_test_bytes();
     bool     step_state();      // Used internally to move between states. TODO: Should be private.
@@ -297,6 +303,7 @@ class LSM9DS1 {
 
     /* Debug stuff... */
     void dumpDevRegs(StringBuilder*);
+    //void dumpDevRegs(StringBuilder*);
 
     /* Functions called by the IIU */
     int8_t readSensor();      // Call to poll the sensor's registers and take any appropriate action.
@@ -455,7 +462,6 @@ class LSM9DS1 {
     IMUFault writeRegister(RegID idx, unsigned int nu_val);
 
     unsigned int regValue(RegID);
-    uint8_t* regPtr(RegID);
     /* This is the end of the low-level functions.                                    */
 
     IMUFault identity_check();
