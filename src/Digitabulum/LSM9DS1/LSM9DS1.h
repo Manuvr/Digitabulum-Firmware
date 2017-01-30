@@ -295,11 +295,6 @@ class LSM9DS1 {
     void dumpDevRegs(StringBuilder*);
     //void dumpDevRegs(StringBuilder*);
 
-    /* Functions called by the IIU */
-    int8_t readSensor();      // Call to poll the sensor's registers and take any appropriate action.
-    //virtual int8_t enable(bool);             // Pass a boolean to turn the sensor on or off.
-    //virtual int8_t set_base_filter_param(uint8_t nu_bw_idx) =0;
-
     /* State-check functions. Inlined where practical. */
     inline IMUState getState() {            return imu_state;                             }
     inline IMUState desiredState() {        return desired_state;                         }
@@ -349,12 +344,6 @@ class LSM9DS1 {
     IMUFault irq_m();    // When an IRQ signal fires, find the cause and service it.
     IMUFault irq_1();    // When an IRQ signal fires, find the cause and service it.
     IMUFault irq_2();    // When an IRQ signal fires, find the cause and service it.
-
-    IMUFault io_op_callback_mag_read(RegID idx, unsigned int value);
-    IMUFault io_op_callback_mag_write(RegID idx, unsigned int value);
-    IMUFault io_op_callback_ag_read(RegID idx, unsigned int value);
-    IMUFault io_op_callback_ag_write(RegID idx, unsigned int value);
-    // TODO: The 4 fxns above should be subsumed into the 2 below.
 
     IMUFault proc_register_read(RegID idx);
     IMUFault proc_register_write(RegID idx);
@@ -438,10 +427,6 @@ class LSM9DS1 {
     uint32_t discards_total_m    = 0;     // Track how many discards we've ASKED for.
     uint16_t discards_remain_i   = 0;     // If we know we need to discard samples...
     uint16_t discards_remain_m   = 0;     // If we know we need to discard samples...
-
-    Vector3<float> last_val_mag;
-    Vector3<float> last_val_acc;
-    Vector3<float> last_val_gyr;
 
     /* These are higher-level fxns that are used as "macros" for specific patterns of */
     /*   register access. Common large-scale operations should go here.               */
