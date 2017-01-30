@@ -306,6 +306,9 @@ class Integrator {
     int8_t calibrate_from_data_mag();
     int8_t calibrate_from_data_ag();
 
+    int8_t collect_reading_m();
+    int8_t collect_reading_i();
+
 
     // Preallocated frames.
     // TODO: These things should not be static.

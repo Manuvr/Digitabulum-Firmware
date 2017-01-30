@@ -233,6 +233,7 @@ _---J. Ian Lindsay_
     280220    2880   30272  313372   More field remeval ahead of migrations to Integrator.
     280220    2880   29832  312932   Integrator is starting to not care about sample type.
     279836    2880   20040  302756   The big drop. Note below.
+    279564    2880   19880  302324   More removal of redundant members.
 
 Lots of things are broken. There are a few stubs, and much dead code. IMU pointer
 maps are contained within a const class and array'd out as non-static members.

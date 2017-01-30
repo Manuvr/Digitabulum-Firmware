@@ -39,9 +39,9 @@ SPIBusOp ManuManager::_preformed_read_m;
 SPIBusOp ManuManager::_preformed_read_temp;
 SPIBusOp ManuManager::_preformed_fifo_read;
 
-Vector3<int16_t> ManuManager::reflection_mag;
-Vector3<int16_t> ManuManager::reflection_acc;
-Vector3<int16_t> ManuManager::reflection_gyr;
+Vector3<int16_t> reflection_mag;
+Vector3<int16_t> reflection_acc;
+Vector3<int16_t> reflection_gyr;
 
 ManuManager* ManuManager::INSTANCE = nullptr;
 
@@ -213,6 +213,11 @@ const int16_t* _frames_i[] = {
   &_frame_buf_i[0],
   &_frame_buf_i[102]
 };
+
+
+Vector3<int16_t> noise_floor_mag[LEGEND_DATASET_IIU_COUNT];
+Vector3<int16_t> noise_floor_acc[LEGEND_DATASET_IIU_COUNT];
+Vector3<int16_t> noise_floor_gyr[LEGEND_DATASET_IIU_COUNT];
 
 
 const RegPtrMap _reg_ptrs[] = {
@@ -568,6 +573,8 @@ void ManuManager::enableAutoscale(SampleType s_type, bool enabled) {
 }
 
 
+
+
 /*******************************************************************************
 * Functions related to abstracting chirality away from the hardware.
 *******************************************************************************/
@@ -708,11 +715,56 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
     case RegID::G_DATA_Z:  //
       {
         // First, note the pointer relation.
+        float scalar_a;
+        float scalar_g;
+        float ax;
+        float ay;
+        float az;
+        float gx;
+        float gy;
+        float gz;
+        int16_t* offset = (int16_t*) op->buf;
+
         // Scale the data
         SensorFrame* nu_msrmnt = Integrator::fetchMeasurement();
         for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+          scalar_a = imus[i].scaleA();
+          scalar_g = imus[i].scaleG();
+          if (imus[i].cancel_error()) {
+            ax = ((((int16_t) *(offset +  0)) - noise_floor_acc[i].x) * reflection_acc.x * scalar_a);
+            ay = ((((int16_t) *(offset +  2)) - noise_floor_acc[i].y) * reflection_acc.y * scalar_a);
+            az = ((((int16_t) *(offset +  4)) - noise_floor_acc[i].z) * reflection_acc.z * scalar_a);
+            gx = ((((int16_t) *(offset +  6)) - noise_floor_gyr[i].x) * reflection_gyr.x * scalar_g);
+            gy = ((((int16_t) *(offset +  8)) - noise_floor_gyr[i].y) * reflection_gyr.y * scalar_g);
+            gz = ((((int16_t) *(offset + 10)) - noise_floor_gyr[i].z) * reflection_gyr.z * scalar_g);
+          }
+          else {
+            ax = (((int16_t) *(offset +  0)) * reflection_acc.x * scalar_a);
+            ay = (((int16_t) *(offset +  2)) * reflection_acc.y * scalar_a);
+            az = (((int16_t) *(offset +  4)) * reflection_acc.z * scalar_a);
+            gx = (((int16_t) *(offset +  6)) * reflection_gyr.x * scalar_g);
+            gy = (((int16_t) *(offset +  8)) * reflection_gyr.y * scalar_g);
+            gz = (((int16_t) *(offset + 10)) * reflection_gyr.z * scalar_g);
+          }
+          nu_msrmnt->setI(i, ax, ay, az, gx, gy, gz);
+
+          if (true) {  // TODO
+            // If there is magnetometer data waiting, include it with the frame.
+            float scalar_m = imus[i].scaleM();
+            //float x = ((((int16_t)regValue(RegID::AG_DATA_X_M) - noise_floor_mag_mag.x) * reflection_vector_mag.x) * scaler);
+            //float y = ((((int16_t)regValue(RegID::AG_DATA_Y_M) - noise_floor_mag_mag.y) * reflection_vector_mag.y) * scaler);
+            //float z = ((((int16_t)regValue(RegID::AG_DATA_Z_M) - noise_floor_mag_mag.z) * reflection_vector_mag.z) * scaler);
+            nu_msrmnt->setM(
+              i,
+              (_reg_block_m_data[i*3 + 0] * reflection_mag.x * scalar_m),
+              (_reg_block_m_data[i*3 + 1] * reflection_mag.y * scalar_m),
+              (_reg_block_m_data[i*3 + 2] * reflection_mag.z * scalar_m)
+            );
+          }
+          offset += 12;
         }
-        // Send to integrator.
+        // Send softened and scaled frame to the integrator.
+        sample_count++;
       }
       break;
 
@@ -878,6 +930,12 @@ int8_t ManuManager::queue_io_job(BusOp* _op) {
 */
 int8_t ManuManager::attached() {
   if (EventReceiver::attached()) {
+    for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+      noise_floor_mag[i].set(0, 0, 0);
+      noise_floor_acc[i].set(0, 0, 0);
+      noise_floor_gyr[i].set(0, 0, 0);
+    }
+
     /* Get ready for a silly pointer dance....
     *  This is an argument-heavy event, and we will be using it ALOT. So we build the Event arguments
     *    once, and then change the data at the location being pointed at, and not the pointers in the
@@ -1212,7 +1270,7 @@ void ManuManager::printDebug(StringBuilder *output) {
 
   output->concatf("-- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
   output->concatf("-- Max quat proc       %u\n",    Integrator::max_quats_per_event);
-  output->concatf("-- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
+  output->concatf("-- sample_count        %d\n",    sample_count);
   output->concatf("-- Delta-t             %2.5f\n--\n", (double) *(_ptr_delta_t));
 
   if (getVerbosity() > 3) {
@@ -1233,6 +1291,9 @@ void ManuManager::printDebug(StringBuilder *output) {
   for (uint8_t i = 0; i < 17; i++) {
     output->concatf("\tIIU %d\t ", i);
     imus[i].dumpDevRegs(output);
+    //output->concatf("--- noise_floor_mag     (%d, %d, %d)\n", noise_floor_mag[i].x, noise_floor_mag[i].y, noise_floor_mag[i].z);
+    //output->concatf("--- noise_floor_acc     (%d, %d, %d)\n", noise_floor_acc[i].x, noise_floor_acc[i].y, noise_floor_acc[i].z);
+    //output->concatf("--- noise_floor_gyr     (%d, %d, %d)\n", noise_floor_gyr[i].x, noise_floor_gyr[i].y, noise_floor_gyr[i].z);
   }
   output->concat("\n");
 }

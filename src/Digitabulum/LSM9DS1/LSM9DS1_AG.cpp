@@ -31,47 +31,6 @@ limitations under the License.
 * /_/    \_\___\___\___|_|\___|_|  \___/|_| |_| |_|\___|\__\___|_|
 *
 *******************************************************************************/
-/*
-* Accelerometer data
-* Tests all the required registers for freshness and builds a Vector with the new reading
-*   if possible.
-* Returns...
-*   0 on success with no vector.
-*   1 on success with new vector.
-*  -1 on error.
-*/
-int8_t LSM9DS1::collect_reading_acc() {
-  /* Ok... so we know that if we got here, the pre-formed bus op is freshly execed,
-       so we are going to grab it's ending timestamp and populate the measurement's
-       field with the value corrected for boot-time.
-     TODO: This will have to revisited later to account for clock-wrap in a clean manner.
-       Until then, it will cause us strange bug, and possibly even a crash at the wrap.
-  */
-  sample_count++;
-
-  float scaler = error_map_acc[scale_acc].per_lsb;
-  float x;
-  float y;
-  float z;
-
-  Vector3<int16_t> reflection_vector_acc(ManuManager::reflection_acc.x, ManuManager::reflection_acc.y, ManuManager::reflection_acc.z);
-
-  if (cancel_error()) {
-    x = ((((int16_t)regValue(RegID::A_DATA_X) - noise_floor_acc.x) * reflection_vector_acc.x) * scaler);
-    y = ((((int16_t)regValue(RegID::A_DATA_Y) - noise_floor_acc.y) * reflection_vector_acc.y) * scaler);
-    z = ((((int16_t)regValue(RegID::A_DATA_Z) - noise_floor_acc.z) * reflection_vector_acc.z) * scaler);
-  }
-  else {
-    x = (((int16_t)regValue(RegID::A_DATA_X)) * reflection_vector_acc.x * scaler);
-    y = (((int16_t)regValue(RegID::A_DATA_Y)) * reflection_vector_acc.y * scaler);
-    z = (((int16_t)regValue(RegID::A_DATA_Z)) * reflection_vector_acc.z * scaler);
-  }
-
-  last_val_acc(x, y, z);
-  //integrator->pushMeasurement(IMU_FLAG_ACCEL_DATA, x, y, z, rate_settings_acc[update_rate_acc].ts_delta);
-
-  return 1;
-}
 
 
 /**
@@ -95,10 +54,10 @@ IMUFault LSM9DS1::request_rescale_acc(uint8_t nu_scale_idx) {
 */
 IMUFault LSM9DS1::set_sample_rate_acc(uint8_t nu_srate_idx) {
   if (nu_srate_idx < MAXIMUM_RATE_INDEX_AG) {
-    if (update_rate_acc != nu_srate_idx) {
+    if (update_rate_i != nu_srate_idx) {
       uint8_t temp8 = regValue(RegID::A_CTRL_REG6);
       temp8 =  (temp8 & 0x1F) | (nu_srate_idx << 5);
-      update_rate_acc = nu_srate_idx;
+      update_rate_i = nu_srate_idx;
       return writeRegister(RegID::A_CTRL_REG6, temp8);
     }
     return IMUFault::NO_ERROR;
@@ -131,48 +90,6 @@ IMUFault LSM9DS1::set_base_filter_param_acc(uint8_t nu_bw_idx) {
 *         |___/
 *******************************************************************************/
 
-/*
-* Gyroscope data
-* Tests all the required registers for freshness and builds a Vector with the new reading
-*   if possible.
-* Returns...
-*   0 on success with no vector.
-*   1 on success with new vector.
-*  -1 on error.
-*/
-int8_t LSM9DS1::collect_reading_gyr() {
-  /* Ok... so we know that if we got here, the pre-formed bus op is freshly execed,
-       so we are going to grab it's ending timestamp and populate the measurement's
-       field with the value corrected for boot-time.
-     TODO: This will have to revisited later to account for clock-wrap in a clean manner.
-       Until then, it will cause us strange bug, and possibly even a crash at the wrap.
-  */
-  sample_count++;
-
-  float scaler = error_map_gyr[scale_gyr].per_lsb;
-  float x;
-  float y;
-  float z;
-
-  Vector3<int16_t> reflection_vector_gyr(ManuManager::reflection_gyr.x, ManuManager::reflection_gyr.y, ManuManager::reflection_gyr.z);
-
-  if (cancel_error()) {
-    x = ((((int16_t)regValue(RegID::G_DATA_X)) - noise_floor_gyr.x) * reflection_vector_gyr.x * scaler);
-    y = ((((int16_t)regValue(RegID::G_DATA_Y)) - noise_floor_gyr.y) * reflection_vector_gyr.y * scaler);
-    z = ((((int16_t)regValue(RegID::G_DATA_Z)) - noise_floor_gyr.z) * reflection_vector_gyr.z * scaler);
-  }
-  else {
-    x = ((((int16_t)regValue(RegID::G_DATA_X)) * reflection_vector_gyr.x) * scaler);
-    y = ((((int16_t)regValue(RegID::G_DATA_Y)) * reflection_vector_gyr.y) * scaler);
-    z = ((((int16_t)regValue(RegID::G_DATA_Z)) * reflection_vector_gyr.z) * scaler);
-  }
-
-  last_val_gyr(x, y, z);
-  //integrator->pushMeasurement(IMU_FLAG_GYRO_DATA, x, y, z, rate_settings_gyr[update_rate_gyr].ts_delta);
-  return 1;
-}
-
-
 /**
 * Call to rescale the sensor.
 */
@@ -195,11 +112,11 @@ IMUFault LSM9DS1::request_rescale_gyr(uint8_t nu_scale_idx) {
 */
 IMUFault LSM9DS1::set_sample_rate_gyr(uint8_t nu_srate_idx) {
   if (nu_srate_idx < MAXIMUM_RATE_INDEX_AG) {
-    if (update_rate_acc != nu_srate_idx) {
+    if (update_rate_i != nu_srate_idx) {
       if (getVerbosity() > 2) Kernel::log("set_sample_rate_gyr():\t\n");
       uint8_t temp8 = regValue(RegID::G_CTRL_REG1);
       temp8 =  (temp8 & 0x1F) | (nu_srate_idx << 5);
-      update_rate_gyr = nu_srate_idx;
+      //update_rate_gyr = nu_srate_idx;
       return writeRegister(RegID::G_CTRL_REG1, temp8);
     }
     return IMUFault::NO_ERROR;
@@ -214,22 +131,6 @@ IMUFault LSM9DS1::set_base_filter_param_gyr(uint8_t nu_bw_idx) {
   return IMUFault::INVALID_PARAM_ID;
 }
 
-
-/*
-* Temperature data
-* Tests all the required registers for freshness and updates the integrator with the temperature
-*   if possible.
-* Returns...
-*   0 on success with no changes made.
-*   1 on success with new temperature point.
-*  -1 on error.
-*/
-int8_t LSM9DS1::collect_reading_temperature() {
-  int8_t return_value = 1;
-  //integrator->setTemperature(((int16_t)regValue(RegID::AG_DATA_TEMP)) / 1.0f);
-  //integrator->setTemperature(((int16_t) value) / 4.0f);
-  return return_value;
-}
 
 
 /*
@@ -282,7 +183,6 @@ IMUFault LSM9DS1::io_op_callback_ag_read(RegID idx, unsigned int value) {
     }
   }
 
-
   switch (idx) {
     case RegID::A_DATA_X:
     case RegID::A_DATA_Y:
@@ -292,11 +192,6 @@ IMUFault LSM9DS1::io_op_callback_ag_read(RegID idx, unsigned int value) {
     case RegID::G_DATA_X:
     case RegID::G_DATA_Y:
     case RegID::G_DATA_Z:
-      break;
-
-    // Since this data is only valid when the mag data is, we'll heed it in that block.
-    case RegID::AG_DATA_TEMP:
-      collect_reading_temperature();
       break;
 
     case RegID::AG_WHO_AM_I:
@@ -341,7 +236,7 @@ IMUFault LSM9DS1::io_op_callback_ag_read(RegID idx, unsigned int value) {
       break;
     case RegID::G_CTRL_REG1:
       if (getVerbosity() > 5) local_log.concatf("\t RegID::G_CTRL_REG1: 0x%02x\n", (uint8_t) value);
-      if ((value >> 4) < MAXIMUM_RATE_INDEX_AG)  update_rate_acc = (value >> 4) & 0x0F;
+      if ((value >> 4) < MAXIMUM_RATE_INDEX_AG)  update_rate_i = (value >> 4) & 0x0F;
       break;
     case RegID::AG_CTRL_REG4:
       if (getVerbosity() > 5) local_log.concatf("\t RegID::AG_CTRL_REG4: 0x%02x\n", (uint8_t) value);
@@ -391,7 +286,7 @@ IMUFault LSM9DS1::io_op_callback_ag_write(RegID idx, unsigned int value) {
       break;
 
     case RegID::G_CTRL_REG1:
-      //if ((value >> 4) < MAXIMUM_RATE_INDEX_AG)  update_rate_acc = (value >> 4) & 0x0F;
+      //if ((value >> 4) < MAXIMUM_RATE_INDEX_AG)  update_rate_i = (value >> 4) & 0x0F;
       break;
     case RegID::G_CTRL_REG2:
       if (((value >> 3) & 0x07) < MAXIMUM_GAIN_INDEX_ACC)  scale_acc = (value >> 3) & 0x07;

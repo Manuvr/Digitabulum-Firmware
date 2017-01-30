@@ -134,9 +134,6 @@ class ManuManager : public EventReceiver, public BusOpCallback {
 
     static const char* chiralityString(Chirality);
 
-    static Vector3<int16_t> reflection_mag;
-    static Vector3<int16_t> reflection_acc;
-    static Vector3<int16_t> reflection_gyr;
 
 
   protected:
@@ -145,10 +142,13 @@ class ManuManager : public EventReceiver, public BusOpCallback {
 
 
   private:
-    CPLDDriver* _bus = nullptr;   // This is the gateway to the hardware.
+    uint32_t  sample_count       = 0;         // How many samples have we read since init?
+
+    CPLDDriver* _bus             = nullptr;   // This is the gateway to the hardware.
+    ManuLegend* operating_legend = nullptr;
+
     Integrator integrator;
 
-    ManuLegend* operating_legend = nullptr;
     /* This is the dataset that we export. */
     uint8_t __dataset[LEGEND_MGR_MAX_DATASET_SIZE];
 

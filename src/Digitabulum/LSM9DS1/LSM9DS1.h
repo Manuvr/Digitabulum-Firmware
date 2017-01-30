@@ -289,7 +289,7 @@ class LSM9DS1 {
     bool     step_state();      // Used internally to move between states. TODO: Should be private.
 
     IMUFault init();
-    void   reset();           // Reset our state without causing a re-init.
+    void     reset();           // Reset our state without causing a re-init.
 
     /* Debug stuff... */
     void dumpDevRegs(StringBuilder*);
@@ -324,6 +324,14 @@ class LSM9DS1 {
     inline void autoscale_acc(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_AUTOSCALE_0);  };
     inline bool autoscale_gyr() {   return _check_flags(IMU_COMMON_FLAG_AUTOSCALE_1);   };
     inline void autoscale_gyr(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_AUTOSCALE_1);  };
+
+    inline float scaleA() {  return error_map_acc[scale_acc].per_lsb;  };
+    inline float scaleG() {  return error_map_gyr[scale_gyr].per_lsb;  };
+    inline float scaleM() {  return error_map_mag[scale_mag].per_lsb;  };
+
+    inline float deltaT_I() {  return rate_settings_i[update_rate_i].ts_delta;  };
+    inline float deltaT_M() {  return rate_settings_m[update_rate_m].ts_delta;  };
+
 
     IMUFault request_rescale_mag(uint8_t nu_scale_idx);     // Call to rescale the sensor.
     IMUFault set_sample_rate_mag(uint8_t nu_srate_idx);     // Call to alter sample rate.
@@ -388,9 +396,8 @@ class LSM9DS1 {
     static const uint8_t MAXIMUM_RATE_INDEX_MAG = 8;
     static const uint8_t MAXIMUM_RATE_INDEX_AG  = 7;
 
-    static const UpdateRate2Hertz rate_settings_mag[MAXIMUM_RATE_INDEX_MAG];
-    static const UpdateRate2Hertz rate_settings_acc[MAXIMUM_RATE_INDEX_AG];
-    static const UpdateRate2Hertz rate_settings_gyr[MAXIMUM_RATE_INDEX_AG];
+    static const UpdateRate2Hertz rate_settings_m[MAXIMUM_RATE_INDEX_MAG];
+    static const UpdateRate2Hertz rate_settings_i[MAXIMUM_RATE_INDEX_AG];
 
 
   private:
@@ -404,7 +411,6 @@ class LSM9DS1 {
 
     uint32_t  time_stamp_base  = 0;       // What time was it when we first started taking samples?
     uint32_t  last_sample_time = 0;       // What time was it when we first started taking samples?
-    uint32_t  sample_count     = 0;       // How many samples have we read since init?
     uint8_t*  pending_samples  = nullptr; // How many samples are we expecting to arrive?
 
     uint16_t _imu_flags        = 1;     // Default verbosity of 1.
@@ -425,24 +431,17 @@ class LSM9DS1 {
     uint8_t scale_acc            = 0;     // What scale is the sensor operating at? This is an index.
     uint8_t scale_gyr            = 0;     // What scale is the sensor operating at? This is an index.
 
-    uint8_t update_rate_mag      = 0;     // Index to the update-rate array.
-    uint8_t update_rate_acc      = 0;     // Index to the update-rate array.
-    uint8_t update_rate_gyr      = 0;     // Index to the update-rate array.
+    uint8_t update_rate_i        = 0;     // Index to the update-rate array.
+    uint8_t update_rate_m        = 0;     // Index to the update-rate array.
 
-    uint16_t discards_remain_mag = 0;     // If we know we need to discard samples...
-    uint16_t discards_remain_acc = 0;     // If we know we need to discard samples...
-    uint16_t discards_remain_gyr = 0;     // If we know we need to discard samples...
-    uint32_t discards_total_mag  = 0;     // Track how many discards we've ASKED for.
-    uint32_t discards_total_acc  = 0;     // Track how many discards we've ASKED for.
-    uint32_t discards_total_gyr  = 0;     // Track how many discards we've ASKED for.
+    uint32_t discards_total_i    = 0;     // Track how many discards we've ASKED for.
+    uint32_t discards_total_m    = 0;     // Track how many discards we've ASKED for.
+    uint16_t discards_remain_i   = 0;     // If we know we need to discard samples...
+    uint16_t discards_remain_m   = 0;     // If we know we need to discard samples...
 
     Vector3<float> last_val_mag;
     Vector3<float> last_val_acc;
     Vector3<float> last_val_gyr;
-
-    Vector3<int16_t> noise_floor_mag;
-    Vector3<int16_t> noise_floor_acc;
-    Vector3<int16_t> noise_floor_gyr;
 
     /* These are higher-level fxns that are used as "macros" for specific patterns of */
     /*   register access. Common large-scale operations should go here.               */
@@ -475,11 +474,6 @@ class LSM9DS1 {
     inline void power_to_acc(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_ACC_POWERED);  };
     inline bool power_to_gyr() {   return _check_flags(IMU_COMMON_FLAG_GYR_POWERED);   };
     inline void power_to_gyr(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_GYR_POWERED);  };
-
-    int8_t collect_reading_mag();
-    int8_t collect_reading_acc();
-    int8_t collect_reading_gyr();
-    int8_t collect_reading_temperature();
 };
 
 #endif // __LSM9DS1_MERGED_H__

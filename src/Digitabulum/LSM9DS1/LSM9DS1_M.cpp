@@ -32,40 +32,6 @@ limitations under the License.
 *                __/ |
 *               |___/
 *******************************************************************************/
-/*
-* Magnetometer data
-* Tests all the required registers for freshness and builds a Vector with the new reading
-*   if possible.
-* Returns...
-*   0 on success with no vector.
-*   1 on success with new vector.
-*  -1 on error.
-*/
-int8_t LSM9DS1::collect_reading_mag() {
-  /* Ok... so we know that if we got here, the pre-formed bus op is freshly execed,
-       so we are going to grab its ending timestamp and populate the measurement's
-       field with the value corrected for boot-time.
-     TODO: This will have to revisited later to account for clock-wrap in a clean manner.
-       Until then, it will cause us strange bugs, and possibly even a crash at the wrap.
-  */
-
-  Vector3<int16_t> reflection_vector_mag(ManuManager::reflection_mag.x, ManuManager::reflection_mag.y, ManuManager::reflection_mag.z);
-
-  float scaler = error_map_mag[scale_mag].per_lsb;
-  //float x = ((((int16_t)regValue(RegID::AG_DATA_X_M) - noise_floor_mag_mag.x) * reflection_vector_mag.x) * scaler);
-  //float y = ((((int16_t)regValue(RegID::AG_DATA_Y_M) - noise_floor_mag_mag.y) * reflection_vector_mag.y) * scaler);
-  //float z = ((((int16_t)regValue(RegID::AG_DATA_Z_M) - noise_floor_mag_mag.z) * reflection_vector_mag.z) * scaler);
-  float x = ((((int16_t)regValue(RegID::M_DATA_X)) * reflection_vector_mag.x) * scaler);
-  float y = ((((int16_t)regValue(RegID::M_DATA_Y)) * reflection_vector_mag.y) * scaler);
-  float z = ((((int16_t)regValue(RegID::M_DATA_Z)) * reflection_vector_mag.z) * scaler);
-
-  last_val_mag(x, y, z);
-  //integrator->pushMeasurement(IMU_FLAG_MAG_DATA, x, y, z, rate_settings_mag[update_rate_mag].ts_delta);
-
-  return 1;
-}
-
-
 
 /**
 * Call to rescale the sensor.
@@ -87,7 +53,7 @@ IMUFault LSM9DS1::request_rescale_mag(uint8_t nu_scale_idx) {
 */
 IMUFault LSM9DS1::set_sample_rate_mag(uint8_t nu_srate_idx) {
   if (nu_srate_idx < MAXIMUM_RATE_INDEX_MAG) {
-    if (update_rate_mag != nu_srate_idx) {
+    if (update_rate_m != nu_srate_idx) {
       uint8_t temp8 = regValue(RegID::M_CTRL_REG1);
       if (0 == nu_srate_idx) {
         // Power the sensor down.
@@ -96,7 +62,7 @@ IMUFault LSM9DS1::set_sample_rate_mag(uint8_t nu_srate_idx) {
         if (getVerbosity() > 2) Kernel::log("set_sample_rate_mag():\tMagnetometer sample rate change.\n");
         temp8 =  (temp8 & ~0x1C) | ((nu_srate_idx-1) << 2);
       }
-      update_rate_mag = nu_srate_idx;
+      update_rate_m = nu_srate_idx;
       return writeRegister(RegID::M_CTRL_REG1, temp8);
     }
     return IMUFault::NO_ERROR;
@@ -154,14 +120,8 @@ IMUFault LSM9DS1::io_op_callback_mag_read(RegID idx, unsigned int value) {
       }
       break;
 
-    case RegID::M_DATA_X:
-      collect_reading_mag();
-    /* We don't address these registers byte-wise. Empty case for documentation's sake. */
-    case RegID::M_DATA_Y:  break;
-    case RegID::M_DATA_Z:  break;
-
     case RegID::M_CTRL_REG1:
-      if (((value >> 2) & 0x07) < MAXIMUM_RATE_INDEX_MAG)  update_rate_mag = ((value >> 6) & 0x03)+1;
+      if (((value >> 2) & 0x07) < MAXIMUM_RATE_INDEX_MAG)  update_rate_m = ((value >> 6) & 0x03)+1;
       break;
     case RegID::M_CTRL_REG2:
       if (((value >> 4) & 0x03) < MAXIMUM_GAIN_INDEX_MAG)  scale_mag = (value >> 5) & 0x03;
@@ -203,7 +163,7 @@ IMUFault LSM9DS1::io_op_callback_mag_write(RegID idx, unsigned int value) {
 
   switch (idx) {
     case RegID::M_CTRL_REG1:
-      if (((value >> 2) & 0x07) < MAXIMUM_RATE_INDEX_MAG)  update_rate_mag = ((value >> 6) & 0x03)+1;
+      if (((value >> 2) & 0x07) < MAXIMUM_RATE_INDEX_MAG)  update_rate_m = ((value >> 6) & 0x03)+1;
       break;
 
     case RegID::M_CTRL_REG2:

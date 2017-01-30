@@ -54,7 +54,7 @@ const IMUState _state_indicies[] = {
 * These are tables of frequencies versus periods (in micros). Lookup is faster
 *   than calculation, typically.
 */
-const UpdateRate2Hertz LSM9DS1::rate_settings_acc[MAXIMUM_RATE_INDEX_AG] = {
+const UpdateRate2Hertz LSM9DS1::rate_settings_i[MAXIMUM_RATE_INDEX_AG] = {
   {0.0,  0.0f},
   {14.9, (1/14.9f)},
   {59.5, (1/59.5f)},
@@ -64,17 +64,8 @@ const UpdateRate2Hertz LSM9DS1::rate_settings_acc[MAXIMUM_RATE_INDEX_AG] = {
   {952,  (1/952.0f)}
 };
 
-const UpdateRate2Hertz LSM9DS1::rate_settings_gyr[MAXIMUM_RATE_INDEX_AG] = {
-  {0.0,  0.0f},
-  {10.0, (1/10.0f)},
-  {50.0, (1/50.0f)},
-  {119,  (1/119.0f)},
-  {238,  (1/238.0f)},
-  {476,  (1/476.0f)},
-  {952,  (1/952.0f)}
-};
 
-const UpdateRate2Hertz LSM9DS1::rate_settings_mag[MAXIMUM_RATE_INDEX_MAG] = {
+const UpdateRate2Hertz LSM9DS1::rate_settings_m[MAXIMUM_RATE_INDEX_MAG] = {
   {0.625, (1/0.625f)},
   {1.25,  (1/1.25f)},
   {2.5,   (1/2.5f)},
@@ -420,7 +411,6 @@ IMUFault LSM9DS1::init() {
   error_condition    = IMUFault::NO_ERROR;
 
   _imu_flags = 1;
-  sample_count       = 0;
   time_stamp_base    = 0;
   if (pending_samples) {
     *pending_samples = 0;
@@ -435,26 +425,20 @@ IMUFault LSM9DS1::init() {
 */
 void LSM9DS1::reset() {
   scale_mag           = 0;
-  update_rate_mag     = 0;
-  discards_remain_mag = 0;
-  discards_total_mag  = 0;
-
   scale_acc           = 0;
-  update_rate_acc     = 0;
-  discards_remain_acc = 0;
-  discards_total_acc  = 0;
-
   scale_gyr           = 0;
-  update_rate_gyr     = 0;
-  discards_remain_gyr = 0;
-  discards_total_gyr  = 0;
+
+  update_rate_m       = 0;
+  update_rate_i       = 0;
+  discards_remain_m   = 0;
+  discards_total_m    = 0;
+  discards_remain_i   = 0;
+  discards_total_i    = 0;
+
 
   last_val_mag(0.0f, 0.0f, 0.0f);
   last_val_acc(0.0f, 0.0f, 0.0f);
   last_val_gyr(0.0f, 0.0f, 0.0f);
-  noise_floor_mag(0.0f, 0.0f, 0.0f);
-  noise_floor_acc(0.0f, 0.0f, 0.0f);
-  noise_floor_gyr(0.0f, 0.0f, 0.0f);
 
   // TODO: Blow away our idea of what is in the registers.
   // mark_it_zero();
@@ -844,7 +828,7 @@ const uint8_t* RegPtrMap::regPtr(RegID idx) const {
 */
 void LSM9DS1::dumpDevRegs(StringBuilder *output) {
   output->concatf("\n-------------------------------------------------------\n--- IMU  %s ==> %s \n-------------------------------------------------------\n", getStateString(imu_state), (desired_state_attained() ? "STABLE" : getStateString(desired_state)));
-  output->concatf("--- sample_count        %d\n--- pending_samples     %d\n\n", sample_count, *pending_samples);
+  output->concatf("--- pending_samples     %d\n\n", *pending_samples);
   if (getVerbosity() > 1) {
     output->concatf("--- calibration smpls   %d\n", sb_next_write);
     output->concatf("--- Base filter param   %d\n", base_filter_param);
@@ -852,9 +836,8 @@ void LSM9DS1::dumpDevRegs(StringBuilder *output) {
   output->concatf("--- Error condition     %s\n---\n", getErrorString(error_condition));
 
   if (getVerbosity() > 1) {
-    output->concatf("--- update_rate_mag     %3.0f Hz\n", (double) rate_settings_mag[update_rate_mag].hertz);
-    output->concatf("--- update_rate_acc     %3.0f Hz\n", (double) rate_settings_acc[update_rate_acc].hertz);
-    output->concatf("--- update_rate_gyr     %3.0f Hz\n", (double) rate_settings_gyr[update_rate_gyr].hertz);
+    output->concatf("--- update_rate_m       %3.0f Hz\n", (double) rate_settings_m[update_rate_m].hertz);
+    output->concatf("--- update_rate_i       %3.0f Hz\n", (double) rate_settings_i[update_rate_i].hertz);
   }
   if (getVerbosity() > 2) {
     output->concatf("--- scale_mag           +/-%d gauss\n", error_map_mag[scale_mag].scale);
@@ -863,9 +846,6 @@ void LSM9DS1::dumpDevRegs(StringBuilder *output) {
     output->concatf("--- autoscale_mag       %s\n", (autoscale_mag() ? "yes" : "no"));
     output->concatf("--- autoscale_acc       %s\n", (autoscale_acc() ? "yes" : "no"));
     output->concatf("--- autoscale_gyr       %s\n", (autoscale_gyr() ? "yes" : "no"));
-    output->concatf("--- noise_floor_mag     (%d, %d, %d)\n", noise_floor_mag.x, noise_floor_mag.y, noise_floor_mag.z);
-    output->concatf("--- noise_floor_acc     (%d, %d, %d)\n", noise_floor_acc.x, noise_floor_acc.y, noise_floor_acc.z);
-    output->concatf("--- noise_floor_gyr     (%d, %d, %d)\n", noise_floor_gyr.x, noise_floor_gyr.y, noise_floor_gyr.z);
   }
 }
 
