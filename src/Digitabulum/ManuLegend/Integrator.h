@@ -40,8 +40,8 @@ Error should be integrated here as well to form a set of limit error values for
 #define __INTEGRATOR_CLASS_H__
 
 #include <Platform/Platform.h>
-#include <DataStructures/InertialMeasurement.h>
 #include <DataStructures/Quaternion.h>
+#include "SensorFrame.h"
 
 
 #define IIU_DATA_HANDLING_UNITS_METRIC     0x00010000
@@ -67,7 +67,7 @@ Error should be integrated here as well to form a set of limit error values for
 #define IIU_DEG_TO_RAD_SCALAR   (3.14159f / 180.0f)
 
 
-#define PREALLOCATED_IIU_MEASUREMENTS           180
+#define PREALLOCATED_IIU_MEASUREMENTS    11   // We retain this many frames.
 
 
 enum class SampleType {
@@ -239,6 +239,8 @@ class Integrator {
     static uint8_t  max_quats_per_event;   // Cut's down on overhead if load is high.
     static const char* getSourceTypeString(SampleType);
 
+    static SensorFrame* fetchMeasurement();
+
 
 
   private:
@@ -252,7 +254,7 @@ class Integrator {
 
     Vector3<float> _grav;   // The Integrator maintains an empirical value for gravity.
 
-    PriorityQueue<InertialMeasurement*> quat_queue;   // This is the queue for quat operations.
+    PriorityQueue<SensorFrame*> quat_queue;   // This is the queue for quat operations.
 
     uint32_t dirty_acc = 0;
     uint32_t dirty_gyr = 0;
@@ -299,10 +301,10 @@ class Integrator {
     //}
 
     // This is a privately-scoped override that does not consider the magnetometer.
-    void MadgwickAHRSupdateIMU(InertialMeasurement*);
+    void MadgwickAHRSupdateIMU(SensorFrame*);
 
-    static InertialMeasurement* fetchMeasurement(SampleType);
-    static void reclaimMeasurement(InertialMeasurement*);
+    int8_t calibrate_from_data_mag();
+    int8_t calibrate_from_data_ag();
 
 
     // Preallocated frames.
@@ -311,8 +313,10 @@ class Integrator {
     static uint32_t measurement_heap_instantiated;
     static uint32_t measurement_heap_freed;
     static uint32_t minimum_prealloc_level;
-    static PriorityQueue<InertialMeasurement*>  preallocd_measurements;
-    static InertialMeasurement __prealloc[PREALLOCATED_IIU_MEASUREMENTS];
+    static PriorityQueue<SensorFrame*>  preallocd_measurements;
+    static SensorFrame __prealloc[PREALLOCATED_IIU_MEASUREMENTS];
+
+    static void reclaimMeasurement(SensorFrame*);
 };
 
 #endif  // __INTEGRATOR_CLASS_H__

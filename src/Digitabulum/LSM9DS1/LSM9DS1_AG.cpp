@@ -261,62 +261,6 @@ IMUFault LSM9DS1::irq_1() {
 }
 
 
-int8_t LSM9DS1::calibrate_from_data_ag() {
-  // Average vectors....
-  Vector3<int32_t> avg;
-  for (int i = 0; i < 32; i++) {
-    avg.x += sample_backlog_acc[i].x;
-    avg.y += sample_backlog_acc[i].y;
-    avg.z += sample_backlog_acc[i].z;
-  }
-  avg /= 32;   // This is our idea of gravity.
-  noise_floor_acc.x = (int16_t) avg.x;
-  noise_floor_acc.y = (int16_t) avg.y;
-  noise_floor_acc.z = (int16_t) avg.z;
-
-  for (int i = 0; i < 32; i++) {
-    avg.x += sample_backlog_gyr[i].x;
-    avg.y += sample_backlog_gyr[i].y;
-    avg.z += sample_backlog_gyr[i].z;
-  }
-  avg /= 32;   // This is our idea of gravity.
-  noise_floor_gyr.x = (int16_t) avg.x;
-  noise_floor_gyr.y = (int16_t) avg.y;
-  noise_floor_gyr.z = (int16_t) avg.z;
-
-  float scaler = error_map_acc[scale_acc].per_lsb;
-  float x = ((noise_floor_acc.x) * scaler);
-  float y = ((noise_floor_acc.y) * scaler);
-  float z = ((noise_floor_acc.z) * scaler);
-
-  //integrator->pushMeasurement(IMU_FLAG_GRAVITY_DATA, x, y, z, 0);
-
-  // This is our idea of magentic North. Write it to the offset registers.
-  //for (int i = 0; i < 8; i++) {
-  //  *(register_pool + 14 + i) = *(register_pool + 3 + i);
-  //}
-  //writeRegister(RegID::AG_INT_THS_L_M, (register_pool + 12),   8, true);
-  scaler = error_map_gyr[scale_gyr].per_lsb;
-  Vector3<int16_t> reflection_vector_gyr(ManuManager::reflection_gyr.x, ManuManager::reflection_gyr.y, ManuManager::reflection_gyr.z);
-
-  x = ((int16_t) regValue(RegID::G_DATA_X)) * scaler * reflection_vector_gyr.x;
-  y = ((int16_t) regValue(RegID::G_DATA_Y)) * scaler * reflection_vector_gyr.y;
-  z = ((int16_t) regValue(RegID::G_DATA_Z)) * scaler * reflection_vector_gyr.z;
-
-  //Vector3<float> proj_xy(x, y, 0);
-  //Vector3<float> proj_xz(x, 0, z);
-  //Vector3<float> x_axis(1.0f, 0.0f, 0.0f);
-  //
-  //float offset_angle_y = Vector3<float>::angle(&proj_xy, &x_axis);
-  //float offset_angle_z = Vector3<float>::angle(&proj_xz, &x_axis);
-
-  //integrator->pushMeasurement(IMU_FLAG_BEARING_DATA, 0, offset_angle_y, offset_angle_z, 0);
-  //integrator->pushMeasurement(IMU_FLAG_BEARING_DATA, x, y, z, 0);
-
-  return 0;
-}
-
-
 /**
 * When a bus operation completes, it is passed back to its issuing class.
 *

@@ -118,23 +118,6 @@ IMUFault LSM9DS1::irq_m() {
 }
 
 
-int8_t LSM9DS1::calibrate_from_data_mag() {
-  // Is reading stable?
-  // Average vectors....
-  Vector3<int32_t> avg;
-  for (int i = 0; i < 32; i++) {
-    avg.x += sample_backlog_mag[i].x;
-    avg.y += sample_backlog_mag[i].y;
-    avg.z += sample_backlog_mag[i].z;
-  }
-  avg /= 32;
-  noise_floor_mag.x = (int16_t) avg.x;
-  noise_floor_mag.y = (int16_t) avg.y;
-  noise_floor_mag.z = (int16_t) avg.z;
-  return 0;
-}
-
-
 /**
 * When a bus operation completes, it is passed back to its issuing class.
 *

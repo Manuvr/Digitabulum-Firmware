@@ -189,6 +189,10 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     DigitPort  get_port_given_digit(Anatomical);
     Anatomical get_digit_given_port(DigitPort);
 
+    int8_t calibrate_from_data_mag();
+    int8_t calibrate_from_data_ag();
+
+
     /* Inlines for deriving address and IRQ bit offsets from index. */
     // Address of the inertial half of the LSM9DS1.
     inline uint8_t _intertial_addr(int idx) {   return ((idx % 17) + CPLD_REG_IMU_DM_P_I);   };

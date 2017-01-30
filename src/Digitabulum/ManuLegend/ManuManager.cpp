@@ -257,6 +257,12 @@ LSM9DS1 imus[LEGEND_DATASET_IIU_COUNT] = {
 };
 
 
+// This is used to define the noise floors for the data.
+//int16_t noise_floor_mag[3*LEGEND_DATASET_IIU_COUNT];
+//int16_t noise_floor_acc[3*LEGEND_DATASET_IIU_COUNT];
+//int16_t noise_floor_gyr[3*LEGEND_DATASET_IIU_COUNT];
+
+
 /*
 * The following sensor registers are managed entirely within ManuManager. For
 *   those registers that we treat as write-only, and homogenous, we will use the
@@ -693,6 +699,24 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
       }
       //printIMURollCall(&local_log);
       break;
+
+    case RegID::A_DATA_X:  // Data must be copied out of the register buffer,
+    case RegID::A_DATA_Y:  //   adjusted while it's still cheap (integer), and
+    case RegID::A_DATA_Z:  //   scaled into floats.
+    case RegID::G_DATA_X:  // Then, the data is sent to the integrator.
+    case RegID::G_DATA_Y:  //
+    case RegID::G_DATA_Z:  //
+      {
+        // First, note the pointer relation.
+        // Scale the data
+        SensorFrame* nu_msrmnt = Integrator::fetchMeasurement();
+        for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+        }
+        // Send to integrator.
+      }
+      break;
+
+
     case RegID::M_CTRL_REG1:
       break;
     case RegID::M_CTRL_REG3:
@@ -772,12 +796,6 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
       break;
     case RegID::AG_STATUS_REG:
       break;
-    case RegID::G_DATA_X:
-      break;
-    case RegID::G_DATA_Y:
-      break;
-    case RegID::G_DATA_Z:
-      break;
     case RegID::A_CTRL_REG6:
       break;
     case RegID::A_CTRL_REG7:
@@ -785,12 +803,6 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
     case RegID::A_INT_GEN_SRC:
       break;
     case RegID::AG_STATUS_REG_ALT:
-      break;
-    case RegID::A_DATA_X:
-      break;
-    case RegID::A_DATA_Y:
-      break;
-    case RegID::A_DATA_Z:
       break;
     case RegID::AG_FIFO_SRC:
       break;

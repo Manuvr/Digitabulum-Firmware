@@ -39,7 +39,7 @@ IMUs need to be aware of their own bus addresses so that bus access can be encap
 #ifndef __LSM9DS1_MERGED_H__
 #define __LSM9DS1_MERGED_H__
 
-#include <DataStructures/InertialMeasurement.h>
+#include "../ManuLegend/SensorFrame.h"
 
 
 /*
@@ -95,19 +95,17 @@ const float GYR_TEMPERATURE_DERATE = 0.02f;
 
 
 /* We use this struct to map between update rates and timestamp deltas. */
-// TODO: Ne3ds mo4r const.
 typedef struct {
-  float hertz;      // Frequency
-  float ts_delta;   // Period (in seconds)
+  const float hertz;      // Frequency
+  const float ts_delta;   // Period (in seconds)
 } UpdateRate2Hertz;
 
 
 /* We use the struct to map between scales and error-rates. */
-// TODO: Ne3ds mo4r const.
 typedef struct {
-  uint16_t scale;     // This is the maximum magnatude of the sensor reading at the given gain.
-  float    per_lsb;   // Each LSB counts for this many of whatever unit.
-  float    error;     // Given in the sensor's native unit. Each reading at this scale has this error.
+  const uint16_t scale;     // This is the maximum magnatude of the sensor reading at the given gain.
+  const float    per_lsb;   // Each LSB counts for this many of whatever unit.
+  const float    error;     // Given in the sensor's native unit. Each reading at this scale has this error.
 } GainErrorMap;
 
 
@@ -442,10 +440,6 @@ class LSM9DS1 {
     Vector3<float> last_val_acc;
     Vector3<float> last_val_gyr;
 
-    Vector3<int16_t> sample_backlog_mag[32];
-    Vector3<int16_t> sample_backlog_acc[32];
-    Vector3<int16_t> sample_backlog_gyr[32];
-
     Vector3<int16_t> noise_floor_mag;
     Vector3<int16_t> noise_floor_acc;
     Vector3<int16_t> noise_floor_gyr;
@@ -481,9 +475,6 @@ class LSM9DS1 {
     inline void power_to_acc(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_ACC_POWERED);  };
     inline bool power_to_gyr() {   return _check_flags(IMU_COMMON_FLAG_GYR_POWERED);   };
     inline void power_to_gyr(bool x) {  _alter_flags(x, IMU_COMMON_FLAG_GYR_POWERED);  };
-
-    int8_t calibrate_from_data_mag();
-    int8_t calibrate_from_data_ag();
 
     int8_t collect_reading_mag();
     int8_t collect_reading_acc();

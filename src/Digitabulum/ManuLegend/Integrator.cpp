@@ -41,18 +41,18 @@ uint32_t Integrator::measurement_heap_instantiated = 0;
 uint32_t Integrator::measurement_heap_freed        = 0;
 uint32_t Integrator::prealloc_starves              = 0;
 uint32_t Integrator::minimum_prealloc_level        = PREALLOCATED_IIU_MEASUREMENTS;
-PriorityQueue<InertialMeasurement*>  Integrator::preallocd_measurements;
-InertialMeasurement Integrator::__prealloc[PREALLOCATED_IIU_MEASUREMENTS];
+PriorityQueue<SensorFrame*>  Integrator::preallocd_measurements;
+SensorFrame Integrator::__prealloc[PREALLOCATED_IIU_MEASUREMENTS];
 
 
 
-InertialMeasurement* Integrator::fetchMeasurement(SampleType type_code) {
-  InertialMeasurement* return_value;
+SensorFrame* Integrator::fetchMeasurement() {
+  SensorFrame* return_value;
 
   if (0 == preallocd_measurements.size()) {
     // We have exhausted our preallocated measurements. Note it.
     prealloc_starves++;
-    return_value = new InertialMeasurement();
+    return_value = new SensorFrame();
     measurement_heap_instantiated++;
     minimum_prealloc_level = 0;
   }
@@ -65,7 +65,7 @@ InertialMeasurement* Integrator::fetchMeasurement(SampleType type_code) {
 
 
 /**
-* Reclaims the given InertialMeasurement so its memory can be re-used.
+* Reclaims the given SensorFrame so its memory can be re-used.
 *
 * At present, our criteria for preallocation is if the pointer address passed in
 *   falls within the range of our __prealloc array. I see nothing "non-portable"
@@ -79,12 +79,12 @@ InertialMeasurement* Integrator::fetchMeasurement(SampleType type_code) {
 *   up until we hit the boundaries of the STM32 CCM.
 *                                 ---J. Ian Lindsay   Mon Apr 13 10:51:54 MST 2015
 *
-* @param InertialMeasurement* obj is the pointer to the object to be reclaimed.
+* @param SensorFrame* obj is the pointer to the object to be reclaimed.
 */
-void Integrator::reclaimMeasurement(InertialMeasurement* obj) {
+void Integrator::reclaimMeasurement(SensorFrame* obj) {
   uintptr_t obj_addr = ((uintptr_t) obj);
   uintptr_t pre_min  = ((uintptr_t) __prealloc);
-  uintptr_t pre_max  = pre_min + (sizeof(InertialMeasurement) * PREALLOCATED_IIU_MEASUREMENTS);
+  uintptr_t pre_max  = pre_min + (sizeof(SensorFrame) * PREALLOCATED_IIU_MEASUREMENTS);
 
   if ((obj_addr < pre_max) && (obj_addr >= pre_min)) {
     // If we are in this block, it means obj was preallocated. wipe and reclaim it.
@@ -252,8 +252,8 @@ int8_t Integrator::pushMeasurement(SampleType data_type, float x, float y, float
     if (0 == quat_queue.size()) {
       // There was nothing in this queue, but there is about to be.
     }
-    InertialMeasurement* nu_measurement = fetchMeasurement(data_type);
-    nu_measurement->set(_ptr_gyr, ((!dirty_mag && cleanMagZero()) ? (Vector3<float>*)&ZERO_VECTOR : _ptr_mag), _ptr_acc, delta_t);
+    SensorFrame* nu_measurement = fetchMeasurement();
+    //nu_measurement->set(_ptr_gyr, ((!dirty_mag && cleanMagZero()) ? (Vector3<float>*)&ZERO_VECTOR : _ptr_mag), _ptr_acc, delta_t);
     if (dirty_mag) dirty_mag = 0;
     dirty_acc = 0;
     dirty_gyr = 0;
@@ -451,7 +451,7 @@ const char* Integrator::getSourceTypeString(SampleType t) {
 uint8_t Integrator::MadgwickQuaternionUpdate() {
   uint8_t quats_procd_this_run = 0;
 
-  InertialMeasurement* measurement;
+  SensorFrame* measurement;
 
   while ((quats_procd_this_run < max_quats_per_event) && quat_queue.hasNext()) {
     measurement = quat_queue.dequeue();
@@ -460,7 +460,7 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
     if (verbosity > 3) {
       local_log.concatf("At delta-t = %f: ", (double)d_t);
       #if defined(__MANUVR_DEBUG)
-        measurement->printDebug(&local_log);
+        //measurement->printDebug(&local_log);
         local_log.concat("\t");
         _ptr_quat->printDebug(&local_log);
       #endif
@@ -477,124 +477,129 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
     float _2q0mx, _2q0my, _2q0mz, _2q1mx, _2bx, _2bz, _4bx, _4bz, _2q0, _2q1, _2q2, _2q3, q0q0, q0q1, q0q2, q0q3, q1q1, q1q2, q1q3, q2q2, q2q3, q3q3;
 
     // Normalise mag measurement
-    float mag_normal = (measurement->m_data).normalize();
+    float mag_normal;
 
-    if (dropObviousBadMag() && (mag_normal >= mag_discard_threshold)) {
-      // We defer to the algorithm that does not use the non-earth mag data.
-      for (int i = 0; i < madgwick_iterations; i++) {
-        MadgwickAHRSupdateIMU(measurement);
-      }
-    }
-    else if (0.0f == mag_normal) {
-      // We defer to the algorithm that does not use the absent mag data.
-      for (int i = 0; i < madgwick_iterations; i++) {
-        MadgwickAHRSupdateIMU(measurement);
-      }
-    }
-    else {
-      float gx = (measurement->g_data).x * IIU_DEG_TO_RAD_SCALAR;
-      float gy = (measurement->g_data).y * IIU_DEG_TO_RAD_SCALAR;
-      float gz = (measurement->g_data).z * IIU_DEG_TO_RAD_SCALAR;
+    // Now we'll start the float churn...
+    for (int set_i = 0; set_i < LEGEND_DATASET_IIU_COUNT; set_i++) {
+      mag_normal = (measurement->m_data[set_i]).normalize();
 
-      for (int i = 0; i < madgwick_iterations; i++) {
-        // Rate of change of quaternion from gyroscope
-        qDot1 = 0.5f * (-q1 * gx - q2 * gy - q3 * gz);
-        qDot2 = 0.5f * (q0 * gx + q2 * gz - q3 * gy);
-        qDot3 = 0.5f * (q0 * gy - q1 * gz + q3 * gx);
-        qDot4 = 0.5f * (q0 * gz + q1 * gy - q2 * gx);
-
-        // Normalise accelerometer measurement. If vector is non-zero, integrate it...
-        if (0.0f != (measurement->a_data).normalize()) {
-          float mx = (measurement->m_data).x;
-          float my = (measurement->m_data).y;
-          float mz = (measurement->m_data).z;
-
-          float ax = (measurement->a_data).x;
-          float ay = (measurement->a_data).y;
-          float az = (measurement->a_data).z;
-
-          // Auxiliary variables to avoid repeated arithmetic
-          _2q0mx = 2.0f * q0 * mx;
-          _2q0my = 2.0f * q0 * my;
-          _2q0mz = 2.0f * q0 * mz;
-          _2q1mx = 2.0f * q1 * mx;
-          _2q0 = 2.0f * q0;
-          _2q1 = 2.0f * q1;
-          _2q2 = 2.0f * q2;
-          _2q3 = 2.0f * q3;
-          q0q0 = q0 * q0;
-          q0q1 = q0 * q1;
-          q0q2 = q0 * q2;
-          q0q3 = q0 * q3;
-          q1q1 = q1 * q1;
-          q1q2 = q1 * q2;
-          q1q3 = q1 * q3;
-          q2q2 = q2 * q2;
-          q2q3 = q2 * q3;
-          q3q3 = q3 * q3;
-
-          // Reference direction of Earth's magnetic field
-          hx = mx * q0q0 - _2q0my * q3 + _2q0mz * q2 + mx * q1q1 + _2q1 * my * q2 + _2q1 * mz * q3 - mx * q2q2 - mx * q3q3;
-          hy = _2q0mx * q3 + my * q0q0 - _2q0mz * q1 + _2q1mx * q2 - my * q1q1 + my * q2q2 + _2q2 * mz * q3 - my * q3q3;
-          _2bx = sqrt(hx * hx + hy * hy);
-          _2bz = -_2q0mx * q2 + _2q0my * q1 + mz * q0q0 + _2q1mx * q3 - mz * q1q1 + _2q2 * my * q3 - mz * q2q2 + mz * q3q3;
-          _4bx = 2.0f * _2bx;
-          _4bz = 2.0f * _2bz;
-          float _8bx = 2.0f * _4bx;
-          float _8bz = 2.0f * _4bz;
-
-          // Gradient decent algorithm corrective step
-          s0 = -_2q2*(2*(q1q3 - q0q2) - ax) + _2q1*(2*(q0q1 + q2q3) - ay) +  -_4bz*q2*(_4bx*(0.5 - q2q2 - q3q3) + _4bz*(q1q3 - q0q2) - mx)   +   (-_4bx*q3+_4bz*q1)*(_4bx*(q1q2 - q0q3) + _4bz*(q0q1 + q2q3) - my)    +   _4bx*q2*(_4bx*(q0q2 + q1q3) + _4bz*(0.5 - q1q1 - q2q2) - mz);
-          s1 = _2q3*(2*(q1q3 - q0q2) - ax)  + _2q0*(2*(q0q1 + q2q3) - ay) + -4*q1*(2*(0.5 - q1q1 - q2q2) - az)    +   _4bz*q3*(_4bx*(0.5 - q2q2 - q3q3) + _4bz*(q1q3 - q0q2) - mx)   + (_4bx*q2+_4bz*q0)*(_4bx*(q1q2 - q0q3) + _4bz*(q0q1 + q2q3) - my)   +   (_4bx*q3-_8bz*q1)*(_4bx*(q0q2 + q1q3) + _4bz*(0.5 - q1q1 - q2q2) - mz);
-          s2 = -_2q0*(2*(q1q3 - q0q2) - ax) + _2q3*(2*(q0q1 + q2q3) - ay) + (-4*q2)*(2*(0.5 - q1q1 - q2q2) - az) +   (-_8bx*q2-_4bz*q0)*(_4bx*(0.5 - q2q2 - q3q3) + _4bz*(q1q3 - q0q2) - mx)+(_4bx*q1+_4bz*q3)*(_4bx*(q1q2 - q0q3) + _4bz*(q0q1 + q2q3) - my)+(_4bx*q0-_8bz*q2)*(_4bx*(q0q2 + q1q3) + _4bz*(0.5 - q1q1 - q2q2) - mz);
-          s3 = _2q1*(2*(q1q3 - q0q2) - ax)  + _2q2*(2*(q0q1 + q2q3) - ay) + (-_8bx*q3+_4bz*q1)*(_4bx*(0.5 - q2q2 - q3q3) + _4bz*(q1q3 - q0q2) - mx)+(-_4bx*q0+_4bz*q2)*(_4bx*(q1q2 - q0q3) + _4bz*(q0q1 + q2q3) - my)+(_4bx*q1)*(_4bx*(q0q2 + q1q3) + _4bz*(0.5 - q1q1 - q2q2) - mz);
-
-          norm = 1.0f / (float) sqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3); // normalise step magnitude
-
-          // Apply feedback step
-          qDot1 -= beta * (s0 * norm);
-          qDot2 -= beta * (s1 * norm);
-          qDot3 -= beta * (s2 * norm);
-          qDot4 -= beta * (s3 * norm);
-
-          // Integrate rate of change of quaternion to yield quaternion
-          q0 += qDot1 * d_t;
-          q1 += qDot2 * d_t;
-          q2 += qDot3 * d_t;
-          q3 += qDot4 * d_t;
-
-          // Normalise quaternion
-          norm = 1.0f / (float) sqrt(q1 * q1 + q2 * q2 + q3 * q3 + q0 * q0);    // normalise quaternion
-          _ptr_quat->w = q0 * norm;
-          _ptr_quat->x = q1 * norm;
-          _ptr_quat->y = q2 * norm;
-          _ptr_quat->z = q3 * norm;
+      if (dropObviousBadMag() && (mag_normal >= mag_discard_threshold)) {
+        // We defer to the algorithm that does not use the non-earth mag data.
+        for (int i = 0; i < madgwick_iterations; i++) {
+          MadgwickAHRSupdateIMU(measurement);
         }
       }
-    }
+      else if (0.0f == mag_normal) {
+        // We defer to the algorithm that does not use the absent mag data.
+        for (int i = 0; i < madgwick_iterations; i++) {
+          MadgwickAHRSupdateIMU(measurement);
+        }
+      }
+      else {
+        float gx = (measurement->g_data[set_i]).x * IIU_DEG_TO_RAD_SCALAR;
+        float gy = (measurement->g_data[set_i]).y * IIU_DEG_TO_RAD_SCALAR;
+        float gz = (measurement->g_data[set_i]).z * IIU_DEG_TO_RAD_SCALAR;
+
+        for (int i = 0; i < madgwick_iterations; i++) {
+          // Rate of change of quaternion from gyroscope
+          qDot1 = 0.5f * (-q1 * gx - q2 * gy - q3 * gz);
+          qDot2 = 0.5f * (q0 * gx + q2 * gz - q3 * gy);
+          qDot3 = 0.5f * (q0 * gy - q1 * gz + q3 * gx);
+          qDot4 = 0.5f * (q0 * gz + q1 * gy - q2 * gx);
+
+          // Normalise accelerometer measurement. If vector is non-zero, integrate it...
+          if (0.0f != (measurement->a_data[set_i]).normalize()) {
+            float mx = (measurement->m_data[set_i]).x;
+            float my = (measurement->m_data[set_i]).y;
+            float mz = (measurement->m_data[set_i]).z;
+
+            float ax = (measurement->a_data[set_i]).x;
+            float ay = (measurement->a_data[set_i]).y;
+            float az = (measurement->a_data[set_i]).z;
+
+            // Auxiliary variables to avoid repeated arithmetic
+            _2q0mx = 2.0f * q0 * mx;
+            _2q0my = 2.0f * q0 * my;
+            _2q0mz = 2.0f * q0 * mz;
+            _2q1mx = 2.0f * q1 * mx;
+            _2q0 = 2.0f * q0;
+            _2q1 = 2.0f * q1;
+            _2q2 = 2.0f * q2;
+            _2q3 = 2.0f * q3;
+            q0q0 = q0 * q0;
+            q0q1 = q0 * q1;
+            q0q2 = q0 * q2;
+            q0q3 = q0 * q3;
+            q1q1 = q1 * q1;
+            q1q2 = q1 * q2;
+            q1q3 = q1 * q3;
+            q2q2 = q2 * q2;
+            q2q3 = q2 * q3;
+            q3q3 = q3 * q3;
+
+            // Reference direction of Earth's magnetic field
+            hx = mx * q0q0 - _2q0my * q3 + _2q0mz * q2 + mx * q1q1 + _2q1 * my * q2 + _2q1 * mz * q3 - mx * q2q2 - mx * q3q3;
+            hy = _2q0mx * q3 + my * q0q0 - _2q0mz * q1 + _2q1mx * q2 - my * q1q1 + my * q2q2 + _2q2 * mz * q3 - my * q3q3;
+            _2bx = sqrt(hx * hx + hy * hy);
+            _2bz = -_2q0mx * q2 + _2q0my * q1 + mz * q0q0 + _2q1mx * q3 - mz * q1q1 + _2q2 * my * q3 - mz * q2q2 + mz * q3q3;
+            _4bx = 2.0f * _2bx;
+            _4bz = 2.0f * _2bz;
+            float _8bx = 2.0f * _4bx;
+            float _8bz = 2.0f * _4bz;
+
+            // Gradient decent algorithm corrective step
+            s0 = -_2q2*(2*(q1q3 - q0q2) - ax) + _2q1*(2*(q0q1 + q2q3) - ay) +  -_4bz*q2*(_4bx*(0.5 - q2q2 - q3q3) + _4bz*(q1q3 - q0q2) - mx)   +   (-_4bx*q3+_4bz*q1)*(_4bx*(q1q2 - q0q3) + _4bz*(q0q1 + q2q3) - my)    +   _4bx*q2*(_4bx*(q0q2 + q1q3) + _4bz*(0.5 - q1q1 - q2q2) - mz);
+            s1 = _2q3*(2*(q1q3 - q0q2) - ax)  + _2q0*(2*(q0q1 + q2q3) - ay) + -4*q1*(2*(0.5 - q1q1 - q2q2) - az)    +   _4bz*q3*(_4bx*(0.5 - q2q2 - q3q3) + _4bz*(q1q3 - q0q2) - mx)   + (_4bx*q2+_4bz*q0)*(_4bx*(q1q2 - q0q3) + _4bz*(q0q1 + q2q3) - my)   +   (_4bx*q3-_8bz*q1)*(_4bx*(q0q2 + q1q3) + _4bz*(0.5 - q1q1 - q2q2) - mz);
+            s2 = -_2q0*(2*(q1q3 - q0q2) - ax) + _2q3*(2*(q0q1 + q2q3) - ay) + (-4*q2)*(2*(0.5 - q1q1 - q2q2) - az) +   (-_8bx*q2-_4bz*q0)*(_4bx*(0.5 - q2q2 - q3q3) + _4bz*(q1q3 - q0q2) - mx)+(_4bx*q1+_4bz*q3)*(_4bx*(q1q2 - q0q3) + _4bz*(q0q1 + q2q3) - my)+(_4bx*q0-_8bz*q2)*(_4bx*(q0q2 + q1q3) + _4bz*(0.5 - q1q1 - q2q2) - mz);
+            s3 = _2q1*(2*(q1q3 - q0q2) - ax)  + _2q2*(2*(q0q1 + q2q3) - ay) + (-_8bx*q3+_4bz*q1)*(_4bx*(0.5 - q2q2 - q3q3) + _4bz*(q1q3 - q0q2) - mx)+(-_4bx*q0+_4bz*q2)*(_4bx*(q1q2 - q0q3) + _4bz*(q0q1 + q2q3) - my)+(_4bx*q1)*(_4bx*(q0q2 + q1q3) + _4bz*(0.5 - q1q1 - q2q2) - mz);
+
+            norm = 1.0f / (float) sqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3); // normalise step magnitude
+
+            // Apply feedback step
+            qDot1 -= beta * (s0 * norm);
+            qDot2 -= beta * (s1 * norm);
+            qDot3 -= beta * (s2 * norm);
+            qDot4 -= beta * (s3 * norm);
+
+            // Integrate rate of change of quaternion to yield quaternion
+            q0 += qDot1 * d_t;
+            q1 += qDot2 * d_t;
+            q2 += qDot3 * d_t;
+            q3 += qDot4 * d_t;
+
+            // Normalise quaternion
+            norm = 1.0f / (float) sqrt(q1 * q1 + q2 * q2 + q3 * q3 + q0 * q0);    // normalise quaternion
+            _ptr_quat->w = q0 * norm;
+            _ptr_quat->x = q1 * norm;
+            _ptr_quat->y = q2 * norm;
+            _ptr_quat->z = q3 * norm;
+          }
+        }
+      }
 
 
-    if (nullifyGravity()) {
-      /* If we are going to cancel gravity, we should do so now. */
-      _grav.x = (2 * (_ptr_quat->x * _ptr_quat->z - _ptr_quat->w * _ptr_quat->y));
-      _grav.y = (2 * (_ptr_quat->w * _ptr_quat->x + _ptr_quat->y * _ptr_quat->z));
-      _grav.z = (_ptr_quat->w * _ptr_quat->w - _ptr_quat->x * _ptr_quat->x - _ptr_quat->y * _ptr_quat->y + _ptr_quat->z * _ptr_quat->z);
+      if (nullifyGravity()) {
+        /* If we are going to cancel gravity, we should do so now. */
+        _grav.x = (2 * (_ptr_quat->x * _ptr_quat->z - _ptr_quat->w * _ptr_quat->y));
+        _grav.y = (2 * (_ptr_quat->w * _ptr_quat->x + _ptr_quat->y * _ptr_quat->z));
+        _grav.z = (_ptr_quat->w * _ptr_quat->w - _ptr_quat->x * _ptr_quat->x - _ptr_quat->y * _ptr_quat->y + _ptr_quat->z * _ptr_quat->z);
 
-      _ptr_null_grav->x = (measurement->a_data).x - _grav.x;
-      _ptr_null_grav->y = (measurement->a_data).y - _grav.y;
-      _ptr_null_grav->z = (measurement->a_data).z - _grav.z;
+        _ptr_null_grav->x = (measurement->a_data[set_i]).x - _grav.x;
+        _ptr_null_grav->y = (measurement->a_data[set_i]).y - _grav.y;
+        _ptr_null_grav->z = (measurement->a_data[set_i]).z - _grav.z;
 
-      if (findVelocity()) {
-        // Are we finding velocity?
-        _ptr_vel->x += _ptr_null_grav->x * d_t;
-        _ptr_vel->y += _ptr_null_grav->y * d_t;
-        _ptr_vel->z += _ptr_null_grav->z * d_t;
+        if (findVelocity()) {
+          // Are we finding velocity?
+          _ptr_vel->x += _ptr_null_grav->x * d_t;
+          _ptr_vel->y += _ptr_null_grav->y * d_t;
+          _ptr_vel->z += _ptr_null_grav->z * d_t;
 
-        if (trackPosition()) {
-          // Track position....
-          _ptr_position->x += _ptr_vel->x * d_t;
-          _ptr_position->y += _ptr_vel->y * d_t;
-          _ptr_position->z += _ptr_vel->z * d_t;
+          if (trackPosition()) {
+            // Track position....
+            _ptr_position->x += _ptr_vel->x * d_t;
+            _ptr_position->y += _ptr_vel->y * d_t;
+            _ptr_position->z += _ptr_vel->z * d_t;
+          }
         }
       }
     }
@@ -610,7 +615,7 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
 //---------------------------------------------------------------------------------------------------
 // IMU algorithm update
 
-void Integrator::MadgwickAHRSupdateIMU(InertialMeasurement* measurement) {
+void Integrator::MadgwickAHRSupdateIMU(SensorFrame* measurement) {
   float norm;
   float s0, s1, s2, s3;
   float qDot1, qDot2, qDot3, qDot4;
@@ -618,66 +623,137 @@ void Integrator::MadgwickAHRSupdateIMU(InertialMeasurement* measurement) {
 
   float q0 = _ptr_quat->w, q1= _ptr_quat->x, q2 = _ptr_quat->y, q3 = _ptr_quat->z;   // short name local variable for readability
 
-  float gx = (measurement->g_data).x * IIU_DEG_TO_RAD_SCALAR;
-  float gy = (measurement->g_data).y * IIU_DEG_TO_RAD_SCALAR;
-  float gz = (measurement->g_data).z * IIU_DEG_TO_RAD_SCALAR;
-  float d_t = measurement->read_time;
+  for (int set_i = 0; set_i < LEGEND_DATASET_IIU_COUNT; set_i++) {
+    float gx = (measurement->g_data[set_i]).x * IIU_DEG_TO_RAD_SCALAR;
+    float gy = (measurement->g_data[set_i]).y * IIU_DEG_TO_RAD_SCALAR;
+    float gz = (measurement->g_data[set_i]).z * IIU_DEG_TO_RAD_SCALAR;
+    float d_t = measurement->read_time;
 
-  // Rate of change of quaternion from gyroscope
-  qDot1 = 0.5f * (-q1 * gx - q2 * gy - q3 * gz);
-  qDot2 = 0.5f * (q0 * gx + q2 * gz - q3 * gy);
-  qDot3 = 0.5f * (q0 * gy - q1 * gz + q3 * gx);
-  qDot4 = 0.5f * (q0 * gz + q1 * gy - q2 * gx);
+    // Rate of change of quaternion from gyroscope
+    qDot1 = 0.5f * (-q1 * gx - q2 * gy - q3 * gz);
+    qDot2 = 0.5f * (q0 * gx + q2 * gz - q3 * gy);
+    qDot3 = 0.5f * (q0 * gy - q1 * gz + q3 * gx);
+    qDot4 = 0.5f * (q0 * gz + q1 * gy - q2 * gx);
 
-  // Normalise accelerometer measurement. If vector is non-zero, integrate it...
-  if (0.0f != (measurement->a_data).normalize()) {
-    float ax = (measurement->a_data).x;
-    float ay = (measurement->a_data).y;
-    float az = (measurement->a_data).z;
-    // Auxiliary variables to avoid repeated arithmetic
-    _2q0 = 2.0f * q0;
-    _2q1 = 2.0f * q1;
-    _2q2 = 2.0f * q2;
-    _2q3 = 2.0f * q3;
-    _4q0 = 4.0f * q0;
-    _4q1 = 4.0f * q1;
-    _4q2 = 4.0f * q2;
-    _8q1 = 8.0f * q1;
-    _8q2 = 8.0f * q2;
-    q0q0 = q0 * q0;
-    q1q1 = q1 * q1;
-    q2q2 = q2 * q2;
-    q3q3 = q3 * q3;
+    // Normalise accelerometer measurement. If vector is non-zero, integrate it...
+    if (0.0f != (measurement->a_data[set_i]).normalize()) {
+      float ax = (measurement->a_data[set_i]).x;
+      float ay = (measurement->a_data[set_i]).y;
+      float az = (measurement->a_data[set_i]).z;
+      // Auxiliary variables to avoid repeated arithmetic
+      _2q0 = 2.0f * q0;
+      _2q1 = 2.0f * q1;
+      _2q2 = 2.0f * q2;
+      _2q3 = 2.0f * q3;
+      _4q0 = 4.0f * q0;
+      _4q1 = 4.0f * q1;
+      _4q2 = 4.0f * q2;
+      _8q1 = 8.0f * q1;
+      _8q2 = 8.0f * q2;
+      q0q0 = q0 * q0;
+      q1q1 = q1 * q1;
+      q2q2 = q2 * q2;
+      q3q3 = q3 * q3;
 
-    // Gradient decent algorithm corrective step
-    s0 = _4q0 * q2q2 + _2q2 * ax + _4q0 * q1q1 - _2q1 * ay;
-    s1 = _4q1 * q3q3 - _2q3 * ax + 4.0f * q0q0 * q1 - _2q0 * ay - _4q1 + _8q1 * q1q1 + _8q1 * q2q2 + _4q1 * az;
-    s2 = 4.0f * q0q0 * q2 + _2q0 * ax + _4q2 * q3q3 - _2q3 * ay - _4q2 + _8q2 * q1q1 + _8q2 * q2q2 + _4q2 * az;
-    s3 = 4.0f * q1q1 * q3 - _2q1 * ax + 4.0f * q2q2 * q3 - _2q2 * ay;
+      // Gradient decent algorithm corrective step
+      s0 = _4q0 * q2q2 + _2q2 * ax + _4q0 * q1q1 - _2q1 * ay;
+      s1 = _4q1 * q3q3 - _2q3 * ax + 4.0f * q0q0 * q1 - _2q0 * ay - _4q1 + _8q1 * q1q1 + _8q1 * q2q2 + _4q1 * az;
+      s2 = 4.0f * q0q0 * q2 + _2q0 * ax + _4q2 * q3q3 - _2q3 * ay - _4q2 + _8q2 * q1q1 + _8q2 * q2q2 + _4q2 * az;
+      s3 = 4.0f * q1q1 * q3 - _2q1 * ax + 4.0f * q2q2 * q3 - _2q2 * ay;
 
-    norm = 1.0f / (float) sqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3); // normalise step magnitude
-    s0 *= norm;
-    s1 *= norm;
-    s2 *= norm;
-    s3 *= norm;
+      norm = 1.0f / (float) sqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3); // normalise step magnitude
+      s0 *= norm;
+      s1 *= norm;
+      s2 *= norm;
+      s3 *= norm;
 
-    // Apply feedback step
-    qDot1 -= beta * s0;
-    qDot2 -= beta * s1;
-    qDot3 -= beta * s2;
-    qDot4 -= beta * s3;
+      // Apply feedback step
+      qDot1 -= beta * s0;
+      qDot2 -= beta * s1;
+      qDot3 -= beta * s2;
+      qDot4 -= beta * s3;
+    }
+
+    // Integrate rate of change of quaternion to yield quaternion
+    q0 += qDot1 * d_t;
+    q1 += qDot2 * d_t;
+    q2 += qDot3 * d_t;
+    q3 += qDot4 * d_t;
+
+    // Normalise quaternion
+    norm = 1.0f / (float) sqrt(q1 * q1 + q2 * q2 + q3 * q3 + q0 * q0);    // normalise quaternion
+    _ptr_quat->w = q0 * norm;
+    _ptr_quat->x = q1 * norm;
+    _ptr_quat->y = q2 * norm;
+    _ptr_quat->z = q3 * norm;
   }
+}
 
-  // Integrate rate of change of quaternion to yield quaternion
-  q0 += qDot1 * d_t;
-  q1 += qDot2 * d_t;
-  q2 += qDot3 * d_t;
-  q3 += qDot4 * d_t;
 
-  // Normalise quaternion
-  norm = 1.0f / (float) sqrt(q1 * q1 + q2 * q2 + q3 * q3 + q0 * q0);    // normalise quaternion
-  _ptr_quat->w = q0 * norm;
-  _ptr_quat->x = q1 * norm;
-  _ptr_quat->y = q2 * norm;
-  _ptr_quat->z = q3 * norm;
+int8_t Integrator::calibrate_from_data_ag() {
+  //// Average vectors....
+  //Vector3<int32_t> avg;
+  //for (int i = 0; i < 32; i++) {
+  //  avg.x += sample_backlog_acc[i].x;
+  //  avg.y += sample_backlog_acc[i].y;
+  //  avg.z += sample_backlog_acc[i].z;
+  //}
+  //avg /= 32;   // This is our idea of gravity.
+  //noise_floor_acc.x = (int16_t) avg.x;
+  //noise_floor_acc.y = (int16_t) avg.y;
+  //noise_floor_acc.z = (int16_t) avg.z;
+
+  //for (int i = 0; i < 32; i++) {
+  //  avg.x += sample_backlog_gyr[i].x;
+  //  avg.y += sample_backlog_gyr[i].y;
+  //  avg.z += sample_backlog_gyr[i].z;
+  //}
+  //avg /= 32;   // This is our idea of gravity.
+  //noise_floor_gyr.x = (int16_t) avg.x;
+  //noise_floor_gyr.y = (int16_t) avg.y;
+  //noise_floor_gyr.z = (int16_t) avg.z;
+
+  //float scaler = error_map_acc[scale_acc].per_lsb;
+  //float x = ((noise_floor_acc.x) * scaler);
+  //float y = ((noise_floor_acc.y) * scaler);
+  //float z = ((noise_floor_acc.z) * scaler);
+
+  //// This is our idea of magentic North. Write it to the offset registers.
+  ////for (int i = 0; i < 8; i++) {
+  ////  *(register_pool + 14 + i) = *(register_pool + 3 + i);
+  ////}
+  ////writeRegister(RegID::AG_INT_THS_L_M, (register_pool + 12),   8, true);
+  //scaler = error_map_gyr[scale_gyr].per_lsb;
+  //Vector3<int16_t> reflection_vector_gyr(ManuManager::reflection_gyr.x, ManuManager::reflection_gyr.y, ManuManager::reflection_gyr.z);
+
+  //x = ((int16_t) regValue(RegID::G_DATA_X)) * scaler * reflection_vector_gyr.x;
+  //y = ((int16_t) regValue(RegID::G_DATA_Y)) * scaler * reflection_vector_gyr.y;
+  //z = ((int16_t) regValue(RegID::G_DATA_Z)) * scaler * reflection_vector_gyr.z;
+  ////Vector3<float> proj_xy(x, y, 0);
+  ////Vector3<float> proj_xz(x, 0, z);
+  ////Vector3<float> x_axis(1.0f, 0.0f, 0.0f);
+  ////
+  ////float offset_angle_y = Vector3<float>::angle(&proj_xy, &x_axis);
+  ////float offset_angle_z = Vector3<float>::angle(&proj_xz, &x_axis);
+  ////integrator->pushMeasurement(IMU_FLAG_BEARING_DATA, 0, offset_angle_y, offset_angle_z, 0);
+  ////integrator->pushMeasurement(IMU_FLAG_BEARING_DATA, x, y, z, 0);
+  //return 0;
+}
+
+
+
+int8_t Integrator::calibrate_from_data_mag() {
+  //// Is reading stable?
+  //// Average vectors....
+  //Vector3<int32_t> avg;
+  //for (int i = 0; i < 32; i++) {
+  //  avg.x += sample_backlog_mag[i].x;
+  //  avg.y += sample_backlog_mag[i].y;
+  //  avg.z += sample_backlog_mag[i].z;
+  //}
+  //avg /= 32;
+  //noise_floor_mag.x = (int16_t) avg.x;
+  //noise_floor_mag.y = (int16_t) avg.y;
+  //noise_floor_mag.z = (int16_t) avg.z;
+  //return 0;
 }

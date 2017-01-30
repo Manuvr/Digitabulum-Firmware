@@ -231,9 +231,17 @@ _---J. Ian Lindsay_
     280132    2880   30336  313348   Removed stop-gap mem space. Cleaned up some TODO.
     280228    2880   30272  313380   Cutting fields that don't make sense anymore.
     280220    2880   30272  313372   More field remeval ahead of migrations to Integrator.
+    280220    2880   29832  312932   Integrator is starting to not care about sample type.
+    279836    2880   20040  302756   The big drop. Note below.
+
 Lots of things are broken. There are a few stubs, and much dead code. IMU pointer
 maps are contained within a const class and array'd out as non-static members.
 
 Debriding and suturing...
+
+Note on the big drop: Eliminated the giant buffers in the IMU classes that were
+  only needed during calibration, and was formerly a trade-off between resting
+  memory load versus efficient pipeline. This trade-off has been resolved in r1.
+
 
 _---J. Ian Lindsay_
