@@ -96,6 +96,7 @@ SOURCES_C    += src/system_stm32f7xx.c
 
 SOURCES_CPP   = src/Digitabulum/CPLDDriver/CPLDDriver.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp
+SOURCES_CPP  += src/Digitabulum/LSM9DS1/RegPtrMap.cpp
 SOURCES_CPP  += src/Digitabulum/ManuLegend/SensorFrame.cpp
 SOURCES_CPP  += src/Digitabulum/ManuLegend/Integrator.cpp
 SOURCES_CPP  += src/Digitabulum/ManuLegend/ManuManager.cpp

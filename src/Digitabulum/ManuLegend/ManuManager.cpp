@@ -43,11 +43,6 @@ Vector3<int16_t> reflection_mag;
 Vector3<int16_t> reflection_acc;
 Vector3<int16_t> reflection_gyr;
 
-ManuManager* ManuManager::INSTANCE = nullptr;
-
-ManuManager* ManuManager::getInstance() {
-  return INSTANCE;
-}
 
 /* ---------------------- */
 /*    Register memory     */
@@ -308,8 +303,6 @@ const char* ManuManager::chiralityString(Chirality x) {
 *******************************************************************************/
 ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") {
   _bus = (CPLDDriver*) bus;  // TODO: Make this cast unnecessary.
-  INSTANCE = this;
-
   reflection_mag.x = 1;
   reflection_mag.y = 1;
   reflection_mag.z = -1;
@@ -330,7 +323,7 @@ ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") 
   // Read 12 bytes...  (A and G vectors)
   // ...across 17 sensors...
   // ...from this base address...
-  _preformed_read_i.setParams(CPLD_REG_IMU_DM_P_I|0x80, 12, 17, LSM9DS1::regAddr(RegID::A_DATA_X)|0x80);
+  _preformed_read_i.setParams(CPLD_REG_IMU_DM_P_I|0x80, 12, 17, RegPtrMap::regAddr(RegID::A_DATA_X)|0x80);
   // ...and drop the results here.
   _preformed_read_i.buf      = (uint8_t*) _frame_buf_i;
   _preformed_read_i.buf_len  = 204;
@@ -343,7 +336,7 @@ ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") 
   // Read 6 bytes...
   // ...across 17 sensors...
   // ...from this base address...
-  _preformed_read_m.setParams(CPLD_REG_IMU_DM_P_M|0x80, 6, 17, LSM9DS1::regAddr(RegID::M_DATA_X)|0xC0);
+  _preformed_read_m.setParams(CPLD_REG_IMU_DM_P_M|0x80, 6, 17, RegPtrMap::regAddr(RegID::M_DATA_X)|0xC0);
   // ...and drop the results here.
   _preformed_read_m.buf      = (uint8_t*) _reg_block_m_data;
   _preformed_read_m.buf_len  = 102;
@@ -356,7 +349,7 @@ ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") 
   // Read 1 byte...
   // ...across 17 sensors...
   // ...from this base address...
-  _preformed_fifo_read.setParams(CPLD_REG_IMU_DM_P_I|0x80, 1, 17, LSM9DS1::regAddr(RegID::AG_FIFO_SRC)|0x80);
+  _preformed_fifo_read.setParams(CPLD_REG_IMU_DM_P_I|0x80, 1, 17, RegPtrMap::regAddr(RegID::AG_FIFO_SRC)|0x80);
   // ...and drop the results here.
   _preformed_fifo_read.buf      = (uint8_t*) __fifo_levels;
   _preformed_fifo_read.buf_len  = 17;
@@ -369,7 +362,7 @@ ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") 
   // Read 2 bytes...
   // ...across 17 sensors...
   // ...from this base address...
-  _preformed_read_temp.setParams(CPLD_REG_IMU_DM_P_I|0x80, 2, 17, LSM9DS1::regAddr(RegID::AG_DATA_TEMP)|0x80);
+  _preformed_read_temp.setParams(CPLD_REG_IMU_DM_P_I|0x80, 2, 17, RegPtrMap::regAddr(RegID::AG_DATA_TEMP)|0x80);
   // ...and drop the results here.
   _preformed_read_temp.buf      = (uint8_t*) __temperatures;
   _preformed_read_temp.buf_len  = 34;
@@ -405,7 +398,6 @@ ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") 
 
 /* This should probably never be called. */
 ManuManager::~ManuManager() {
-  while (active_legends.hasNext()) active_legends.remove();
 }
 
 
@@ -418,22 +410,6 @@ ManuManager::~ManuManager() {
 LSM9DS1* ManuManager::fetchIMU(uint8_t idx) {
   // TODO: We have no excuse for needing a modulus here. Too expensive. Never occured.
   return &imus[idx % LEGEND_DATASET_IIU_COUNT];
-}
-
-
-/*
-* Digitabulum places the following constraints on IMU operation:
-*   1) The entire sensor package must be operating at the same sample-rate.
-*   2) Sensors must be configured for multiple-access.
-*   3) AG FIFO enabled, and interrupt at high-water mark.
-*   4) Interrupt on magnetometer data ready.
-*
-* Constraints 1 might be lifted in the future at the cost of software complexity.
-*
-*
-*/
-int8_t ManuManager::init_iius() {
-  return 0;
 }
 
 
@@ -532,15 +508,6 @@ int8_t ManuManager::setLegend(ManuLegend* nu_legend) {
   return -1;
 }
 
-
-
-uint32_t ManuManager::totalSamples() {
-  uint32_t return_value = 0;
-  for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
-    return_value += integrator.totalSamples();
-  }
-  return return_value;
-}
 
 
 void ManuManager::enableAutoscale(SampleType s_type, bool enabled) {
@@ -1203,7 +1170,7 @@ void ManuManager::printTemperatures(StringBuilder *output) {
   for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
     switch (i) {
       case 1:   // Skip output for the IMU that doesn't exist at digit0.
-        output->concat("   <N/A>   ");
+        output->concat("  <N/A>  ");
         break;
       case 0:
         output->concat("-- 0(MC)    ");
@@ -1256,8 +1223,7 @@ void ManuManager::printDebug(StringBuilder *output) {
 
   if (getVerbosity() > 3) {
     output->concatf("-- __dataset location  %p\n", (uintptr_t) __dataset);
-    output->concatf("-- __IIU location      %p\n", (uintptr_t) imus);
-    output->concatf("-- INSTANCE location   %p\n--\n", (uintptr_t) INSTANCE);
+    output->concatf("-- __IIU location      %p\n--\n", (uintptr_t) imus);
   }
 
   float grav_consensus = 0.0;
@@ -1266,12 +1232,11 @@ void ManuManager::printDebug(StringBuilder *output) {
     //grav_consensus += imus[i].grav_scalar;
   }
   grav_consensus /= 17;
-  output->concatf("-- Gravity consensus:  %.4fg\n",  (double) grav_consensus);
-
-  output->concatf("-- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
+  output->concatf("-- Gravity consensus:  %.4fg\n", (double) grav_consensus);
+  //output->concatf("-- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
   output->concatf("-- Max quat proc       %u\n",    Integrator::max_quats_per_event);
   output->concatf("-- sample_count        %d\n",    sample_count);
-  output->concatf("-- Delta-t             %2.5f\n--\n", (double) *(_ptr_delta_t));
+  //output->concatf("-- Delta-t             %2.5f\n--\n", (double) *(_ptr_delta_t));
 
   if (getVerbosity() > 3) {
     output->concatf("-- MAX_DATASET_SIZE    %u\n",    (unsigned long) LEGEND_MGR_MAX_DATASET_SIZE);
@@ -1290,7 +1255,7 @@ void ManuManager::printDebug(StringBuilder *output) {
   output->concat("-- Intertial integration units:\n");
   for (uint8_t i = 0; i < 17; i++) {
     output->concatf("\tIIU %d\t ", i);
-    imus[i].dumpDevRegs(output);
+    //imus[i].dumpDevRegs(output);
     //output->concatf("--- noise_floor_mag     (%d, %d, %d)\n", noise_floor_mag[i].x, noise_floor_mag[i].y, noise_floor_mag[i].z);
     //output->concatf("--- noise_floor_acc     (%d, %d, %d)\n", noise_floor_acc[i].x, noise_floor_acc[i].y, noise_floor_acc[i].z);
     //output->concatf("--- noise_floor_gyr     (%d, %d, %d)\n", noise_floor_gyr[i].x, noise_floor_gyr[i].y, noise_floor_gyr[i].z);
@@ -1347,6 +1312,14 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           break;
         case 5:
           integrator.dumpPointers(&local_log);   // Show us the results, JIC
+          break;
+        case 6:
+          local_log.concatf("sizeof(ManuManager)      %u\n", sizeof(ManuManager));
+          local_log.concatf("sizeof(Integrator)       %u\n", sizeof(Integrator));
+          local_log.concatf("sizeof(SensorFrame)      %u\n", sizeof(SensorFrame));
+          local_log.concatf("sizeof(LSM9DS1)          %u\n", sizeof(LSM9DS1));
+          local_log.concatf("sizeof(_frame_buf_i)     %u\n", sizeof(_frame_buf_i));
+          local_log.concatf("sizeof(Vector3<float>)   %u\n", sizeof(Vector3<float>));
           break;
         case 9:
           printTemperatures(&local_log);   // Show us the temperatures.
@@ -1678,4 +1651,53 @@ int8_t ManuManager::read_fifo_depth() {
   op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
   op->setBuffer(&_reg_block_ident[0], LEGEND_DATASET_IIU_COUNT);
   return queue_io_job(op);
+}
+
+
+/*
+* Digitabulum places the following constraints on IMU operation:
+*   1) The entire sensor package must be operating at the same sample-rate.
+*   2) Sensors must be configured for multiple-access.
+*   3) AG FIFO enabled, and interrupt at high-water mark.
+*   4) Interrupt on magnetometer data ready.
+*
+* Constraints 1 might be lifted in the future at the cost of software complexity.
+*
+*
+*/
+int8_t ManuManager::init_iius() {
+  // The order we do this in matters.
+  int8_t ret = -1;
+  // Step 1: Enable SPI write, multiple-access and disable i2c.
+  SPIBusOp* op = _bus->new_op(BusOpcode::TX, this);
+  op->setParams((CPLD_REG_RANK_P_M | 0x40), 3, 9, RegPtrMap::regAddr(RegID::M_CTRL_REG3));  // 3 bytes per IMU.
+  op->setBuffer(&_reg_block_m_ctrl3_5[0], 9);
+  if (0 == queue_io_job(op)) {
+    op = _bus->new_op(BusOpcode::TX, this);
+    op->setParams((CPLD_REG_RANK_P_I | 0x00), 3, 9, RegPtrMap::regAddr(RegID::AG_CTRL_REG8));  // 3 bytes per IMU.
+    op->setBuffer(&_reg_block_ag_ctrl8_9_10[0], 9);
+    if (0 == queue_io_job(op)) {
+      op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams((CPLD_REG_RANK_P_I | 0x00), 2, 6, RegPtrMap::regAddr(RegID::AG_INT1_CTRL));  // 2 bytes per IMU.
+      op->setBuffer(&_reg_block_ag_interrupt_conf[0], 6);
+      if (0 == queue_io_job(op)) {
+        op = _bus->new_op(BusOpcode::TX, this);
+        op->setParams((CPLD_REG_RANK_P_M | 0x40), 1, 3, RegPtrMap::regAddr(RegID::M_INT_CFG));  // 1 byte per IMU.
+        op->setBuffer(&_reg_block_m_irq_cfg[0], 3);
+        if (0 == queue_io_job(op)) {
+          op = _bus->new_op(BusOpcode::TX, this);
+          op->setParams((CPLD_REG_RANK_P_M | 0x40), 1, 3, RegPtrMap::regAddr(RegID::M_CTRL_REG1));  // 1 byte per IMU.
+          op->setBuffer(&_reg_block_m_ctrl1[0], 3);
+          if (0 == queue_io_job(op)) {
+            op = _bus->new_op(BusOpcode::TX, this);
+            op->setParams((CPLD_REG_RANK_P_I | 0x00), 1, 3, RegPtrMap::regAddr(RegID::AG_FIFO_CTRL));  // 1 byte per IMU.
+            op->setBuffer(&_reg_block_fifo_ctrl[0], 3);
+            ret = queue_io_job(op);
+          }
+        }
+      }
+    }
+  }
+
+  return ret;
 }

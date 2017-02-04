@@ -259,6 +259,10 @@ class RegPtrMap {
     const uint8_t* regPtr(RegID) const;
 
     static RegID regIdFromAddr(uint8_t, uint8_t);
+    static const uint8_t regAddr(RegID);
+    static const uint8_t regWidth(RegID);
+    static const bool    regWritable(RegID);
+    static const char*   regNameString(RegID);
 
 
   private:
@@ -363,11 +367,6 @@ class LSM9DS1 {
     static IMUState getStateByIndex(uint8_t state_idx);
     static const char* getStateString(IMUState);
     static const char* getErrorString(IMUFault);
-    static const char* regNameString(RegID);
-
-    static const uint8_t regAddr(RegID);
-    static const uint8_t regWidth(RegID);
-    static const bool    regWritable(RegID);
 
 
     static const GainErrorMap error_map_mag[];

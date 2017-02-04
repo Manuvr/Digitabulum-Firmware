@@ -120,8 +120,6 @@ class ManuManager : public EventReceiver, public BusOpCallback {
 
     void dumpPreformedElements(StringBuilder*);
 
-    uint32_t totalSamples();
-
     inline ManuLegend* getActiveLegend() {    return operating_legend;    }
     int8_t setLegend(ManuLegend*);
 
@@ -129,8 +127,10 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     inline Chirality getChirality() {  return (Chirality) _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_MASK);  };
     inline bool chiralityKnown() {     return _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_KNOWN);  };
 
+    inline uint32_t totalSamples() {   return sample_count;   };
 
-    static ManuManager* getInstance();
+
+    //static ManuManager* getInstance();
 
     static const char* chiralityString(Chirality);
 
@@ -161,8 +161,6 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     ManuvrMsg event_legend_frame_ready;
     ManuvrMsg event_iiu_read;
     ManuvrMsg quat_crunch_event;
-
-    LinkedList<ManuLegend*> active_legends;  // We need to keep track of the legends we've released.
 
     int8_t send_map_event();
 

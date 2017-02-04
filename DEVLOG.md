@@ -248,3 +248,15 @@ Note on the big drop: Eliminated the giant buffers in the IMU classes that were
 
 
 _---J. Ian Lindsay_
+
+------
+
+### 2016.02.03:
+
+Tonight's mission will be to un-kink the SPI DMA handlers on the F7 and begin extending functionality WRT IMU handlers.
+
+    make DEBUG=1
+    279396    2936   19264  301596  Tonights baseline.
+
+
+_---J. Ian Lindsay_
