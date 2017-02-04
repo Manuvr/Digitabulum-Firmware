@@ -43,6 +43,12 @@ If that succeeded and your system has DFU support, you can then plug your glove 
     make program
 
 ----------------------
+####Building the emulator
+There is a separate makefile for the linux emulator.
+
+    make -f Makefile.emu DEBUG=1
+
+----------------------
 ####Building the CPLD
 Altera's software is required to build the CPLD. It is presently outside the scope of this document.
 

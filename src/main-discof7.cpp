@@ -302,7 +302,7 @@ int main() {
   //CPLDDriver _cpld;
   //kernel->subscribe(&_cpld);
 
-  //LegendManager _legend_manager(&_cpld);
+  //ManuManager _legend_manager(&_cpld);
   //kernel->subscribe(&_legend_manager);
 
   I2CAdapter i2c(1, 25, 24);

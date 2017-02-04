@@ -41,7 +41,7 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #define __DIGITABULUM_MANU_LEGEND_H_
 
 #include <Kernel.h>
-#include "../LSM9DS1/IIU.h"
+#include "Integrator.h"
 #include "../CPLDDriver/CPLDDriver.h"
 
 

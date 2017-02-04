@@ -19,15 +19,14 @@ limitations under the License.
 
 */
 
-#include "LSM9DSx.h"
-#include "IIU.h"
+#include "LSM9DS1.h"
 #include "../CPLDDriver/CPLDDriver.h"
+#include "../ManuLegend/ManuManager.h"
 
-extern unsigned long micros(void);
-extern volatile CPLDDriver* cpld;
+extern unsigned long micros();
 
 
-/****************************************************************************************************
+/*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
 *     /       |           |   /   \  |           ||  |  /      |   /       |
 *    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
@@ -35,30 +34,89 @@ extern volatile CPLDDriver* cpld;
 * .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
 * |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
 *
-* Static members and initializers should be located here. Initializers first, functions second.
-****************************************************************************************************/
+* Static members and initializers should be located here.
+*******************************************************************************/
 
-State _state_indicies[] = {
-  State::STAGE_0,   // Undiscovered. Maybe absent.
-  State::STAGE_1,   // Discovered, but not init'd.
-  State::STAGE_2,   // Discovered and initiallized, but unknown register values.
-  State::STAGE_3,   // Fully initialized and sync'd. Un-calibrated.
-  State::STAGE_4,   // Calibrated and idle.
-  State::STAGE_5,   // Calibrated and reading.
-  State::FAULT,     // Fault.
-  State::UNDEF      // Not a state-machine value. A return code to simplifiy error-checks.
+const IMUState _state_indicies[] = {
+  IMUState::STAGE_0,   // Undiscovered. Maybe absent.
+  IMUState::STAGE_1,   // Discovered, but not init'd.
+  IMUState::STAGE_2,   // Discovered and initiallized, but unknown register values.
+  IMUState::STAGE_3,   // Fully initialized and sync'd. Un-calibrated.
+  IMUState::STAGE_4,   // Calibrated and idle.
+  IMUState::STAGE_5,   // Calibrated and reading.
+  IMUState::FAULT,     // Fault.
+  IMUState::UNDEF      // Not a state-machine value. A return code to simplifiy error-checks.
 };
+
+
+/*
+* These are tables of frequencies versus periods (in micros). Lookup is faster
+*   than calculation, typically.
+*/
+const UpdateRate2Hertz LSM9DS1::rate_settings_i[MAXIMUM_RATE_INDEX_AG] = {
+  {0.0,  0.0f},
+  {14.9, (1/14.9f)},
+  {59.5, (1/59.5f)},
+  {119,  (1/119.0f)},
+  {238,  (1/238.0f)},
+  {476,  (1/476.0f)},
+  {952,  (1/952.0f)}
+};
+
+
+const UpdateRate2Hertz LSM9DS1::rate_settings_m[MAXIMUM_RATE_INDEX_MAG] = {
+  {0.625, (1/0.625f)},
+  {1.25,  (1/1.25f)},
+  {2.5,   (1/2.5f)},
+  {5.0,   (1/5.0f)},
+  {10.0,  (1/10.0f)},
+  {20.0,  (1/20.0f)},
+  {40.0,  (1/40.0f)},
+  {80.0,  (1/80.0f)}
+};
+
+
+/*
+* These are generic table of scales versus unit-per-bit for 16-bit types.
+* TODO: These need to be validated against actual datasheet values.
+*/
+const GainErrorMap LSM9DS1::error_map_acc[MAXIMUM_GAIN_INDEX_ACC] = {
+  {2,  (2/32768.0f),  0.000030},
+  {4,  (4/32768.0f),  0.000061},
+  {6,  (6/32768.0f),  0.000092},
+  {8,  (8/32768.0f),  0.000122},
+  {16, (16/32768.0f), 0.000244}
+};
+
+const GainErrorMap LSM9DS1::error_map_gyr[MAXIMUM_GAIN_INDEX_GYR] = {
+  {245,   (245/32768.0f),  0.00437 * 0.0174532777778},
+  {500,   (500/32768.0f),  0.00875 * 0.0174532777778},
+  {2000,  (2000/32768.0f), 0.03500 * 0.0174532777778}
+};
+
+const GainErrorMap LSM9DS1::error_map_mag[MAXIMUM_GAIN_INDEX_MAG] = {
+  {4,  (4/32768.0f),  0.000061},
+  {8,  (8/32768.0f),  0.000122},
+  {12, (12/32768.0f), 0.00032},
+  {16, (16/32768.0f), 0.000244}
+};
+
+
+const float LSM9DS1::max_range_vect_acc  = 16.0;
+const float LSM9DS1::max_range_vect_gyr  = 2000.0;
+const float LSM9DS1::max_range_vect_mag  = 16.0;
+
 
 /**
 * Return an enumerator given the state index.
 *
 * @return enum State
 */
-State LSM9DSx_Common::getStateByIndex(uint8_t state_idx) {
+IMUState LSM9DS1::getStateByIndex(uint8_t state_idx) {
   if (state_idx < sizeof(_state_indicies)) {
     return _state_indicies[state_idx];
   }
-  return State::UNDEF;
+  return IMUState::UNDEF;
 }
 
 
@@ -67,18 +125,19 @@ State LSM9DSx_Common::getStateByIndex(uint8_t state_idx) {
 *
 * @return const char*
 */
-const char* LSM9DSx_Common::getErrorString(uint8_t fault_code) {
+const char* LSM9DS1::getErrorString(IMUFault fault_code) {
   switch (fault_code) {
-    case IMU_ERROR_NO_ERROR               :  return "NO_ERROR";
-    case IMU_ERROR_WRONG_IDENTITY         :  return "WRONG_IDENTITY";
-    case IMU_ERROR_INVALID_PARAM_ID       :  return "INVALID_PARAM_ID";
-    case IMU_ERROR_NOT_CALIBRATED         :  return "NOT_CALIBRATED";
-    case IMU_ERROR_NOT_WRITABLE           :  return "NOT_WRITABLE";
-    case IMU_ERROR_DATA_EXHAUSTED         :  return "DATA_EXHAUSTED";
-    case IMU_ERROR_NOT_INITIALIZED        :  return "NOT_INITIALIZED";
-    case IMU_ERROR_BUS_INSERTION_FAILED   :  return "INSERTION_FAILED";
-    case IMU_ERROR_BUS_OPERATION_FAILED_R :  return "OPERATION_FAILED_R";
-    case IMU_ERROR_BUS_OPERATION_FAILED_W :  return "OPERATION_FAILED_W";
+    case IMUFault::NO_ERROR               :  return "NO_ERROR";
+    case IMUFault::WRONG_IDENTITY         :  return "WRONG_IDENTITY";
+    case IMUFault::INVALID_PARAM_ID       :  return "INVALID_PARAM_ID";
+    case IMUFault::NOT_CALIBRATED         :  return "NOT_CALIBRATED";
+    case IMUFault::NOT_WRITABLE           :  return "NOT_WRITABLE";
+    case IMUFault::DATA_EXHAUSTED         :  return "DATA_EXHAUSTED";
+    case IMUFault::NOT_INITIALIZED        :  return "NOT_INITIALIZED";
+    case IMUFault::BUS_INSERTION_FAILED   :  return "INSERTION_FAILED";
+    case IMUFault::BUS_OPERATION_FAILED_R :  return "OPERATION_FAILED_R";
+    case IMUFault::BUS_OPERATION_FAILED_W :  return "OPERATION_FAILED_W";
+    case IMUFault::REGISTER_UNDEFINED     :  return "REGISTER_UNDEFINED";
   }
   return "<UNKNOWN>";
 }
@@ -89,64 +148,51 @@ const char* LSM9DSx_Common::getErrorString(uint8_t fault_code) {
 *
 * @return const char*
 */
-const char* LSM9DSx_Common::getStateString(State state) {
+const char* LSM9DS1::getStateString(IMUState state) {
   switch (state) {
-    case State::UNDEF:    return "UNDEF";
-    case State::FAULT:    return "FAULT";
-    case State::STAGE_0:  return "STAGE_0";
-    case State::STAGE_1:  return "STAGE_1";
-    case State::STAGE_2:  return "STAGE_2";
-    case State::STAGE_3:  return "STAGE_3";
-    case State::STAGE_4:  return "STAGE_4";
-    case State::STAGE_5:  return "STAGE_5";
+    case IMUState::UNDEF:    return "UNDEF";
+    case IMUState::FAULT:    return "FAULT";
+    case IMUState::STAGE_0:  return "STAGE_0";
+    case IMUState::STAGE_1:  return "STAGE_1";
+    case IMUState::STAGE_2:  return "STAGE_2";
+    case IMUState::STAGE_3:  return "STAGE_3";
+    case IMUState::STAGE_4:  return "STAGE_4";
+    case IMUState::STAGE_5:  return "STAGE_5";
   }
   return "<UNKNOWN>";
 }
 
 
 
-/****************************************************************************************************
-*   _____
-*  / ____|
-* | |     ___  _ __ ___  _ __ ___   ___  _ __
-* | |    / _ \| '_ ` _ \| '_ ` _ \ / _ \| '_ \
-* | |___| (_) | | | | | | | | | | | (_) | | | |
-*  \_____\___/|_| |_| |_|_| |_| |_|\___/|_| |_|
-*
-* Low-level functions that the devices have in common...
-* This amounts to mostly register access.
-* Should probably avoid putting things here that directly pertain to sensor functionality.
-****************************************************************************************************/
-//TODO: I'll work back up to this once it isn't in the way.
-//LSM9DSx_Common::LSM9DSx_Common(uint8_t addr, uint8_t ident_idx, uint8_t idx_test_0, uint8_t idx_test_1, IIU* _integrator) :
-//  IDX_T0(idx_test_0), IDX_T1(idx_test_1), BUS_ADDR(addr), IDX_ID(ident_idx)
-//{
-//  integrator = _integrator;
-//  init();
-//}
+/*******************************************************************************
+*   ___ _              ___      _ _              _      _
+*  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
+* | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
+*  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
+*                                          |_|
+* Constructors/destructors, class initialization functions and so-forth...
+*******************************************************************************/
 
-LSM9DSx_Common::LSM9DSx_Common() {
+LSM9DS1::LSM9DS1(const RegPtrMap* pm) : _ptr_map(pm) {}
+
+
+LSM9DS1::~LSM9DS1() {
 }
 
 
 /**
 * Called to init the common boilerplate for this sensor.
 *
-* @return  IMU_ERROR_NO_ERROR or appropriate failure code.
+* @return  IMUFault::NO_ERROR or appropriate failure code.
 */
-int8_t LSM9DSx_Common::init() {
+IMUFault LSM9DS1::init() {
   // Force our states back to reset.
-  imu_state          = State::STAGE_0;
-  desired_state      = State::STAGE_0;
-  error_condition    = IMU_ERROR_NO_ERROR;
+  imu_state          = IMUState::STAGE_0;
+  desired_state      = IMUState::STAGE_0;
+  error_condition    = IMUFault::NO_ERROR;
 
   _imu_flags = 1;
-  sample_count       = 0;
-  time_stamp_base    = 0;
-  if (pending_samples) {
-    *pending_samples = 0;
-  }
-  return IMU_ERROR_NO_ERROR;
+  return IMUFault::NO_ERROR;
 }
 
 
@@ -154,17 +200,23 @@ int8_t LSM9DSx_Common::init() {
 * Calling this function will reset the common class elements to their
 *   default states.
 */
-void LSM9DSx_Common::reset() {
+void LSM9DS1::reset() {
+  scale_mag           = 0;
+  scale_acc           = 0;
+  scale_gyr           = 0;
+
+  update_rate_m       = 0;
+  update_rate_i       = 0;
+  discards_remain_m   = 0;
+  discards_total_m    = 0;
+  discards_remain_i   = 0;
+  discards_total_i    = 0;
+
   // TODO: Blow away our idea of what is in the registers.
   // mark_it_zero();
   init();
-}
-
-
-
-int8_t LSM9DSx_Common::identity_check() {
-  if (present()) return IMU_ERROR_NO_ERROR;
-  return readRegister(IDX_ID);
+  writeRegister(RegID::AG_CTRL_REG8, 0x01);
+  writeRegister(RegID::M_CTRL_REG2, 0x04);
 }
 
 
@@ -174,12 +226,77 @@ int8_t LSM9DSx_Common::identity_check() {
 *   should cause an automatic re-read of those same registers to check that the bytes
 *   were written.
 */
-void LSM9DSx_Common::write_test_bytes() {
-  io_test_val_0 = (uint8_t) randomInt() % 128;
-  io_test_val_1 = (uint8_t) randomInt() % 128;
+void LSM9DS1::write_test_bytes() {
+  io_test_val_0 = (uint8_t) randomInt();
+  io_test_val_1 = (uint8_t) randomInt();
 
-  writeRegister(IDX_T0, io_test_val_0);
-  writeRegister(IDX_T1, io_test_val_1);
+  writeRegister(RegID::G_INT_GEN_THS_Y, io_test_val_0);
+  writeRegister(RegID::M_OFFSET_Z,      io_test_val_1);
+}
+
+
+/*
+* For now:
+* 0: Off  (Implies other register activity)
+* 1: Lowest rate while still collecting data.
+* 2: Low-accuracy rate. ~100Hz from each FIFO'd sensor.
+* 3: Moderate rate.
+* 4: Highest rate supported.
+*/
+void LSM9DS1::setSampleRateProfile(uint8_t profile_idx) {
+  switch (profile_idx) {
+    case 0:
+      //delta_t = 0.0f;
+      set_sample_rate_acc(0);
+      set_sample_rate_gyr(0);
+      set_sample_rate_mag(0);
+      break;
+    case 1:
+      //delta_t = 0.0f;
+      set_sample_rate_acc(1);
+      set_sample_rate_gyr(1);
+      set_sample_rate_mag(1);
+      break;
+    case 2:
+      //delta_t = 0.0f;
+      set_sample_rate_acc(6);
+      set_sample_rate_gyr(2);
+      set_sample_rate_mag(5);
+      break;
+    case 3:
+      //delta_t = 0.0f;
+      set_sample_rate_acc(8);
+      set_sample_rate_gyr(3);
+      set_sample_rate_mag(5);
+      break;
+    case 4:
+      //delta_t = 0.0f;
+      set_sample_rate_acc(10);
+      set_sample_rate_gyr(4);
+      set_sample_rate_mag(6);
+      break;
+    default:
+      break;
+  }
+}
+
+
+/*
+*
+*/
+bool LSM9DS1::is_setup_completed() {
+  if (!present()) return false;
+
+  if (!initComplete()) {   // TODO: Redundant.
+    if (initPending()) {   // TODO: Redundant.
+      //if (reg_defs[RegID::M_CTRL_REG1].dirty) return false;
+      //if (reg_defs[RegID::M_CTRL_REG5].dirty) return false;
+      //if (reg_defs[RegID::G_INT_GEN_CFG].dirty) return false;
+      //if (reg_defs[RegID::AG_FIFO_CTRL].dirty) return false;
+    }
+  }
+
+  return true;
 }
 
 
@@ -189,18 +306,18 @@ void LSM9DSx_Common::write_test_bytes() {
 *
 * @return true if the test passes. False otherwise.
 */
-bool LSM9DSx_Common::integrity_check() {
+bool LSM9DS1::integrity_check() {
   if (!present()) return false;
 
   // If we are ain a state where we are reading the init values back, look for our test
   // values, and fail the init if they are not found.
-  if (io_test_val_0 == regValue(IDX_T0)) {
-    if (io_test_val_1 == regValue(IDX_T1)) {
+  if (io_test_val_0 == regValue(RegID::G_INT_GEN_THS_Y)) {
+    if (io_test_val_1 == regValue(RegID::M_OFFSET_Z)) {
         // We will call this successful init.
         if (getVerbosity() > 5) {
           StringBuilder local_log;
           local_log.concat("Successful readback!");
-          integrator->deposit_log(&local_log);
+          Kernel::log(&local_log);
         }
         // Rewrite valid values to those registers if necessary.
         //writeDirtyRegisters();
@@ -210,20 +327,20 @@ bool LSM9DSx_Common::integrity_check() {
     else {
       if (getVerbosity() > 2) {
         StringBuilder local_log;
-        local_log.concatf("%s failed integrity check (index 0x%02x). Found 0x%02x. Expected 0x%02x.\n", imu_type(), IDX_T1, regValue(IDX_T1), io_test_val_1);
-        integrator->deposit_log(&local_log);
+        local_log.concatf("Failed integrity check (M_OFFSET_Z). Found 0x%02x. Expected 0x%02x.\n", regValue(RegID::M_OFFSET_Z), io_test_val_1);
+        Kernel::log(&local_log);
       }
     }
   }
   else {
     if (getVerbosity() > 2) {
       StringBuilder local_log;
-      local_log.concatf("%s failed integrity check (index 0x%02x). Found 0x%02x. Expected 0x%02x.\n", imu_type(), IDX_T0, regValue(IDX_T0), io_test_val_0);
-      integrator->deposit_log(&local_log);
+      local_log.concatf("Failed integrity check (G_INT_GEN_THS_Y). Found 0x%02x. Expected 0x%02x.\n", regValue(RegID::G_INT_GEN_THS_Y), io_test_val_0);
+      Kernel::log(&local_log);
     }
   }
 
-  error_condition = IMU_ERROR_NOT_WRITABLE;
+  error_condition = IMUFault::NOT_WRITABLE;
   return false;
 }
 
@@ -237,12 +354,13 @@ bool LSM9DSx_Common::integrity_check() {
 * @param  uint8_t The new state desired by the firmware (the Legend).
 * @return non-zero on error.
 */
-int8_t LSM9DSx_Common::setDesiredState(State nu) {
-  if (present() && (nu < State::STAGE_1)) {
+IMUFault LSM9DS1::setDesiredState(IMUState nu) {
+  if (present() && (nu < IMUState::STAGE_1)) {
     // If we already know the sensor is there, why go back further than this?
-    local_log.concatf("%s Trying to move to a state lower than allowed.\n", imu_type());
+    StringBuilder local_log;
+    local_log.concat("Trying to move to a state lower than allowed.\n");
     Kernel::log(&local_log);
-    return -1;
+    return IMUFault::INVALID_PARAM_ID;
   }
 
   if (desired_state != nu) {
@@ -252,7 +370,8 @@ int8_t LSM9DSx_Common::setDesiredState(State nu) {
       //   bus operations pending.
       if (getVerbosity() > 2) {
         //local_log.concatf("%s tried to move to state %s while the IMU is off-balance (%s --> %s). Rejecting request.\n", imu_type(), getStateString(nu), getStateString(), getStateString(desired_state));
-        local_log.concatf("%s tried to move to state %s while the IMU is off-balance (%s --> %s). We will allow this for now.\n", imu_type(), getStateString(nu), getStateString(), getStateString(desired_state));
+        StringBuilder local_log;
+        local_log.concatf("Tried to move to state %s while the IMU is off-balance (%s --> %s). We will allow this for now.\n", getStateString(nu), getStateString(), getStateString(desired_state));
         Kernel::log(&local_log);
       }
       //return -2;
@@ -261,7 +380,7 @@ int8_t LSM9DSx_Common::setDesiredState(State nu) {
     desired_state = nu;
     step_state();
   }
-  return IMU_ERROR_NO_ERROR;
+  return IMUFault::NO_ERROR;
 }
 
 
@@ -270,70 +389,69 @@ int8_t LSM9DSx_Common::setDesiredState(State nu) {
 *
 * @return true if the state is stable, and the integrator should be notified.
 */
-bool LSM9DSx_Common::step_state() {
+bool LSM9DS1::step_state() {
   if (!desired_state_attained()) {
-    if (error_condition) {
+    if (IMUFault::NO_ERROR != error_condition) {
       // We shouldn't be changing states if there is an error condition.
       // Reset is the only way to exit the condition at present.
       if (getVerbosity() > 2) {
-        local_log.concatf("%s step_state() was called while we are in an error condition: %s\n", imu_type(), getErrorString());
+        StringBuilder local_log;
+        local_log.concatf("Step_state() was called while we are in an error condition: %s\n",  getErrorString());
         Kernel::log(&local_log);
       }
       return true;
     }
 
     switch (getState()) {
-      case State::STAGE_0:  // We think the IIU might be physicaly absent.
-        //reset(); ?
-        identity_check();
+      case IMUState::STAGE_0:  // We think the IMU might be physicaly absent.
         break;
 
-      case State::STAGE_1:  // We are sure the IMU is present, but we haven't done anything with it.
-        configure_sensor();
+      case IMUState::STAGE_1:  // We are sure the IMU is present, but we haven't done anything with it.
+        //configure_sensor();
         break;
 
-      case State::STAGE_2:  // Discovered and initiallized, but unknown register values.
+      case IMUState::STAGE_2:  // Discovered and initiallized, but unknown register values.
         if (is_setup_completed()) {
-          bulk_refresh();
+          //bulk_refresh();
         }
         else {
-          set_state(State::STAGE_1);
+          set_state(IMUState::STAGE_1);
           return true;
         }
         break;
 
-      case State::STAGE_3:  // Fully initialized and sync'd. Un-calibrated.
-        integrator->state_change_notice(this, State::STAGE_3, State::STAGE_3);  // TODO: Wrong.
+      case IMUState::STAGE_3:  // Fully initialized and sync'd. Un-calibrated.
         sb_next_write = 0;
-        readSensor();
-        break;                                                       // TODO: Stop skipping calibrate().
+        //readSensor();
+        // TODO: Stop skipping calibrate().
+        break;
 
-      case State::STAGE_4:  // Calibrated and idle.
-        if (desiredState() == State::STAGE_5) {
+      case IMUState::STAGE_4:  // Calibrated and idle.
+        if (desiredState() == IMUState::STAGE_5) {
           // Enable the chained reads, and start the process rolling.
-          readSensor();
+          //readSensor();
         }
         else {
           // Downgrading to init state 3 (recalibrate).
-          set_state(State::STAGE_3);
+          set_state(IMUState::STAGE_3);
           sb_next_write = 0;
-          readSensor();
+          //readSensor();
           return true;
         }
         break;
 
-      case State::STAGE_5:  // Calibrated and reading.
+      case IMUState::STAGE_5:  // Calibrated and reading.
         switch (desiredState()) {
-          case State::STAGE_4:   // Stop reads.
-            set_state(State::STAGE_4);
+          case IMUState::STAGE_4:   // Stop reads.
+            set_state(IMUState::STAGE_4);
             return false;   /// Note the slight break from convention... Careful...
 
-          case State::STAGE_3:  // Downgrading to init state 3 (recalibrate).
-            set_state(State::STAGE_3);
+          case IMUState::STAGE_3:  // Downgrading to init state 3 (recalibrate).
+            set_state(IMUState::STAGE_3);
             sb_next_write = 0;
-            readSensor();
+            //readSensor();
             return true;
-          case State::STAGE_5:  // Keep reading.
+          case IMUState::STAGE_5:  // Keep reading.
             return true;
           default:
             break;
@@ -349,249 +467,43 @@ bool LSM9DSx_Common::step_state() {
 }
 
 
-
-/**
-* Reads every register in the sensor with maximum bux efficiency.
-*
-* @return non-zero if there was a problem inserting the read job.
-*/
-int8_t LSM9DSx_Common::bulk_refresh() {
-  return (fire_preformed_bus_op(&full_register_refresh) ? IMU_ERROR_NO_ERROR : IMU_ERROR_BUS_INSERTION_FAILED);
-}
-
-
-int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t nu_val) {
-  if (regExists(reg_index) && regWritable(reg_index)) {
-    uint8_t* tmp = regPtr(reg_index);
-    *tmp = nu_val;
-    return writeRegister(reg_index, tmp, 1, false);
-  }
-  return IMU_ERROR_REGISTER_UNDEFINED;
-}
-int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t len) {     return writeRegister(reg_index, buf, len, (len > 1)); }
-int8_t LSM9DSx_Common::writeRegister(uint8_t reg_index, uint8_t *buf, uint8_t len, bool advance_regs) {
-  if (!regWritable(reg_index)) {
-    return IMU_ERROR_NOT_WRITABLE;
-  }
-  else {
-    uint8_t first_byte = reg_index;
-    if (advance_regs) {
-      // If we are advancing the register address,..
-      // ..does the device even have that many...
-      #ifdef __MANUVR_DEBUG
-      StringBuilder _log;
-      _log.concatf("SENSOR_ERROR_REG_NOT_DEFINED %d, LEN %d, idx = %d\n", BUS_ADDR, len, reg_index);
-      Kernel::log(&_log);
-      #endif
-      if (regExists(reg_index + len)) {  // TODO: Sketchy.... might be unnecessary.
-        return IMU_ERROR_REGISTER_UNDEFINED;
+IMUFault LSM9DS1::writeRegister(RegID idx, unsigned int nu_val) {
+  const uint8_t* ptr = _ptr_map->regPtr(idx);
+  if (ptr) {
+    if (RegPtrMap::regWritable(idx)) {
+      switch (RegPtrMap::regWidth(idx)) {
+        // These are the only two widths in the sensor.
+        case 2:
+          *((uint16_t*)ptr) = (uint16_t)nu_val;
+          break;
+        case 1:
+          *((uint8_t*) ptr) = (uint8_t) nu_val;
+          break;
+        default:
+          return IMUFault::NOT_WRITABLE;
       }
-      // ...and is the entire range writable? Fail if not.
-        for (uint8_t i = 0; i < len; i++) {
-          if (regWritable(reg_index)) {
-            #ifdef __MANUVR_DEBUG
-              StringBuilder _log;
-              _log.concatf("IMU_ERROR_NOT_WRITABLE %d\n", BUS_ADDR);
-              Kernel::log(&_log);
-            #endif
-            return IMU_ERROR_NOT_WRITABLE;
-          }
-        }
-        first_byte |= 0x40;
+      return IMUFault::NO_ERROR;
     }
-
-    SPIBusOp* op = ((CPLDDriver*)cpld)->new_op();
-    op->devRegisterAdvance(advance_regs);
-    op->set_opcode(BusOpcode::TX);
-    op->buf             = buf;
-    op->buf_len         = len;
-    op->callback        = (BusOpCallback*) this;
-    op->setParams(BUS_ADDR, len, 1, first_byte);
-
-    if (profile()) {
-      op->profile(true);
-    }
-    ((CPLDDriver*)cpld)->queue_io_job(op);
+    return IMUFault::NOT_WRITABLE;
   }
-  return IMU_ERROR_NO_ERROR;
-}
-
-
-/*
-* Behavior:
-* -----------------------------------------------------------------------
-* reg_index     Device access will begin at the specified register index.
-* buf           Pointer where read data will be deposited.
-* len           How much data will we read?
-* advance_regs  Are we reading x bytes from sequential registers?
-*                 If false, will read the (reg_index) (len) times.
-* (return)      IMU error code.
-*
-* Override rules:
-* -----------------------------------------------------------------------
-* 2 parameters   Length of one is assumed.
-* 3 parameters   Lengths of more than 1 will be assumed to draw
-*                  from sequential registers in the device.
-*/
-int8_t LSM9DSx_Common::readRegister(uint8_t reg_index, uint8_t *buf, uint8_t len) {   return readRegister(reg_index, buf, len, (len > 1)); }
-int8_t LSM9DSx_Common::readRegister(uint8_t reg_index, uint8_t *buf, uint8_t len, bool advance_regs) {
-  uint8_t first_byte = reg_index | 0x80;
-  if (advance_regs) {
-    // Mark all the registers covered by the range as being unread.
-    int temp_len = len;
-    int temp_idx = reg_index;
-    while ((temp_len < len) && regExists(temp_idx)) {
-      temp_len++;
-      temp_idx++;
-    }
-    first_byte |= 0x40;
-  }
-
-  SPIBusOp* op = ((CPLDDriver*)cpld)->new_op();
-  op->devRegisterAdvance(advance_regs);
-  op->set_opcode(BusOpcode::RX);
-  op->buf             = buf;
-  op->buf_len         = len;
-  op->callback        = (BusOpCallback*) this;
-  op->setParams(BUS_ADDR|0x80, len, 1, first_byte);
-
-  if (profile()) {
-    op->profile(true);
-  }
-  ((CPLDDriver*)cpld)->queue_io_job(op);
-
-  return IMU_ERROR_NO_ERROR;
-}
-
-
-int8_t LSM9DSx_Common::readRegister(uint8_t idx) {
-  return readRegister(idx, regPtr(idx), 1, false);
+  return IMUFault::REGISTER_UNDEFINED;
 }
 
 
 /*
 * Convenience fxn. Returns 0 if register index is out of bounds.
+* TODO: ProbaBLY belongs in RegPtrMap class. Can it be made const?
 */
-unsigned int LSM9DSx_Common::regValue(uint8_t idx) {
-  switch (idx) {
-    case 2:
-    case 4:
-      return 0;
-    case 1:
-    default:
-      return 1;
-  }
-}
-
-
-/*
-*
-*/
-bool LSM9DSx_Common::regWritable(uint8_t idx) {
-  switch (idx) {
-    case 2:
-    case 4:
-      return true;
-    case 1:
-    default:
-      return false;
-  }
-}
-
-
-/*
-* Convenience fxn. Returns 0 if register index is out of bounds.
-*/
-bool LSM9DSx_Common::regExists(uint8_t idx) {
-  switch (idx) {
-    case 2:
-    case 4:
-      return true;
-    case 1:
-    default:
-      return false;
-  }
-}
-
-
-/*
-*
-*/
-uint8_t* LSM9DSx_Common::regPtr(uint8_t idx) {
-  switch (idx) {
-    case 2:
-    case 4:
-      return &io_test_val_0;
-    case 1:
-    default:
-      return &io_test_val_1;
-  }
-}
-
-
-/**
-* This is the means by which the class sends one of its pre-formed bus operations to the bus
-*   manager.
-*
-* @param  A pointer to the pre-formed bus operation that the class wishes dispatched.
-* @return true on success. False on failure.
-*/
-bool LSM9DSx_Common::fire_preformed_bus_op(SPIBusOp* op) {
-  if (reset_preformed_queue_item(op) ) {
-    if (profile()) profiler_read_begin = micros();
-
-    if (0 != ((CPLDDriver*)cpld)->queue_io_job(op)) {
-      return false;
+unsigned int LSM9DS1::regValue(RegID idx) {
+  const uint8_t* ptr = _ptr_map->regPtr(idx);
+  if (ptr) {
+    switch (RegPtrMap::regWidth(idx)) {
+      // These are the only two widths in the sensor.
+      case 2: return *((uint16_t*)ptr);
+      case 1: return *((uint8_t*) ptr);
     }
   }
-  return true;
-}
-
-
-
-
-
-/**
-* We need to control for multiple-insertion conditions at this point. The passed-in
-*   parameter is the bus operation that is about to be inserted into the bus queue.
-* If we see that the bus op is not IDLE (IE, it is already waiting to be run, or is BEING run),
-*   we return false without changing the operation. Otherwise, we reset it and give the "GO"
-*   for insertion.
-*
-* @return true on success. False on failure.
-*/
-bool LSM9DSx_Common::reset_preformed_queue_item(SPIBusOp* op) {
-  switch (op->get_state()) {
-    case XferState::IDLE:
-      break;
-    case XferState::INITIATE:
-    case XferState::ADDR:
-    case XferState::TX_WAIT:
-    case XferState::RX_WAIT:
-    case XferState::STOP:
-    case XferState::COMPLETE:
-    default:   // Functions like a primitive semaphore.
-      if (getVerbosity() > 2) {
-        local_log.concatf("reset_preformed_queue_item() failed because it had state %s\n", op->getStateString());
-        op->printDebug(&local_log);
-        Kernel::log(&local_log);
-      }
-      return false;
-  }
-
-  op->set_state(XferState::IDLE);
-  return true;
-}
-
-
-
-/**
-* NULL-checked upstream.
-*/
-void LSM9DSx_Common::dumpPreformedElements(StringBuilder *output) {
-  output->concat("--- Full refresh\n");
-  full_register_refresh.printDebug(output);
-  output->concat("\n");
+  return 0;
 }
 
 
@@ -600,44 +512,395 @@ void LSM9DSx_Common::dumpPreformedElements(StringBuilder *output) {
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
-void LSM9DSx_Common::dumpDevRegs(StringBuilder *output) {
-  output->concatf("\n-------------------------------------------------------\n--- IMU 0x%04x  %s ==>  %s \n-------------------------------------------------------\n", BUS_ADDR, getStateString(imu_state), (desired_state_attained() ? "STABLE" : getStateString(desired_state)));
-  output->concatf("--- sample_count        %d\n--- pending_samples     %d\n\n", sample_count, *pending_samples);
+void LSM9DS1::dumpDevRegs(StringBuilder *output) {
+  output->concatf("\n-------------------------------------------------------\n--- IMU  %s ==> %s \n-------------------------------------------------------\n", getStateString(imu_state), (desired_state_attained() ? "STABLE" : getStateString(desired_state)));
+  output->concatf("--- pending_samples     %d\n\n", regValue(RegID::AG_FIFO_SRC) & 0x1F);
   if (getVerbosity() > 1) {
     output->concatf("--- calibration smpls   %d\n", sb_next_write);
     output->concatf("--- Base filter param   %d\n", base_filter_param);
   }
   output->concatf("--- Error condition     %s\n---\n", getErrorString(error_condition));
+
+  if (getVerbosity() > 1) {
+    output->concatf("--- update_rate_m       %3.0f Hz\n", (double) rate_settings_m[update_rate_m].hertz);
+    output->concatf("--- update_rate_i       %3.0f Hz\n", (double) rate_settings_i[update_rate_i].hertz);
+  }
+  if (getVerbosity() > 2) {
+    output->concatf("--- scale_mag           +/-%d gauss\n", error_map_mag[scale_mag].scale);
+    output->concatf("--- scale_acc           +/-%d m/s\n", error_map_acc[scale_acc].scale);
+    output->concatf("--- scale_gyr           +/-%d deg/s\n", error_map_gyr[scale_gyr].scale);
+    output->concatf("--- autoscale_mag       %s\n", (autoscale_mag() ? "yes" : "no"));
+    output->concatf("--- autoscale_acc       %s\n", (autoscale_acc() ? "yes" : "no"));
+    output->concatf("--- autoscale_gyr       %s\n", (autoscale_gyr() ? "yes" : "no"));
+  }
 }
+
+
+/**
+* When a bus operation completes, it is passed back to its issuing class.
+*
+* @param  idx  The register that completed a read.
+* @return IMUFault code.
+*/
+IMUFault LSM9DS1::proc_register_read(RegID idx) {
+  IMUFault return_value = IMUFault::NO_ERROR;
+  unsigned int value = regValue(idx);
+  StringBuilder local_log;
+
+  /* READ Case-offs */
+  if (initPending()) {
+    if (RegID::M_OFFSET_Z == idx) {
+      set_state(IMUState::STAGE_2);
+      step_state();
+    }
+  }
+
+  switch (idx) {
+    case RegID::M_WHO_AM_I:
+      if (0x3D == value) {
+        if (!present()) {
+          set_state(IMUState::STAGE_1);
+          step_state();
+        }
+      }
+      else {
+        // We lost the IMU, perhaps...
+        set_state(IMUState::STAGE_0);
+        error_condition = IMUFault::WRONG_IDENTITY;
+      }
+      break;
+    case RegID::AG_WHO_AM_I:
+      if (0x68 == value) {
+        if (!present()) {
+          set_state(IMUState::STAGE_1);
+          step_state();
+        }
+        else {
+          // Nominal condition. Maybe we bulk-read? Nice to have verification....
+        }
+      }
+      else {
+        // We lost the IMU, perhaps...
+        set_state(IMUState::STAGE_0);
+        error_condition = IMUFault::WRONG_IDENTITY;
+      }
+      break;
+
+    case RegID::M_CTRL_REG1:
+      if (((value >> 2) & 0x07) < MAXIMUM_RATE_INDEX_MAG)  update_rate_m = ((value >> 6) & 0x03)+1;
+      break;
+    case RegID::M_CTRL_REG2:
+      if (((value >> 4) & 0x03) < MAXIMUM_GAIN_INDEX_MAG)  scale_mag = (value >> 5) & 0x03;
+      break;
+    case RegID::M_CTRL_REG3:
+      power_to_mag(value & 0x02);
+      break;
+    case RegID::M_CTRL_REG4:
+      break;
+    case RegID::M_CTRL_REG5:
+      break;
+    case RegID::G_INT_GEN_SRC:     /* The gyroscope interrupt status register. */
+      if (value & 0x01) {                 // An interrupt was seen because we crossed a threshold we set.
+        if (value & 0xE0) {               // Did we exceed our set threshold?
+          if (autoscale_gyr()) request_rescale_gyr(scale_gyr+1);
+        }
+        else if (value & 0x1C) {          // Did we drop below our set threshold?
+          if (autoscale_gyr()) request_rescale_gyr(scale_gyr-1);
+        }
+      }
+      else if (value & 0x02) {            // We had a range overflow. Means we need to autoscale...
+        if (autoscale_gyr()) request_rescale_gyr(scale_gyr+1);
+      }
+      break;
+    // TODO: We need to implement these....
+    case RegID::AG_STATUS_REG:      /* Status of the gyr data registers on the sensor. */
+      break;
+
+    case RegID::AG_STATUS_REG_ALT:
+      if (getVerbosity() > 5) {
+        local_log.concatf("\t RegID::AG_STATUS_REG_ALT: 0x%02x\n", (uint8_t) value);
+      }
+      break;
+    case RegID::AG_FIFO_CTRL:
+      if (getVerbosity() > 5) {
+        local_log.concatf("\t AG_FIFO Control: 0x%02x\n", (uint8_t) value);
+      }
+      break;
+    case RegID::G_CTRL_REG1:
+      if (getVerbosity() > 5) {
+        local_log.concatf("\t RegID::G_CTRL_REG1: 0x%02x\n", (uint8_t) value);
+      }
+      if ((value >> 4) < MAXIMUM_RATE_INDEX_AG)  update_rate_i = (value >> 4) & 0x0F;
+      break;
+    case RegID::AG_CTRL_REG4:
+      if (getVerbosity() > 5) {
+        local_log.concatf("\t RegID::AG_CTRL_REG4: 0x%02x\n", (uint8_t) value);
+      }
+      if (((value >> 3) & 0x07) < MAXIMUM_GAIN_INDEX_ACC)  scale_acc = (value >> 3) & 0x07;
+      base_filter_param = (value >> 6) & 0x03;
+      break;
+    case RegID::A_CTRL_REG6:
+      if (getVerbosity() > 5) {
+        local_log.concatf("\t RegID::A_CTRL_REG6: 0x%02x\n", (uint8_t) value);
+      }
+      if (((value >> 3) & 0x03) < MAXIMUM_GAIN_INDEX_GYR)  scale_gyr = (value >> 3) & 0x03;
+      break;
+    case RegID::AG_FIFO_SRC:     /* The FIFO status register. */
+      break;
+
+    default:
+      if (getVerbosity() > 5) {
+        local_log.concatf("\t LSM9DS1 read an unimplemented register: %s.\n", RegPtrMap::regNameString(idx));
+      }
+      break;
+  }
+
+  if (local_log.length() > 0) Kernel::log(&local_log);
+  return return_value;
+}
+
+
+/**
+* When a bus operation completes, it is passed back to its issuing class.
+*
+* @param  idx  The register that completed a write.
+* @return IMUFault code.
+*/
+IMUFault LSM9DS1::proc_register_write(RegID idx) {
+  IMUFault return_value = IMUFault::NO_ERROR;
+  unsigned int value = regValue(idx);
+
+  /* WRITE Case-offs */
+  switch (idx) {
+    case RegID::M_CTRL_REG1:
+      if (((value >> 2) & 0x07) < MAXIMUM_RATE_INDEX_MAG)  update_rate_m = ((value >> 6) & 0x03)+1;
+      break;
+
+    case RegID::M_CTRL_REG2:
+      if (((value >> 4) & 0x03) < MAXIMUM_GAIN_INDEX_MAG)  scale_mag = (value >> 5) & 0x03;
+      if (value & 0x04) { // Did we write here to reset?
+        if (!present()) {
+          //integrator->init();
+        }
+      }
+      break;
+
+    case RegID::M_CTRL_REG3:
+      power_to_mag(value & 0x02);
+      break;
+
+    case RegID::M_CTRL_REG5:
+      break;
+
+    default:
+      if (getVerbosity() > 5) {
+        StringBuilder local_log;
+        local_log.concatf("\t LSM9DS1 wrote an unimplemented register: %s.\n", RegPtrMap::regNameString(idx));
+        Kernel::log(&local_log);
+      }
+      break;
+  }
+
+  return return_value;
+}
+
 
 
 /*******************************************************************************
-* ___     _       _                      These members are mandatory overrides
-*  |   / / \ o   | \  _     o  _  _      for implementing I/O callbacks. They
-* _|_ /  \_/ o   |_/ (/_ \/ | (_ (/_     are also implemented by Adapters.
+*  __  __                        _                       _
+* |  \/  |                      | |                     | |
+* | \  / | __ _  __ _ _ __   ___| |_ ___  _ __ ___   ___| |_ ___ _ __
+* | |\/| |/ _` |/ _` | '_ \ / _ \ __/ _ \| '_ ` _ \ / _ \ __/ _ \ '__|
+* | |  | | (_| | (_| | | | |  __/ || (_) | | | | | |  __/ ||  __/ |
+* |_|  |_|\__,_|\__, |_| |_|\___|\__\___/|_| |_| |_|\___|\__\___|_|
+*                __/ |
+*               |___/
 *******************************************************************************/
 
 /**
-* Called prior to the given bus operation beginning.
-* Returning 0 will allow the operation to continue.
-* Returning anything else will fail the operation with IO_RECALL.
-*   Operations failed this way will have their callbacks invoked as normal.
-*
-* @param  _op  The bus operation that was completed.
-* @return 0 to run the op, or non-zero to cancel it.
+* Call to rescale the sensor.
 */
-int8_t LSM9DSx_Common::io_op_callahead(BusOp* _op) {
-  return 0;
+IMUFault LSM9DS1::request_rescale_mag(uint8_t nu_scale_idx) {
+  if (nu_scale_idx < MAXIMUM_GAIN_INDEX_MAG) {
+    if (scale_mag != nu_scale_idx) {
+      if (getVerbosity() > 2) Kernel::log("request_rescale_mag():\tRescaling magnetometer.\n");
+      return writeRegister(RegID::M_CTRL_REG2, (nu_scale_idx << 5));
+    }
+    return IMUFault::NO_ERROR;
+  }
+  return IMUFault::INVALID_PARAM_ID;
 }
 
 
-/*
-* Ultimately, all bus access this class does passes to this function as its last-stop
-*   before becoming folded into the SPI bus queue.
+/**
+* Call to alter sample rate.
 */
-int8_t LSM9DSx_Common::queue_io_job(BusOp* _op) {
-  if (nullptr == _op) return -1;   // This should never happen.
-  SPIBusOp* op = (SPIBusOp*) _op;
-  op->callback = (BusOpCallback*) this;         // Notify us of the results.
-  return ((CPLDDriver*)cpld)->queue_io_job(op);     // Pass it to the CPLD for bus access.
+IMUFault LSM9DS1::set_sample_rate_mag(uint8_t nu_srate_idx) {
+  if (nu_srate_idx < MAXIMUM_RATE_INDEX_MAG) {
+    if (update_rate_m != nu_srate_idx) {
+      uint8_t temp8 = regValue(RegID::M_CTRL_REG1);
+      if (0 == nu_srate_idx) {
+        // Power the sensor down.
+      }
+      else {
+        if (getVerbosity() > 2) Kernel::log("set_sample_rate_mag():\tMagnetometer sample rate change.\n");
+        temp8 =  (temp8 & ~0x1C) | ((nu_srate_idx-1) << 2);
+      }
+      update_rate_m = nu_srate_idx;
+      return writeRegister(RegID::M_CTRL_REG1, temp8);
+    }
+    return IMUFault::NO_ERROR;
+  }
+  return IMUFault::INVALID_PARAM_ID;
+}
+
+
+
+/*
+* The purpose here is to figure out why one of our interrupt lines is going off.
+* Because this sensor is so awesome, it has configurable interrupt sources that
+*   are bindable to two separate pins.
+* Since everything is async, we will process this task in stages. We need to
+*   keep in mind that there will be two other devices sharing IRQ lines with
+*   this one, and we need to give them a chance to read their registers before
+*   their interrupts go stale.
+// TODO: staggered priorities if separate bus access? Might help find the cause faster...
+
+* Stage 0) Read all relevant registers. Return.
+* Stage 1) Process register data and service interrupt if applicable in io_op_callback().
+*
+* Return codes:
+*   Success, with IRQ service
+*   Success, no IRQ service
+*   Failure
+*/
+IMUFault LSM9DS1::irq_2() {
+  if (getVerbosity() > 3) Kernel::log("LSM9DS1::irq_2()\n");
+  return IMUFault::NO_ERROR;
+}
+
+IMUFault LSM9DS1::irq_1() {
+  if (getVerbosity() > 3) Kernel::log("LSM9DS1::irq_1()\n");
+  return IMUFault::NO_ERROR;
+}
+
+IMUFault LSM9DS1::irq_drdy() {
+  if (getVerbosity() > 3) Kernel::log("LSM9DS1::irq_drdy()\n");
+  return IMUFault::NO_ERROR;
+}
+
+IMUFault LSM9DS1::irq_m() {
+  if (getVerbosity() > 3) Kernel::log("LSM9DS1::irq_m()\n");
+  return IMUFault::NO_ERROR;
+}
+
+
+
+/*******************************************************************************
+*                       _                               _
+*     /\               | |                             | |
+*    /  \   ___ ___ ___| | ___ _ __ ___  _ __ ___   ___| |_ ___ _ __
+*   / /\ \ / __/ __/ _ \ |/ _ \ '__/ _ \| '_ ` _ \ / _ \ __/ _ \ '__|
+*  / ____ \ (_| (_|  __/ |  __/ | | (_) | | | | | |  __/ ||  __/ |
+* /_/    \_\___\___\___|_|\___|_|  \___/|_| |_| |_|\___|\__\___|_|
+*
+*******************************************************************************/
+
+
+/**
+* Call to rescale the sensor.
+*/
+IMUFault LSM9DS1::request_rescale_acc(uint8_t nu_scale_idx) {
+  if (nu_scale_idx < MAXIMUM_GAIN_INDEX_ACC) {
+    if (scale_acc != nu_scale_idx) {
+      uint8_t temp8 = regValue(RegID::A_CTRL_REG6);
+      temp8 =  (temp8 & 0xE7) | (nu_scale_idx << 3);
+      return writeRegister(RegID::A_CTRL_REG6, temp8);
+    }
+    return IMUFault::NO_ERROR;
+  }
+  return IMUFault::INVALID_PARAM_ID;
+}
+
+
+/**
+* Call to alter sample rate.
+*/
+IMUFault LSM9DS1::set_sample_rate_acc(uint8_t nu_srate_idx) {
+  if (nu_srate_idx < MAXIMUM_RATE_INDEX_AG) {
+    if (update_rate_i != nu_srate_idx) {
+      uint8_t temp8 = regValue(RegID::A_CTRL_REG6);
+      temp8 =  (temp8 & 0x1F) | (nu_srate_idx << 5);
+      update_rate_i = nu_srate_idx;
+      return writeRegister(RegID::A_CTRL_REG6, temp8);
+    }
+    return IMUFault::NO_ERROR;
+  }
+  return IMUFault::INVALID_PARAM_ID;
+}
+
+
+// Call to change the bandwidth of the AA filter.
+IMUFault LSM9DS1::set_base_filter_param_acc(uint8_t nu_bw_idx) {
+  if ((nu_bw_idx < 4) && (nu_bw_idx != base_filter_param)) {
+    base_filter_param = nu_bw_idx;
+    uint8_t temp8 = regValue(RegID::A_CTRL_REG6);
+    temp8 =  (temp8 & 0xFC) | (nu_bw_idx & 0x03);
+    return writeRegister(RegID::A_CTRL_REG6, temp8);
+  }
+  return IMUFault::INVALID_PARAM_ID;
+}
+
+
+
+/*******************************************************************************
+*   _____
+*  / ____|
+* | |  __ _   _ _ __ ___
+* | | |_ | | | | '__/ _ \
+* | |__| | |_| | | | (_) |
+*  \_____|\__, |_|  \___/
+*          __/ |
+*         |___/
+*******************************************************************************/
+
+/**
+* Call to rescale the sensor.
+*/
+IMUFault LSM9DS1::request_rescale_gyr(uint8_t nu_scale_idx) {
+  if (nu_scale_idx < MAXIMUM_GAIN_INDEX_ACC) {
+    if (scale_acc != nu_scale_idx) {
+      if (getVerbosity() > 2) Kernel::log("request_rescale_gyr():\tRescaling Gyro.\n");
+      uint8_t temp8 = regValue(RegID::G_CTRL_REG1);
+      temp8 =  (temp8 & 0xE7) | (nu_scale_idx << 3);
+      return writeRegister(RegID::G_CTRL_REG1, temp8);
+    }
+    return IMUFault::NO_ERROR;
+  }
+  return IMUFault::INVALID_PARAM_ID;
+}
+
+
+/**
+* Call to alter sample rate.
+*/
+IMUFault LSM9DS1::set_sample_rate_gyr(uint8_t nu_srate_idx) {
+  if (nu_srate_idx < MAXIMUM_RATE_INDEX_AG) {
+    if (update_rate_i != nu_srate_idx) {
+      if (getVerbosity() > 2) Kernel::log("set_sample_rate_gyr():\t\n");
+      uint8_t temp8 = regValue(RegID::G_CTRL_REG1);
+      temp8 =  (temp8 & 0x1F) | (nu_srate_idx << 5);
+      //update_rate_gyr = nu_srate_idx;
+      return writeRegister(RegID::G_CTRL_REG1, temp8);
+    }
+    return IMUFault::NO_ERROR;
+  }
+  return IMUFault::INVALID_PARAM_ID;
+}
+
+
+
+// Call to change the cutoff of the gyro's base filter.
+IMUFault LSM9DS1::set_base_filter_param_gyr(uint8_t nu_bw_idx) {
+  return IMUFault::INVALID_PARAM_ID;
 }

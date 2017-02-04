@@ -204,3 +204,81 @@ Took a few weeks to do hardware stuff. Digit and metacarpals flex units arrive a
     286988    2728   43144  332860   Tonight's baseline.
     287892    2728   43184  333804   Expanded IRQ work.
     287284    2728   43152  333164   Fixed SPI1 for the moment.
+
+_---J. Ian Lindsay_
+
+------
+
+### 2016.01.18:
+
+Bus is fixed (enough). DMA handler still broken on every-other transfer. Code needs to migrate inward from the IMU driver classes, toward ManuManager, and ManuManager need to undergo mitosis to isolate the hardware layer from data concerns. The CPLD in r1 allows us to (in principle) run a single class instance for all the sensor handling that operates on aggregates, rather than r0's one-instance-per-physical-device.
+
+IIU's connective role is vestigial, and its data processing role is no longer confined to individual IMUs. Given that it already has an established relationship with ManuManager, it will (for now) be retained as the front-end of the data pipeline (as it was before), but will be fed by ManuManager, rather than the existing driver classes.
+
+    make DEBUG=1
+    287284    2728   43152  333164   Tonight's baseline.
+
+_---J. Ian Lindsay_
+
+------
+
+### 2016.01.28:
+
+    make DEBUG=1
+    287284    2728   43152  333164   Former baseline.
+    280156    2656   30376  313188   Compiles again following memory re-org.
+    280092    2656   30336  313084   Consolidated acc and gyr read ops into one.
+    280132    2880   30336  313348   Removed stop-gap mem space. Cleaned up some TODO.
+    280228    2880   30272  313380   Cutting fields that don't make sense anymore.
+    280220    2880   30272  313372   More field remeval ahead of migrations to Integrator.
+    280220    2880   29832  312932   Integrator is starting to not care about sample type.
+    279836    2880   20040  302756   The big drop. Note below.
+    279564    2880   19880  302324   More removal of redundant members.
+    279500    2880   19264  301644   Removal of value cache in IMU classes.
+    278964    2880   19264  301108   Removal of dead code.
+
+Lots of things are broken. There are a few stubs, and much dead code. IMU pointer
+maps are contained within a const class and array'd out as non-static members.
+
+Debriding and suturing...
+
+Note on the big drop: Eliminated the giant buffers in the IMU classes that were
+  only needed during calibration, and was formerly a trade-off between resting
+  memory load versus efficient pipeline. This trade-off has been resolved in r1.
+
+
+_---J. Ian Lindsay_
+
+------
+
+### 2016.02.03:
+
+Tonight's mission will be to un-kink the SPI DMA handlers on the F7 and begin extending functionality WRT IMU handlers.
+
+    make DEBUG=1
+    279396    2936   19264  301596  Tonights baseline.
+
+Relocated the static register stuff into its own source file.
+
+    279332    2936   18992  301260  Removed crappy logging buffer.
+    280292    2936   19464  302692  Finished RegPtrMap.
+    280332    2936   19464  302732  Adding debugging aids ahead of firmware flash. Must test ranked access.
+
+First firmware flash in about two weeks. DMA problem appears fixed-enough to run my ranked-access tests, which, despite not being full-coverage, are passing without issue.
+
+This was a bonus feature that cost very little to add to the CPLD. But now that I know it validates, I can write commands to IMUs by rank, in parallel. Different values can be written to each rank, but all members of a rank must have the same value.
+
+This will solve some data-concurrency issues that were present in r0 (frame-skew), as well as save an enormous amount of bandwidth for write operations that meet the qualifying criteria. Initializing the IMUs can now be done with 57 bytes on the bus versus the 211 it would take without ranked writes.
+
+This also marked the final validation of IMU/CPLD address correspondence. Theory is confirmed to have produced a matching implementation.
+
+OshPark PCBs for r2's debug harness got in yesterday. The connectors arrive today, so I will be hot-plating.
+
+
+    280652    2936   19464  303052  Ahead of another cruft removal wave in IMU class.
+    280652    2936   19328  302916  Ahead of alignment changes.
+    280652    2936   19264  302852  IMU alignment changes.
+    280716    2936   19192  302844  Improving RegPtrMap along the way.
+    280788    2936   19056  302780  More cruft removal from IMU class.
+
+_---J. Ian Lindsay_

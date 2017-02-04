@@ -1,7 +1,7 @@
 /*
-File:   target_linux.cpp
+File:   target_esp32.cpp
 Author: J. Ian Lindsay
-Date:   2016.12.04
+Date:   2017.02.04
 
 Copyright 2016 Manuvr, Inc
 
@@ -20,10 +20,8 @@ limitations under the License.
 
 These are platform-specific functions for dealing with Digitabulum's sensor
   package.
-This file contains functions for running firmware under linux. This should only
-  be construed as being for firmware emulation's sake. Ports to linux-based SBCs
-  should make a board-specific file that mirrors this one, rather than torturing
-  the pre-processor in this file.
+This file contains functions for running firmware on the ESP32. We will be
+  assuming the WROOM32 configuration.
 
 TODO: Until something smarter is done, it is assumed that this file will be
   #include'd by pre-processor choice in CPLDDriver.cpp.
@@ -140,12 +138,10 @@ XferFault SPIBusOp::begin() {
   if ((opcode == BusOpcode::TX) || (2 < _param_len)) {
     set_state((0 == buf_len) ? XferState::TX_WAIT : XferState::ADDR);
     //__HAL_SPI_ENABLE_IT(&hspi1, (SPI_IT_TXE));
-    //HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*) &STATIC_SINK, _param_len);
   }
   else {
     set_state((0 == buf_len) ? XferState::RX_WAIT : XferState::ADDR);
     // We can afford to read two bytes into the same space as our xfer_params...
-    //HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t*) xfer_params, (uint8_t*)(xfer_params + 2), 2);
   }
 
   return XferFault::NONE;
@@ -179,15 +175,11 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
     case XferState::QUEUED:
     case XferState::ADDR:
       if (buf_len > 0) {
-        // We have 4 bytes to throw away from the params transfer.
-        //uint16_t tmpreg = 0;
         if (opcode == BusOpcode::TX) {
           set_state(XferState::TX_WAIT);
-          //HAL_SPI_Transmit_IT(&hspi1, (uint8_t*) buf, buf_len);
         }
         else {
           set_state(XferState::RX_WAIT);
-          //HAL_SPI_Receive_DMA(&hspi1, buf, buf_len);
         }
       }
       return 0;

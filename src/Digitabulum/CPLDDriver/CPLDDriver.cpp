@@ -96,7 +96,12 @@ void cpld_wakeup_isr(){
   #include "target_stm32f746.cpp"
 #elif defined(__MANUVR_LINUX)
   #include "target_linux.cpp"
+#elif defined(__MANUVR_ESP32)
+  #include "target_esp32.cpp"
 #endif
+
+
+
 
 /*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
@@ -184,6 +189,21 @@ const char* CPLDDriver::digitStateToString(DigitState x) {
       break;
   }
   return "UNKNOWN";
+}
+
+
+// NO ERROR CHECKING! Don't call this with an argument >79.
+bool irq_is_presently_high(uint8_t bit) {
+  const uint8_t bit_offset  = bit & 0x07;  // Cheaper than modulus 8.
+  const uint8_t byte_offset = bit >> 3;    // Cheaper than div by 8.
+  return ((_irq_data_ptr[byte_offset] & (0x01 << bit_offset)) != 0);
+}
+
+// NO ERROR CHECKING! Don't call this with an argument >79.
+bool irq_demands_service(uint8_t bit) {
+  const uint8_t bit_offset  = bit & 0x07;  // Cheaper than modulus 8.
+  const uint8_t byte_offset = bit >> 3;    // Cheaper than div by 8.
+  return ((_irq_accum[byte_offset] & (0x01 << bit_offset)) != 0);
 }
 
 
@@ -810,38 +830,54 @@ uint8_t CPLDDriver::getCPLDVersion() {
 }
 
 
+/**
+* Used by the ManuManager to easily check for a digit's IRQ validity.
+* Pulls directly from the most-recent valid IRQ buffer, so this check is fairly
+*   direct, and not reliant on IMU access.
+*
+* @param  x  The DigitPort (Not Anatomical!) in question.
+* @return DigitState
+*/
 DigitState CPLDDriver::digitState(DigitPort x) {
   if (digitExists(x)) {
-    // Digit asleep or not?
+    // TODO: Digit asleep or not?
     return DigitState::AWAKE;
   }
   return DigitState::ABSENT;
 }
 
 
+/**
+* Used by the ManuManager to easily check for a digit's IRQ validity.
+* Pulls directly from the most-recent valid IRQ buffer, so this check is fairly
+*   direct, and not reliant on IMU access.
+*
+* @return True if the IRQ data confirms a digit.
+*/
+bool CPLDDriver::digitExists(DigitPort x) {
+  switch (x) {
+    case DigitPort::MC:
+    case DigitPort::PORT_1:
+    case DigitPort::PORT_2:
+    case DigitPort::PORT_3:
+    case DigitPort::PORT_4:
+    case DigitPort::PORT_5:
+      // MC_PRESENT is bit 68 in the IRQ stream, other digits follow in numerical order.
+      return irq_is_presently_high(68 + (uint8_t) x);
+    default:
+      return false;
+  }
+};
+
+
 /*******************************************************************************
 * This is where IMU-related functions live.                                    *
 *******************************************************************************/
 
-// NO ERROR CHECKING! Don't call this with an argument >79.
-bool irq_is_presently_high(uint8_t bit) {
-  const uint8_t bit_offset  = bit & 0x07;  // Cheaper than modulus 8.
-  const uint8_t byte_offset = bit >> 3;    // Cheaper than div by 8.
-  return ((_irq_data_ptr[byte_offset] & (0x01 << bit_offset)) != 0);
-}
-
-// NO ERROR CHECKING! Don't call this with an argument >79.
-bool irq_demands_service(uint8_t bit) {
-  const uint8_t bit_offset  = bit & 0x07;  // Cheaper than modulus 8.
-  const uint8_t byte_offset = bit >> 3;    // Cheaper than div by 8.
-  return ((_irq_accum[byte_offset] & (0x01 << bit_offset)) != 0);
-}
-
-
 /**
 *
 *
-* @return The index of the IMU with an outstanding IRQ.
+* @return the minimum number of signals outstanding, or -1 on error.
 */
 int8_t CPLDDriver::iiu_group_irq() {
   int8_t return_value = 0;
@@ -898,32 +934,16 @@ int8_t CPLDDriver::iiu_group_irq() {
     }
     _irq_accum[9] &= reset_bits;  // Clear serviced bits.
   }
+
+  for (int i = 0; i < 9; i++) {
+    if (_irq_accum[i]) {
+      return_value++;
+    }
+  }
+
   flushLocalLog();
   return return_value;
 }
-
-
-/**
-* Used by the ManuManager to easily check for a digit's IRQ validity.
-* Pulls directly from the most-recent valid IRQ buffer, so this check is fairly
-*   direct, and not reliant on IMU access.
-*
-* @return True if the IRQ data confirms a digit.
-*/
-bool CPLDDriver::digitExists(DigitPort x) {
-  switch (x) {
-    case DigitPort::MC:
-    case DigitPort::PORT_1:
-    case DigitPort::PORT_2:
-    case DigitPort::PORT_3:
-    case DigitPort::PORT_4:
-    case DigitPort::PORT_5:
-      // MC_PRESENT is bit 68 in the IRQ stream.
-      return irq_is_presently_high(68 + (uint8_t) x);
-    default:
-      return false;
-  }
-};
 
 
 

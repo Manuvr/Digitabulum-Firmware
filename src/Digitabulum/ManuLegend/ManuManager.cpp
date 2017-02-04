@@ -1,5 +1,5 @@
 /*
-File:   LegendManager.cpp
+File:   ManuManager.cpp
 Author: J. Ian Lindsay
 Date:   2014.07.01
 
@@ -33,214 +33,240 @@ limitations under the License.
 *
 * Static members and initializers should be located here.
 *******************************************************************************/
-IIU LegendManager::iius[LEGEND_DATASET_IIU_COUNT];  // TODO: Shouldn't be static.
-InertialMeasurement LegendManager::__prealloc[PREALLOCATED_IIU_MEASUREMENTS];
-// TODO: These shouldn't be static.
 
-SPIBusOp LegendManager::_preformed_read_a;
-SPIBusOp LegendManager::_preformed_read_g;
-SPIBusOp LegendManager::_preformed_read_m;
-SPIBusOp LegendManager::_preformed_read_temp;
-SPIBusOp LegendManager::_preformed_fifo_read;
+SPIBusOp ManuManager::_preformed_read_i;
+SPIBusOp ManuManager::_preformed_read_m;
+SPIBusOp ManuManager::_preformed_read_temp;
+SPIBusOp ManuManager::_preformed_fifo_read;
 
-Vector3<int16_t> LegendManager::reflection_mag;
-Vector3<int16_t> LegendManager::reflection_acc;
-Vector3<int16_t> LegendManager::reflection_gyr;
+Vector3<int16_t> reflection_mag;
+Vector3<int16_t> reflection_acc;
+Vector3<int16_t> reflection_gyr;
 
-LegendManager* LegendManager::INSTANCE = nullptr;
 
-LegendManager* LegendManager::getInstance() {
-  return INSTANCE;
-}
+/*------------------------------------------------------------------------------
+  Register memory
+  These are giant strips of DMA-capable memory that are used for raw frame
+    reads from the sensor package. */
 
-uint32_t LegendManager::measurement_heap_instantiated = 0;
-uint32_t LegendManager::measurement_heap_freed        = 0;
+/****** First, the special-cases.... ******************************************/
 
-uint32_t LegendManager::prealloc_starves = 0;
+/* Inertial data,
+    x2 because Acc+Gyr
+    x2 because double-buffered
+    x3 because 3-space vectors (of 16-bit ints)
+    X17 because that many sensors
+    = 204 int16's
+    = 408 bytes
+*/
+int16_t _frame_buf_i[2 * 2 * 3 * LEGEND_DATASET_IIU_COUNT];
 
-PriorityQueue<InertialMeasurement*>  LegendManager::preallocd_measurements;
+/* Temperature data. Single buffered. */
+// TODO: Might consolidate temp into inertial. Sensor and CPLD allow for it.
+int16_t __temperatures[LEGEND_DATASET_IIU_COUNT];
 
-uint32_t LegendManager::minimum_prealloc_level = PREALLOCATED_IIU_MEASUREMENTS;
+/* Magnetometer data registers. Single buffered. */
+int16_t _reg_block_m_data[3 * LEGEND_DATASET_IIU_COUNT];
 
-/* ---------------------- */
-/*    Register memory     */
-/*    Experiment #2       */
-/* ---------------------- */
-// TODO: These ranges of memory are not accessed outside of this translation unit.
-//         they probably should not be class members.
-/* These are giant strips of DMA-capable memory that are used for raw frame
-     reads from the sensor package. Twice what we need for double-buffering. */
+/* Identity registers for both sensor aspects. */
+uint8_t _reg_block_ident[2 * LEGEND_DATASET_IIU_COUNT];
 
-//Vector3<int16_t> LegendManager::__frame_buf_a[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
-//Vector3<int16_t> LegendManager::__frame_buf_g[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
-//
-///* More large stretches of DMA memory. These are for IIU register definitions.
-//     Registers laid out this way cannot be multiply-accessed as more than single bytes
-//     by their respective IIU classes because the memory is not contiguous. */
-//int16_t LegendManager::__temperatures[LEGEND_DATASET_IIU_COUNT];
-//
-//uint8_t LegendManager::__ag_status[LEGEND_DATASET_IIU_COUNT];
-//
-///* Identity registers for both sensor aspects. */
-//uint8_t LegendManager::_imu_ids[2 * LEGEND_DATASET_IIU_COUNT];
-//
-//// TODO: Implement things below this line....
-///* Accelerometer interrupt registers. */
-//uint8_t LegendManager::_reg_block_ag_0[LEGEND_DATASET_IIU_COUNT * AG_BASE_0_SIZE];
-///* Gyroscope control registers. */
-//uint8_t LegendManager::_reg_block_ag_1[LEGEND_DATASET_IIU_COUNT * AG_BASE_1_SIZE];
-///* Accelerometer control registers. */
-//uint8_t LegendManager::_reg_block_ag_2[LEGEND_DATASET_IIU_COUNT * AG_BASE_2_SIZE];
-//
-///* Inertial aspect control registers. */
-//uint8_t _reg_block_ag_ctrl1[LEGEND_DATASET_IIU_COUNT];
-//uint8_t _reg_block_ag_ctrl2[LEGEND_DATASET_IIU_COUNT];
-//uint8_t _reg_block_ag_ctrl3[LEGEND_DATASET_IIU_COUNT];
-//uint8_t _reg_block_ag_ctrl4[LEGEND_DATASET_IIU_COUNT];
-//uint8_t _reg_block_ag_ctrl5[LEGEND_DATASET_IIU_COUNT];
-//uint8_t _reg_block_ag_ctrl6[LEGEND_DATASET_IIU_COUNT];
-//uint8_t _reg_block_ag_ctrl7[LEGEND_DATASET_IIU_COUNT];
-//uint8_t _reg_block_ag_ctrl8[LEGEND_DATASET_IIU_COUNT];
-//uint8_t _reg_block_ag_ctrl9[LEGEND_DATASET_IIU_COUNT];
-//uint8_t _reg_block_ag_ctrl10[LEGEND_DATASET_IIU_COUNT];
-//
-///* Accelerometer IRQ status registers. */
-//uint8_t _reg_block_a_irq_src[LEGEND_DATASET_IIU_COUNT];
-//
-//
-//
-///* Inertial aspect status registers. */
-//uint8_t _reg_block_ag_status[LEGEND_DATASET_IIU_COUNT];
-//
-///* Inertial aspect FIFO control and status registers. */
-//uint8_t __fifo_ctrl[LEGEND_DATASET_IIU_COUNT];
-//uint8_t __fifo_levels[LEGEND_DATASET_IIU_COUNT];
-//
-///* Gyroscope interrupt config and source registers. */
-//uint8_t _reg_block_g_irq_cfg[LEGEND_DATASET_IIU_COUNT];
-//
-///* Gyroscope threshold registers. Will be interpreted as 15-bit unsigned. */
-//Vector3<int16_t> _reg_block_g_thresholds[LEGEND_DATASET_IIU_COUNT];
-//
-//
-///* Magnetometer offset registers. */
-//Vector3<int16_t> _reg_block_m_offsets[LEGEND_DATASET_IIU_COUNT];
-//
-///* Magnetometer data registers. */
-//Vector3<int16_t> _reg_block_m_data[LEGEND_DATASET_IIU_COUNT];
-//
-///* Magnetometer control registers. */
-//uint8_t _reg_block_m_ctrl1[LEGEND_DATASET_IIU_COUNT];
-//uint8_t _reg_block_m_ctrl2[LEGEND_DATASET_IIU_COUNT];
-//uint8_t _reg_block_m_ctrl3[LEGEND_DATASET_IIU_COUNT];
-//uint8_t _reg_block_m_ctrl4[LEGEND_DATASET_IIU_COUNT];
-//uint8_t _reg_block_m_ctrl5[LEGEND_DATASET_IIU_COUNT];
-//
-///* Magnetometer status registers. */
-//uint8_t  _reg_block_m_status[LEGEND_DATASET_IIU_COUNT];
-//
-///* Magnetometer interrupt config and source registers. */
-//uint8_t _reg_block_m_irq_cfg[LEGEND_DATASET_IIU_COUNT];
-//uint8_t _reg_block_m_irq_src[LEGEND_DATASET_IIU_COUNT];
-//
-///* Magnetometer threshold registers. Will be interpreted as 15-bit unsigned. */
-//uint16_t _reg_block_m_thresholds[LEGEND_DATASET_IIU_COUNT];
-///* ---------------------- */
-///* End of register memory */
-///* ---------------------- */
 
-/* ---------------------- */
-/*    Register memory     */
-/*    Experiment #1       */
-/* ---------------------- */
-/* Identity registers. */
-uint8_t LegendManager::_imu_ids[2 * LEGEND_DATASET_IIU_COUNT];
+/****** Ranked-access registers below this line. ******************************/
+/*
+  The following sensor registers are managed entirely within ManuManager. For
+    those registers that we treat as write-only, and homogenous, we will use the
+    ranked-access mode in the CPLD.
+  TODO: Until the DMA apparatus is smart enough to know what we're doing,
+    we actually need to define all 6 bytes. We should be able to loop the
+    memory-side of the transaction if we want all bytes to be the same.
+*/
 
-Vector3<int16_t> LegendManager::__frame_buf_a[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
-Vector3<int16_t> LegendManager::__frame_buf_g[2 * LEGEND_DATASET_IIU_COUNT];  // Inertial data
-Vector3<int16_t> _reg_block_m_data[2 * LEGEND_DATASET_IIU_COUNT];  // Mag data
+/*
+  AG_INT1_CTRL and AG_INT2_CTRL (Rank-access)
+  3 ranks times 2 byte-wide registers.
+  INT1 will service re-scaling, and INT2 will service the FIFO.
+  TODO: Might merge this into a single register 16-bits wide?
+*/
+uint8_t _reg_block_ag_interrupt_conf[6] = {0xC0, 0x08, 0xC0, 0x08, 0xC0, 0x08};
 
-int16_t LegendManager::__temperatures[LEGEND_DATASET_IIU_COUNT];
-uint8_t LegendManager::__fifo_ctrl[LEGEND_DATASET_IIU_COUNT];
-uint8_t LegendManager::__fifo_levels[LEGEND_DATASET_IIU_COUNT];  // The FIFO levels.
-uint8_t LegendManager::__ag_status[LEGEND_DATASET_IIU_COUNT];
+/*
+  G_ORIENT_CFG(Rank-access)
+  3 ranks times 1 byte-wide register.
+  Great pains were taken to enforce a common orientation in hardware.
+*/
+uint8_t _reg_block_orient_cfg[3] = {0x00, 0x00, 0x00};
 
-// TODO: Implement things below this line....
-/* Accelerometer interrupt registers. */
-uint8_t LegendManager::_reg_block_ag_0[LEGEND_DATASET_IIU_COUNT * AG_BASE_0_SIZE];
-/* Gyroscope control registers. */
-uint8_t LegendManager::_reg_block_ag_1[LEGEND_DATASET_IIU_COUNT * AG_BASE_1_SIZE];
-/* Accelerometer control registers. */
-uint8_t LegendManager::_reg_block_ag_2[LEGEND_DATASET_IIU_COUNT * AG_BASE_2_SIZE];
-/* Gyroscope interrupt registers. */
-uint8_t LegendManager::_reg_block_ag_3[LEGEND_DATASET_IIU_COUNT * AG_BASE_3_SIZE];
+/*
+  Deals with IRQ latching, axis enablement, and 4D. (Rank-access)
+  3 ranks times 2 byte-wide registers.
+  ctrl4: All gyro axis enabled, IRQ not latched, no 4D.
+  ctrl5: No acc decimation, all axis enabled.
+  TODO: Might merge this into a single register 16-bits wide?
+*/
+uint8_t _reg_block_ag_ctrl4_5[6] = {0x38, 0x38, 0x38, 0x38, 0x38, 0x38};
+
+/*
+  IRQ pin control, FIFO and bus config, self-test. (Rank-access)
+  3 ranks times 3 byte-wide registers.
+  ctrl8:  BDU=1, active-hi push-pull IRQ pins, 4-wire SPI w/auto-inc, LE.
+  ctrl9:  No temp in FIFO, i2c, or DRDY. FIFO on and unrestricted.
+  ctrl10: Self-tests disabled.
+*/
+uint8_t _reg_block_ag_ctrl8_9_10[9] = {
+  0x44, 0x06, 0x00,
+  0x44, 0x06, 0x00,
+  0x44, 0x06, 0x00
+};
+
+/*
+  Inertial aspect FIFO control registers. (Rank-access)
+  3 ranks times 1 byte-wide register.
+  FIFO in continuous mode, with a threshold of 4.
+*/
+uint8_t _reg_block_fifo_ctrl[3] = {0xC4, 0xC4, 0xC4};
+
+/*
+  Magnetometer interrupt config registers. (Rank-access)
+  3 ranks times 1 byte-wide register.
+  Non-latched, active-high IRQ enabled for all axes.
+*/
+uint8_t _reg_block_m_irq_cfg[3] = {0xE5, 0xE5, 0xE5};
+
+/*
+  Magnetometer ctrl1 registers. (Rank-access)
+  3 ranks times 1 byte-wide register.
+  ctrl1: Temp-compensated, med performance, 5hz, no self-test
+*/
+uint8_t _reg_block_m_ctrl1[3] = {0xAC, 0xAC, 0xAC};
+
+/*
+  Magnetometer ctrl3-5 registers. (Rank-access)
+  3 ranks times 3 byte-wide registers.
+  ctrl3:  No i2c, no LP, SPI I/O, continuous conversion.
+  ctrl4:  Little-endian, med performance
+  ctrl5:  Block-update.
+*/
+uint8_t _reg_block_m_ctrl3_5[9] = {
+  0x84, 0x04, 0x40,
+  0x84, 0x04, 0x40,
+  0x84, 0x04, 0x40
+};
+
+/*
+  Accelerometer IRQ status registers. (Discrete-access)
+  Handled by: ManuManager
+*/
+uint8_t _reg_block_a_irq_src[LEGEND_DATASET_IIU_COUNT];
+
+/*
+  Gyroscope interrupt config, source, and threshold registers. (Discrete-access)
+  Handled by: ManuManager
+*/
+uint8_t _reg_block_g_irq_src[LEGEND_DATASET_IIU_COUNT];
+uint8_t _reg_block_g_irq_cfg[LEGEND_DATASET_IIU_COUNT];
+
+
+
+/****** Individually-packed registers below this line. ************************/
+
+/* Activity thresholds and durations. */
+uint8_t _reg_block_ag_activity[2 * LEGEND_DATASET_IIU_COUNT];
+
+/* Accelerometer interrupt settings, thresholds, G_REFERENCE */
+uint8_t _reg_block_ag_0[6 * LEGEND_DATASET_IIU_COUNT];
+
+/* Inertial aspect control registers. */
+uint8_t _reg_block_ag_ctrl1_3[3 * LEGEND_DATASET_IIU_COUNT];
+uint8_t _reg_block_ag_ctrl6_7[2 * LEGEND_DATASET_IIU_COUNT];
+
+
+/* Inertial aspect status registers. */
+uint8_t _reg_block_ag_status[LEGEND_DATASET_IIU_COUNT];
+
+/* Inertial aspect FIFO status registers. */
+uint8_t __fifo_levels[LEGEND_DATASET_IIU_COUNT];
+
+
+int16_t _reg_block_g_thresholds[3 * LEGEND_DATASET_IIU_COUNT];
+uint8_t _reg_block_g_irq_dur[LEGEND_DATASET_IIU_COUNT];
+
 
 /* Magnetometer offset registers. */
-uint8_t _reg_block_m_0[LEGEND_DATASET_IIU_COUNT * M_BASE_0_SIZE];
+int16_t _reg_block_m_offsets[3 * LEGEND_DATASET_IIU_COUNT];
+
 /* Magnetometer control registers. */
-uint8_t _reg_block_m_1[LEGEND_DATASET_IIU_COUNT * M_BASE_1_SIZE];
-/* Magnetometer interrupt registers. */
-uint8_t _reg_block_m_2[LEGEND_DATASET_IIU_COUNT * M_BASE_2_SIZE];
-/* ---------------------- */
-/* End of register memory */
-/* ---------------------- */
+uint8_t _reg_block_m_ctrl2[LEGEND_DATASET_IIU_COUNT];
+
+/* Magnetometer status registers. */
+uint8_t  _reg_block_m_status[LEGEND_DATASET_IIU_COUNT];
+
+/* Magnetometer interrupt source registers. */
+uint8_t _reg_block_m_irq_src[LEGEND_DATASET_IIU_COUNT];
+
+/* Magnetometer threshold registers. Will be interpreted as 15-bit unsigned. */
+uint16_t _reg_block_m_thresholds[LEGEND_DATASET_IIU_COUNT];
+
+/* End of register memory
+------------------------------------------------------------------------------*/
 
 
+/* These are the beginnings of a ring-buffer for whole inertial frames. */
+const int16_t* _frames_i[] = {
+  &_frame_buf_i[0],
+  &_frame_buf_i[102]
+};
 
-InertialMeasurement* LegendManager::fetchMeasurement(uint8_t type_code) {
-  InertialMeasurement* return_value;
-
-  if (0 == preallocd_measurements.size()) {
-    // We have exhausted our preallocated measurements. Note it.
-    prealloc_starves++;
-    return_value = new InertialMeasurement();
-    measurement_heap_instantiated++;
-    minimum_prealloc_level = 0;
-  }
-  else {
-    return_value = preallocd_measurements.dequeue();
-    minimum_prealloc_level = strict_min((uint32_t) preallocd_measurements.size(), minimum_prealloc_level);
-  }
-  return return_value;
-}
+/* This is used to define the noise floors for the data. */
+Vector3<int16_t> noise_floor_mag[LEGEND_DATASET_IIU_COUNT];
+Vector3<int16_t> noise_floor_acc[LEGEND_DATASET_IIU_COUNT];
+Vector3<int16_t> noise_floor_gyr[LEGEND_DATASET_IIU_COUNT];
 
 
-/**
-* Reclaims the given InertialMeasurement so its memory can be re-used.
-*
-* At present, our criteria for preallocation is if the pointer address passed in
-*   falls within the range of our __prealloc array. I see nothing "non-portable"
-*   about this, it doesn't require a flag or class member, and it is fast to check.
-* However, this strategy only works for types that are never used in DMA or code
-*   execution on the STM32F4. It may work for other architectures (PIC32, x86?).
-*   I also feel like it ought to be somewhat slower than a flag or member, but not
-*   by such an amount that the memory savings are not worth the CPU trade-off.
-* Consider writing all new cyclical queues with preallocated members to use this
-*   strategy. Also, consider converting the most time-critical types to this strategy
-*   up until we hit the boundaries of the STM32 CCM.
-*                                 ---J. Ian Lindsay   Mon Apr 13 10:51:54 MST 2015
-*
-* @param InertialMeasurement* obj is the pointer to the object to be reclaimed.
-*/
-void LegendManager::reclaimMeasurement(InertialMeasurement* obj) {
-  uintptr_t obj_addr = ((uintptr_t) obj);
-  uintptr_t pre_min  = ((uintptr_t) INSTANCE->__prealloc);
-  uintptr_t pre_max  = pre_min + (sizeof(InertialMeasurement) * PREALLOCATED_IIU_MEASUREMENTS);
-
-  if ((obj_addr < pre_max) && (obj_addr >= pre_min)) {
-    // If we are in this block, it means obj was preallocated. wipe and reclaim it.
-    obj->wipe();
-    preallocd_measurements.insert(obj);
-  }
-  else {
-    // We were created because our prealloc was starved. we are therefore a transient heap object.
-    measurement_heap_freed++;
-    delete obj;
-  }
-}
+// TODO: ThereMustBeABetterWay.jpg
+const RegPtrMap _reg_ptrs[] = {
+  RegPtrMap(0 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(1 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(2 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(3 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(4 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(5 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(6 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(7 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(8 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(9 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(10, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(11, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(12, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(13, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(14, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(15, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(16, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0])
+};
 
 
-const char* LegendManager::chiralityString(Chirality x) {
+LSM9DS1 imus[LEGEND_DATASET_IIU_COUNT] = {
+  LSM9DS1(&_reg_ptrs[0 ]),
+  LSM9DS1(&_reg_ptrs[1 ]),
+  LSM9DS1(&_reg_ptrs[2 ]),
+  LSM9DS1(&_reg_ptrs[3 ]),
+  LSM9DS1(&_reg_ptrs[4 ]),
+  LSM9DS1(&_reg_ptrs[5 ]),
+  LSM9DS1(&_reg_ptrs[6 ]),
+  LSM9DS1(&_reg_ptrs[7 ]),
+  LSM9DS1(&_reg_ptrs[8 ]),
+  LSM9DS1(&_reg_ptrs[9 ]),
+  LSM9DS1(&_reg_ptrs[10]),
+  LSM9DS1(&_reg_ptrs[11]),
+  LSM9DS1(&_reg_ptrs[12]),
+  LSM9DS1(&_reg_ptrs[13]),
+  LSM9DS1(&_reg_ptrs[14]),
+  LSM9DS1(&_reg_ptrs[15]),
+  LSM9DS1(&_reg_ptrs[16])
+};
+
+
+const char* ManuManager::chiralityString(Chirality x) {
   switch (x) {
     case Chirality::RIGHT:  return "RIGHT";
     case Chirality::LEFT:   return "LEFT";
@@ -260,47 +286,25 @@ const char* LegendManager::chiralityString(Chirality x) {
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
-LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") {
+ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") {
   _bus = (CPLDDriver*) bus;  // TODO: Make this cast unnecessary.
-  INSTANCE = this;
 
-  reflection_mag.x = 1;
-  reflection_mag.y = 1;
-  reflection_mag.z = -1;
+  reflection_gyr(1, 1, 1);
+  reflection_acc(1, 1, 1);
+  reflection_mag(1, 1, 1);
 
-  reflection_acc.x = -1;
-  reflection_acc.y = 1;
-  reflection_acc.z = -1;
-
-  reflection_gyr.x = -1;
-  reflection_gyr.y = 1;
-  reflection_gyr.z = -1;
-
-  _preformed_read_a.shouldReap(false);
-  _preformed_read_a.devRegisterAdvance(true);
-  _preformed_read_a.set_opcode(BusOpcode::RX);
-  _preformed_read_a.callback = (BusOpCallback*) this;
+  _preformed_read_i.shouldReap(false);
+  _preformed_read_i.devRegisterAdvance(true);
+  _preformed_read_i.set_opcode(BusOpcode::RX);
+  _preformed_read_i.callback = (BusOpCallback*) this;
   // Starting from the first accelerometer...
-  // Read 6 bytes...
+  // Read 12 bytes...  (A and G vectors)
   // ...across 17 sensors...
   // ...from this base address...
-  _preformed_read_a.setParams(CPLD_REG_IMU_DM_P_I|0x80, 6, 17, LSM9DS1_A_DATA_X|0x80);
+  _preformed_read_i.setParams(CPLD_REG_IMU_DM_P_I|0x80, 12, 17, RegPtrMap::regAddr(RegID::A_DATA_X)|0x80);
   // ...and drop the results here.
-  _preformed_read_a.buf      = (uint8_t*) __frame_buf_a;
-  _preformed_read_a.buf_len  = 102;
-
-  _preformed_read_g.shouldReap(false);
-  _preformed_read_g.devRegisterAdvance(true);
-  _preformed_read_g.set_opcode(BusOpcode::RX);
-  _preformed_read_g.callback = (BusOpCallback*) this;
-  // Starting from the first gyro...
-  // Read 6 bytes...
-  // ...across 17 sensors...
-  // ...from this base address...
-  _preformed_read_g.setParams(CPLD_REG_IMU_DM_P_I|0x80, 6, 17, LSM9DS1_G_DATA_X|0x80);
-  // ...and drop the results here.
-  _preformed_read_g.buf      = (uint8_t*) __frame_buf_g;
-  _preformed_read_g.buf_len  = 102;
+  _preformed_read_i.buf      = (uint8_t*) _frame_buf_i;
+  _preformed_read_i.buf_len  = 204;
 
   _preformed_read_m.shouldReap(false);
   _preformed_read_m.devRegisterAdvance(true);
@@ -310,7 +314,7 @@ LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgm
   // Read 6 bytes...
   // ...across 17 sensors...
   // ...from this base address...
-  _preformed_read_m.setParams(CPLD_REG_IMU_DM_P_M|0x80, 6, 17, LSM9DS1_M_DATA_X|0xC0);
+  _preformed_read_m.setParams(CPLD_REG_IMU_DM_P_M|0x80, 6, 17, RegPtrMap::regAddr(RegID::M_DATA_X)|0xC0);
   // ...and drop the results here.
   _preformed_read_m.buf      = (uint8_t*) _reg_block_m_data;
   _preformed_read_m.buf_len  = 102;
@@ -323,7 +327,7 @@ LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgm
   // Read 1 byte...
   // ...across 17 sensors...
   // ...from this base address...
-  _preformed_fifo_read.setParams(CPLD_REG_IMU_DM_P_I|0x80, 1, 17, LSM9DS1_AG_FIFO_SRC|0x80);
+  _preformed_fifo_read.setParams(CPLD_REG_IMU_DM_P_I|0x80, 1, 17, RegPtrMap::regAddr(RegID::AG_FIFO_SRC)|0x80);
   // ...and drop the results here.
   _preformed_fifo_read.buf      = (uint8_t*) __fifo_levels;
   _preformed_fifo_read.buf_len  = 17;
@@ -336,16 +340,10 @@ LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgm
   // Read 2 bytes...
   // ...across 17 sensors...
   // ...from this base address...
-  _preformed_read_temp.setParams(CPLD_REG_IMU_DM_P_I|0x80, 2, 17, LSM9DS1_AG_DATA_TEMP|0x80);
+  _preformed_read_temp.setParams(CPLD_REG_IMU_DM_P_I|0x80, 2, 17, RegPtrMap::regAddr(RegID::AG_DATA_TEMP)|0x80);
   // ...and drop the results here.
   _preformed_read_temp.buf      = (uint8_t*) __temperatures;
   _preformed_read_temp.buf_len  = 34;
-
-  /* Populate all the static preallocation slots for measurements. */
-  for (uint16_t i = 0; i < PREALLOCATED_IIU_MEASUREMENTS; i++) {
-    __prealloc[i].wipe();
-    preallocd_measurements.insert(&__prealloc[i]);
-  }
 
   // Zero the ManuLegend.
   for (int i = 0; i < LEGEND_MGR_MAX_DATASET_SIZE; i++) {
@@ -377,8 +375,7 @@ LegendManager::LegendManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgm
 
 
 /* This should probably never be called. */
-LegendManager::~LegendManager() {
-  while (active_legends.hasNext()) active_legends.remove();
+ManuManager::~ManuManager() {
 }
 
 
@@ -388,46 +385,9 @@ LegendManager::~LegendManager() {
 *   absolutely no excuse for returning NULL, since we built these objects when CPLDDriver
 *   was constructed.
 */
-IIU* LegendManager::fetchIIU(uint8_t idx) {
-  if (idx > 16) {
-    local_log.concatf("LegendManager::fetchIIU(%d):  We should crash, but will return mod-17 instead.\n", idx);
-    Kernel::log(&local_log);
-  }
-  return &iius[idx % LEGEND_DATASET_IIU_COUNT];
-}
-
-
-int8_t LegendManager::init_iiu(uint8_t idx) {
-  return (idx > 16) ? -1 : iius[idx].init();
-}
-
-
-/* Read the given IMU. */
-int8_t LegendManager::refreshIMU(uint8_t idx) {
-  return (idx > 16) ? -1 : iius[idx].readSensor();
-}
-
-
-/* Read all IMUs. */
-int8_t LegendManager::refreshIMU() {
-  if (last_imu_read) {
-    // We are alrady doing something to the IMUs, Need to wait.
-    if (getVerbosity() > 2) {
-      local_log.concat("LegendManager tried to do two large IMU operations at once. Doing nothing. Be patient.\n");
-      Kernel::log(&local_log);
-    }
-    return -1;
-  }
-
-  if (event_iiu_read.enableSchedule(true)) {
-    // We are alrady doing something to the IMUs, Need to wait.
-    local_log.concat("Tried to refresh all IMUs while the schedule to do the same thing is enabled. Doing nothing..\n");
-    Kernel::log(&local_log);
-    return -1;
-  }
-
-  event_iiu_read.fireNow();
-  return 0;
+LSM9DS1* ManuManager::fetchIMU(uint8_t idx) {
+  // TODO: We have no excuse for needing a modulus here. Too expensive. Never occured.
+  return &imus[idx % LEGEND_DATASET_IIU_COUNT];
 }
 
 
@@ -438,7 +398,7 @@ int8_t LegendManager::refreshIMU() {
 *
 * @return non-zero on error.
 */
-int8_t LegendManager::send_map_event() {
+int8_t ManuManager::send_map_event() {
   event_legend_frame_ready.specific_target = nullptr;
   if (operating_legend && _er_flag(LEGEND_MGR_FLAGS_LEGEND_SENT)) {
     operating_legend->copy_frame();
@@ -454,14 +414,12 @@ int8_t LegendManager::send_map_event() {
 *
 * @return non-zero on error.
 */
-int8_t LegendManager::reconfigure_data_map() {
+int8_t ManuManager::reconfigure_data_map() {
   uint16_t accumulated_offset = LEGEND_DATASET_GLOBAL_SIZE;
   for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
-    // Configure the IIU...
-    iius[i].class_init(i);
-
     /* Assign the ManuLegend specification to the IIU class, thereby giving the IIU class its pointers. */
-    iius[i].assign_legend_pointers(
+    // TODO: This is broken. Integrator should emit the data?
+    integrator.assign_legend_pointers(
       (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_ACC      ),
       (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_GYR      ),
       (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_MAG      ),
@@ -476,10 +434,9 @@ int8_t LegendManager::reconfigure_data_map() {
       (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_SC_TMEP  )
     );
     accumulated_offset += LEGEND_DATASET_PER_IMU_SIZE;
-
-    iius[i].nullGyroError(true);   // No reason to not do this...
-    iius[i].nullifyGravity(false);
   }
+  integrator.nullGyroError(true);   // No reason to not do this...
+  integrator.nullifyGravity(false);
   return 0;
 }
 
@@ -487,7 +444,7 @@ int8_t LegendManager::reconfigure_data_map() {
 
 // Calling causes a pointer dance that reconfigures the data we send to the host.
 // Don't do anything unless the legend is stable. This is concurrency-control.
-int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
+int8_t ManuManager::setLegend(ManuLegend* nu_legend) {
   if (_er_flag(LEGEND_MGR_FLAGS_LEGEND_STABLE)) {
     // Only reconfigure if stable.
     _er_clear_flag(LEGEND_MGR_FLAGS_LEGEND_STABLE);   // Mark as unstable.
@@ -531,13 +488,35 @@ int8_t LegendManager::setLegend(ManuLegend* nu_legend) {
 
 
 
-uint32_t LegendManager::totalSamples() {
-  uint32_t return_value = 0;
-  for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
-    return_value += iius[i].totalSamples();
+void ManuManager::enableAutoscale(SampleType s_type, bool enabled) {
+  switch (s_type) {
+    case SampleType::ACCEL:
+      for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+        imus[i].autoscale_acc(enabled);
+      }
+      break;
+    case SampleType::GYRO:
+      for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+        imus[i].autoscale_gyr(enabled);
+      }
+      break;
+    case SampleType::MAG:
+      for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+        imus[i].autoscale_mag(enabled);
+      }
+      break;
+    case SampleType::ALL:
+      for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+        imus[i].autoscale_acc(enabled);
+        imus[i].autoscale_gyr(enabled);
+        imus[i].autoscale_mag(enabled);
+      }
+      break;
+    default:
+      break;
   }
-  return return_value;
 }
+
 
 
 
@@ -549,7 +528,7 @@ uint32_t LegendManager::totalSamples() {
 * Called internally as a result of either (a conclusive chirality test) or
 *   (loaded configuration).
 */
-int LegendManager::set_chirality(Chirality c) {
+int ManuManager::set_chirality(Chirality c) {
   uint8_t x = LEGEND_MGR_FLAGS_CHIRALITY_KNOWN;
   switch (c) {   // I won't even apologize for this. Suffer.
     default:
@@ -562,7 +541,7 @@ int LegendManager::set_chirality(Chirality c) {
 }
 
 
-DigitPort LegendManager::get_port_given_digit(Anatomical digit) {
+DigitPort ManuManager::get_port_given_digit(Anatomical digit) {
   // TODO: This is sloppy. Might-should rework it to use no conditionals.
   switch (digit) {
     case Anatomical::DIGIT_1:
@@ -586,7 +565,7 @@ DigitPort LegendManager::get_port_given_digit(Anatomical digit) {
 }
 
 
-Anatomical LegendManager::get_digit_given_port(DigitPort port) {
+Anatomical ManuManager::get_digit_given_port(DigitPort port) {
   // TODO: This is sloppy. Might-should rework it to use no conditionals.
   switch (port) {
     case DigitPort::PORT_1:
@@ -629,21 +608,23 @@ Anatomical LegendManager::get_digit_given_port(DigitPort port) {
 * @param  _op  The bus operation that was completed.
 * @return 0 to run the op, or non-zero to cancel it.
 */
-int8_t LegendManager::io_op_callahead(BusOp* _op) {
-  Kernel::log("LegendManager::io_op_callahead\n");
+int8_t ManuManager::io_op_callahead(BusOp* _op) {
+  Kernel::log("ManuManager::io_op_callahead\n");
   return 0;
 }
 
 
 /**
 * When a bus operation completes, it is passed back to its issuing class.
+* Unlike r0, all IMU traffic calls back to this function, and not the individual
+*   IMU drivers.
 *
 * @param  _op  The bus operation that was completed.
 * @return 0 on success, or appropriate error code.
 */
-int8_t LegendManager::io_op_callback(BusOp* _op) {
+int8_t ManuManager::io_op_callback(BusOp* _op) {
   SPIBusOp* op = (SPIBusOp*) _op;
-  // There is zero chance this object will be a null pointer unless it was done on purpose.
+  int8_t return_value = SPI_CALLBACK_NOMINAL;
   if (op->hasFault()) {
     if (getVerbosity() > 3) {
       local_log.concat("io_op_callback() rejected a callback because the bus op failed.\n");
@@ -652,28 +633,206 @@ int8_t LegendManager::io_op_callback(BusOp* _op) {
     return SPI_CALLBACK_ERROR;
   }
 
-  switch (op->getTransferParam(3)) {
-    case 0x8F:  // This is a bulk identity check.
-      printIMURollCall(&local_log);
+  uint8_t cpld_addr = op->getTransferParam(0);
+  uint8_t imu_count = op->getTransferParam(2);
+  uint8_t reg_addr  = op->getTransferParam(3);
+  RegID   idx       = RegPtrMap::regIdFromAddr(cpld_addr, reg_addr);
+
+  // Alright... we'll do the selection based on register address first
+  // These checks we can do regardless of target sensor aspect.
+  switch (idx) {
+    case RegID::M_WHO_AM_I:
+    case RegID::AG_WHO_AM_I:  // This is a bulk identity check.
+      for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+        if ((0x3d == _reg_block_ident[i]) && (0x68 == _reg_block_ident[i+LEGEND_DATASET_IIU_COUNT])) {
+          // If the identity bytes match, set the IMU state appropriately...
+          fetchIMU(i)->setDesiredState(IMUState::STAGE_1);
+        }
+      }
+      //printIMURollCall(&local_log);
       break;
+
+    case RegID::A_DATA_X:  // Data must be copied out of the register buffer,
+    case RegID::A_DATA_Y:  //   adjusted while it's still cheap (integer), and
+    case RegID::A_DATA_Z:  //   scaled into floats.
+    case RegID::G_DATA_X:  // Then, the data is sent to the integrator.
+    case RegID::G_DATA_Y:  //
+    case RegID::G_DATA_Z:  //
+      {
+        // First, note the pointer relation.
+        float scalar_a;
+        float scalar_g;
+        float ax;
+        float ay;
+        float az;
+        float gx;
+        float gy;
+        float gz;
+        int16_t* offset = (int16_t*) op->buf;
+
+        // Scale the data
+        SensorFrame* nu_msrmnt = Integrator::fetchMeasurement();
+        for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+          scalar_a = imus[i].scaleA();
+          scalar_g = imus[i].scaleG();
+          if (imus[i].cancel_error()) {
+            ax = ((((int16_t) *(offset +  0)) - noise_floor_acc[i].x) * reflection_acc.x * scalar_a);
+            ay = ((((int16_t) *(offset +  2)) - noise_floor_acc[i].y) * reflection_acc.y * scalar_a);
+            az = ((((int16_t) *(offset +  4)) - noise_floor_acc[i].z) * reflection_acc.z * scalar_a);
+            gx = ((((int16_t) *(offset +  6)) - noise_floor_gyr[i].x) * reflection_gyr.x * scalar_g);
+            gy = ((((int16_t) *(offset +  8)) - noise_floor_gyr[i].y) * reflection_gyr.y * scalar_g);
+            gz = ((((int16_t) *(offset + 10)) - noise_floor_gyr[i].z) * reflection_gyr.z * scalar_g);
+          }
+          else {
+            ax = (((int16_t) *(offset +  0)) * reflection_acc.x * scalar_a);
+            ay = (((int16_t) *(offset +  2)) * reflection_acc.y * scalar_a);
+            az = (((int16_t) *(offset +  4)) * reflection_acc.z * scalar_a);
+            gx = (((int16_t) *(offset +  6)) * reflection_gyr.x * scalar_g);
+            gy = (((int16_t) *(offset +  8)) * reflection_gyr.y * scalar_g);
+            gz = (((int16_t) *(offset + 10)) * reflection_gyr.z * scalar_g);
+          }
+          nu_msrmnt->setI(i, ax, ay, az, gx, gy, gz);
+
+          if (true) {  // TODO
+            // If there is magnetometer data waiting, include it with the frame.
+            float scalar_m = imus[i].scaleM();
+            //float x = ((((int16_t)regValue(RegID::AG_DATA_X_M) - noise_floor_mag_mag.x) * reflection_vector_mag.x) * scaler);
+            //float y = ((((int16_t)regValue(RegID::AG_DATA_Y_M) - noise_floor_mag_mag.y) * reflection_vector_mag.y) * scaler);
+            //float z = ((((int16_t)regValue(RegID::AG_DATA_Z_M) - noise_floor_mag_mag.z) * reflection_vector_mag.z) * scaler);
+            nu_msrmnt->setM(
+              i,
+              (_reg_block_m_data[i*3 + 0] * reflection_mag.x * scalar_m),
+              (_reg_block_m_data[i*3 + 1] * reflection_mag.y * scalar_m),
+              (_reg_block_m_data[i*3 + 2] * reflection_mag.z * scalar_m)
+            );
+          }
+          offset += 12;
+        }
+        // Send softened and scaled frame to the integrator.
+        sample_count++;
+      }
+      break;
+
+
+    case RegID::M_CTRL_REG1:
+      break;
+    case RegID::M_CTRL_REG3:
+      break;
+    case RegID::M_CTRL_REG4:
+      break;
+    case RegID::M_CTRL_REG5:
+      break;
+    case RegID::M_INT_CFG:
+      break;
+    case RegID::AG_INT1_CTRL:
+      break;
+    case RegID::AG_INT2_CTRL:
+      break;
+    case RegID::G_ORIENT_CFG:
+      break;
+    case RegID::AG_CTRL_REG4:
+      break;
+    case RegID::A_CTRL_REG5:
+      break;
+    case RegID::AG_CTRL_REG8:
+      break;
+    case RegID::AG_CTRL_REG9:
+      break;
+    case RegID::AG_CTRL_REG10:
+      break;
+    case RegID::AG_FIFO_CTRL:
+      break;
+
+
+    /* These are exported to the IMU class. */
+    case RegID::M_OFFSET_X:
+      break;
+    case RegID::M_OFFSET_Y:
+      break;
+    case RegID::M_OFFSET_Z:
+      break;
+    case RegID::M_CTRL_REG2:
+      break;
+    case RegID::M_STATUS_REG:
+      break;
+    case RegID::M_DATA_X:
+      break;
+    case RegID::M_DATA_Y:
+      break;
+    case RegID::M_DATA_Z:
+      break;
+    case RegID::M_INT_SRC:
+      break;
+    case RegID::M_INT_TSH:
+      break;
+    case RegID::AG_ACT_THS:
+      break;
+    case RegID::AG_ACT_DUR:
+      break;
+    case RegID::A_INT_GEN_CFG:
+      break;
+    case RegID::A_INT_GEN_THS_X:
+      break;
+    case RegID::A_INT_GEN_THS_Y:
+      break;
+    case RegID::A_INT_GEN_THS_Z:
+      break;
+    case RegID::A_INT_GEN_DURATION:
+      break;
+    case RegID::G_REFERENCE:
+      break;
+    case RegID::G_CTRL_REG1:
+      break;
+    case RegID::G_CTRL_REG2:
+      break;
+    case RegID::G_CTRL_REG3:
+      break;
+    case RegID::G_INT_GEN_SRC:
+      break;
+    case RegID::AG_DATA_TEMP:
+      break;
+    case RegID::AG_STATUS_REG:
+      break;
+    case RegID::A_CTRL_REG6:
+      break;
+    case RegID::A_CTRL_REG7:
+      break;
+    case RegID::A_INT_GEN_SRC:
+      break;
+    case RegID::AG_STATUS_REG_ALT:
+      break;
+    case RegID::AG_FIFO_SRC:
+      break;
+    case RegID::G_INT_GEN_CFG:
+      break;
+    case RegID::G_INT_GEN_THS_X:
+      break;
+    case RegID::G_INT_GEN_THS_Y:
+      break;
+    case RegID::G_INT_GEN_THS_Z:
+      break;
+    case RegID::G_INT_GEN_DURATION:
+      break;
+
     default:
+      // For registers that are still handled via individual IMU classes, pass
+      //   control to them.
+      for (uint8_t i = (cpld_addr % LEGEND_DATASET_IIU_COUNT); i < imu_count; i++) {
+        // For each sensor involved in the transfer, notify it of new data.
+        LSM9DS1* imu = fetchIMU(i);
+        IMUFault error_condition = (BusOpcode::RX == op->get_opcode()) ? imu->proc_register_read(idx) : imu->proc_register_write(idx);
+      }
       break;
   }
 
-  if (op == &_preformed_read_a) {
-  }
-  else if (op == &_preformed_read_g) {
-  }
-  else if (op == &_preformed_read_m) {
-  }
-  else if (op == &_preformed_read_temp) {
-    // Our pre-formed temperature read.
-  }
-  else if (op == &_preformed_fifo_read) {
+  if (op == &_preformed_read_i) {
+    Kernel::staticRaiseEvent(&quat_crunch_event);
+    // TODO: If the FIFO watermark IRQ signal is still asserted, read another batch.
+    return_value = SPI_CALLBACK_RECYCLE;
   }
 
   flushLocalLog();
-  return SPI_CALLBACK_NOMINAL;
+  return return_value;
 }
 
 
@@ -686,7 +845,7 @@ int8_t LegendManager::io_op_callback(BusOp* _op) {
 * @param  _op  The bus operation to execute.
 * @return Zero on success, or appropriate error code.
 */
-int8_t LegendManager::queue_io_job(BusOp* _op) {
+int8_t ManuManager::queue_io_job(BusOp* _op) {
   SPIBusOp* op = (SPIBusOp*) _op;
   if (nullptr == op->callback) {
     op->callback = (BusOpCallback*) this;
@@ -714,8 +873,14 @@ int8_t LegendManager::queue_io_job(BusOp* _op) {
 *
 * @return 0 on no action, 1 on action, -1 on failure.
 */
-int8_t LegendManager::attached() {
+int8_t ManuManager::attached() {
   if (EventReceiver::attached()) {
+    for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+      noise_floor_mag[i].set(0, 0, 0);
+      noise_floor_acc[i].set(0, 0, 0);
+      noise_floor_gyr[i].set(0, 0, 0);
+    }
+
     /* Get ready for a silly pointer dance....
     *  This is an argument-heavy event, and we will be using it ALOT. So we build the Event arguments
     *    once, and then change the data at the location being pointed at, and not the pointers in the
@@ -746,6 +911,13 @@ int8_t LegendManager::attached() {
     event_legend_frame_ready.alterScheduleRecurrence(-1);
     event_legend_frame_ready.autoClear(false);
     event_legend_frame_ready.enableSchedule(false);
+
+    /* Setup our pre-formed quat crunch event. */
+    quat_crunch_event.repurpose(DIGITABULUM_MSG_IMU_QUAT_CRUNCH, this);
+    quat_crunch_event.incRefs();
+    quat_crunch_event.specific_target = (EventReceiver*) this;
+    //quat_crunch_event.priority(4);
+
     return 1;
   }
   return 0;
@@ -766,7 +938,7 @@ int8_t LegendManager::attached() {
 * @param  event  The event for which service has been completed.
 * @return A callback return code.
 */
-int8_t LegendManager::callback_proc(ManuvrMsg* event) {
+int8_t ManuManager::callback_proc(ManuvrMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
   int8_t return_value = (0 == event->refCount()) ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
@@ -774,70 +946,14 @@ int8_t LegendManager::callback_proc(ManuvrMsg* event) {
   /* Some class-specific set of conditionals below this line. */
   switch (event->eventCode()) {
     case DIGITABULUM_MSG_IMU_READ:
-      switch (last_imu_read) {
-        case 0:
-        case 1:
-        case 2:
-        case 3:
-        case 4:
-        case 5:
-        case 6:
-        case 7:
-        case 8:
-        case 9:
-        case 10:
-        case 11:
-        case 12:
-        case 13:
-        case 14:
-        case 15:
-          last_imu_read++;
-          return EVENT_CALLBACK_RETURN_RECYCLE;
-
-        case 16:
-          last_imu_read = 0;
-          break;
-
-        default:
-          if (getVerbosity() > 2) local_log.concat("LegendManager::callback_proc(IMU_READ): Bad arg\n");
-          last_imu_read = 0;
-          break;
+      if (false) {  // TODO: Check the minimum FIFO level.
+        return EVENT_CALLBACK_RETURN_RECYCLE;
       }
       break;
 
-
     case DIGITABULUM_MSG_IMU_INIT:
-      switch (last_imu_read) {
-        case 0:
-        case 1:
-        case 2:
-        case 3:
-        case 4:
-        case 5:
-        case 6:
-        case 7:
-        case 8:
-        case 9:
-        case 10:
-        case 11:
-        case 12:
-        case 13:
-        case 14:
-        case 15:
-          last_imu_read++;
-          if (getVerbosity() > 6) local_log.concat("LegendManager::callback_proc(IMU_INIT): RECYCLING\n");
-          // We still have IMUs left to deal with. Recycle the event...
-          return EVENT_CALLBACK_RETURN_RECYCLE;
-        case 16:
-          last_imu_read = 0;
-          if (getVerbosity() > 6) local_log.concat("LegendManager::callback_proc(IMU_INIT): DROPPING\n");
-          break;
-
-        default:
-          if (getVerbosity() > 2) local_log.concat("LegendManager::callback_proc(IMU_READ): Bad arg\n");
-          last_imu_read = 0;
-          break;
-      }
+      // At this point we should have all IMUs initialized. We probably had interrupts
+      //   happen that are hanging. Clear them, as they will be meaningless.
       break;
 
     case DIGITABULUM_MSG_IMU_LEGEND:
@@ -855,22 +971,14 @@ int8_t LegendManager::callback_proc(ManuvrMsg* event) {
       break;
 
     case DIGITABULUM_MSG_IMU_QUAT_CRUNCH:
-      {
-        uint8_t temp_uint_8;
-        if (0 == event->getArgAs(&temp_uint_8)) {
-          if (iius[temp_uint_8 % 17].has_quats_left()) {
-            return_value = EVENT_CALLBACK_RETURN_RECYCLE;
-          }
-        }
-        else {
-          local_log.concat("LegendManager::callback_proc(): QUAT crunch had no argument?!.\n");
-        }
+      if (integrator.has_quats_left()) {
+        return_value = EVENT_CALLBACK_RETURN_RECYCLE;
       }
       break;
 
     default:
       if (getVerbosity() > 5) {
-        local_log.concat("LegendManager::callback_proc(): Default case.\n");
+        local_log.concat("ManuManager::callback_proc(): Default case.\n");
         #if defined(__MANUVR_DEBUG)
           event->printDebug(&local_log);
         #endif
@@ -886,17 +994,15 @@ int8_t LegendManager::callback_proc(ManuvrMsg* event) {
 
 
 
-int8_t LegendManager::notify(ManuvrMsg* active_event) {
+int8_t ManuManager::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
   uint8_t temp_uint_8 = 0;
 
   /* Some class-specific set of conditionals below this line. */
   switch (active_event->eventCode()) {
     case DIGITABULUM_MSG_IMU_READ:
-      iius[last_imu_read].readSensor();
       return_value++;
       break;
-
 
     case MANUVR_MSG_SESS_ESTABLISHED:
       event_legend_frame_ready.delaySchedule(1100);     // Enable the periodic frame broadcast.
@@ -923,30 +1029,10 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
       break;
 
     case DIGITABULUM_MSG_IMU_INIT:
-      /* This is a request (probably from elsewhere in this class) to move one-or-more
-           IMUs into the given INIT stage. The argument forms are...
-           None        A request to move all IMUs into the minimum meaningful INIT stage (INIT-1).
-           uint8       A request to move all IMUs into the given INIT stage.
-       */
-      if (0 == active_event->argCount()) {
-        if (last_imu_read > 16) {
-          if (getVerbosity() > 1) local_log.concat("MSG_IMU_INIT: last_imu_read > 16.\n");
-        }
-        else {
-          iius[last_imu_read].init();
-          return_value++;
-        }
+      for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+        imus[i].init();
       }
-      else if (0 == active_event->getArgAs(&temp_uint_8)) {
-        // If the arg was present, we interpret this as a specified INIT stage...
-        if (temp_uint_8 > 16) {
-          if (getVerbosity() > 1) local_log.concat("MSG_IMU_INIT had an IMU idx > 16.\n");
-        }
-        else {
-          iius[last_imu_read].state_pass_through(temp_uint_8);
-          return_value++;
-        }
-      }
+      return_value++;
       break;
 
     case DIGITABULUM_MSG_IMU_MAP_STATE:
@@ -961,7 +1047,7 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
     case DIGITABULUM_MSG_CPLD_RESET_COMPLETE:
       if (getVerbosity() > 3) local_log.concatf("Initializing IMUs...\n");
       // Range-bind everything....
-      for (uint8_t i = 0; i < 17; i++) iius[i].rangeBind(true);
+      integrator.rangeBind(true);
 
       // Fire the event to put the IMUs into INIT-1.
       //raiseEvent(Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT));
@@ -983,7 +1069,7 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
           if (getVerbosity() > 1) local_log.concat("QUAT_CRUNCH had an IMU idx > 16.\n");
         }
         else {
-          iius[temp_uint_8].MadgwickQuaternionUpdate();
+          integrator.MadgwickQuaternionUpdate();
         }
         return_value++;
       }
@@ -1010,7 +1096,7 @@ int8_t LegendManager::notify(ManuvrMsg* active_event) {
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
-void LegendManager::printIMURollCall(StringBuilder *output) {
+void ManuManager::printIMURollCall(StringBuilder *output) {
   EventReceiver::printDebug(output);
   output->concat("-- Intertial integration units: id(M/I)\n--\n-- Dgt      Prx        Imt        Dst        Reports\n");
   // TODO: Audit usage of length-specified integers as iterators. Cut where not
@@ -1042,7 +1128,7 @@ void LegendManager::printIMURollCall(StringBuilder *output) {
       default:
         break;
     }
-    output->concatf("%02u(%02x/%02x)  ", i, _imu_ids[i], _imu_ids[i+LEGEND_DATASET_IIU_COUNT]);
+    output->concatf("%02u(%02x/%02x)  ", i, _reg_block_ident[i], _reg_block_ident[i+LEGEND_DATASET_IIU_COUNT]);
   }
   output->concatf("%c\n\n", _bus->digitExists(DigitPort::PORT_5) ? 'Y' : ' ');
 }
@@ -1053,9 +1139,52 @@ void LegendManager::printIMURollCall(StringBuilder *output) {
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
-void LegendManager::printTemperatures(StringBuilder *output) {
+void ManuManager::printTemperatures(StringBuilder *output) {
   EventReceiver::printDebug(output);
   output->concat("-- Intertial integration units: id(deg-C)\n--\n-- Dgt      Prx        Imt        Dst\n");
+  // TODO: Audit usage of length-specified integers as iterators. Cut where not
+  //   important and check effects on optimization, as some arch's take a
+  //   runtime hit for access in any length less than thier ALU widths.
+  for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+    switch (i) {
+      case 1:   // Skip output for the IMU that doesn't exist at digit0.
+        output->concat("  <N/A>  ");
+        break;
+      case 0:
+        output->concat("-- 0(MC)    ");
+        break;
+      case 2:   // digit1 begins
+        output->concat("\n-- 1        ");
+        break;
+      case 5:   // digit2 begins
+        output->concat("\n-- 2        ");
+        break;
+      case 8:   // digit3 begins
+        output->concat("\n-- 3        ");
+        break;
+      case 11:  // digit4 begins
+        output->concat("\n-- 4        ");
+        break;
+      case 14:  // digit5 begins
+        output->concat("\n-- 5        ");
+        break;
+      default:
+        break;
+    }
+    output->concatf("%02u(%03d)  ", i, *((int16_t*) &__temperatures[i << 2]));
+  }
+  output->concat("\n\n");
+}
+
+
+/**
+* Debug support method. This fxn is only present in debug builds.
+*
+* @param   StringBuilder* The buffer into which this fxn should write its output.
+*/
+void ManuManager::printFIFOLevels(StringBuilder *output) {
+  EventReceiver::printDebug(output);
+  output->concat("-- Intertial integration units: fifo_lvl(hex)\n--\n-- Dgt      Prx        Imt        Dst\n");
   // TODO: Audit usage of length-specified integers as iterators. Cut where not
   //   important and check effects on optimization, as some arch's take a
   //   runtime hit for access in any length less than thier ALU widths.
@@ -1085,11 +1214,19 @@ void LegendManager::printTemperatures(StringBuilder *output) {
       default:
         break;
     }
-    output->concatf("%02u(%03d)  ", i, *((int16_t*) &__temperatures[i << 2]));
+    output->concatf("%02u(%02x)  ", i, __fifo_levels[i]);
   }
   output->concat("\n\n");
 }
 
+
+#if defined(__MANUVR_DEBUG)
+void ManuManager::dumpPreformedElements(StringBuilder* output) {
+  output->concat("--- Quat-crunch event\n");
+  quat_crunch_event.printDebug(output);
+  output->concat("\n");
+}
+#endif
 
 
 
@@ -1098,8 +1235,7 @@ void LegendManager::printTemperatures(StringBuilder *output) {
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
-void LegendManager::printDebug(StringBuilder *output) {
-  if (output == nullptr) return;
+void ManuManager::printDebug(StringBuilder *output) {
   EventReceiver::printDebug(output);
   if (getVerbosity() > 0) {
     // Print just the aggregate sample count and return.
@@ -1108,23 +1244,20 @@ void LegendManager::printDebug(StringBuilder *output) {
 
   if (getVerbosity() > 3) {
     output->concatf("-- __dataset location  %p\n", (uintptr_t) __dataset);
-    output->concatf("-- __prealloc location %p\n", (uintptr_t) __prealloc);
-    output->concatf("-- __IIU location      %p\n", (uintptr_t) iius);
-    output->concatf("-- INSTANCE location   %p\n--\n", (uintptr_t) INSTANCE);
+    output->concatf("-- __IIU location      %p\n--\n", (uintptr_t) imus);
   }
 
   float grav_consensus = 0.0;
   output->concat("-- Intertial integration units:\n");
   for (uint8_t i = 0; i < 17; i++) {
-    grav_consensus += iius[i].grav_scalar;
+    //grav_consensus += imus[i].grav_scalar;
   }
   grav_consensus /= 17;
-  output->concatf("-- Gravity consensus:  %.4fg\n",  (double) grav_consensus);
-
-  output->concatf("-- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
-  output->concatf("-- Max quat proc       %u\n",    IIU::max_quats_per_event);
-  output->concatf("-- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
-  output->concatf("-- Delta-t             %2.5f\n--\n", (double) *(_ptr_delta_t));
+  output->concatf("-- Gravity consensus:  %.4fg\n", (double) grav_consensus);
+  //output->concatf("-- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
+  output->concatf("-- Max quat proc       %u\n",    Integrator::max_quats_per_event);
+  output->concatf("-- sample_count        %d\n",    sample_count);
+  //output->concatf("-- Delta-t             %2.5f\n--\n", (double) *(_ptr_delta_t));
 
   if (getVerbosity() > 3) {
     output->concatf("-- MAX_DATASET_SIZE    %u\n",    (unsigned long) LEGEND_MGR_MAX_DATASET_SIZE);
@@ -1136,13 +1269,17 @@ void LegendManager::printDebug(StringBuilder *output) {
     #endif
   }
 
-  output->concatf("-- prealloc starves    %u\n-- minimum_prealloc    %u\n", (unsigned long) prealloc_starves, (unsigned long) minimum_prealloc_level);
-  output->concatf("-- Measurement queue info\n--\t Instantiated %u \t Freed: %u \t Prealloc queue depth: %d\n--\n", measurement_heap_instantiated, measurement_heap_freed, preallocd_measurements.size());
+  #if defined(__MANUVR_DEBUG)
+    dumpPreformedElements(output);
+  #endif
 
   output->concat("-- Intertial integration units:\n");
   for (uint8_t i = 0; i < 17; i++) {
     output->concatf("\tIIU %d\t ", i);
-    iius[i].printBrief(output);
+    //imus[i].dumpDevRegs(output);
+    //output->concatf("--- noise_floor_mag     (%d, %d, %d)\n", noise_floor_mag[i].x, noise_floor_mag[i].y, noise_floor_mag[i].z);
+    //output->concatf("--- noise_floor_acc     (%d, %d, %d)\n", noise_floor_acc[i].x, noise_floor_acc[i].y, noise_floor_acc[i].z);
+    //output->concatf("--- noise_floor_gyr     (%d, %d, %d)\n", noise_floor_gyr[i].x, noise_floor_gyr[i].y, noise_floor_gyr[i].z);
   }
   output->concat("\n");
 }
@@ -1150,7 +1287,7 @@ void LegendManager::printDebug(StringBuilder *output) {
 
 
 #if defined(MANUVR_CONSOLE_SUPPORT)
-void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
+void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
   uint8_t temp_byte = 0;
@@ -1168,17 +1305,18 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
       if (temp_byte < 17) {
         if (parse_mule.count() > 0) {
           int temp_int = parse_mule.position_as_int(0);
-          iius[temp_byte].setVerbosity(temp_int);
+          imus[temp_byte].setVerbosity(temp_int);
         }
-        local_log.concatf("Verbosity on IIU %d is %d.\n", temp_byte, iius[temp_byte].getVerbosity());
+        local_log.concatf("Verbosity on IMU %d is %d.\n", temp_byte, imus[temp_byte].getVerbosity());
       }
       break;
 
     case 'i':
       switch (temp_byte) {
         case 1:
-          local_log.concatf("IIU preallocated measurements are stored at %p.\n", __prealloc);
+          dumpPreformedElements(&local_log);
           break;
+
         case 2:
           if (operating_legend) {
             operating_legend->printDebug(&local_log);
@@ -1192,6 +1330,28 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
           break;
         case 4:
           printIMURollCall(&local_log);   // Show us the results, JIC
+          break;
+        case 5:
+          integrator.dumpPointers(&local_log);
+          break;
+        case 6:
+          local_log.concatf("sizeof(ManuManager)      %u\n", sizeof(ManuManager));
+          local_log.concatf("sizeof(Integrator)       %u\n", sizeof(Integrator));
+          local_log.concatf("sizeof(SensorFrame)      %u\n", sizeof(SensorFrame));
+          local_log.concatf("sizeof(LSM9DS1)          %u\n", sizeof(LSM9DS1));
+          local_log.concatf("sizeof(RegPtrMap)        %u\n", sizeof(RegPtrMap));
+          local_log.concatf("sizeof(_frame_buf_i)     %u\n", sizeof(_frame_buf_i));
+          break;
+        case 7:
+          {
+            SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
+            op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::AG_ACT_DUR) | 0x80);
+            op->setBuffer(&__fifo_levels[0], LEGEND_DATASET_IIU_COUNT);
+            queue_io_job(op);
+          }
+          break;
+        case 8:
+          printFIFOLevels(&local_log);
           break;
         case 9:
           printTemperatures(&local_log);   // Show us the temperatures.
@@ -1214,34 +1374,15 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
         operating_legend->printDataset(&local_log);
       }
       break;
-    case '+':
-      if (temp_byte < 17) {
-        iius[temp_byte].dumpPointers(&local_log);
-      }
-      break;
-
 
     // IMU DEBUG //////////////////////////////////////////////////////////////////
     case 'c':
       if (temp_byte < 17) {
-        iius[temp_byte].printDebug(&local_log);
+        imus[temp_byte].dumpDevRegs(&local_log);
       }
       break;
 
     // IMU STATE CONTROL //////////////////////////////////////////////////////////
-    case 'g':
-      if (255 == temp_byte) {
-        local_log.concat("Syncing all IIUs...\n");
-        for (uint8_t i = 0; i < 17; i++) {
-          iius[i].sync();
-        }
-      }
-      else if (temp_byte < 17) {
-        iius[temp_byte].sync();
-        local_log.concatf("Syncing IIU %d.\n", temp_byte);
-      }
-      break;
-
     case 's':
       parse_mule.concat(str);
       parse_mule.split(",");
@@ -1251,12 +1392,12 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
 
         if (255 == temp_byte) {
           for (uint8_t i = 0; i < 17; i++) {
-            iius[i].setOperatingState(temp_int);
+            imus[i].setDesiredState((IMUState) temp_int);
           }
         }
         else if (temp_byte < 17) {
           local_log.concatf("Setting the state of IMU %d to %d\n", temp_byte, temp_int);
-          iius[temp_byte].setOperatingState(temp_int);
+          imus[temp_byte].setDesiredState((IMUState) temp_int);
         }
 
       }
@@ -1264,11 +1405,9 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'k':
       if ((temp_byte < 6) && (temp_byte >= 0)) {
-        ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
-        event->addArg((uint8_t) temp_byte);  // Set the desired init stage.
-        event->priority(0);
-        raiseEvent(event);
+        init_iius();
         local_log.concatf("Broadcasting IMU_INIT for stage %u...\n", temp_byte);
+
       }
       else {
         local_log.concatf("Illegal INIT stage: %u\n", temp_byte);
@@ -1279,12 +1418,12 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
       if (255 == temp_byte) {
         local_log.concat("Reseting all IIUs...\n");
         for (uint8_t i = 0; i < 17; i++) {
-          iius[i].reset();
+          imus[i].reset();
         }
       }
       else if (temp_byte < 17) {
         local_log.concatf("Resetting IIU %d.\n", temp_byte);
-        iius[temp_byte].reset();
+        imus[temp_byte].reset();
       }
       break;
 
@@ -1347,179 +1486,94 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
 
     case '[':
     case ']':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling spherical abberation correction on all IIUs.\n", ((*(str) == ']') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          iius[i].correctSphericalAbberation((*(str) == ']'));
-        }
-      }
-      else if (temp_byte < 17) {
-        iius[temp_byte].correctSphericalAbberation((*(str) == ']'));
-        local_log.concatf("%sabling spherical abberation correction on IIU %d.\n", ((*(str) == ']') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling spherical abberation correction on all IIUs.\n", ((*(str) == ']') ? "En":"Dis"));
+      integrator.correctSphericalAbberation((*(str) == ']'));
       break;
 
     case 'u':
     case 'U':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling (clean-mag-is-zero) on all IIUs.\n", ((*(str) == 'U') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          iius[i].cleanMagZero((*(str) == 'U'));
-        }
-      }
-      else if (temp_byte < 17) {
-        iius[temp_byte].cleanMagZero((*(str) == 'U'));
-        local_log.concatf("%sabling (clean-mag-is-zero) on IIU %d.\n", ((*(str) == 'U') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling (clean-mag-is-zero) on all IIUs.\n", ((*(str) == 'U') ? "En":"Dis"));
+      integrator.cleanMagZero((*(str) == 'U'));
       break;
 
     case 'w':
     case 'W':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling mag data scrutiny on all IIUs.\n", ((*(str) == 'Z') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          iius[i].dropObviousBadMag((*(str) == 'Z'));
-        }
-      }
-      else if (temp_byte < 17) {
-        iius[temp_byte].dropObviousBadMag((*(str) == 'Z'));
-        local_log.concatf("%sabling mag data scrutiny on IIU %d.\n", ((*(str) == 'Z') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling mag data scrutiny on all IIUs.\n", ((*(str) == 'Z') ? "En":"Dis"));
+      integrator.dropObviousBadMag((*(str) == 'Z'));
       break;
 
     case 'z':
     case 'Z':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling autoscale on all IIUs.\n", ((*(str) == 'Z') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          iius[i].enableAutoscale((*(str) == 'Z'));
-        }
-      }
-      else if (temp_byte < 17) {
-        iius[temp_byte].enableAutoscale((*(str) == 'Z'));
-        local_log.concatf("%sabling autoscale on IIU %d.\n", ((*(str) == 'Z') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling autoscale on all IMUs.\n", ((*(str) == 'Z') ? "En":"Dis"));
+      enableAutoscale(SampleType::ALL, (*(str) == 'Z'));
       break;
 
     case 'n':
     case 'N':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling range-binding on all IIUs.\n", ((*(str) == 'N') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          iius[i].rangeBind((*(str) == 'N'));
-        }
-      }
-      else if (temp_byte < 17) {
-        iius[temp_byte].rangeBind((*(str) == 'N'));
-        local_log.concatf("%sabling range-binding on IIU %d.\n", ((*(str) == 'N') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling range-binding on all IIUs.\n", ((*(str) == 'N') ? "En":"Dis"));
+      integrator.rangeBind((*(str) == 'N'));
       break;
 
     case 'h':
     case 'H':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling quats on all IIUs.\n", ((*(str) == 'H') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          iius[i].processQuats((*(str) == 'H'));
-        }
-      }
-      else if (temp_byte < 17) {
-        iius[temp_byte].processQuats((*(str) == 'H'));
-        local_log.concatf("%sabling quats on IIU %d.\n", ((*(str) == 'H') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling quats on all IIUs.\n", ((*(str) == 'H') ? "En":"Dis"));
+      integrator.processQuats((*(str) == 'H'));
       break;
 
     case 'x':
     case 'X':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling gyro error compensation on all IIUs.\n", ((*(str) == 'X') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          iius[i].nullGyroError((*(str) == 'X'));
-        }
-      }
-      else if (temp_byte < 17) {
-        iius[temp_byte].nullGyroError((*(str) == 'X'));
-        local_log.concatf("%sabling gyro error compensation on IIU %d.\n", ((*(str) == 'X') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling gyro error compensation on all IIUs.\n", ((*(str) == 'X') ? "En":"Dis"));
+      integrator.nullGyroError((*(str) == 'X'));
       break;
 
     case 'm':
     case 'M':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling gravity nullification on all IIUs.\n", ((*(str) == 'M') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          iius[i].nullifyGravity((*(str) == 'M'));
-        }
-      }
-      else if (temp_byte < 17) {
-        iius[temp_byte].nullifyGravity((*(str) == 'M'));
-        local_log.concatf("%sabling gravity nullification on IIU %d.\n", ((*(str) == 'M') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling gravity nullification on all IIUs.\n", ((*(str) == 'M') ? "En":"Dis"));
+      integrator.nullifyGravity((*(str) == 'M'));
       break;
 
     case 'y':
     case 'Y':
-      if (255 == temp_byte) {
-        local_log.concatf("%sabling bearing nullification on all IIUs.\n", ((*(str) == 'Y') ? "En":"Dis"));
-        for (uint8_t i = 0; i < 17; i++) {
-          iius[i].nullifyBearing((*(str) == 'Y'));
-        }
-      }
-      else if (temp_byte < 17) {
-        iius[temp_byte].nullifyBearing((*(str) == 'Y'));
-        local_log.concatf("%sabling bearing nullification on IIU %d.\n", ((*(str) == 'Y') ? "En":"Dis"), temp_byte);
-      }
+      local_log.concatf("%sabling bearing nullification on all IIUs.\n", ((*(str) == 'Y') ? "En":"Dis"));
+      integrator.nullifyBearing((*(str) == 'Y'));
       break;
 
     case 'Q':
       local_log.concatf("Madgwick iterations to %d on all IIUs.\n", temp_byte);
-      for (uint8_t i = 0; i < 17; i++) {
-        iius[i].madgwickIterations(temp_byte);
-      }
+      integrator.madgwickIterations(temp_byte);
       break;
 
 
 
     case ',':
-      IIU::max_quats_per_event = temp_byte;
-      local_log.concatf("IIU class now runs a maximum of %u quats per event.\n", IIU::max_quats_per_event);
+      Integrator::max_quats_per_event = temp_byte;
+      local_log.concatf("IIU class now runs a maximum of %u quats per event.\n", Integrator::max_quats_per_event);
       break;
 
     case 'b':
-      for (uint8_t i = 0; i < 17; i++) {
-        iius[i].beta = (float)temp_byte * 0.1;
-      }
-      local_log.concatf("Beta value is now %f.\n", (double) (temp_byte * 0.1f));
+      integrator.beta = (float)temp_byte * 0.1;
+      local_log.concatf("Beta value is now %f.\n", (double) integrator.beta);
       break;
 
     case 'L':
       for (uint8_t i = 0; i < 17; i++) {
-        iius[i].setSampleRateProfile(temp_byte);
+        imus[i].setSampleRateProfile(temp_byte);
       }
       local_log.concatf("Moving to sample rate profile %d.\n", temp_byte);
       break;
 
     case 'o':
       for (uint8_t i = 0; i < 17; i++) {
-        iius[i].setGyroBaseFiler(temp_byte);
+        imus[i].set_base_filter_param_gyr(temp_byte);
       }
       local_log.concatf("Setting GYR base filter to %d.\n", temp_byte);
       break;
 
     case 'O':
       for (uint8_t i = 0; i < 17; i++) {
-        iius[i].setAccelBaseFiler(temp_byte);
+        imus[i].set_base_filter_param_acc(temp_byte);
       }
       local_log.concatf("Setting ACC base filter to %d.\n", temp_byte);
-      break;
-
-    case 'a':
-      if (255 == temp_byte) {
-        refreshIMU();
-      }
-      else if (17 > temp_byte) {
-        refreshIMU(temp_byte);
-      }
       break;
 
     case 'd':
@@ -1577,29 +1631,6 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
-    case 'p':
-      {
-        parse_mule.concat(str);
-        parse_mule.split(",");
-        parse_mule.drop_position(0);
-        uint8_t start = (temp_byte < 17) ? temp_byte   : 0;
-        uint8_t stop  = (temp_byte < 17) ? temp_byte+1 : 17;
-        int temp_int  = (parse_mule.count() > 0) ? parse_mule.position_as_int(0) : 255;
-        for (uint8_t i = start; i < stop; i++) {
-          if (255 != temp_int) {  // The user wants to make a change..
-            iius[i].enableProfiling(temp_int ? true:false);
-          }
-          local_log.concatf("Profiling IIU %d: %sabled.\n", i, (iius[i].enableProfiling() ? "en":"dis"));
-        }
-      }
-      break;
-
-    case 'e':
-      if (temp_byte < 17) {
-        iius[temp_byte].dumpPreformedElements(&local_log);
-      }
-      break;
-
     /* Single frame readback tests. */
     case '!':   // Temperature
       queue_io_job(&_preformed_read_temp);
@@ -1607,11 +1638,8 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
     case '@':   // Mag
       queue_io_job(&_preformed_read_m);
       break;
-    case '#':   // Accel
-      queue_io_job(&_preformed_read_a);
-      break;
-    case '$':   // Gyro
-      queue_io_job(&_preformed_read_g);
+    case '#':   // Intertial
+      queue_io_job(&_preformed_read_i);
       break;
     case '%':   // FIFO
       queue_io_job(&_preformed_fifo_read);
@@ -1631,26 +1659,75 @@ void LegendManager::procDirectDebugInstruction(StringBuilder *input) {
 
 
 /*******************************************************************************
-* LegendManager is doing too much.
+* ManuManager is doing too much.
 *******************************************************************************/
 
-int8_t LegendManager::read_identities() {
+int8_t ManuManager::read_identities() {
   // Zero the space so we ensure no false positives.
-  bzero(&_imu_ids[0], (2 * LEGEND_DATASET_IIU_COUNT));
+  bzero(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
 
   // Because the identity address is the same for both aspects, and their addresses
   //   are continuous, we just read 1 byte from 34 sensors.
   SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
   op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
-  op->setBuffer(&_imu_ids[0], (2 * LEGEND_DATASET_IIU_COUNT));
+  op->setBuffer(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
   return queue_io_job(op);
 }
 
 
 
-int8_t LegendManager::read_fifo_depth() {
+int8_t ManuManager::read_fifo_depth() {
   SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
   op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
-  op->setBuffer(&_imu_ids[0], LEGEND_DATASET_IIU_COUNT);
+  op->setBuffer(&_reg_block_ident[0], LEGEND_DATASET_IIU_COUNT);
   return queue_io_job(op);
+}
+
+
+/*
+* Digitabulum places the following constraints on IMU operation:
+*   1) The entire sensor package must be operating at the same sample-rate.
+*   2) Sensors must be configured for multiple-access.
+*   3) AG FIFO enabled, and interrupt at high-water mark.
+*   4) Interrupt on magnetometer data ready.
+*
+* Constraints 1 might be lifted in the future at the cost of software complexity.
+*
+*
+*/
+int8_t ManuManager::init_iius() {
+  // The order we do this in matters.
+  int8_t ret = -1;
+  // Step 1: Enable SPI write, multiple-access and disable i2c.
+  SPIBusOp* op = _bus->new_op(BusOpcode::TX, this);
+  op->setParams((CPLD_REG_RANK_P_M | 0x40), 3, 9, RegPtrMap::regAddr(RegID::M_CTRL_REG3) | 0x40);  // 3 bytes per IMU.
+  op->setBuffer(&_reg_block_m_ctrl3_5[0], 9);
+  if (0 == queue_io_job(op)) {
+    op = _bus->new_op(BusOpcode::TX, this);
+    op->setParams((CPLD_REG_RANK_P_I | 0x00), 3, 9, RegPtrMap::regAddr(RegID::AG_CTRL_REG8));  // 3 bytes per IMU.
+    op->setBuffer(&_reg_block_ag_ctrl8_9_10[0], 9);
+    if (0 == queue_io_job(op)) {
+      op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams((CPLD_REG_RANK_P_I | 0x00), 2, 6, RegPtrMap::regAddr(RegID::AG_INT1_CTRL));  // 2 bytes per IMU.
+      op->setBuffer(&_reg_block_ag_interrupt_conf[0], 6);
+      if (0 == queue_io_job(op)) {
+        op = _bus->new_op(BusOpcode::TX, this);
+        op->setParams((CPLD_REG_RANK_P_M | 0x40), 1, 3, RegPtrMap::regAddr(RegID::M_INT_CFG) | 0x40);  // 1 byte per IMU.
+        op->setBuffer(&_reg_block_m_irq_cfg[0], 3);
+        if (0 == queue_io_job(op)) {
+          op = _bus->new_op(BusOpcode::TX, this);
+          op->setParams((CPLD_REG_RANK_P_M | 0x40), 1, 3, RegPtrMap::regAddr(RegID::M_CTRL_REG1) | 0x40);  // 1 byte per IMU.
+          op->setBuffer(&_reg_block_m_ctrl1[0], 3);
+          if (0 == queue_io_job(op)) {
+            op = _bus->new_op(BusOpcode::TX, this);
+            op->setParams((CPLD_REG_RANK_P_I | 0x00), 1, 3, RegPtrMap::regAddr(RegID::AG_FIFO_CTRL));  // 1 byte per IMU.
+            op->setBuffer(&_reg_block_fifo_ctrl[0], 3);
+            ret = queue_io_job(op);
+          }
+        }
+      }
+    }
+  }
+
+  return ret;
 }
