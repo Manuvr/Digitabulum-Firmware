@@ -22,6 +22,18 @@ limitations under the License.
 #include "LSM9DS1.h"
 #include "../CPLDDriver/CPLDDriver.h"
 
+
+/*******************************************************************************
+*      _______.___________.    ___   .___________. __    ______     _______.
+*     /       |           |   /   \  |           ||  |  /      |   /       |
+*    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
+*     \   \       |  |      /  /_\  \    |  |     |  | |  |        \   \
+* .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
+* |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
+*
+* Static members and initializers should be located here.
+*******************************************************************************/
+
 /* The addresses of the registers named in the enum class RegID. */
 const uint8_t _imu_address_map[] = {
   0x05, 0x07, 0x09,  // M: 16-bit offset registers
@@ -44,22 +56,25 @@ const uint8_t _imu_address_map[] = {
   0x37
 };
 
-/* The default values of the registers named in the enum class RegID. */
-// TODO: Make these match datasheet values.
+/*
+* The default values of the registers named in the enum class RegID.
+* Some of these values should be construed as being 16-bit, but the size of
+*   these arrays must remain the same.
+*/
 const uint8_t _imu_reg_defaults[] = {
   0x00, 0x00, 0x00,  // M: 16-bit offset registers
-  0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00,
+  0x3d, 0x40,
+  0x00, 0x03, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00,  // M: 16-bit data registers
-  0x00, 0x00,
+  0x08, 0x00,
   0x00,              // M: 16-bit threshold register
   // This is where the AG registers start.
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x68, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00,              // I: 16-bit temperature register (11-bit)
   0x00,
   0x00, 0x00, 0x00,  // G: 16-bit gyro data registers
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x38, 0x38, 0x00, 0x00, 0x04, 0x00, 0x00,
   0x00, 0x00,
   0x00, 0x00, 0x00,  // A: 16-bit acc data registers
   0x00, 0x00, 0x00,
@@ -208,7 +223,6 @@ RegID RegPtrMap::regIdFromAddr(uint8_t dev_addr, uint8_t reg_addr) {
 }
 
 
-
 /**
 * Print the IMU register name.
 *
@@ -228,4 +242,72 @@ const uint8_t RegPtrMap::regWidth(RegID id) {
 
 const bool RegPtrMap::regWritable(RegID id) {
   return _imu_register_writable_map[(uint8_t) id];
+}
+
+
+/*
+* Looks at our local offset table to obtain value. This was set at instantiation
+*   by ManaManager.
+* TODO: This member is a horrible liability.... Not all of these registers will have a local pointer.
+*/
+const uint8_t* RegPtrMap::regPtr(RegID idx) const {
+  switch (idx) {
+    case RegID::M_OFFSET_X:          return ((uint8_t*) M_OFFSETS)+0;
+    case RegID::M_OFFSET_Y:          return ((uint8_t*) M_OFFSETS)+2;
+    case RegID::M_OFFSET_Z:          return ((uint8_t*) M_OFFSETS)+4;
+    case RegID::M_WHO_AM_I:          break;
+    case RegID::M_CTRL_REG1:         break;
+    case RegID::M_CTRL_REG2:         return M_CTRL+0;
+    case RegID::M_CTRL_REG3:         break;
+    case RegID::M_CTRL_REG4:         break;
+    case RegID::M_CTRL_REG5:         break;
+    case RegID::M_STATUS_REG:        return M_STATUS+0;
+    case RegID::M_DATA_X:            break;
+    case RegID::M_DATA_Y:            break;
+    case RegID::M_DATA_Z:            break;
+    case RegID::M_INT_CFG:           break;
+    case RegID::M_INT_SRC:           return M_INT_SRC+0;
+    case RegID::M_INT_TSH:           return ((uint8_t*) M_INT_TSH)+0;
+    case RegID::AG_ACT_THS:          return AG_ACT+0;
+    case RegID::AG_ACT_DUR:          return AG_ACT+1;
+    case RegID::A_INT_GEN_CFG:       return AG_BLOCK_0+0;
+    case RegID::A_INT_GEN_THS_X:     return AG_BLOCK_0+1;
+    case RegID::A_INT_GEN_THS_Y:     return AG_BLOCK_0+2;
+    case RegID::A_INT_GEN_THS_Z:     return AG_BLOCK_0+3;
+    case RegID::A_INT_GEN_DURATION:  return AG_BLOCK_0+4;
+    case RegID::G_REFERENCE:         return AG_BLOCK_0+5;
+    case RegID::AG_INT1_CTRL:        break;
+    case RegID::AG_INT2_CTRL:        break;
+    case RegID::AG_WHO_AM_I:         break;
+    case RegID::G_CTRL_REG1:         return AG_CTRL1_3+0;
+    case RegID::G_CTRL_REG2:         return AG_CTRL1_3+1;
+    case RegID::G_CTRL_REG3:         return AG_CTRL1_3+2;
+    case RegID::G_ORIENT_CFG:        break;
+    case RegID::G_INT_GEN_SRC:       break;
+    case RegID::AG_DATA_TEMP:        break;
+    case RegID::AG_STATUS_REG:       break;
+    case RegID::G_DATA_X:            break;
+    case RegID::G_DATA_Y:            break;
+    case RegID::G_DATA_Z:            break;
+    case RegID::AG_CTRL_REG4:        break;
+    case RegID::A_CTRL_REG5:         break;
+    case RegID::A_CTRL_REG6:         return AG_CTRL6_7+0;
+    case RegID::A_CTRL_REG7:         return AG_CTRL6_7+1;
+    case RegID::AG_CTRL_REG8:        break;
+    case RegID::AG_CTRL_REG9:        break;
+    case RegID::AG_CTRL_REG10:       break;
+    case RegID::A_INT_GEN_SRC:       break;
+    case RegID::AG_STATUS_REG_ALT:   break;
+    case RegID::A_DATA_X:            break;
+    case RegID::A_DATA_Y:            break;
+    case RegID::A_DATA_Z:            break;
+    case RegID::AG_FIFO_CTRL:        break;
+    case RegID::AG_FIFO_SRC:         return FIFO_LVLS;
+    case RegID::G_INT_GEN_CFG:       break;
+    case RegID::G_INT_GEN_THS_X:     return ((uint8_t*) G_INT_THS)+0;
+    case RegID::G_INT_GEN_THS_Y:     return ((uint8_t*) G_INT_THS)+2;
+    case RegID::G_INT_GEN_THS_Z:     return ((uint8_t*) G_INT_THS)+4;
+    case RegID::G_INT_GEN_DURATION:  return G_INT_DUR+0;
+  }
+  return nullptr;
 }

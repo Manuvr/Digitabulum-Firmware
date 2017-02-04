@@ -116,7 +116,7 @@ typedef struct {
 *
 * NOTE: These values are NOT register addresses, they are indicies. The given
 *   order, and the fact that the first valid register starts at 0 is an
-*   assumption made throughout this class.
+*   assumption made throughout this class, as well as RegPtrMap.
 *   Magnetometer registers occur first because the CPLD is organized that way.
 * NOTE: In order to get away with using the restricted list, the sensors MUST be
 *   configured to allow multiple sequential register access. The means for doing
@@ -124,8 +124,8 @@ typedef struct {
 */
 enum class RegID {
   M_OFFSET_X = 0x00,  // 16-bit offset registers
-  M_OFFSET_Y,         // 16-bit offset registers
-  M_OFFSET_Z,         // 16-bit offset registers
+  M_OFFSET_Y,         // 16-bit offset registers  TODO: Condense into X?
+  M_OFFSET_Z,         // 16-bit offset registers  TODO: Condense into X?
   M_WHO_AM_I,
   M_CTRL_REG1,
   M_CTRL_REG2,
@@ -134,8 +134,8 @@ enum class RegID {
   M_CTRL_REG5,
   M_STATUS_REG,
   M_DATA_X,           // 16-bit data registers
-  M_DATA_Y,           // 16-bit data registers
-  M_DATA_Z,           // 16-bit data registers
+  M_DATA_Y,           // 16-bit data registers  TODO: Condense into X?
+  M_DATA_Z,           // 16-bit data registers  TODO: Condense into X?
   M_INT_CFG,
   M_INT_SRC,
   M_INT_TSH,          // 16-bit threshold register
@@ -143,13 +143,13 @@ enum class RegID {
   AG_ACT_DUR,
   A_INT_GEN_CFG,
   A_INT_GEN_THS_X,    // 8-bit threshold registers
-  A_INT_GEN_THS_Y,    // 8-bit threshold registers
-  A_INT_GEN_THS_Z,    // 8-bit threshold registers
+  A_INT_GEN_THS_Y,    // 8-bit threshold registers  TODO: Condense into X?
+  A_INT_GEN_THS_Z,    // 8-bit threshold registers  TODO: Condense into X?
   A_INT_GEN_DURATION,
   G_REFERENCE,
   AG_INT1_CTRL,
   AG_INT2_CTRL,
-  AG_WHO_AM_I,
+  AG_WHO_AM_I,        // TODO: Condense into M_WHO_AM_I?
   G_CTRL_REG1,
   G_CTRL_REG2,
   G_CTRL_REG3,
@@ -158,8 +158,8 @@ enum class RegID {
   AG_DATA_TEMP,       // 16-bit temperature register (11-bit)
   AG_STATUS_REG,
   G_DATA_X,           // 16-bit gyro data registers
-  G_DATA_Y,           // 16-bit gyro data registers
-  G_DATA_Z,           // 16-bit gyro data registers
+  G_DATA_Y,           // 16-bit gyro data registers  TODO: Condense into X?
+  G_DATA_Z,           // 16-bit gyro data registers  TODO: Condense into X?
   AG_CTRL_REG4,
   A_CTRL_REG5,
   A_CTRL_REG6,
@@ -170,17 +170,16 @@ enum class RegID {
   A_INT_GEN_SRC,
   AG_STATUS_REG_ALT,
   A_DATA_X,           // 16-bit accelerometer data registers
-  A_DATA_Y,           // 16-bit accelerometer data registers
-  A_DATA_Z,           // 16-bit accelerometer data registers
+  A_DATA_Y,           // 16-bit accelerometer data registers  TODO: Condense into X?
+  A_DATA_Z,           // 16-bit accelerometer data registers  TODO: Condense into X?
   AG_FIFO_CTRL,
   AG_FIFO_SRC,
   G_INT_GEN_CFG,
   G_INT_GEN_THS_X,    // 16-bit threshold registers
-  G_INT_GEN_THS_Y,    // 16-bit threshold registers
-  G_INT_GEN_THS_Z,    // 16-bit threshold registers
+  G_INT_GEN_THS_Y,    // 16-bit threshold registers  TODO: Condense into X?
+  G_INT_GEN_THS_Z,    // 16-bit threshold registers  TODO: Condense into X?
   G_INT_GEN_DURATION
 };
-
 
 
 
@@ -189,71 +188,35 @@ enum class RegID {
 *   values are pointers to the memory that represents the LSM9DS1 registers.
 *******************************************************************************/
 class RegPtrMap {
-  // Because the data frames come in so fast, we need to double buffer them.
-  //M_OFFSET_X = 0x00,  // 16-bit offset registers
-  //M_OFFSET_Y,         // 16-bit offset registers
-  //M_OFFSET_Z,         // 16-bit offset registers
-  //M_CTRL_REG1,
-  //M_CTRL_REG2,
-  //M_CTRL_REG3,
-  //M_CTRL_REG4,
-  //M_CTRL_REG5,
-  //M_STATUS_REG,
-  //M_DATA_X,           // 16-bit data registers
-  //M_DATA_Y,           // 16-bit data registers
-  //M_DATA_Z,           // 16-bit data registers
-  //M_INT_CFG,
-  //M_INT_SRC,
-  //M_INT_TSH,          // 16-bit threshold register
-
-  //AG_ACT_THS,
-  //AG_ACT_DUR,
-  //A_INT_GEN_CFG,
-  //A_INT_GEN_THS_X,    // 8-bit threshold registers
-  //A_INT_GEN_THS_Y,    // 8-bit threshold registers
-  //A_INT_GEN_THS_Z,    // 8-bit threshold registers
-  //A_INT_GEN_DURATION,
-  //G_REFERENCE,
-  //AG_INT1_CTRL,
-  //AG_INT2_CTRL,
-  //AG_WHO_AM_I,
-  //G_CTRL_REG1,
-  //G_CTRL_REG2,
-  //G_CTRL_REG3,
-  //G_ORIENT_CFG,
-  //G_INT_GEN_SRC,
-  //AG_STATUS_REG,
-  //AG_CTRL_REG4,
-  //A_CTRL_REG5,
-  //A_CTRL_REG6,
-  //A_CTRL_REG7,
-  //AG_CTRL_REG8,
-  //AG_CTRL_REG9,
-  //AG_CTRL_REG10,
-  //A_INT_GEN_SRC,
-  //AG_STATUS_REG_ALT,
-  //AG_FIFO_CTRL,
-  //AG_FIFO_SRC,
-  //G_INT_GEN_CFG,
-  //G_INT_GEN_THS_X,    // 16-bit threshold registers
-  //G_INT_GEN_THS_Y,    // 16-bit threshold registers
-  //G_INT_GEN_THS_Z,    // 16-bit threshold registers
-  //G_INT_GEN_DURATION
-
+  // NOTE: This class should lose ptr members over time as limits are tested.
   public:
     RegPtrMap(
-      const uint8_t idx,
-      const uint8_t* ag_activity,
-      const uint8_t* ag_ctrl1_3,
-      const uint8_t* ag_ctrl6_7,
-      const uint8_t* ag_status,
-      const uint8_t* fifo_src
+      const uint8_t   idx,
+      const uint8_t*  ag_activity,
+      const uint8_t*  ag_ctrl1_3,
+      const uint8_t*  ag_ctrl6_7,
+      const uint8_t*  ag_status,
+      const uint8_t*  fifo_src,
+      const int16_t*  g_thresholds,
+      const uint8_t*  g_irq_dur,
+      const int16_t*  m_offsets,
+      const uint8_t*  m_ctrl2,
+      const uint8_t*  m_status,
+      const uint8_t*  m_irq_src,
+      const uint16_t* m_thresholds
     ) :
       AG_ACT((idx * 2) + ag_activity),
       AG_CTRL1_3((idx * 3) + ag_ctrl1_3),
       AG_CTRL6_7((idx * 2) + ag_ctrl6_7),
       AG_STATUS(idx + ag_status),
-      FIFO_LVLS(idx + fifo_src)
+      FIFO_LVLS(idx + fifo_src),
+      G_INT_THS((idx * 6) + g_thresholds),  // 16-bit: Horrid.
+      G_INT_DUR(idx + g_irq_dur),
+      M_OFFSETS((idx * 6) + m_offsets),     // 16-bit: Horrid.
+      M_CTRL(idx + m_ctrl2),
+      M_STATUS(idx + m_status),
+      M_INT_SRC(idx + m_irq_src),
+      M_INT_TSH((idx * 2) + m_thresholds)   // 16-bit: Horrid.
     {};
 
     const uint8_t* regPtr(RegID) const;
@@ -268,12 +231,21 @@ class RegPtrMap {
   private:
     // Some registers are not included in this list if their function can be
     //   handled entirely within ManuManager.
-    const uint8_t* AG_ACT;  // AG_ACT_THS, AG_ACT_DUR
+    const uint8_t* AG_ACT;      // AG_ACT_THS, AG_ACT_DUR
     const uint8_t* AG_BLOCK_0;  // A_INT_GEN_CFG, A_INT_GEN_THS_X, A_INT_GEN_THS_Y, A_INT_GEN_THS_Z, A_INT_GEN_DURATION, G_REFERENCE,
     const uint8_t* AG_CTRL1_3;  // G_CTRL_REG1, G_CTRL_REG2, G_CTRL_REG3
     const uint8_t* AG_CTRL6_7;  // A_CTRL_REG6, A_CTRL_REG7
     const uint8_t* AG_STATUS;   // AG_STATUS_REG
     const uint8_t* FIFO_LVLS;   // AG_FIFO_SRC
+
+    const int16_t* G_INT_THS;   // 16-bit: G_INT_GEN_THS_X, G_INT_GEN_THS_Y, G_INT_GEN_THS_Z
+    const uint8_t* G_INT_DUR;   // G_INT_GEN_DURATION
+
+    const int16_t* M_OFFSETS;   // 16-bit: M_OFFSET_X, M_OFFSET_Y, M_OFFSET_Z
+    const uint8_t* M_CTRL;      // M_CTRL_REG2
+    const uint8_t* M_STATUS;    // M_STATUS_REG
+    const uint8_t* M_INT_SRC;   // M_INT_SRC
+    const uint16_t* M_INT_TSH;  // 16-bit: M_INT_TSH
 };
 
 
@@ -391,50 +363,37 @@ class LSM9DS1 {
   private:
     const RegPtrMap* _ptr_map;
 
-    // TODO: r1 simplified things a great deal. All these members can probably DIAF.
-    RegID IDX_T0; // TODO: Ought to be const if here at all.
-    RegID IDX_T1; // TODO: Ought to be const if here at all.
-    uint8_t   io_test_val_0    = 0;     //
-    uint8_t   io_test_val_1    = 0;     //
+    uint32_t  discards_total_i    = 0;     // Track how many discards we've ASKED for.
+    uint32_t  discards_total_m    = 0;     // Track how many discards we've ASKED for.
+    uint16_t  discards_remain_i   = 0;     // If we know we need to discard samples...
+    uint16_t  discards_remain_m   = 0;     // If we know we need to discard samples...
 
-    uint32_t  time_stamp_base  = 0;       // What time was it when we first started taking samples?
-    uint32_t  last_sample_time = 0;       // What time was it when we first started taking samples?
-    uint8_t*  pending_samples  = nullptr; // How many samples are we expecting to arrive?
+    uint16_t  _imu_flags          = 1;     // Default verbosity of 1.
 
-    uint16_t _imu_flags        = 1;     // Default verbosity of 1.
+    uint8_t   io_test_val_0       = 0;     //
+    uint8_t   io_test_val_1       = 0;     //
 
-    int8_t    base_filter_param = 0;
+    uint8_t   sb_next_read        = 0;
+    uint8_t   sb_next_write       = 0;
 
-    uint8_t   sb_next_read     = 0;
-    uint8_t   sb_next_write    = 0;
-    IMUFault  error_condition  = IMUFault::NO_ERROR;
+    int8_t    base_filter_param   = 0;
 
-    IMUState  imu_state        = IMUState::STAGE_0;
-    IMUState  desired_state    = IMUState::STAGE_0;
+    IMUFault  error_condition     = IMUFault::NO_ERROR;
 
-    StringBuilder local_log;
+    IMUState  imu_state           = IMUState::STAGE_0;
+    IMUState  desired_state       = IMUState::STAGE_0;
 
+    uint8_t   scale_mag           = 0;     // Index to the scale array.
+    uint8_t   scale_acc           = 0;     // Index to the scale array.
+    uint8_t   scale_gyr           = 0;     // Index to the scale array.
 
-    uint8_t scale_mag            = 0;     // What scale is the sensor operating at? This is an index.
-    uint8_t scale_acc            = 0;     // What scale is the sensor operating at? This is an index.
-    uint8_t scale_gyr            = 0;     // What scale is the sensor operating at? This is an index.
+    uint8_t   update_rate_i       = 0;     // Index to the update-rate array.
+    uint8_t   update_rate_m       = 0;     // Index to the update-rate array.
 
-    uint8_t update_rate_i        = 0;     // Index to the update-rate array.
-    uint8_t update_rate_m        = 0;     // Index to the update-rate array.
-
-    uint32_t discards_total_i    = 0;     // Track how many discards we've ASKED for.
-    uint32_t discards_total_m    = 0;     // Track how many discards we've ASKED for.
-    uint16_t discards_remain_i   = 0;     // If we know we need to discard samples...
-    uint16_t discards_remain_m   = 0;     // If we know we need to discard samples...
-
-    /* These are higher-level fxns that are used as "macros" for specific patterns of */
-    /*   register access. Common large-scale operations should go here.               */
     IMUFault writeRegister(RegID idx, unsigned int nu_val);
-
     unsigned int regValue(RegID);
-    /* This is the end of the low-level functions.                                    */
 
-    IMUFault identity_check();
+
     bool integrity_check();
 
     bool is_setup_completed();

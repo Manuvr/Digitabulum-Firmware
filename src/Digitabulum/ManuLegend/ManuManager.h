@@ -120,8 +120,8 @@ class ManuManager : public EventReceiver, public BusOpCallback {
 
     void dumpPreformedElements(StringBuilder*);
 
-    inline ManuLegend* getActiveLegend() {    return operating_legend;    }
     int8_t setLegend(ManuLegend*);
+    inline ManuLegend* getActiveLegend() {    return operating_legend;    }
 
     /* Expose our idea about handedness to other modules. */
     inline Chirality getChirality() {  return (Chirality) _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_MASK);  };
@@ -129,8 +129,6 @@ class ManuManager : public EventReceiver, public BusOpCallback {
 
     inline uint32_t totalSamples() {   return sample_count;   };
 
-
-    //static ManuManager* getInstance();
 
     static const char* chiralityString(Chirality);
 
@@ -182,6 +180,7 @@ class ManuManager : public EventReceiver, public BusOpCallback {
 
     void printIMURollCall(StringBuilder*);
     void printTemperatures(StringBuilder*);
+    void printFIFOLevels(StringBuilder*);
 
     int set_chirality(Chirality);
     DigitPort  get_port_given_digit(Anatomical);
@@ -197,8 +196,6 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     // Address of the magnetic half of the LSM9DS1.
     inline uint8_t _magnetic_addr(int idx) {    return ((idx % 17) + CPLD_REG_IMU_DM_P_M);   };
 
-
-    static ManuManager *INSTANCE;
 
     // These are preformed bus operations that address multiple IMUs...
     static SPIBusOp _preformed_read_i;

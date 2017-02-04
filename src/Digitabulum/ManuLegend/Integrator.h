@@ -254,8 +254,6 @@ class Integrator {
 
     Vector3<float> _grav;   // The Integrator maintains an empirical value for gravity.
 
-    PriorityQueue<SensorFrame*> quat_queue;   // This is the queue for quat operations.
-
     uint32_t dirty_acc = 0;
     uint32_t dirty_gyr = 0;
     uint32_t dirty_mag = 0;
@@ -281,6 +279,8 @@ class Integrator {
 
     //Vector3<float> gravity;        // If we need gravity, but the Legend doesn't want it.
     StringBuilder local_log;
+
+    PriorityQueue<SensorFrame*> quat_queue;   // This is the queue for quat operations.
 
     int8_t verbosity            = 3;
     uint8_t madgwick_iterations = 1;

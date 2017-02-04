@@ -44,11 +44,12 @@ Vector3<int16_t> reflection_acc;
 Vector3<int16_t> reflection_gyr;
 
 
-/* ---------------------- */
-/*    Register memory     */
-/* ---------------------- */
-/* These are giant strips of DMA-capable memory that are used for raw frame
-     reads from the sensor package. */
+/*------------------------------------------------------------------------------
+  Register memory
+  These are giant strips of DMA-capable memory that are used for raw frame
+    reads from the sensor package. */
+
+/****** First, the special-cases.... ******************************************/
 
 /* Inertial data,
     x2 because Acc+Gyr
@@ -60,7 +61,6 @@ Vector3<int16_t> reflection_gyr;
 */
 int16_t _frame_buf_i[2 * 2 * 3 * LEGEND_DATASET_IIU_COUNT];
 
-
 /* Temperature data. Single buffered. */
 // TODO: Might consolidate temp into inertial. Sensor and CPLD allow for it.
 int16_t __temperatures[LEGEND_DATASET_IIU_COUNT];
@@ -68,18 +68,19 @@ int16_t __temperatures[LEGEND_DATASET_IIU_COUNT];
 /* Magnetometer data registers. Single buffered. */
 int16_t _reg_block_m_data[3 * LEGEND_DATASET_IIU_COUNT];
 
-/* More large stretches of DMA memory. These are for IIU register definitions.
-     Registers laid out this way cannot be multiply-accessed as more than single bytes
-     by their respective IMU classes because the memory is not contiguous. */
-
 /* Identity registers for both sensor aspects. */
 uint8_t _reg_block_ident[2 * LEGEND_DATASET_IIU_COUNT];
 
 
-/* Ranked-access registers below this line.*/
-  // TODO: Until the DMA apparatus is smart enough to know what we're doing,
-  //   we actually need to define all 6 bytes. We should be able to loop the
-  //   memory-side of the transaction if we want all bytes to be the same.
+/****** Ranked-access registers below this line. ******************************/
+/*
+  The following sensor registers are managed entirely within ManuManager. For
+    those registers that we treat as write-only, and homogenous, we will use the
+    ranked-access mode in the CPLD.
+  TODO: Until the DMA apparatus is smart enough to know what we're doing,
+    we actually need to define all 6 bytes. We should be able to loop the
+    memory-side of the transaction if we want all bytes to be the same.
+*/
 
 /*
   AG_INT1_CTRL and AG_INT2_CTRL (Rank-access)
@@ -152,9 +153,22 @@ uint8_t _reg_block_m_ctrl3_5[9] = {
   0x84, 0x04, 0x40
 };
 
+/*
+  Accelerometer IRQ status registers. (Discrete-access)
+  Handled by: ManuManager
+*/
+uint8_t _reg_block_a_irq_src[LEGEND_DATASET_IIU_COUNT];
+
+/*
+  Gyroscope interrupt config, source, and threshold registers. (Discrete-access)
+  Handled by: ManuManager
+*/
+uint8_t _reg_block_g_irq_src[LEGEND_DATASET_IIU_COUNT];
+uint8_t _reg_block_g_irq_cfg[LEGEND_DATASET_IIU_COUNT];
 
 
-/* Individually-packed registers below this line. */
+
+/****** Individually-packed registers below this line. ************************/
 
 /* Activity thresholds and durations. */
 uint8_t _reg_block_ag_activity[2 * LEGEND_DATASET_IIU_COUNT];
@@ -170,17 +184,10 @@ uint8_t _reg_block_ag_ctrl6_7[2 * LEGEND_DATASET_IIU_COUNT];
 /* Inertial aspect status registers. */
 uint8_t _reg_block_ag_status[LEGEND_DATASET_IIU_COUNT];
 
-/* Accelerometer IRQ status registers. */
-uint8_t _reg_block_a_irq_src[LEGEND_DATASET_IIU_COUNT];
-
-
-
 /* Inertial aspect FIFO status registers. */
 uint8_t __fifo_levels[LEGEND_DATASET_IIU_COUNT];
 
-/* Gyroscope interrupt config, source, and threshold registers. */
-uint8_t _reg_block_g_irq_src[LEGEND_DATASET_IIU_COUNT];
-uint8_t _reg_block_g_irq_cfg[LEGEND_DATASET_IIU_COUNT];
+
 int16_t _reg_block_g_thresholds[3 * LEGEND_DATASET_IIU_COUNT];
 uint8_t _reg_block_g_irq_dur[LEGEND_DATASET_IIU_COUNT];
 
@@ -199,9 +206,10 @@ uint8_t _reg_block_m_irq_src[LEGEND_DATASET_IIU_COUNT];
 
 /* Magnetometer threshold registers. Will be interpreted as 15-bit unsigned. */
 uint16_t _reg_block_m_thresholds[LEGEND_DATASET_IIU_COUNT];
-/* ---------------------- */
-/* End of register memory */
-/* ---------------------- */
+
+/* End of register memory
+------------------------------------------------------------------------------*/
+
 
 /* These are the beginnings of a ring-buffer for whole inertial frames. */
 const int16_t* _frames_i[] = {
@@ -209,30 +217,31 @@ const int16_t* _frames_i[] = {
   &_frame_buf_i[102]
 };
 
-
+/* This is used to define the noise floors for the data. */
 Vector3<int16_t> noise_floor_mag[LEGEND_DATASET_IIU_COUNT];
 Vector3<int16_t> noise_floor_acc[LEGEND_DATASET_IIU_COUNT];
 Vector3<int16_t> noise_floor_gyr[LEGEND_DATASET_IIU_COUNT];
 
 
+// TODO: ThereMustBeABetterWay.jpg
 const RegPtrMap _reg_ptrs[] = {
-  RegPtrMap(0 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
-  RegPtrMap(1 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
-  RegPtrMap(2 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
-  RegPtrMap(3 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
-  RegPtrMap(4 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
-  RegPtrMap(5 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
-  RegPtrMap(6 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
-  RegPtrMap(7 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
-  RegPtrMap(8 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
-  RegPtrMap(9 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
-  RegPtrMap(10, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
-  RegPtrMap(11, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
-  RegPtrMap(12, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
-  RegPtrMap(13, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
-  RegPtrMap(14, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
-  RegPtrMap(15, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0]),
-  RegPtrMap(16, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0])
+  RegPtrMap(0 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(1 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(2 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(3 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(4 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(5 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(6 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(7 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(8 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(9 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(10, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(11, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(12, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(13, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(14, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(15, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
+  RegPtrMap(16, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0])
 };
 
 
@@ -257,30 +266,6 @@ LSM9DS1 imus[LEGEND_DATASET_IIU_COUNT] = {
 };
 
 
-// This is used to define the noise floors for the data.
-//int16_t noise_floor_mag[3*LEGEND_DATASET_IIU_COUNT];
-//int16_t noise_floor_acc[3*LEGEND_DATASET_IIU_COUNT];
-//int16_t noise_floor_gyr[3*LEGEND_DATASET_IIU_COUNT];
-
-
-/*
-* The following sensor registers are managed entirely within ManuManager. For
-*   those registers that we treat as write-only, and homogenous, we will use the
-*   ranked-access mode in the CPLD.
-
-  A_DATA_X,           // 16-bit accelerometer data registers
-  A_DATA_Y,           // 16-bit accelerometer data registers
-  A_DATA_Z,           // 16-bit accelerometer data registers
-  AG_FIFO_CTRL,
-  AG_FIFO_SRC,
-  G_INT_GEN_CFG,
-  G_INT_GEN_THS_X,    // 16-bit threshold registers
-  G_INT_GEN_THS_Y,    // 16-bit threshold registers
-  G_INT_GEN_THS_Z,    // 16-bit threshold registers
-  G_INT_GEN_DURATION
-*/
-
-
 const char* ManuManager::chiralityString(Chirality x) {
   switch (x) {
     case Chirality::RIGHT:  return "RIGHT";
@@ -303,17 +288,10 @@ const char* ManuManager::chiralityString(Chirality x) {
 *******************************************************************************/
 ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") {
   _bus = (CPLDDriver*) bus;  // TODO: Make this cast unnecessary.
-  reflection_mag.x = 1;
-  reflection_mag.y = 1;
-  reflection_mag.z = -1;
 
-  reflection_acc.x = -1;
-  reflection_acc.y = 1;
-  reflection_acc.z = -1;
-
-  reflection_gyr.x = -1;
-  reflection_gyr.y = 1;
-  reflection_gyr.z = -1;
+  reflection_gyr(1, 1, 1);
+  reflection_acc(1, 1, 1);
+  reflection_mag(1, 1, 1);
 
   _preformed_read_i.shouldReap(false);
   _preformed_read_i.devRegisterAdvance(true);
@@ -1199,6 +1177,49 @@ void ManuManager::printTemperatures(StringBuilder *output) {
 }
 
 
+/**
+* Debug support method. This fxn is only present in debug builds.
+*
+* @param   StringBuilder* The buffer into which this fxn should write its output.
+*/
+void ManuManager::printFIFOLevels(StringBuilder *output) {
+  EventReceiver::printDebug(output);
+  output->concat("-- Intertial integration units: fifo_lvl(hex)\n--\n-- Dgt      Prx        Imt        Dst\n");
+  // TODO: Audit usage of length-specified integers as iterators. Cut where not
+  //   important and check effects on optimization, as some arch's take a
+  //   runtime hit for access in any length less than thier ALU widths.
+  for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+    switch (i) {
+      case 1:   // Skip output for the IMU that doesn't exist at digit0.
+        output->concat("   <N/A>   ");
+        break;
+      case 0:
+        output->concat("-- 0(MC)    ");
+        break;
+      case 2:   // digit1 begins
+        output->concat("\n-- 1        ");
+        break;
+      case 5:   // digit2 begins
+        output->concat("\n-- 2        ");
+        break;
+      case 8:   // digit3 begins
+        output->concat("\n-- 3        ");
+        break;
+      case 11:  // digit4 begins
+        output->concat("\n-- 4        ");
+        break;
+      case 14:  // digit5 begins
+        output->concat("\n-- 5        ");
+        break;
+      default:
+        break;
+    }
+    output->concatf("%02u(%02x)  ", i, __fifo_levels[i]);
+  }
+  output->concat("\n\n");
+}
+
+
 #if defined(__MANUVR_DEBUG)
 void ManuManager::dumpPreformedElements(StringBuilder* output) {
   output->concat("--- Quat-crunch event\n");
@@ -1311,15 +1332,26 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           printIMURollCall(&local_log);   // Show us the results, JIC
           break;
         case 5:
-          integrator.dumpPointers(&local_log);   // Show us the results, JIC
+          integrator.dumpPointers(&local_log);
           break;
         case 6:
           local_log.concatf("sizeof(ManuManager)      %u\n", sizeof(ManuManager));
           local_log.concatf("sizeof(Integrator)       %u\n", sizeof(Integrator));
           local_log.concatf("sizeof(SensorFrame)      %u\n", sizeof(SensorFrame));
           local_log.concatf("sizeof(LSM9DS1)          %u\n", sizeof(LSM9DS1));
+          local_log.concatf("sizeof(RegPtrMap)        %u\n", sizeof(RegPtrMap));
           local_log.concatf("sizeof(_frame_buf_i)     %u\n", sizeof(_frame_buf_i));
-          local_log.concatf("sizeof(Vector3<float>)   %u\n", sizeof(Vector3<float>));
+          break;
+        case 7:
+          {
+            SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
+            op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::AG_ACT_DUR) | 0x80);
+            op->setBuffer(&__fifo_levels[0], LEGEND_DATASET_IIU_COUNT);
+            queue_io_job(op);
+          }
+          break;
+        case 8:
+          printFIFOLevels(&local_log);
           break;
         case 9:
           printTemperatures(&local_log);   // Show us the temperatures.
@@ -1373,11 +1405,9 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'k':
       if ((temp_byte < 6) && (temp_byte >= 0)) {
-        ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
-        event->addArg((uint8_t) temp_byte);  // Set the desired init stage.
-        event->priority(0);
-        raiseEvent(event);
+        init_iius();
         local_log.concatf("Broadcasting IMU_INIT for stage %u...\n", temp_byte);
+
       }
       else {
         local_log.concatf("Illegal INIT stage: %u\n", temp_byte);
@@ -1670,7 +1700,7 @@ int8_t ManuManager::init_iius() {
   int8_t ret = -1;
   // Step 1: Enable SPI write, multiple-access and disable i2c.
   SPIBusOp* op = _bus->new_op(BusOpcode::TX, this);
-  op->setParams((CPLD_REG_RANK_P_M | 0x40), 3, 9, RegPtrMap::regAddr(RegID::M_CTRL_REG3));  // 3 bytes per IMU.
+  op->setParams((CPLD_REG_RANK_P_M | 0x40), 3, 9, RegPtrMap::regAddr(RegID::M_CTRL_REG3) | 0x40);  // 3 bytes per IMU.
   op->setBuffer(&_reg_block_m_ctrl3_5[0], 9);
   if (0 == queue_io_job(op)) {
     op = _bus->new_op(BusOpcode::TX, this);
@@ -1682,11 +1712,11 @@ int8_t ManuManager::init_iius() {
       op->setBuffer(&_reg_block_ag_interrupt_conf[0], 6);
       if (0 == queue_io_job(op)) {
         op = _bus->new_op(BusOpcode::TX, this);
-        op->setParams((CPLD_REG_RANK_P_M | 0x40), 1, 3, RegPtrMap::regAddr(RegID::M_INT_CFG));  // 1 byte per IMU.
+        op->setParams((CPLD_REG_RANK_P_M | 0x40), 1, 3, RegPtrMap::regAddr(RegID::M_INT_CFG) | 0x40);  // 1 byte per IMU.
         op->setBuffer(&_reg_block_m_irq_cfg[0], 3);
         if (0 == queue_io_job(op)) {
           op = _bus->new_op(BusOpcode::TX, this);
-          op->setParams((CPLD_REG_RANK_P_M | 0x40), 1, 3, RegPtrMap::regAddr(RegID::M_CTRL_REG1));  // 1 byte per IMU.
+          op->setParams((CPLD_REG_RANK_P_M | 0x40), 1, 3, RegPtrMap::regAddr(RegID::M_CTRL_REG1) | 0x40);  // 1 byte per IMU.
           op->setBuffer(&_reg_block_m_ctrl1[0], 3);
           if (0 == queue_io_job(op)) {
             op = _bus->new_op(BusOpcode::TX, this);

@@ -20,6 +20,7 @@ limitations under the License.
 */
 
 #include "LSM9DS1.h"
+#include "../CPLDDriver/CPLDDriver.h"
 #include "../ManuLegend/ManuManager.h"
 
 extern unsigned long micros();
@@ -171,17 +172,8 @@ const char* LSM9DS1::getStateString(IMUState state) {
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
-//TODO: I'll work back up to this once it isn't in the way.
-//LSM9DS1::LSM9DS1(uint8_t addr, uint8_t ident_idx, uint8_t idx_test_0, uint8_t idx_test_1) :
-//  IDX_T0(idx_test_0), IDX_T1(idx_test_1), BUS_ADDR(addr), IDX_ID(ident_idx)
-//{
-//  init();
-//}
 
-LSM9DS1::LSM9DS1(const RegPtrMap* pm) : _ptr_map(pm) {
-  IDX_T0 = RegID::M_OFFSET_X;
-  IDX_T1 = RegID::M_OFFSET_Y;
-}
+LSM9DS1::LSM9DS1(const RegPtrMap* pm) : _ptr_map(pm) {}
 
 
 LSM9DS1::~LSM9DS1() {
@@ -200,10 +192,6 @@ IMUFault LSM9DS1::init() {
   error_condition    = IMUFault::NO_ERROR;
 
   _imu_flags = 1;
-  time_stamp_base    = 0;
-  if (pending_samples) {
-    *pending_samples = 0;
-  }
   return IMUFault::NO_ERROR;
 }
 
@@ -232,12 +220,6 @@ void LSM9DS1::reset() {
 }
 
 
-
-IMUFault LSM9DS1::identity_check() {
-  return (present() ? IMUFault::NO_ERROR : IMUFault::WRONG_IDENTITY);
-}
-
-
 /**
 * Calling this will cause us to generate two random bytes and write them to two
 *   separate registers chosen by the extending class. Those writes (if successful)
@@ -245,11 +227,11 @@ IMUFault LSM9DS1::identity_check() {
 *   were written.
 */
 void LSM9DS1::write_test_bytes() {
-  io_test_val_0 = (uint8_t) randomInt() % 128;
-  io_test_val_1 = (uint8_t) randomInt() % 128;
+  io_test_val_0 = (uint8_t) randomInt();
+  io_test_val_1 = (uint8_t) randomInt();
 
-  writeRegister(IDX_T0, io_test_val_0);
-  writeRegister(IDX_T1, io_test_val_1);
+  writeRegister(RegID::G_INT_GEN_THS_Y, io_test_val_0);
+  writeRegister(RegID::M_OFFSET_Z,      io_test_val_1);
 }
 
 
@@ -329,8 +311,8 @@ bool LSM9DS1::integrity_check() {
 
   // If we are ain a state where we are reading the init values back, look for our test
   // values, and fail the init if they are not found.
-  if (io_test_val_0 == regValue(IDX_T0)) {
-    if (io_test_val_1 == regValue(IDX_T1)) {
+  if (io_test_val_0 == regValue(RegID::G_INT_GEN_THS_Y)) {
+    if (io_test_val_1 == regValue(RegID::M_OFFSET_Z)) {
         // We will call this successful init.
         if (getVerbosity() > 5) {
           StringBuilder local_log;
@@ -345,7 +327,7 @@ bool LSM9DS1::integrity_check() {
     else {
       if (getVerbosity() > 2) {
         StringBuilder local_log;
-        local_log.concatf("Failed integrity check (index 0x%02x). Found 0x%02x. Expected 0x%02x.\n", IDX_T1, regValue(IDX_T1), io_test_val_1);
+        local_log.concatf("Failed integrity check (M_OFFSET_Z). Found 0x%02x. Expected 0x%02x.\n", regValue(RegID::M_OFFSET_Z), io_test_val_1);
         Kernel::log(&local_log);
       }
     }
@@ -353,7 +335,7 @@ bool LSM9DS1::integrity_check() {
   else {
     if (getVerbosity() > 2) {
       StringBuilder local_log;
-      local_log.concatf("Failed integrity check (index 0x%02x). Found 0x%02x. Expected 0x%02x.\n", IDX_T0, regValue(IDX_T0), io_test_val_0);
+      local_log.concatf("Failed integrity check (G_INT_GEN_THS_Y). Found 0x%02x. Expected 0x%02x.\n", regValue(RegID::G_INT_GEN_THS_Y), io_test_val_0);
       Kernel::log(&local_log);
     }
   }
@@ -375,6 +357,7 @@ bool LSM9DS1::integrity_check() {
 IMUFault LSM9DS1::setDesiredState(IMUState nu) {
   if (present() && (nu < IMUState::STAGE_1)) {
     // If we already know the sensor is there, why go back further than this?
+    StringBuilder local_log;
     local_log.concat("Trying to move to a state lower than allowed.\n");
     Kernel::log(&local_log);
     return IMUFault::INVALID_PARAM_ID;
@@ -387,6 +370,7 @@ IMUFault LSM9DS1::setDesiredState(IMUState nu) {
       //   bus operations pending.
       if (getVerbosity() > 2) {
         //local_log.concatf("%s tried to move to state %s while the IMU is off-balance (%s --> %s). Rejecting request.\n", imu_type(), getStateString(nu), getStateString(), getStateString(desired_state));
+        StringBuilder local_log;
         local_log.concatf("Tried to move to state %s while the IMU is off-balance (%s --> %s). We will allow this for now.\n", getStateString(nu), getStateString(), getStateString(desired_state));
         Kernel::log(&local_log);
       }
@@ -411,6 +395,7 @@ bool LSM9DS1::step_state() {
       // We shouldn't be changing states if there is an error condition.
       // Reset is the only way to exit the condition at present.
       if (getVerbosity() > 2) {
+        StringBuilder local_log;
         local_log.concatf("Step_state() was called while we are in an error condition: %s\n",  getErrorString());
         Kernel::log(&local_log);
       }
@@ -418,9 +403,7 @@ bool LSM9DS1::step_state() {
     }
 
     switch (getState()) {
-      case IMUState::STAGE_0:  // We think the IIU might be physicaly absent.
-        //reset(); ?
-        identity_check();
+      case IMUState::STAGE_0:  // We think the IMU might be physicaly absent.
         break;
 
       case IMUState::STAGE_1:  // We are sure the IMU is present, but we haven't done anything with it.
@@ -509,6 +492,7 @@ IMUFault LSM9DS1::writeRegister(RegID idx, unsigned int nu_val) {
 
 /*
 * Convenience fxn. Returns 0 if register index is out of bounds.
+* TODO: ProbaBLY belongs in RegPtrMap class. Can it be made const?
 */
 unsigned int LSM9DS1::regValue(RegID idx) {
   const uint8_t* ptr = _ptr_map->regPtr(idx);
@@ -523,73 +507,6 @@ unsigned int LSM9DS1::regValue(RegID idx) {
 }
 
 
-/*
-* Looks at our local offset table to obtain value. This was set at instantiation
-*   by ManaManager.
-*/
-const uint8_t* RegPtrMap::regPtr(RegID idx) const {
-  switch (idx) {
-    case RegID::M_OFFSET_X:          return nullptr;
-    case RegID::M_OFFSET_Y:          return nullptr;
-    case RegID::M_OFFSET_Z:          return nullptr;
-    case RegID::M_WHO_AM_I:          return nullptr;
-    case RegID::M_CTRL_REG1:         return nullptr;
-    case RegID::M_CTRL_REG2:         return nullptr;
-    case RegID::M_CTRL_REG3:         return nullptr;
-    case RegID::M_CTRL_REG4:         return nullptr;
-    case RegID::M_CTRL_REG5:         return nullptr;
-    case RegID::M_STATUS_REG:        return nullptr;
-    case RegID::M_DATA_X:            return nullptr;
-    case RegID::M_DATA_Y:            return nullptr;
-    case RegID::M_DATA_Z:            return nullptr;
-    case RegID::M_INT_CFG:           return nullptr;
-    case RegID::M_INT_SRC:           return nullptr;
-    case RegID::M_INT_TSH:           return nullptr;
-    case RegID::AG_ACT_THS:          return AG_ACT+0;
-    case RegID::AG_ACT_DUR:          return AG_ACT+1;
-    case RegID::A_INT_GEN_CFG:       return AG_BLOCK_0+0;
-    case RegID::A_INT_GEN_THS_X:     return AG_BLOCK_0+1;
-    case RegID::A_INT_GEN_THS_Y:     return AG_BLOCK_0+2;
-    case RegID::A_INT_GEN_THS_Z:     return AG_BLOCK_0+3;
-    case RegID::A_INT_GEN_DURATION:  return AG_BLOCK_0+4;
-    case RegID::G_REFERENCE:         return AG_BLOCK_0+5;
-    case RegID::AG_INT1_CTRL:        return nullptr;
-    case RegID::AG_INT2_CTRL:        return nullptr;
-    case RegID::AG_WHO_AM_I:         return nullptr;
-    case RegID::G_CTRL_REG1:         return AG_CTRL1_3+0;
-    case RegID::G_CTRL_REG2:         return AG_CTRL1_3+1;
-    case RegID::G_CTRL_REG3:         return AG_CTRL1_3+2;
-    case RegID::G_ORIENT_CFG:        return nullptr;
-    case RegID::G_INT_GEN_SRC:       return nullptr;
-    case RegID::AG_DATA_TEMP:        return nullptr;
-    case RegID::AG_STATUS_REG:       return nullptr;
-    case RegID::G_DATA_X:            return nullptr;
-    case RegID::G_DATA_Y:            return nullptr;
-    case RegID::G_DATA_Z:            return nullptr;
-    case RegID::AG_CTRL_REG4:        return nullptr;
-    case RegID::A_CTRL_REG5:         return nullptr;
-    case RegID::A_CTRL_REG6:         return AG_CTRL6_7+0;
-    case RegID::A_CTRL_REG7:         return AG_CTRL6_7+1;
-    case RegID::AG_CTRL_REG8:        return nullptr;
-    case RegID::AG_CTRL_REG9:        return nullptr;
-    case RegID::AG_CTRL_REG10:       return nullptr;
-    case RegID::A_INT_GEN_SRC:       return nullptr;
-    case RegID::AG_STATUS_REG_ALT:   return nullptr;
-    case RegID::A_DATA_X:            return nullptr;
-    case RegID::A_DATA_Y:            return nullptr;
-    case RegID::A_DATA_Z:            return nullptr;
-    case RegID::AG_FIFO_CTRL:        return nullptr;
-    case RegID::AG_FIFO_SRC:         return nullptr;
-    case RegID::G_INT_GEN_CFG:       return nullptr;
-    case RegID::G_INT_GEN_THS_X:     return nullptr;
-    case RegID::G_INT_GEN_THS_Y:     return nullptr;
-    case RegID::G_INT_GEN_THS_Z:     return nullptr;
-    case RegID::G_INT_GEN_DURATION:  return nullptr;
-  }
-  return nullptr;
-}
-
-
 /**
 * Dump the contents of this device to the logger.
 *
@@ -597,7 +514,7 @@ const uint8_t* RegPtrMap::regPtr(RegID idx) const {
 */
 void LSM9DS1::dumpDevRegs(StringBuilder *output) {
   output->concatf("\n-------------------------------------------------------\n--- IMU  %s ==> %s \n-------------------------------------------------------\n", getStateString(imu_state), (desired_state_attained() ? "STABLE" : getStateString(desired_state)));
-  output->concatf("--- pending_samples     %d\n\n", *pending_samples);
+  output->concatf("--- pending_samples     %d\n\n", regValue(RegID::AG_FIFO_SRC) & 0x1F);
   if (getVerbosity() > 1) {
     output->concatf("--- calibration smpls   %d\n", sb_next_write);
     output->concatf("--- Base filter param   %d\n", base_filter_param);
@@ -628,10 +545,11 @@ void LSM9DS1::dumpDevRegs(StringBuilder *output) {
 IMUFault LSM9DS1::proc_register_read(RegID idx) {
   IMUFault return_value = IMUFault::NO_ERROR;
   unsigned int value = regValue(idx);
+  StringBuilder local_log;
 
   /* READ Case-offs */
   if (initPending()) {
-    if (IDX_T1 == idx) {
+    if (RegID::M_OFFSET_Z == idx) {
       set_state(IMUState::STAGE_2);
       step_state();
     }
@@ -699,29 +617,41 @@ IMUFault LSM9DS1::proc_register_read(RegID idx) {
       break;
 
     case RegID::AG_STATUS_REG_ALT:
-      if (getVerbosity() > 5) local_log.concatf("\t RegID::AG_STATUS_REG_ALT: 0x%02x\n", (uint8_t) value);
+      if (getVerbosity() > 5) {
+        local_log.concatf("\t RegID::AG_STATUS_REG_ALT: 0x%02x\n", (uint8_t) value);
+      }
       break;
     case RegID::AG_FIFO_CTRL:
-      if (getVerbosity() > 5) local_log.concatf("\t AG_FIFO Control: 0x%02x\n", (uint8_t) value);
+      if (getVerbosity() > 5) {
+        local_log.concatf("\t AG_FIFO Control: 0x%02x\n", (uint8_t) value);
+      }
       break;
     case RegID::G_CTRL_REG1:
-      if (getVerbosity() > 5) local_log.concatf("\t RegID::G_CTRL_REG1: 0x%02x\n", (uint8_t) value);
+      if (getVerbosity() > 5) {
+        local_log.concatf("\t RegID::G_CTRL_REG1: 0x%02x\n", (uint8_t) value);
+      }
       if ((value >> 4) < MAXIMUM_RATE_INDEX_AG)  update_rate_i = (value >> 4) & 0x0F;
       break;
     case RegID::AG_CTRL_REG4:
-      if (getVerbosity() > 5) local_log.concatf("\t RegID::AG_CTRL_REG4: 0x%02x\n", (uint8_t) value);
+      if (getVerbosity() > 5) {
+        local_log.concatf("\t RegID::AG_CTRL_REG4: 0x%02x\n", (uint8_t) value);
+      }
       if (((value >> 3) & 0x07) < MAXIMUM_GAIN_INDEX_ACC)  scale_acc = (value >> 3) & 0x07;
       base_filter_param = (value >> 6) & 0x03;
       break;
     case RegID::A_CTRL_REG6:
-      if (getVerbosity() > 5) local_log.concatf("\t RegID::A_CTRL_REG6: 0x%02x\n", (uint8_t) value);
+      if (getVerbosity() > 5) {
+        local_log.concatf("\t RegID::A_CTRL_REG6: 0x%02x\n", (uint8_t) value);
+      }
       if (((value >> 3) & 0x03) < MAXIMUM_GAIN_INDEX_GYR)  scale_gyr = (value >> 3) & 0x03;
       break;
     case RegID::AG_FIFO_SRC:     /* The FIFO status register. */
       break;
 
     default:
-      if (getVerbosity() > 5) local_log.concatf("\t LSM9DS1 read an unimplemented register: %s.\n", RegPtrMap::regNameString(idx));
+      if (getVerbosity() > 5) {
+        local_log.concatf("\t LSM9DS1 read an unimplemented register: %s.\n", RegPtrMap::regNameString(idx));
+      }
       break;
   }
 
@@ -763,11 +693,14 @@ IMUFault LSM9DS1::proc_register_write(RegID idx) {
       break;
 
     default:
-      if (getVerbosity() > 5) local_log.concatf("\t LSM9DS1 wrote an unimplemented register: %s.\n", RegPtrMap::regNameString(idx));
+      if (getVerbosity() > 5) {
+        StringBuilder local_log;
+        local_log.concatf("\t LSM9DS1 wrote an unimplemented register: %s.\n", RegPtrMap::regNameString(idx));
+        Kernel::log(&local_log);
+      }
       break;
   }
 
-  if (local_log.length() > 0) Kernel::log(&local_log);
   return return_value;
 }
 
