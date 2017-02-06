@@ -156,69 +156,49 @@ const char* _imu_register_names[] = {
 
 // TODO: Incurring two branches might be cheaper than a const map. Investigate.
 RegID RegPtrMap::regIdFromAddr(uint8_t dev_addr, uint8_t reg_addr) {
-  if (dev_addr < CPLD_REG_IMU_DM_P_I) {  // Magnetic aspect.
-    switch (reg_addr & 0x3F) {
-      case 0x05: return RegID::M_OFFSET_X;
-      case 0x07: return RegID::M_OFFSET_Y;
-      case 0x09: return RegID::M_OFFSET_Z;
-      case 0x0f: return RegID::M_WHO_AM_I;
-      case 0x20: return RegID::M_CTRL_REG1;
-      case 0x21: return RegID::M_CTRL_REG2;
-      case 0x22: return RegID::M_CTRL_REG3;
-      case 0x23: return RegID::M_CTRL_REG4;
-      case 0x24: return RegID::M_CTRL_REG5;
-      case 0x27: return RegID::M_STATUS_REG;
-      case 0x28: return RegID::M_DATA_X;
-      case 0x2a: return RegID::M_DATA_Y;
-      case 0x2c: return RegID::M_DATA_Z;
-      case 0x30: return RegID::M_INT_CFG;
-      case 0x31: return RegID::M_INT_SRC;
-      case 0x32: return RegID::M_INT_TSH;
-    }
-  }
-  else {
-    switch (reg_addr & 0x3F) {
-      case 0x04: return RegID::AG_ACT_THS;
-      case 0x05: return RegID::AG_ACT_DUR;
-      case 0x06: return RegID::A_INT_GEN_CFG;
-      case 0x07: return RegID::A_INT_GEN_THS_X;
-      case 0x08: return RegID::A_INT_GEN_THS_Y;
-      case 0x09: return RegID::A_INT_GEN_THS_Z;
-      case 0x0a: return RegID::A_INT_GEN_DURATION;
-      case 0x0b: return RegID::G_REFERENCE;
-      case 0x0c: return RegID::AG_INT1_CTRL;
-      case 0x0d: return RegID::AG_INT2_CTRL;
-      case 0x0f: return RegID::AG_WHO_AM_I;
-      case 0x10: return RegID::G_CTRL_REG1;
-      case 0x11: return RegID::G_CTRL_REG2;
-      case 0x12: return RegID::G_CTRL_REG3;
-      case 0x13: return RegID::G_ORIENT_CFG;
-      case 0x14: return RegID::G_INT_GEN_SRC;
-      case 0x15: return RegID::AG_DATA_TEMP;
-      case 0x17: return RegID::AG_STATUS_REG;
-      case 0x18: return RegID::G_DATA_X;
-      case 0x1a: return RegID::G_DATA_Y;
-      case 0x1c: return RegID::G_DATA_Z;
-      case 0x1e: return RegID::AG_CTRL_REG4;
-      case 0x1f: return RegID::A_CTRL_REG5;
-      case 0x20: return RegID::A_CTRL_REG6;
-      case 0x21: return RegID::A_CTRL_REG7;
-      case 0x22: return RegID::AG_CTRL_REG8;
-      case 0x23: return RegID::AG_CTRL_REG9;
-      case 0x24: return RegID::AG_CTRL_REG10;
-      case 0x26: return RegID::A_INT_GEN_SRC;
-      case 0x27: return RegID::AG_STATUS_REG_ALT;
-      case 0x28: return RegID::A_DATA_X;
-      case 0x2a: return RegID::A_DATA_Y;
-      case 0x2c: return RegID::A_DATA_Z;
-      case 0x2e: return RegID::AG_FIFO_CTRL;
-      case 0x2f: return RegID::AG_FIFO_SRC;
-      case 0x30: return RegID::G_INT_GEN_CFG;
-      case 0x31: return RegID::G_INT_GEN_THS_X;
-      case 0x33: return RegID::G_INT_GEN_THS_Y;
-      case 0x35: return RegID::G_INT_GEN_THS_Z;
-      case 0x37: return RegID::G_INT_GEN_DURATION;
-    }
+  switch (reg_addr & 0x3F) {
+    case 0x04: return RegID::AG_ACT_THS;
+    case 0x06: return RegID::A_INT_GEN_CFG;
+    case 0x08: return RegID::A_INT_GEN_THS_Y;
+    case 0x0a: return RegID::A_INT_GEN_DURATION;
+    case 0x0b: return RegID::G_REFERENCE;
+    case 0x0c: return RegID::AG_INT1_CTRL;
+    case 0x0d: return RegID::AG_INT2_CTRL;
+    case 0x10: return RegID::G_CTRL_REG1;
+    case 0x11: return RegID::G_CTRL_REG2;
+    case 0x12: return RegID::G_CTRL_REG3;
+    case 0x13: return RegID::G_ORIENT_CFG;
+    case 0x14: return RegID::G_INT_GEN_SRC;
+    case 0x15: return RegID::AG_DATA_TEMP;
+    case 0x17: return RegID::AG_STATUS_REG;
+    case 0x18: return RegID::G_DATA_X;
+    case 0x1a: return RegID::G_DATA_Y;
+    case 0x1c: return RegID::G_DATA_Z;
+    case 0x1e: return RegID::AG_CTRL_REG4;
+    case 0x1f: return RegID::A_CTRL_REG5;
+    case 0x26: return RegID::A_INT_GEN_SRC;
+    case 0x2e: return RegID::AG_FIFO_CTRL;
+    case 0x2f: return RegID::AG_FIFO_SRC;
+    case 0x32: return RegID::M_INT_TSH;
+    case 0x33: return RegID::G_INT_GEN_THS_Y;
+    case 0x35: return RegID::G_INT_GEN_THS_Z;
+    case 0x37: return RegID::G_INT_GEN_DURATION;
+    case 0x05: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_OFFSET_X   : RegID::AG_ACT_DUR);
+    case 0x07: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_OFFSET_Y   : RegID::A_INT_GEN_THS_X);
+    case 0x09: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_OFFSET_Z   : RegID::A_INT_GEN_THS_Z);
+    case 0x0f: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_WHO_AM_I   : RegID::AG_WHO_AM_I);
+    case 0x20: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_CTRL_REG1  : RegID::A_CTRL_REG6);
+    case 0x21: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_CTRL_REG2  : RegID::A_CTRL_REG7);
+    case 0x22: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_CTRL_REG3  : RegID::AG_CTRL_REG8);
+    case 0x23: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_CTRL_REG4  : RegID::AG_CTRL_REG9);
+    case 0x24: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_CTRL_REG5  : RegID::AG_CTRL_REG10);
+    case 0x27: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_STATUS_REG : RegID::AG_STATUS_REG_ALT);
+    case 0x28: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_DATA_X     : RegID::A_DATA_X);
+    case 0x2a: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_DATA_Y     : RegID::A_DATA_Y);
+    case 0x2c: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_DATA_Z     : RegID::A_DATA_Z);
+    case 0x30: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_INT_CFG    : RegID::G_INT_GEN_CFG);
+    case 0x31: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_INT_SRC    : RegID::G_INT_GEN_THS_X);
+    default:   return RegID::AG_DATA_TEMP;  // Obviously wrong, but will fail a write operation.
   }
 }
 
@@ -255,17 +235,17 @@ const uint8_t* RegPtrMap::regPtr(RegID idx) const {
     case RegID::M_OFFSET_X:          return ((uint8_t*) M_OFFSETS)+0;
     case RegID::M_OFFSET_Y:          return ((uint8_t*) M_OFFSETS)+2;
     case RegID::M_OFFSET_Z:          return ((uint8_t*) M_OFFSETS)+4;
-    case RegID::M_WHO_AM_I:          break;
-    case RegID::M_CTRL_REG1:         break;
+    case RegID::M_WHO_AM_I:          return nullptr;
+    case RegID::M_CTRL_REG1:         return nullptr;
     case RegID::M_CTRL_REG2:         return M_CTRL+0;
-    case RegID::M_CTRL_REG3:         break;
-    case RegID::M_CTRL_REG4:         break;
-    case RegID::M_CTRL_REG5:         break;
+    case RegID::M_CTRL_REG3:         return nullptr;
+    case RegID::M_CTRL_REG4:         return nullptr;
+    case RegID::M_CTRL_REG5:         return nullptr;
     case RegID::M_STATUS_REG:        return M_STATUS+0;
-    case RegID::M_DATA_X:            break;
-    case RegID::M_DATA_Y:            break;
-    case RegID::M_DATA_Z:            break;
-    case RegID::M_INT_CFG:           break;
+    case RegID::M_DATA_X:            return nullptr;
+    case RegID::M_DATA_Y:            return nullptr;
+    case RegID::M_DATA_Z:            return nullptr;
+    case RegID::M_INT_CFG:           return nullptr;
     case RegID::M_INT_SRC:           return M_INT_SRC+0;
     case RegID::M_INT_TSH:           return ((uint8_t*) M_INT_TSH)+0;
     case RegID::AG_ACT_THS:          return AG_ACT+0;
@@ -276,38 +256,38 @@ const uint8_t* RegPtrMap::regPtr(RegID idx) const {
     case RegID::A_INT_GEN_THS_Z:     return AG_BLOCK_0+3;
     case RegID::A_INT_GEN_DURATION:  return AG_BLOCK_0+4;
     case RegID::G_REFERENCE:         return AG_BLOCK_0+5;
-    case RegID::AG_INT1_CTRL:        break;
-    case RegID::AG_INT2_CTRL:        break;
-    case RegID::AG_WHO_AM_I:         break;
+    case RegID::AG_INT1_CTRL:        return nullptr;
+    case RegID::AG_INT2_CTRL:        return nullptr;
+    case RegID::AG_WHO_AM_I:         return nullptr;
     case RegID::G_CTRL_REG1:         return AG_CTRL1_3+0;
     case RegID::G_CTRL_REG2:         return AG_CTRL1_3+1;
     case RegID::G_CTRL_REG3:         return AG_CTRL1_3+2;
-    case RegID::G_ORIENT_CFG:        break;
-    case RegID::G_INT_GEN_SRC:       break;
-    case RegID::AG_DATA_TEMP:        break;
-    case RegID::AG_STATUS_REG:       break;
-    case RegID::G_DATA_X:            break;
-    case RegID::G_DATA_Y:            break;
-    case RegID::G_DATA_Z:            break;
-    case RegID::AG_CTRL_REG4:        break;
-    case RegID::A_CTRL_REG5:         break;
+    case RegID::G_ORIENT_CFG:        return nullptr;
+    case RegID::G_INT_GEN_SRC:       return nullptr;
+    case RegID::AG_DATA_TEMP:        return nullptr;
+    case RegID::AG_STATUS_REG:       return nullptr;
+    case RegID::G_DATA_X:            return nullptr;
+    case RegID::G_DATA_Y:            return nullptr;
+    case RegID::G_DATA_Z:            return nullptr;
+    case RegID::AG_CTRL_REG4:        return nullptr;
+    case RegID::A_CTRL_REG5:         return nullptr;
     case RegID::A_CTRL_REG6:         return AG_CTRL6_7+0;
     case RegID::A_CTRL_REG7:         return AG_CTRL6_7+1;
-    case RegID::AG_CTRL_REG8:        break;
-    case RegID::AG_CTRL_REG9:        break;
-    case RegID::AG_CTRL_REG10:       break;
-    case RegID::A_INT_GEN_SRC:       break;
-    case RegID::AG_STATUS_REG_ALT:   break;
-    case RegID::A_DATA_X:            break;
-    case RegID::A_DATA_Y:            break;
-    case RegID::A_DATA_Z:            break;
-    case RegID::AG_FIFO_CTRL:        break;
+    case RegID::AG_CTRL_REG8:        return nullptr;
+    case RegID::AG_CTRL_REG9:        return nullptr;
+    case RegID::AG_CTRL_REG10:       return nullptr;
+    case RegID::A_INT_GEN_SRC:       return nullptr;
+    case RegID::AG_STATUS_REG_ALT:   return nullptr;
+    case RegID::A_DATA_X:            return nullptr;
+    case RegID::A_DATA_Y:            return nullptr;
+    case RegID::A_DATA_Z:            return nullptr;
+    case RegID::AG_FIFO_CTRL:        return nullptr;
     case RegID::AG_FIFO_SRC:         return FIFO_LVLS;
-    case RegID::G_INT_GEN_CFG:       break;
+    case RegID::G_INT_GEN_CFG:       return nullptr;
     case RegID::G_INT_GEN_THS_X:     return ((uint8_t*) G_INT_THS)+0;
     case RegID::G_INT_GEN_THS_Y:     return ((uint8_t*) G_INT_THS)+2;
     case RegID::G_INT_GEN_THS_Z:     return ((uint8_t*) G_INT_THS)+4;
     case RegID::G_INT_GEN_DURATION:  return G_INT_DUR+0;
+    default:                         return nullptr;
   }
-  return nullptr;
 }

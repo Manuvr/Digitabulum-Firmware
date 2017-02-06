@@ -280,5 +280,9 @@ OshPark PCBs for r2's debug harness got in yesterday. The connectors arrive toda
     280652    2936   19264  302852  IMU alignment changes.
     280716    2936   19192  302844  Improving RegPtrMap along the way.
     280788    2936   19056  302780  More cruft removal from IMU class.
+    281004    2936   19056  302996  Extending SensorFrame debug output.
+    281004    2936   24336  308276  Adding members to the SensorFrame.
+    281068    2936   28872  312876  Adding members to the SensorFrame.
+    280684    2936   28872  312492  Removing dead code.
 
 _---J. Ian Lindsay_

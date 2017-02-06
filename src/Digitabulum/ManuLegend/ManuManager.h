@@ -123,6 +123,9 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     int8_t setLegend(ManuLegend*);
     inline ManuLegend* getActiveLegend() {    return operating_legend;    }
 
+    int8_t read_ag_frame();
+    int8_t read_mag_frame();
+
     /* Expose our idea about handedness to other modules. */
     inline Chirality getChirality() {  return (Chirality) _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_MASK);  };
     inline bool chiralityKnown() {     return _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_KNOWN);  };
@@ -150,7 +153,6 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     /* This is the dataset that we export. */
     uint8_t __dataset[LEGEND_MGR_MAX_DATASET_SIZE];
 
-
     // Used to direct data that we don't want in the legend until data-selection-by-NULL is implemented
     //   in the IIU class.
     uint32_t*       _ptr_sequence = nullptr;
@@ -159,6 +161,8 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     ManuvrMsg event_legend_frame_ready;
     ManuvrMsg event_iiu_read;
     ManuvrMsg quat_crunch_event;
+
+    uint8_t  max_quats_per_event = 2;   // Cuts down on overhead if load is high.
 
     int8_t send_map_event();
 

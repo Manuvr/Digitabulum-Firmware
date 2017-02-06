@@ -93,6 +93,7 @@ class Integrator {
     Integrator();
     ~Integrator();
 
+    void dumpPointers(StringBuilder*);
     void printDebug(StringBuilder*);
     void setVerbosity(int8_t);
 
@@ -105,19 +106,13 @@ class Integrator {
 
     void reset();
 
-    void setSampleRate(uint8_t idx);
-
-    bool state_pass_through(uint8_t);
-
-    void printBrief(StringBuilder*);
-
     /* These are meant to be called from the IMUs. */
     int8_t pushMeasurement(SampleType, float x, float y, float z, float delta_t);
+    int8_t pushMeasurement(SensorFrame*);
+
     void deposit_log(StringBuilder*);
 
     /* These are meant to be called from a Legend. */
-    void printLastFrame(StringBuilder *output);
-
     void assign_legend_pointers(
       void* acc,
       void* gyr,
@@ -135,11 +130,9 @@ class Integrator {
 
     uint8_t MadgwickQuaternionUpdate();
 
-    void dumpPointers(StringBuilder*);
-
     inline bool isDirty() {         return (dirty_acc||dirty_gyr||dirty_mag); }
     inline bool isQuatDirty() {     return (dirty_acc & dirty_gyr);           }
-    inline bool has_quats_left() {  return (quat_queue.size() > 0);           }
+    inline bool has_quats_left() {  return (frame_queue.size() > 0);           }
 
 
     /*
@@ -236,7 +229,6 @@ class Integrator {
 
 
     static float    mag_discard_threshold;
-    static uint8_t  max_quats_per_event;   // Cut's down on overhead if load is high.
     static const char* getSourceTypeString(SampleType);
 
     static SensorFrame* fetchMeasurement();
@@ -280,7 +272,7 @@ class Integrator {
     //Vector3<float> gravity;        // If we need gravity, but the Legend doesn't want it.
     StringBuilder local_log;
 
-    PriorityQueue<SensorFrame*> quat_queue;   // This is the queue for quat operations.
+    PriorityQueue<SensorFrame*> frame_queue;   // This is the queue for quat operations.
 
     int8_t verbosity            = 3;
     uint8_t madgwick_iterations = 1;
