@@ -67,7 +67,7 @@ Error should be integrated here as well to form a set of limit error values for
 #define IIU_DEG_TO_RAD_SCALAR   (3.14159f / 180.0f)
 
 
-#define PREALLOCATED_IIU_MEASUREMENTS    11   // We retain this many frames.
+#define PREALLOCD_IMU_FRAMES    11   // We retain this many frames.
 
 
 enum class SampleType {
@@ -309,7 +309,7 @@ class Integrator {
     static uint32_t measurement_heap_freed;
     static uint32_t minimum_prealloc_level;
     static PriorityQueue<SensorFrame*>  preallocd_measurements;
-    static SensorFrame __prealloc[PREALLOCATED_IIU_MEASUREMENTS];
+    static SensorFrame __prealloc[PREALLOCD_IMU_FRAMES];
 
     static void reclaimMeasurement(SensorFrame*);
 };

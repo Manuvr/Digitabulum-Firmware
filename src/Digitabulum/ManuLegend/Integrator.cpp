@@ -38,10 +38,10 @@ float    Integrator::mag_discard_threshold         = 0.8f;  // In Gauss.
 uint32_t Integrator::measurement_heap_instantiated = 0;
 uint32_t Integrator::measurement_heap_freed        = 0;
 uint32_t Integrator::prealloc_starves              = 0;
-uint32_t Integrator::minimum_prealloc_level        = PREALLOCATED_IIU_MEASUREMENTS;
+uint32_t Integrator::minimum_prealloc_level        = PREALLOCD_IMU_FRAMES;
 
 PriorityQueue<SensorFrame*>  Integrator::preallocd_measurements;
-SensorFrame Integrator::__prealloc[PREALLOCATED_IIU_MEASUREMENTS];
+SensorFrame Integrator::__prealloc[PREALLOCD_IMU_FRAMES];
 
 
 
@@ -83,7 +83,7 @@ SensorFrame* Integrator::fetchMeasurement() {
 void Integrator::reclaimMeasurement(SensorFrame* obj) {
   uintptr_t obj_addr = ((uintptr_t) obj);
   uintptr_t pre_min  = ((uintptr_t) __prealloc);
-  uintptr_t pre_max  = pre_min + (sizeof(SensorFrame) * PREALLOCATED_IIU_MEASUREMENTS);
+  uintptr_t pre_max  = pre_min + (sizeof(SensorFrame) * PREALLOCD_IMU_FRAMES);
 
   if ((obj_addr < pre_max) && (obj_addr >= pre_min)) {
     // If we are in this block, it means obj was preallocated. wipe and reclaim it.
@@ -131,7 +131,7 @@ Integrator::Integrator() {
   beta = 0.2f;
 
   /* Populate all the static preallocation slots for measurements. */
-  for (uint16_t i = 0; i < PREALLOCATED_IIU_MEASUREMENTS; i++) {
+  for (uint16_t i = 0; i < PREALLOCD_IMU_FRAMES; i++) {
     __prealloc[i].wipe();
     preallocd_measurements.insert(&__prealloc[i]);
   }

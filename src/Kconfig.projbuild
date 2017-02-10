@@ -1,0 +1,49 @@
+menu "Digitabulum Configuration"
+
+config WIFI_SSID
+    string "WiFi SSID"
+  default "myssid"
+  help
+    SSID (network name) for the example to connect to.
+
+config WIFI_PASSWORD
+    string "WiFi Password"
+  default "myssid"
+  help
+    WiFi password (WPA or WPA2) for the example to use.
+      Can be left blank if the network has no security set.
+
+config CPLD_SPI_PREALLOC_COUNT
+    int "Preallocated SPI jobs"
+  default 10
+  help
+    The CPLD's primary SPI channel has unpredictable bus traffic patterns.
+      Allocate this many SPI jobs to avoid burdening the heap under load.
+
+config CPLD_SPI_MAX_QUEUE_DEPTH
+    int "Max SPI queue depth"
+  default 40
+  help
+    If too many bus operations stack up in the queue, we will drop them.
+      How many is too many?
+
+config CPLD_SPI_MAX_QUEUE_PRINT
+    int "SPI job listing limit"
+  default 3
+  help
+    How many queue items to display in debug?
+
+config PREALLOCD_IMU_FRAMES
+    int "Preallocated IMU frames"
+  default 3
+  help
+    How many data frames to track without heap impact?
+
+config __IMU_DEBUG
+    depends on __MANUVR_DEBUG
+    bool "IMU Debug"
+  default n
+  ---help---
+    Enables debugging features surrounding IMUs and the Integrator.
+
+endmenu
