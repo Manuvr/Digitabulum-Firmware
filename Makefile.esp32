@@ -8,7 +8,7 @@ PROJECT_NAME   := digitabulum-r2
 
 BUILD_ROOT   := $(shell pwd)
 BUILD_DIR_BASE := $(BUILD_ROOT)/build
-EXTRA_COMPONENT_DIRS := $(BUILD_ROOT)/lib/
+#EXTRA_COMPONENT_DIRS := $(BUILD_ROOT)/lib/
 SRCDIRS := $(BUILD_ROOT)/src/
 
 
