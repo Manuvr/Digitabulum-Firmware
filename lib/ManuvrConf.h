@@ -33,7 +33,6 @@ This is an example file for building firmware on linux. Anticipated target is a 
 /*
 * Particulars of this platform.
 */
-#define PLATFORM_RNG_CARRY_CAPACITY       32    // How many random numbers should be cached? Must be > 0.
 #define PROTOCOL_MTU                    3000    // See MTU notes above....
 
 
@@ -57,20 +56,6 @@ This is an example file for building firmware on linux. Anticipated target is a 
 /*
 * Kernel options.
 */
-#define EVENT_MANAGER_PREALLOC_COUNT       8    // How large a preallocation buffer should we keep?
-#define MANUVR_PLATFORM_TIMER_PERIOD_MS    1    // What is the granularity of our scheduler?
-
-#define MAXIMUM_SEQUENTIAL_SKIPS          20    // How many scheduler skips are we willing to tolerate?
-
-/****************************************************************************************************
-* Optional fields...                                                                                *
-****************************************************************************************************/
-
-#define EXTENDED_DETAIL_STRING    "{}"  // Optional. User-defined.
-
-// If another Manuverable asks, we will send them semantic definitions for our messages.
-// Comment the line below if your platform is too-small to support these, or you don't intend
-//   your Manuvrable to be used by a human directly.
-//#define __ENABLE_MSG_SEMANTICS
+#define MANUVR_PLATFORM_TIMER_PERIOD_MS   10    // What is the granularity of our scheduler?
 
 #endif

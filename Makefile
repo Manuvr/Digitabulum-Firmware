@@ -90,7 +90,6 @@ CFLAGS += -DENABLE_USB_VCP
 # Source file definitions...
 ###########################################################################
 SOURCES_C     = src/syscalls.c
-SOURCES_C    += src/fatfs.c
 SOURCES_C    += src/stm32f7xx_it.c
 SOURCES_C    += src/system_stm32f7xx.c
 
@@ -140,6 +139,7 @@ endif
 # Debugging options...
 ifeq ($(DEBUG),1)
 MANUVR_OPTIONS += -D__MANUVR_DEBUG
+MANUVR_OPTIONS += -D__IMU_DEBUG
 #MANUVR_OPTIONS += -D__MANUVR_PIPE_DEBUG
 MANUVR_OPTIONS += -D__MANUVR_EVENT_PROFILER
 #CFLAGS += -g -ggdb

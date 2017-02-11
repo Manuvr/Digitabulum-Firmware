@@ -51,7 +51,7 @@
   ******************************************************************************
   */
 
-
+#if defined(STM32F7xx)
 #include "stm32f7xx.h"
 
 #if !defined  (HSE_VALUE)
@@ -196,3 +196,5 @@ void SystemCoreClockUpdate() {
   /* HCLK frequency */
   SystemCoreClock >>= tmp;
 }
+
+#endif   //STM32F7xx

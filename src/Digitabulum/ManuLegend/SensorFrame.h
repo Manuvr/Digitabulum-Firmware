@@ -1,7 +1,7 @@
 /*
 File:   SensorFrame.h
 Author: J. Ian Lindsay
-Date:   2014.05.12
+Date:   2017.01.31
 
 Copyright 2016 Manuvr, Inc
 
@@ -18,7 +18,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-This is a container class for a single IMU measurement frame.
+This is a container class for an IMU measurement frame.
 */
 
 #ifndef __IIU_MEASUREMENT_H__
@@ -26,10 +26,11 @@ This is a container class for a single IMU measurement frame.
 
 #include <inttypes.h>
 #include <DataStructures/Vector3.h>
+#include <DataStructures/Quaternion.h>
 
-#if defined(__MANUVR_DEBUG)
+#if defined(__IMU_DEBUG)
 #include <DataStructures/StringBuilder.h>
-#endif
+#endif  // __IMU_DEBUG
 
 /*
 * This is a container class that is pushed downstream to the Integrator class,
@@ -42,15 +43,16 @@ class SensorFrame {
     Vector3<float> g_data[17];  // The vector of the gyro data.
     Vector3<float> a_data[17];  // The vector of the accel data.
     Vector3<float> m_data[17];  // The vector of the mag data.
-
-    float read_time;  // Derived from the system time when the values arrived from the sensor.
+    Vector3<float> v_data[17];  // Velocity
+    Vector3<float> n_data[17];  // Null-grav
+    Vector3<float> p_data[17];  // Position
+    Vector4f         quat[17];    // Orientation
 
     SensorFrame();
 
     void wipe();
-    #if defined(__MANUVR_DEBUG)
-      //void printDebug(StringBuilder* output);
-      void printDebug(uint8_t i, StringBuilder* output);
+    #if defined(__IMU_DEBUG)
+      void printDebug(StringBuilder* output);
     #endif
 
     inline float time() {          return read_time;  };
@@ -65,10 +67,23 @@ class SensorFrame {
       m_data[i](x, y, z);
     };
 
+    inline void setV(uint8_t i, float x, float y, float z) {
+      v_data[i](x, y, z);
+    };
+
+    inline void setN(uint8_t i, float x, float y, float z) {
+      n_data[i](x, y, z);
+    };
+
+    inline void setP(uint8_t i, float x, float y, float z) {
+      p_data[i](x, y, z);
+    };
+
 
   private:
+    uint32_t seq;          // Sequence number
+    float    temperature;  //
+    float    read_time;    // Derived from the system time when the values arrived from the sensor.
 };
-
-
 
 #endif  //__IIU_MEASUREMENT_H__

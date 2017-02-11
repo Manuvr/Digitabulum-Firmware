@@ -34,15 +34,14 @@ limitations under the License.
 *******************************************************************************/
 
 static const Vector3<float> ZERO_VECTOR;
-uint8_t  Integrator::max_quats_per_event    = 2;
-float    Integrator::mag_discard_threshold  = 0.8f;  // In Gauss.
-
+float    Integrator::mag_discard_threshold         = 0.8f;  // In Gauss.
 uint32_t Integrator::measurement_heap_instantiated = 0;
 uint32_t Integrator::measurement_heap_freed        = 0;
 uint32_t Integrator::prealloc_starves              = 0;
-uint32_t Integrator::minimum_prealloc_level        = PREALLOCATED_IIU_MEASUREMENTS;
+uint32_t Integrator::minimum_prealloc_level        = PREALLOCD_IMU_FRAMES;
+
 PriorityQueue<SensorFrame*>  Integrator::preallocd_measurements;
-SensorFrame Integrator::__prealloc[PREALLOCATED_IIU_MEASUREMENTS];
+SensorFrame Integrator::__prealloc[PREALLOCD_IMU_FRAMES];
 
 
 
@@ -84,7 +83,7 @@ SensorFrame* Integrator::fetchMeasurement() {
 void Integrator::reclaimMeasurement(SensorFrame* obj) {
   uintptr_t obj_addr = ((uintptr_t) obj);
   uintptr_t pre_min  = ((uintptr_t) __prealloc);
-  uintptr_t pre_max  = pre_min + (sizeof(SensorFrame) * PREALLOCATED_IIU_MEASUREMENTS);
+  uintptr_t pre_max  = pre_min + (sizeof(SensorFrame) * PREALLOCD_IMU_FRAMES);
 
   if ((obj_addr < pre_max) && (obj_addr >= pre_min)) {
     // If we are in this block, it means obj was preallocated. wipe and reclaim it.
@@ -95,6 +94,22 @@ void Integrator::reclaimMeasurement(SensorFrame* obj) {
     // We were created because our prealloc was starved. we are therefore a transient heap object.
     measurement_heap_freed++;
     delete obj;
+  }
+}
+
+
+const char* Integrator::getSourceTypeString(SampleType t) {
+  switch (t) {
+    case SampleType::ACCEL:          return "ACCEL";
+    case SampleType::GYRO:           return "GYRO";
+    case SampleType::MAG:            return "MAG";
+    case SampleType::GRAVITY:        return "GRAVITY";
+    case SampleType::BEARING:        return "BEARING";
+    case SampleType::ALTITUDE:       return "ALTITUDE";
+    case SampleType::LOCATION:       return "LOCATION";
+    case SampleType::ALL:            return "ALL";
+    case SampleType::UNSPECIFIED:    return "UNSPECIFIED";
+    default:                         return "<UNDEFINED>";
   }
 }
 
@@ -116,7 +131,7 @@ Integrator::Integrator() {
   beta = 0.2f;
 
   /* Populate all the static preallocation slots for measurements. */
-  for (uint16_t i = 0; i < PREALLOCATED_IIU_MEASUREMENTS; i++) {
+  for (uint16_t i = 0; i < PREALLOCD_IMU_FRAMES; i++) {
     __prealloc[i].wipe();
     preallocd_measurements.insert(&__prealloc[i]);
   }
@@ -124,9 +139,9 @@ Integrator::Integrator() {
 
 
 Integrator::~Integrator() {
-  while (quat_queue.hasNext()) {
+  while (frame_queue.hasNext()) {
     // We need to return the preallocated measurements we are holding.
-    reclaimMeasurement(quat_queue.dequeue());
+    reclaimMeasurement(frame_queue.dequeue());
   }
 }
 
@@ -249,7 +264,7 @@ int8_t Integrator::pushMeasurement(SampleType data_type, float x, float y, float
   }
 
   if (processQuats() && isQuatDirty()) {
-    if (0 == quat_queue.size()) {
+    if (0 == frame_queue.size()) {
       // There was nothing in this queue, but there is about to be.
     }
     SensorFrame* nu_measurement = fetchMeasurement();
@@ -258,9 +273,17 @@ int8_t Integrator::pushMeasurement(SampleType data_type, float x, float y, float
     dirty_acc = 0;
     dirty_gyr = 0;
 
-    quat_queue.insert(nu_measurement, 0xFFFFFFFF - read_time);
+    frame_queue.insert(nu_measurement);
   }
 
+  return 0;
+}
+
+
+/*
+*/
+int8_t Integrator::pushMeasurement(SensorFrame* nu_measurement) {
+  frame_queue.insert(nu_measurement);
   return 0;
 }
 
@@ -344,23 +367,14 @@ void Integrator::setVerbosity(int8_t nu) {
 }
 
 
-void Integrator::printLastFrame(StringBuilder *output) {
-  output->concatf("--- (MAG) (%.4f, %.4f, %.4f)",  (double)(_ptr_mag->x), (double)(_ptr_mag->y), (double)(_ptr_mag->z));
-  output->concatf("\t(ACCEL) (%.4f, %.4f, %.4f)",  (double)(_ptr_acc->x), (double)(_ptr_acc->y), (double)(_ptr_acc->z));
-  output->concatf("\t(GYRO) (%.4f, %.4f, %.4f)\n", (double)(_ptr_gyr->x), (double)(_ptr_gyr->y), (double)(_ptr_gyr->z));
-}
-
-
 /**
 * Debug support method. This fxn is only present in debug builds.
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
 void Integrator::printDebug(StringBuilder* output) {
-  if (nullptr == output) return;
   output->concatf("\n-------------------------------------------------------\n--- Integrator\n-------------------------------------------------------\n--- %s legend\n--- Samples:\t ", (legend_writable()?"writable":"invalid"));
-  printBrief(output);  // OK
-  output->concatf("--- measurements\n--- quat_queue:\t %d measurements\n", quat_queue.size());
+  output->concatf("--- measurements\n--- frame_queue:\t %d measurements\n", frame_queue.size());
   output->concatf("--- temperature: %.2fC\n--- delta_t:\t %.4fms\n--- Quat:\t ", ((double) delta_t * 1000), (double)*(_ptr_temperature));
   #if defined(__MANUVR_DEBUG)
     _ptr_quat->printDebug(output);  // OK
@@ -371,7 +385,6 @@ void Integrator::printDebug(StringBuilder* output) {
     output->concatf("--- Gravity: %s (%.4f, %.4f, %.4f)  %.4G\n", (nullifyGravity() ? "(nulled)":"        "), (double)(_grav.x), (double)(_grav.y), (double)(_grav.z), (double) (grav_scalar));
     output->concatf("--- offset_angle_y      %5.2f\n", (double) offset_angle_y);
     output->concatf("--- offset_angle_z      %5.2f\n", (double) offset_angle_z);
-    printLastFrame(output);
   }
 
   if (verbosity > 3) {
@@ -385,15 +398,9 @@ void Integrator::printDebug(StringBuilder* output) {
   }
   grav_consensus /= 17;
   output->concatf("-- Gravity consensus:  %.4fg\n",  (double) grav_consensus);
-  output->concatf("-- Max quat proc       %u\n",    Integrator::max_quats_per_event);
   output->concatf("-- prealloc starves    %u\n-- minimum_prealloc    %u\n", (unsigned long) prealloc_starves, (unsigned long) minimum_prealloc_level);
   output->concatf("-- Measurement queue info\n--\t Instantiated %u \t Freed: %u \t Prealloc queue depth: %d\n--\n", measurement_heap_instantiated, measurement_heap_freed, preallocd_measurements.size());
   output->concat("\n");
-}
-
-
-void Integrator::printBrief(StringBuilder* output) {
-  output->concatf("%8u acc  %8u gyr  %8u mag  %8u temp\n", (unsigned long) *(_ptr_s_count_acc), (unsigned long) *(_ptr_s_count_gyr), (unsigned long) *(_ptr_s_count_mag), (unsigned long) *(_ptr_s_count_temp));
 }
 
 
@@ -412,21 +419,6 @@ void Integrator::dumpPointers(StringBuilder* output) {
   output->concatf("\t _ptr_s_count_temp \t 0x%08x\n",    (unsigned long)  _ptr_s_count_temp);
 }
 
-
-const char* Integrator::getSourceTypeString(SampleType t) {
-  switch (t) {
-    case SampleType::ACCEL:          return "ACCEL";
-    case SampleType::GYRO:           return "GYRO";
-    case SampleType::MAG:            return "MAG";
-    case SampleType::GRAVITY:        return "GRAVITY";
-    case SampleType::BEARING:        return "BEARING";
-    case SampleType::ALTITUDE:       return "ALTITUDE";
-    case SampleType::LOCATION:       return "LOCATION";
-    case SampleType::ALL:            return "ALL";
-    case SampleType::UNSPECIFIED:    return "UNSPECIFIED";
-    default:                         return "<UNDEFINED>";
-  }
-}
 
 
 /**
@@ -449,13 +441,11 @@ const char* Integrator::getSourceTypeString(SampleType t) {
 *   shall be chaos as several different systems rely on that data member being synchronized WRT to the _ptr_quat->
 */
 uint8_t Integrator::MadgwickQuaternionUpdate() {
-  uint8_t quats_procd_this_run = 0;
-
   SensorFrame* measurement;
 
-  while ((quats_procd_this_run < max_quats_per_event) && quat_queue.hasNext()) {
-    measurement = quat_queue.dequeue();
-    float d_t = measurement->read_time;
+  if (frame_queue.hasNext()) {
+    measurement = frame_queue.dequeue();
+    float d_t = measurement->time();
 
     if (verbosity > 3) {
       local_log.concatf("At delta-t = %f: ", (double)d_t);
@@ -604,12 +594,11 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
       }
     }
 
-    quats_procd_this_run++;          // Bailout still counts as proc.
     reclaimMeasurement(measurement); // Release the memory. Even on bailout.
   }
 
   if (local_log.length() > 0) Kernel::log(&local_log);
-  return quats_procd_this_run;
+  return 1;
 }
 
 //---------------------------------------------------------------------------------------------------
@@ -627,7 +616,7 @@ void Integrator::MadgwickAHRSupdateIMU(SensorFrame* measurement) {
     float gx = (measurement->g_data[set_i]).x * IIU_DEG_TO_RAD_SCALAR;
     float gy = (measurement->g_data[set_i]).y * IIU_DEG_TO_RAD_SCALAR;
     float gz = (measurement->g_data[set_i]).z * IIU_DEG_TO_RAD_SCALAR;
-    float d_t = measurement->read_time;
+    float d_t = measurement->time();
 
     // Rate of change of quaternion from gyroscope
     qDot1 = 0.5f * (-q1 * gx - q2 * gy - q3 * gz);

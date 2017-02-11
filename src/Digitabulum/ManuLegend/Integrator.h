@@ -67,7 +67,7 @@ Error should be integrated here as well to form a set of limit error values for
 #define IIU_DEG_TO_RAD_SCALAR   (3.14159f / 180.0f)
 
 
-#define PREALLOCATED_IIU_MEASUREMENTS    11   // We retain this many frames.
+#define PREALLOCD_IMU_FRAMES    11   // We retain this many frames.
 
 
 enum class SampleType {
@@ -93,6 +93,7 @@ class Integrator {
     Integrator();
     ~Integrator();
 
+    void dumpPointers(StringBuilder*);
     void printDebug(StringBuilder*);
     void setVerbosity(int8_t);
 
@@ -105,19 +106,13 @@ class Integrator {
 
     void reset();
 
-    void setSampleRate(uint8_t idx);
-
-    bool state_pass_through(uint8_t);
-
-    void printBrief(StringBuilder*);
-
     /* These are meant to be called from the IMUs. */
     int8_t pushMeasurement(SampleType, float x, float y, float z, float delta_t);
+    int8_t pushMeasurement(SensorFrame*);
+
     void deposit_log(StringBuilder*);
 
     /* These are meant to be called from a Legend. */
-    void printLastFrame(StringBuilder *output);
-
     void assign_legend_pointers(
       void* acc,
       void* gyr,
@@ -135,11 +130,9 @@ class Integrator {
 
     uint8_t MadgwickQuaternionUpdate();
 
-    void dumpPointers(StringBuilder*);
-
     inline bool isDirty() {         return (dirty_acc||dirty_gyr||dirty_mag); }
     inline bool isQuatDirty() {     return (dirty_acc & dirty_gyr);           }
-    inline bool has_quats_left() {  return (quat_queue.size() > 0);           }
+    inline bool has_quats_left() {  return (frame_queue.size() > 0);           }
 
 
     /*
@@ -236,7 +229,6 @@ class Integrator {
 
 
     static float    mag_discard_threshold;
-    static uint8_t  max_quats_per_event;   // Cut's down on overhead if load is high.
     static const char* getSourceTypeString(SampleType);
 
     static SensorFrame* fetchMeasurement();
@@ -280,7 +272,7 @@ class Integrator {
     //Vector3<float> gravity;        // If we need gravity, but the Legend doesn't want it.
     StringBuilder local_log;
 
-    PriorityQueue<SensorFrame*> quat_queue;   // This is the queue for quat operations.
+    PriorityQueue<SensorFrame*> frame_queue;   // This is the queue for quat operations.
 
     int8_t verbosity            = 3;
     uint8_t madgwick_iterations = 1;
@@ -317,7 +309,7 @@ class Integrator {
     static uint32_t measurement_heap_freed;
     static uint32_t minimum_prealloc_level;
     static PriorityQueue<SensorFrame*>  preallocd_measurements;
-    static SensorFrame __prealloc[PREALLOCATED_IIU_MEASUREMENTS];
+    static SensorFrame __prealloc[PREALLOCD_IMU_FRAMES];
 
     static void reclaimMeasurement(SensorFrame*);
 };

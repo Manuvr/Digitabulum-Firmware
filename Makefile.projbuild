@@ -1,0 +1,3 @@
+
+
+#CFLAGS += -DIDENTITY_STRING="Digitabulum-r2" -I$(pwd)/lib/

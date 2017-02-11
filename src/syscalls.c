@@ -1,3 +1,5 @@
+#if defined(STM32F7xx)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -167,3 +169,6 @@ caddr_t _sbrk_r (struct _reent *r, int incr) {
 #ifdef __cplusplus
 }
 #endif
+
+
+#endif   //STM32F7xx

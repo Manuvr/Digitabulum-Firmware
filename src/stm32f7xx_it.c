@@ -30,6 +30,9 @@
   *
   ******************************************************************************
   */
+
+#if defined(STM32F7xx)
+
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f7xx_hal.h"
 #include "stm32f7xx.h"
@@ -40,7 +43,7 @@ extern volatile uint32_t millis_since_reset;
 
 
 /* External variables --------------------------------------------------------*/
-extern void xPortSysTickHandler(void);
+extern void xPortSysTickHandler();
 extern volatile void _hack_sadvance();
 
 /******************************************************************************/
@@ -50,7 +53,7 @@ extern volatile void _hack_sadvance();
 /**
 * @brief This function handles System tick timer.
 */
-void SysTick_Handler(void) {
+void SysTick_Handler() {
   millis_since_reset++;
   _hack_sadvance();
   HAL_IncTick();
@@ -66,110 +69,83 @@ void SysTick_Handler(void) {
 /*
 *
 */
-void WWDG_IRQHandler(void) {
-}
-
+void WWDG_IRQHandler() {}
 
 /*
 *
 */
-void RTC_WKUP_IRQHandler(void) {
-}
-
+void RTC_WKUP_IRQHandler() {}
 
 /*
 *
 */
-void RTC_Alarm_IRQHandler(void) {
-}
-
+void RTC_Alarm_IRQHandler() {}
 
 /*
 *
 */
-void DMA1_Stream0_IRQHandler(void) {
-}
-
+void DMA1_Stream0_IRQHandler() {}
 
 /*
 *
 */
-void DMA1_Stream1_IRQHandler(void) {
-}
-
+void DMA1_Stream1_IRQHandler() {}
 
 /*
 *
 */
-void DMA1_Stream2_IRQHandler(void) {
-}
-
+void DMA1_Stream2_IRQHandler() {}
 
 /*
 *
 */
-void DMA1_Stream4_IRQHandler(void) {
-}
-
+void DMA1_Stream4_IRQHandler() {}
 
 /*
 *
 */
-void DMA1_Stream5_IRQHandler(void) {
-}
-
+void DMA1_Stream5_IRQHandler() {}
 
 /*
 *
 */
-void DMA1_Stream6_IRQHandler(void) {
-}
-
+void DMA1_Stream6_IRQHandler() {}
 
 /*
 *
 */
-void DMA1_Stream7_IRQHandler(void) {
+void DMA1_Stream7_IRQHandler() {
 }
-
 
 /*
 *
 */
-void DMA2_Stream0_IRQHandler(void) {
-}
-
+void DMA2_Stream0_IRQHandler() {}
 
 /*
 *
 */
-void DMA2_Stream1_IRQHandler(void) {
-}
-
+void DMA2_Stream1_IRQHandler() {}
 
 /*
 *
 */
-void DMA2_Stream4_IRQHandler(void) {
-}
-
+void DMA2_Stream4_IRQHandler() {}
 
 /*
 *
 */
-void DMA2_Stream5_IRQHandler(void) {
-}
-
+void DMA2_Stream5_IRQHandler() {}
 
 /*
 *
 */
-void DMA2_Stream6_IRQHandler(void) {
-}
-
+void DMA2_Stream6_IRQHandler() {}
 
 /*
 *
 */
-void DMA2_Stream7_IRQHandler(void) {
-}
+void DMA2_Stream7_IRQHandler() {}
+
+
+#endif   //STM32F7xx

@@ -935,11 +935,17 @@ int8_t CPLDDriver::iiu_group_irq() {
     _irq_accum[9] &= reset_bits;  // Clear serviced bits.
   }
 
-  for (int i = 0; i < 9; i++) {
+  // Now we will scan across the IMU signals looking for the data ready signals.
+  // If all the present digits have their signals raised, we fire the frame
+  //   read for that sensor aspect.
+  bool fire_m = true;
+  bool fire_i = true;
+  for (int i = 0; i < 9; i++) {  // We don't care about the last byte.
     if (_irq_accum[i]) {
       return_value++;
     }
   }
+
 
   flushLocalLog();
   return return_value;

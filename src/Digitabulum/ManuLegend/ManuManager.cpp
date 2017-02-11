@@ -1255,7 +1255,7 @@ void ManuManager::printDebug(StringBuilder *output) {
   grav_consensus /= 17;
   output->concatf("-- Gravity consensus:  %.4fg\n", (double) grav_consensus);
   //output->concatf("-- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
-  output->concatf("-- Max quat proc       %u\n",    Integrator::max_quats_per_event);
+  output->concatf("-- Max quat proc       %u\n",    max_quats_per_event);
   output->concatf("-- sample_count        %d\n",    sample_count);
   //output->concatf("-- Delta-t             %2.5f\n--\n", (double) *(_ptr_delta_t));
 
@@ -1546,8 +1546,8 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
 
 
     case ',':
-      Integrator::max_quats_per_event = temp_byte;
-      local_log.concatf("IIU class now runs a maximum of %u quats per event.\n", Integrator::max_quats_per_event);
+      max_quats_per_event = temp_byte;
+      local_log.concatf("IIU class now runs a maximum of %u quats per event.\n", max_quats_per_event);
       break;
 
     case 'b':
@@ -1677,10 +1677,15 @@ int8_t ManuManager::read_identities() {
 
 
 int8_t ManuManager::read_fifo_depth() {
-  SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
-  op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, 0x8F);
-  op->setBuffer(&_reg_block_ident[0], LEGEND_DATASET_IIU_COUNT);
-  return queue_io_job(op);
+  return queue_io_job(&_preformed_fifo_read);
+}
+
+int8_t ManuManager::read_ag_frame() {
+  return queue_io_job(&_preformed_read_i);
+}
+
+int8_t ManuManager::read_mag_frame() {
+  return queue_io_job(&_preformed_read_m);
 }
 
 
