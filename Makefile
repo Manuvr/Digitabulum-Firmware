@@ -22,9 +22,9 @@ export MANUVR_PLATFORM = ESP32
 export OUTPUT_PATH     = $(BUILD_ROOT)/build
 
 PROJECT_NAME         := digitabulum-r2
-COMPONENT_SRCDIRS    := ManuvrOS/
+#COMPONENT_SRCDIRS    := ManuvrOS/
 BUILD_DIR_BASE       := $(OUTPUT_PATH)
-SRCDIRS              := src/Digitabulum src/Targets/ESP32 #lib/ManuvrOS/ManuvrOS
+SRCDIRS              := src/Digitabulum src/Targets/ESP32 lib/ManuvrOS/ManuvrOS
 
 # Pull in the esp-idf...
 include $(IDF_PATH)/make/project.mk
