@@ -14,12 +14,15 @@ CPP_STANDARD       = gnu++11
 ###########################################################################
 # Environmental awareness...
 ###########################################################################
+ifndef STM32GCCPATH
+$(error If building for STM32, you must supply the STM32GCCPATH variable.)
+endif
+
 # This is where we will store compiled libs and the final output.
 export BUILD_ROOT   = $(shell pwd)
 export OUTPUT_PATH  = $(BUILD_ROOT)/build
 
-TOOLCHAIN          = $(BUILD_ROOT)/compiler/bin
-STLINK_LOADER_PATH = $(BUILD_ROOT)/compiler/stlink
+TOOLCHAIN           = $(STM32GCCPATH)/bin
 
 export CC      = $(TOOLCHAIN)/arm-none-eabi-gcc
 export CXX     = $(TOOLCHAIN)/arm-none-eabi-g++
@@ -87,9 +90,9 @@ CFLAGS += -DENABLE_USB_VCP
 ###########################################################################
 # Source file definitions...
 ###########################################################################
-SOURCES_C     = src/syscalls.c
-SOURCES_C    += src/stm32f7xx_it.c
-SOURCES_C    += src/system_stm32f7xx.c
+SOURCES_C     = src/Targets/STM32F7/syscalls.c
+SOURCES_C    += src/Targets/STM32F7/stm32f7xx_it.c
+SOURCES_C    += src/Targets/STM32F7/system_stm32f7xx.c
 
 SOURCES_CPP   = src/Digitabulum/CPLDDriver/CPLDDriver.cpp
 SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp
@@ -123,7 +126,7 @@ ifeq ($(THREADS),1)
 INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS
 INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/include
 INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1
-SOURCES_C  += src/freertos.c
+SOURCES_C  += src/Targets/STM32F7/freertos.c
 MANUVR_OPTIONS += -D__MANUVR_FREERTOS
 export THREADS=1
 endif
@@ -149,11 +152,11 @@ ifeq ($(DISCO),1)
 # In this case, we will be doing hardware debugging on the F7 discovery.
 # So we should add source files and options to reflect this.
 DIGITABULUM_BOARD = DISCOF7
-SOURCES_CPP  += src/main-discof7.cpp
+SOURCES_CPP  += src/Targets/STM32F7/main-discof7.cpp
 CFLAGS += -DSTM32F7xx
 else
 DIGITABULUM_BOARD = R1
-SOURCES_CPP  += src/main.cpp
+SOURCES_CPP  += src/Targets/STM32F7/main.cpp
 endif
 
 ###########################################################################
