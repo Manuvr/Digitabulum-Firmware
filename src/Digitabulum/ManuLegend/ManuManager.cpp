@@ -1314,7 +1314,11 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
     case 'i':
       switch (temp_byte) {
         case 1:
-          dumpPreformedElements(&local_log);
+          #if defined(__MANUVR_DEBUG)
+            dumpPreformedElements(&local_log);
+          #else
+            local_log.concat("Not a debug build.\n");
+          #endif
           break;
 
         case 2:

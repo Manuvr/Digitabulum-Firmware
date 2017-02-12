@@ -1,10 +1,14 @@
 *.gch
 *.o
+*.out
+*.map
 .directory
-compiler
+
+sdkconfig
+sdkconfig.old
+
+compiler/
 build/
 emu/
 lib/ManuvrOS
 lib/telehash-c
-digitabulum.map
-*.out
