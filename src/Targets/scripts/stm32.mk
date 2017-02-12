@@ -38,7 +38,7 @@ export MAKE    = $(shell which make)
 ###########################################################################
 # Includes, flags, and linker directives...
 ###########################################################################
-CPP_FLAGS    = -fno-rtti -fno-exceptions
+CXXFLAGS    = -fno-rtti -fno-exceptions
 CFLAGS       = -Wall #-nostdlib
 LIBS         = -lc -lm -lstdperiph -lfatfs -lfreertos -lmanuvr
 LD_FILE      = digitabulum.ld
@@ -143,8 +143,8 @@ MANUVR_OPTIONS += -D__IMU_DEBUG
 #MANUVR_OPTIONS += -D__MANUVR_PIPE_DEBUG
 MANUVR_OPTIONS += -D__MANUVR_EVENT_PROFILER
 #CFLAGS += -g -ggdb
-#CPP_FLAGS += -fno-use-linker-plugin
-#CPP_FLAGS += -fstack-usage
+#CXXFLAGS += -fno-use-linker-plugin
+#CXXFLAGS += -fstack-usage
 endif
 
 ifeq ($(DISCO),1)
@@ -169,7 +169,7 @@ CFLAGS += $(MANUVR_OPTIONS) $(OPTIMIZATION) $(INCLUDES) -D$(DIGITABULUM_BOARD)
 export STM32F746xx
 export MANUVR_PLATFORM = STM32F7
 export CFLAGS
-export CPP_FLAGS += $(CFLAGS)
+export CXXFLAGS += $(CFLAGS)
 
 
 ###########################################################################
@@ -197,7 +197,7 @@ libs:
 	$(MAKE) -C lib
 
 $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf: $(OBJS) libs
-	$(CXX) src/startup.s $(OBJS) $(SOURCES_CPP) -o $@ $(CPP_FLAGS) -std=$(CPP_STANDARD) $(LDFLAGS)
+	$(CXX) src/startup.s $(OBJS) $(SOURCES_CPP) -o $@ $(CXXFLAGS) -std=$(CPP_STANDARD) $(LDFLAGS)
 	$(CP) -O ihex $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).hex
 	$(CP) -O binary $(OUTPUT_PATH)/$(FIRMWARE_NAME).elf $(OUTPUT_PATH)/$(FIRMWARE_NAME).bin
 

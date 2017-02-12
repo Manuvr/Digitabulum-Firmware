@@ -6,7 +6,7 @@
 ###########################################################################
 OPTIMIZATION       = -O2
 C_STANDARD         = gnu99
-CPP_STANDARD       = gnu++11
+CXX_STANDARD       = gnu++11
 
 
 ###########################################################################
@@ -28,7 +28,7 @@ export MAKE    = $(shell which make)
 ###########################################################################
 # Includes, flags, and linker directives...
 ###########################################################################
-CPP_FLAGS    = -fno-rtti -fno-exceptions
+CXXFLAGS     = -fno-rtti -fno-exceptions
 CFLAGS       = -Wall
 LIBS         = -lc -lm -lpthread -lmanuvr
 
@@ -52,14 +52,14 @@ LDFLAGS += -L. -L$(OUTPUT_PATH)
 ###########################################################################
 # Source file definitions...
 ###########################################################################
-SOURCES_CPP   = src/Targets/Linux/main-emu.cpp
-SOURCES_CPP  += src/Digitabulum/CPLDDriver/CPLDDriver.cpp
-SOURCES_CPP  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp
-SOURCES_CPP  += src/Digitabulum/LSM9DS1/RegPtrMap.cpp
-SOURCES_CPP  += src/Digitabulum/ManuLegend/SensorFrame.cpp
-SOURCES_CPP  += src/Digitabulum/ManuLegend/Integrator.cpp
-SOURCES_CPP  += src/Digitabulum/ManuLegend/ManuManager.cpp
-SOURCES_CPP  += src/Digitabulum/ManuLegend/ManuLegend.cpp
+CXX_SRCS   = src/Targets/Linux/main-emu.cpp
+CXX_SRCS  += src/Digitabulum/CPLDDriver/CPLDDriver.cpp
+CXX_SRCS  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp
+CXX_SRCS  += src/Digitabulum/LSM9DS1/RegPtrMap.cpp
+CXX_SRCS  += src/Digitabulum/ManuLegend/SensorFrame.cpp
+CXX_SRCS  += src/Digitabulum/ManuLegend/Integrator.cpp
+CXX_SRCS  += src/Digitabulum/ManuLegend/ManuManager.cpp
+CXX_SRCS  += src/Digitabulum/ManuLegend/ManuLegend.cpp
 
 
 ###########################################################################
@@ -82,15 +82,15 @@ MANUVR_OPTIONS += -D__MANUVR_DEBUG
 MANUVR_OPTIONS += -D__IMU_DEBUG
 MANUVR_OPTIONS += -D__MANUVR_EVENT_PROFILER
 #CFLAGS += -g -ggdb
-#CPP_FLAGS += -fno-use-linker-plugin
-#CPP_FLAGS += -fstack-usage
+#CXXFLAGS += -fno-use-linker-plugin
+#CXXFLAGS += -fstack-usage
 endif
 
 
 ###########################################################################
 # exports, consolidation....
 ###########################################################################
-OBJS = $(SOURCES_C:.c=.o)
+OBJS = $(C_SRCS:.c=.o) $(CXX_SRCS:.cpp=.o)
 
 # Merge our choices and export them to the downstream Makefiles...
 CFLAGS += $(MANUVR_OPTIONS) $(OPTIMIZATION) $(INCLUDES)
@@ -100,7 +100,7 @@ ANALYZER_FLAGS +=  --std=c++11 --report-progress --force -j6
 
 #export MANUVR_PLATFORM = LINUX
 export CFLAGS
-export CPP_FLAGS += $(CFLAGS)
+export CXXFLAGS += $(CFLAGS)
 export ANALYZER_FLAGS
 
 
@@ -116,14 +116,23 @@ all: $(OUTPUT_PATH)/$(FIRMWARE_NAME)
 	$(SZ) $(OUTPUT_PATH)/$(FIRMWARE_NAME)
 
 %.o : %.c
-	$(CC) $(CFLAGS) -c -o $@ $^
+	$(CC) $(CFLAGS) -std=$(C_STANDARD) -c -o $@ $^
+
+%.o : %.cpp
+	$(CXX) -std=$(CXX_STANDARD) $(CXXFLAGS) -c -o $@ $^
 
 libs:
 	mkdir -p $(OUTPUT_PATH)
 	$(MAKE) -C lib
 
 $(OUTPUT_PATH)/$(FIRMWARE_NAME): $(OBJS) libs
-	$(CXX) $(OBJS) $(SOURCES_CPP) -o $@ $(CPP_FLAGS) -std=$(CPP_STANDARD) $(LDFLAGS)
+	$(CXX) $(OBJS) -o $@ $(CXXFLAGS) -std=$(CXX_STANDARD) $(LDFLAGS)
 
 clean:
+	rm -rf $(OUTPUT_PATH)
 	rm -f $(OBJS)
+
+
+fullclean: clean
+	rm -rf doc/doxygen/*
+	$(MAKE) clean -C lib/

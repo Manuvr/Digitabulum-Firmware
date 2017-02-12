@@ -49,7 +49,7 @@ include $(IDF_PATH)/make/project.mk
 ############################################################################
 ## Includes, flags, and linker directives...
 ############################################################################
-#CPP_FLAGS    = -fno-rtti -fno-exceptions
+#CXXFLAGS    = -fno-rtti -fno-exceptions
 #CFLAGS       = -Wall
 #LIBS         = -lc -lm -lpthread -lfreertos -llwip -lmanuvr
 #
@@ -91,8 +91,8 @@ include $(IDF_PATH)/make/project.mk
 #
 ## Debugging options...
 ##CFLAGS += -g -ggdb
-##CPP_FLAGS += -fno-use-linker-plugin
-##CPP_FLAGS += -fstack-usage
+##CXXFLAGS += -fno-use-linker-plugin
+##CXXFLAGS += -fstack-usage
 #endif
 #
 #
@@ -106,7 +106,7 @@ include $(IDF_PATH)/make/project.mk
 #
 #export MANUVR_PLATFORM = ESP32
 #export CFLAGS
-#export CPP_FLAGS += $(CFLAGS)
+#export CXXFLAGS += $(CFLAGS)
 #
 #
 ############################################################################
@@ -128,7 +128,7 @@ include $(IDF_PATH)/make/project.mk
 #	$(MAKE) manuvr -C lib
 #
 #$(OUTPUT_PATH)/$(FIRMWARE_NAME): $(OBJS) libs
-#	$(CXX) $(OBJS) $(SOURCES_CPP) -o $@ $(CPP_FLAGS) -std=$(CPP_STANDARD) $(LDFLAGS)
+#	$(CXX) $(OBJS) $(SOURCES_CPP) -o $@ $(CXXFLAGS) -std=$(CPP_STANDARD) $(LDFLAGS)
 #
 #clean:
 #	rm -f *.o *.su *~ *.map $(OBJS)
