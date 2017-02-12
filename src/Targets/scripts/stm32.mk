@@ -4,8 +4,6 @@
 # Date:   2014.08.13
 #
 ###########################################################################
-FIRMWARE_NAME      = digitabulum
-
 MCU                = cortex-m7
 EXT_CLK_RATE       = 24000000
 OPTIMIZATION       = -O2
@@ -167,7 +165,6 @@ OBJS = $(SOURCES_C:.c=.o)
 CFLAGS += $(MANUVR_OPTIONS) $(OPTIMIZATION) $(INCLUDES) -D$(DIGITABULUM_BOARD)
 
 export STM32F746xx
-export MANUVR_PLATFORM = STM32F7
 export CFLAGS
 export CXXFLAGS += $(CFLAGS)
 

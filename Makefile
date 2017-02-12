@@ -40,3 +40,15 @@ export OUTPUT_PATH     = $(BUILD_ROOT)/build
 
 include src/Targets/scripts/linux.mk
 endif   # LINUX
+
+
+################################################################################
+## STM32F7 target
+ifeq ($(PLATFORM),STM32F7)
+export MANUVR_PLATFORM = STM32F7
+export FIRMWARE_NAME   = "digitabulum-r2"
+export BUILD_ROOT      = $(shell pwd)
+export OUTPUT_PATH     = $(BUILD_ROOT)/build
+
+include src/Targets/scripts/stm32.mk
+endif   # STM32F7
