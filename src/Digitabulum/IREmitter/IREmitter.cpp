@@ -146,7 +146,7 @@ void IREmitter::procDirectDebugInstruction(StringBuilder *input) {
     case 'f':  // Flash the IR LED like a beacon.
       break;
     default:
-      #ifdef __MANUVR_DEBUG
+      #ifdef MANUVR_DEBUG
       EventReceiver::procDirectDebugInstruction(input);
       #endif
       break;

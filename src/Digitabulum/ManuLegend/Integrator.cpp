@@ -376,7 +376,7 @@ void Integrator::printDebug(StringBuilder* output) {
   output->concatf("\n-------------------------------------------------------\n--- Integrator\n-------------------------------------------------------\n--- %s legend\n--- Samples:\t ", (legend_writable()?"writable":"invalid"));
   output->concatf("--- measurements\n--- frame_queue:\t %d measurements\n", frame_queue.size());
   output->concatf("--- temperature: %.2fC\n--- delta_t:\t %.4fms\n--- Quat:\t ", ((double) delta_t * 1000), (double)*(_ptr_temperature));
-  #if defined(__MANUVR_DEBUG)
+  #if defined(MANUVR_DEBUG)
     _ptr_quat->printDebug(output);  // OK
   #endif
   output->concat("\n");
@@ -449,7 +449,7 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
 
     if (verbosity > 3) {
       local_log.concatf("At delta-t = %f: ", (double)d_t);
-      #if defined(__MANUVR_DEBUG)
+      #if defined(MANUVR_DEBUG)
         //measurement->printDebug(&local_log);
         local_log.concat("\t");
         _ptr_quat->printDebug(&local_log);
@@ -726,7 +726,7 @@ int8_t Integrator::calibrate_from_data_ag() {
   ////float offset_angle_z = Vector3<float>::angle(&proj_xz, &x_axis);
   ////integrator->pushMeasurement(IMU_FLAG_BEARING_DATA, 0, offset_angle_y, offset_angle_z, 0);
   ////integrator->pushMeasurement(IMU_FLAG_BEARING_DATA, x, y, z, 0);
-  //return 0;
+  return 0;
 }
 
 
@@ -744,5 +744,5 @@ int8_t Integrator::calibrate_from_data_mag() {
   //noise_floor_mag.x = (int16_t) avg.x;
   //noise_floor_mag.y = (int16_t) avg.y;
   //noise_floor_mag.z = (int16_t) avg.z;
-  //return 0;
+  return 0;
 }

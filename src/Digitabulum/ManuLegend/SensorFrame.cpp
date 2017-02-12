@@ -46,7 +46,7 @@ void SensorFrame::wipe() {
 }
 
 
-#if defined(__IMU_DEBUG)
+#if defined(MANUVR_IMU_DEBUG)
 void SensorFrame::printDebug(StringBuilder* output) {
   output->concatf("Measurement (%p)  Delta-t = %f", (double) read_time);
   StringBuilder a_line;
@@ -110,4 +110,4 @@ void SensorFrame::printDebug(StringBuilder* output) {
     m_line.concatf("M(%.4f, %.4f, %.4f)  ", (double)m_data[i].x, (double)m_data[i].y, (double)m_data[i].z);
   }
 }
-#endif  // __IMU_DEBUG
+#endif  // MANUVR_IMU_DEBUG

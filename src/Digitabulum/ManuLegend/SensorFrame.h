@@ -28,9 +28,9 @@ This is a container class for an IMU measurement frame.
 #include <DataStructures/Vector3.h>
 #include <DataStructures/Quaternion.h>
 
-#if defined(__IMU_DEBUG)
+#if defined(MANUVR_IMU_DEBUG)
 #include <DataStructures/StringBuilder.h>
-#endif  // __IMU_DEBUG
+#endif  // MANUVR_IMU_DEBUG
 
 /*
 * This is a container class that is pushed downstream to the Integrator class,
@@ -51,7 +51,7 @@ class SensorFrame {
     SensorFrame();
 
     void wipe();
-    #if defined(__IMU_DEBUG)
+    #if defined(MANUVR_IMU_DEBUG)
       void printDebug(StringBuilder* output);
     #endif
 

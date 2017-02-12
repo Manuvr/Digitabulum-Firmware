@@ -179,7 +179,7 @@ void HapticStrap::procDirectDebugInstruction(StringBuilder *input) {
     case ']':  // Buzz vibrator 1
       break;
     default:
-      #ifdef __MANUVR_DEBUG
+      #ifdef MANUVR_DEBUG
       EventReceiver::procDirectDebugInstruction(input);
       #endif
       break;

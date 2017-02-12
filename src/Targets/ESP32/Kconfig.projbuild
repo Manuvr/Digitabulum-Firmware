@@ -1,0 +1,224 @@
+menu "Manuvr Configuration"
+config FIRMWARE_NAME
+    string "Firmware name"
+  default "digitabulum-r2"
+  ---help---
+    The firmware's name.
+
+config MANUVR_STORAGE
+    bool "Storage API"
+  default n
+  ---help---
+    Support runtime data persistence?
+
+config EVENT_MANAGER_PREALLOC_COUNT
+    int "Manuvr message preallocation size"
+  default 8
+  ---help---
+    How large a pool should we keep to cope with bursts of messages?
+
+config SCHEDULER_MAX_SKIP_BEFORE_RESET
+    int "Scheduler skips before reset"
+  default 6
+  ---help---
+    This is only useful for hung program recovery in the absence of
+    either a supported watchdog, or threads.
+
+
+config PLATFORM_RNG_CARRY_CAPACITY
+    int "RNG pool size"
+  default 32
+  ---help---
+    How many 32-bit random numbers should we have in our RNG pool?
+
+
+config MANUVR_HAS_CRYPT_WRAPPER
+    bool "Use cryptographic wrappers"
+  default n
+  ---help---
+    Should cryptographic wrappers be supported?
+
+config WITH_MBEDTLS
+    depends on MANUVR_HAS_CRYPT_WRAPPER
+    bool "Wrapper for mbedtls"
+  default n
+
+config WITH_BLIND_CRYPTO
+    depends on MANUVR_HAS_CRYPT_WRAPPER
+    bool "Blind crypto"
+  default n
+  ---help---
+    Platform cryptography peripherals require the cryptographic wrapper
+      to accept insertion of arbitrary algorithm support and runtime.
+
+
+menu "Protocol wrappers"
+config MANUVR_OVER_THE_WIRE
+    bool "Manuvr native"
+  default y
+  ---help---
+    Support Manuvr's native types and messages over the wire.
+
+config MANUVR_SUPPORT_MQTT
+    bool "MQTT Client"
+  default n
+  ---help---
+    Support MQTT client via Paho.
+
+config MANUVR_SUPPORT_COAP
+    bool "CoAP"
+  default n
+  ---help---
+    Support CoAP via Erbium.
+
+config MANUVR_CONSOLE_SUPPORT
+    bool "Console"
+  default y
+  ---help---
+    Support direct firmware console.
+
+endmenu
+
+
+menu "Transport wrappers"
+config MANUVR_STDIO
+    bool "STDIO"
+  default y
+  ---help---
+    Treat STDIO as a general stream-oriented transport.
+
+config MANUVR_SUPPORT_SERIAL
+    bool "Serial port"
+  default n
+  ---help---
+    Generalized serial port support.
+
+config MANUVR_SUPPORT_TCPSOCKET
+    bool "TCP"
+  default n
+  ---help---
+    Support TCP.
+
+config MANUVR_SUPPORT_UDP
+    bool "UDP"
+  default n
+  ---help---
+    Support UDP.
+
+endmenu
+
+
+menu "Modules"
+config MANUVR_SUPPORT_I2C
+    bool "I2C support"
+  default n
+  ---help---
+    Enable I2C API.
+
+config MANUVR_GPS_PIPE
+    bool "GPS ties"
+  default n
+  ---help---
+    Enabling this will allow a NEMA parser to be stacked onto a transport
+      and will confer certain capabilities that a platform may not otherwise have.
+endmenu
+
+
+menu "Serialization support"
+config MANUVR_CBOR
+    bool "Support CBOR"
+  default y
+  ---help---
+    Support CBOR.
+
+config MANUVR_JSON
+    bool "Support JSON"
+  default n
+  ---help---
+    Support JSON.
+endmenu
+
+menu "Debugging"
+config MANUVR_DEBUG
+    bool "Debugging functions"
+  default y
+  ---help---
+    Enable runtime debugging.
+
+config MANUVR_PIPE_DEBUG
+    depends on MANUVR_DEBUG
+    bool "Debug pipes"
+  default n
+  ---help---
+    Debug pipes. Very dangerous.
+
+config MANUVR_EVENT_PROFILER
+    depends on MANUVR_DEBUG
+    bool "Profiling support"
+  default y
+  ---help---
+    Track message execution stats.
+
+config DEFAULT_CLASS_VERBOSITY
+    depends on MANUVR_DEBUG
+    int "Default module verbosity"
+  default 3
+  ---help---
+    Modules will be initialized with whatever verbosity level is given here.
+    Valid range is [0-7], with 0 being silent, and 7 logging everything.
+
+endmenu
+endmenu
+
+
+
+
+
+menu "Digitabulum Configuration"
+
+config WIFI_SSID
+    string "WiFi SSID"
+  default "myssid"
+  help
+    SSID (network name) for the example to connect to.
+
+config WIFI_PASSWORD
+    string "WiFi Password"
+  default "myssid"
+  help
+    WiFi password (WPA or WPA2) for the example to use.
+      Can be left blank if the network has no security set.
+
+config CPLD_SPI_PREALLOC_COUNT
+    int "Preallocated SPI jobs"
+  default 10
+  help
+    The CPLD's primary SPI channel has unpredictable bus traffic patterns.
+      Allocate this many SPI jobs to avoid burdening the heap under load.
+
+config CPLD_SPI_MAX_QUEUE_DEPTH
+    int "Max SPI queue depth"
+  default 40
+  help
+    If too many bus operations stack up in the queue, we will drop them.
+      How many is too many?
+
+config CPLD_SPI_MAX_QUEUE_PRINT
+    int "SPI job listing limit"
+  default 3
+  help
+    How many queue items to display in debug?
+
+config PREALLOCD_IMU_FRAMES
+    int "Preallocated IMU frames"
+  default 3
+  help
+    How many data frames to track without heap impact?
+
+config MANUVR_IMU_DEBUG
+    depends on MANUVR_DEBUG
+    bool "IMU Debug"
+  default n
+  ---help---
+    Enables debugging features surrounding IMUs and the Integrator.
+endmenu

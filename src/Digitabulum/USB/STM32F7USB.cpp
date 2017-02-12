@@ -197,7 +197,7 @@ int8_t STM32F7USB::listen() {
 
 // TODO: Perhaps reset the terminal?
 int8_t STM32F7USB::reset() {
-  //#if defined(__MANUVR_DEBUG)
+  //#if defined(MANUVR_DEBUG)
   //  if (getVerbosity() > 3) local_log.concatf("STM32F7USB initialized.\n");
   //#endif
   initialized(true);

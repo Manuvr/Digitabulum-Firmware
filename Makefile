@@ -16,14 +16,15 @@ ifndef IDF_PATH
 	$(error If building for ESP32, you must supply the IDF_PATH variable.)
 endif
 
-export MANUVR_PLATFORM = ESP32
-
 BUILD_ROOT           := $(shell pwd)
+
+export MANUVR_PLATFORM = ESP32
+export OUTPUT_PATH     = $(BUILD_ROOT)/build
+
 PROJECT_NAME         := digitabulum-r2
 COMPONENT_SRCDIRS    := ManuvrOS/
 BUILD_DIR_BASE       := $(OUTPUT_PATH)
-EXTRA_COMPONENT_DIRS := $(BUILD_ROOT)/lib/
-SRCDIRS              := $(BUILD_ROOT)/src/
+SRCDIRS              := src/Digitabulum src/Targets/ESP32 #lib/ManuvrOS/ManuvrOS
 
 # Pull in the esp-idf...
 include $(IDF_PATH)/make/project.mk

@@ -154,7 +154,7 @@ void RN4677::bt_gpio_5() {
   }
   inst->_last_gpio_5_event = ms;
 
-  #ifdef __MANUVR_DEBUG
+  #ifdef MANUVR_DEBUG
     if (inst->getVerbosity() > 6) {
       StringBuilder _log;
       _log.concatf("BT GPIO 5: %lu.\n", ms);

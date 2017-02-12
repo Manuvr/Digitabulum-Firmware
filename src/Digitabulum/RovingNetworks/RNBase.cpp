@@ -322,7 +322,7 @@ int8_t RNBase::advance_work_queue() {
         if (BusOpcode::RX == current_job->get_opcode()) {
           // This is meant for the session.
           if (haveFar()) {
-            #ifdef __MANUVR_DEBUG
+            #ifdef MANUVR_DEBUG
               if (getVerbosity() > 4) Kernel::log("RNBase sending RX to application...\n");
             #endif
           }
@@ -354,7 +354,7 @@ int8_t RNBase::advance_work_queue() {
             }
             break;
           default:
-            #ifdef __MANUVR_DEBUG
+            #ifdef MANUVR_DEBUG
               if (getVerbosity() > 1) Kernel::log("advance_work_queue(): We should not be here.\n");
             #endif
             break;
@@ -383,7 +383,7 @@ int8_t RNBase::advance_work_queue() {
 //	if (current_job) {
 //		if (current_job->isComplete()) {
 //			if (current_job->hasFault()) {
-//			  #ifdef __MANUVR_DEBUG
+//			  #ifdef MANUVR_DEBUG
 //			  if (getVerbosity() > 3) {
 //          local_log.concatf("Destroying failed job.\n");
 //          if (getVerbosity() > 4) current_job->printDebug(&local_log);
@@ -497,7 +497,7 @@ int8_t RNBase::read_port() {
 * @param cmd  A pointer to the string to be sent to the module.
 */
 void RNBase::sendGeneralCommand(StringBuilder *cmd) {
-  #ifdef __MANUVR_DEBUG
+  #ifdef MANUVR_DEBUG
     if (getVerbosity() > 5) {
       local_log.concatf("Sending command %s.\n", cmd->string());
       Kernel::log(&local_log);
@@ -525,7 +525,7 @@ void RNBase::sendGeneralCommand(const char *cmd) {
 */
 void RNBase::setSPPMode(void) {
   sendGeneralCommand(RNBASE_PROTO_SPP);
-  #ifdef __MANUVR_DEBUG
+  #ifdef MANUVR_DEBUG
     if (getVerbosity() > 5) Kernel::log("Tried to enter SPP mode.\n");
   #endif
 }
@@ -605,7 +605,7 @@ void RNBase::setAutoconnect(bool autocon) {
     enterCommandMode();
     StringBuilder temp(autocon ? RNBASE_MODE_AUTOCONNECT : RNBASE_MODE_MANUCONNECT);
     insert_into_work_queue(BusOpcode::TX_CMD_WAIT_RX, &temp);
-    #ifdef __MANUVR_DEBUG
+    #ifdef MANUVR_DEBUG
     if (getVerbosity() > 4) {
       local_log.concatf("Autoconnect is now %sabled.", (autocon ? "en" : "dis"));
       Kernel::log(&local_log);
@@ -615,7 +615,7 @@ void RNBase::setAutoconnect(bool autocon) {
     sendRebootCommand();
   }
   else {
-    #ifdef __MANUVR_DEBUG
+    #ifdef MANUVR_DEBUG
     if (getVerbosity() > 4) {
       local_log.concatf("Autoconnect mode was already %sabled.", (autocon ? "en" : "dis"));
       Kernel::log(&local_log);
@@ -712,7 +712,7 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
       }
       else {
         return_value = 0;
-        #ifdef __MANUVR_DEBUG
+        #ifdef MANUVR_DEBUG
           if (getVerbosity() > 5) Kernel::log("Dropping BT send. Queue flooded.\n");
         #endif
         _queue_floods++;
@@ -737,7 +737,7 @@ uint32_t RNBase::insert_into_work_queue(BusOpcode opcode, StringBuilder* data) {
 void RNBase::process_connection_change(bool conn) {
   connected(conn);
   if (!conn) {
-    #ifdef __MANUVR_DEBUG
+    #ifdef MANUVR_DEBUG
       if (getVerbosity() > 3) Kernel::log("We lost connection...\n");
     #endif
     burn_or_recycle_current();
@@ -811,7 +811,7 @@ size_t RNBase::feed_rx_buffer(unsigned char *nu, size_t len) {
           }
         }
         else {
-          #ifdef __MANUVR_DEBUG
+          #ifdef MANUVR_DEBUG
           if (getVerbosity() > 2) {
             Kernel::log("RNBase: In command_mode (or pending), but have wrong opcode for work_queue item.\n\t");
             for (size_t i = 0; i < remaining_len; i++) {
@@ -825,7 +825,7 @@ size_t RNBase::feed_rx_buffer(unsigned char *nu, size_t len) {
         }
       }
       else {
-        #ifdef __MANUVR_DEBUG
+        #ifdef MANUVR_DEBUG
         // TODO: I have _never_ seen this happen.
         if (getVerbosity() > 2) {
           Kernel::log("Don't know what to do with data. In command_mode (or pending), but have no work_queue item to feed.\n\t");
@@ -959,7 +959,7 @@ int8_t RNBase::notify(ManuvrMsg* active_event) {
       {
         StringBuilder* temp_sb;
         if (0 == active_event->getArgAs(&temp_sb)) {
-          #ifdef __MANUVR_DEBUG
+          #ifdef MANUVR_DEBUG
             if (getVerbosity() > 3) local_log.concatf("We about to print %d bytes to the host.\n", temp_sb->length());
           #endif
           printToHost(temp_sb);

@@ -979,7 +979,7 @@ int8_t ManuManager::callback_proc(ManuvrMsg* event) {
     default:
       if (getVerbosity() > 5) {
         local_log.concat("ManuManager::callback_proc(): Default case.\n");
-        #if defined(__MANUVR_DEBUG)
+        #if defined(MANUVR_DEBUG)
           event->printDebug(&local_log);
         #endif
         Kernel::log(&local_log);
@@ -1092,7 +1092,7 @@ int8_t ManuManager::notify(ManuvrMsg* active_event) {
 
 /**
 * Debug support method. This fxn is only present in debug builds.
-* // TODO: This is a lie. Audit __MANUVR_DEBUG usage and elaborate it by class to reduce build sizes.
+* // TODO: This is a lie. Audit MANUVR_DEBUG usage and elaborate it by class to reduce build sizes.
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
@@ -1220,7 +1220,7 @@ void ManuManager::printFIFOLevels(StringBuilder *output) {
 }
 
 
-#if defined(__MANUVR_DEBUG)
+#if defined(MANUVR_DEBUG)
 void ManuManager::dumpPreformedElements(StringBuilder* output) {
   output->concat("--- Quat-crunch event\n");
   quat_crunch_event.printDebug(output);
@@ -1261,7 +1261,7 @@ void ManuManager::printDebug(StringBuilder *output) {
 
   if (getVerbosity() > 3) {
     output->concatf("-- MAX_DATASET_SIZE    %u\n",    (unsigned long) LEGEND_MGR_MAX_DATASET_SIZE);
-    #if defined(__MANUVR_DEBUG)
+    #if defined(MANUVR_DEBUG)
       if (getVerbosity() > 5) {
         event_legend_frame_ready.printDebug(output);
         event_iiu_read.printDebug(output);
@@ -1269,7 +1269,7 @@ void ManuManager::printDebug(StringBuilder *output) {
     #endif
   }
 
-  #if defined(__MANUVR_DEBUG)
+  #if defined(MANUVR_DEBUG)
     dumpPreformedElements(output);
   #endif
 
@@ -1314,7 +1314,7 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
     case 'i':
       switch (temp_byte) {
         case 1:
-          #if defined(__MANUVR_DEBUG)
+          #if defined(MANUVR_DEBUG)
             dumpPreformedElements(&local_log);
           #else
             local_log.concat("Not a debug build.\n");
@@ -1590,7 +1590,7 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           event_legend_frame_ready.enableSchedule(true);  // Enable the periodic read.
           local_log.concat("Enabled frame broadcasts.\n");
           break;
-        #if defined(__MANUVR_DEBUG)
+        #if defined(MANUVR_DEBUG)
           case 253:
             event_legend_frame_ready.printDebug(&local_log);
             break;
