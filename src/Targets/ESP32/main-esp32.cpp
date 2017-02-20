@@ -74,26 +74,53 @@ volatile void _hack_sadvance() {
 * 2     1     33  DEN_AG_CARPALS
 */
 const CPLDPins cpld_pins(
-  25, // CPLD's reset pin
-  30, // AKA: SPI2_MISO
-  45, // CPLD's IRQ_WAKEUP pin
-  75, // GPIO
-  78, // GPIO
-  33 // The DEN_AG pin on the carpals IMU.
+  17,  // CPLD's reset pin
+  18,  // Transfer request
+  19,  // CPLD's IRQ_WAKEUP pin
+  21,  // CPLD clock input
+  22,  // CPLD OE pin
+  23,  // CPLD GPIO
+  25,  // SPI1 CS
+  26,  // SPI1 CLK
+  27,  // SPI1 MOSI
+  32,  // SPI1 MISO
+  33,  // SPI2 CS
+  34,  // SPI2 CLK
+  35   // SPI2 MOSI
 );
+
 
 const I2CAdapterOptions i2c_opts(
-  1,   // Device number
-  23, // sda
-  22  // scl
+  0,   // Device number
+  13,  // IO13 (sda)
+  14   // IO14 (scl)
 );
 
+/*
+Pins
+-------------
+IO13  // i2c
+IO14  // i2c
+IO15  // LED
+IO16  // LED
+IO17
+IO18
+IO19
+IO21
+IO22
+IO23
+IO25
+IO26
+IO27
+IO32
+IO33
+IO34
+IO35
+*/
 
-
-/****************************************************************************************************
-* Main function                                                                                     *
-****************************************************************************************************/
-void app_main() {
+#if defined (__MANUVR_FREERTOS)
+void loopTask(void *pvParameters) {
+  printf("******************* loopTask()\n");
   /*
   * The platform object is created on the stack, but takes no action upon
   *   construction. The first thing that should be done is to call the preinit
@@ -108,17 +135,39 @@ void app_main() {
   ManuManager _legend_manager(&_cpld);
   kernel->subscribe(&_legend_manager);
 
-  I2CAdapter i2c(&i2c_opts);
-  kernel->subscribe(&i2c);
+  //I2CAdapter i2c(&i2c_opts);
+  //kernel->subscribe(&i2c);
 
-  // Pins 58 and 63 are the reset and IRQ pin, respectively.
-  // This is translated to pins 10 and 13 on PortD.
-  ADP8866 leds(58, 63, 0x27);
-  i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
-  kernel->subscribe((EventReceiver*) &leds);
+  //ADP8866 leds(15, 16);
+  //i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
+  //kernel->subscribe((EventReceiver*) &leds);
 
+  printf("******************* micros()\t %lu\n", micros());
+  printf("******************* millis()\t %lu\n", millis());
   platform.bootstrap();
+  printf("******************* bootstrap()\n");
+
+  while (1) {
+    kernel->procIdleFlags();
+    if (0 == millis() % 5000) {
+      StringBuilder local_log;
+      kernel->printDebug(&local_log);
+      printf("%s\n", local_log.string());
+    }
+  }
 }
+
+
+/****************************************************************************************************
+* Main function                                                                                     *
+****************************************************************************************************/
+void app_main() {
+  xTaskCreatePinnedToCore(loopTask, "loopTask", 32768, NULL, 1, NULL, 1);
+}
+
+#endif  // __MANUVR_FREERTOS
+
+
 
 #ifdef __cplusplus
   }

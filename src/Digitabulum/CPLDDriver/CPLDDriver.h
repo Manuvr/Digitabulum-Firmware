@@ -557,22 +557,65 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 */
 class CPLDPins {
   public:
-    CPLDPins() {};
-    CPLDPins(uint8_t r, uint8_t rdy, uint8_t irq, uint8_t g0, uint8_t g1, uint8_t den) {
-      reset  = r;
-      tx_rdy = rdy;
-      irq    = irq;
-      gpio0  = g0;
-      gpio1  = g1;
-      den    = den;
-    };
+    CPLDPins(const CPLDPins* p) :
+      reset(p->reset),
+      req(p->req),
+      irq(p->irq),
+      clk(p->clk),
+      oe(p->oe),
+      gpio(p->gpio),
+      s1_cs(p->s1_cs),
+      s1_clk(p->s1_clk),
+      s1_mosi(p->s1_mosi),
+      s1_miso(p->s1_miso),
+      s2_cs(p->s2_cs),
+      s2_clk(p->s2_clk),
+      s2_mosi(p->s2_mosi)
+    {};
 
-    uint8_t reset;  // CPLD's reset pin
-    uint8_t tx_rdy; // AKA: SPI2_MISO
-    uint8_t irq;    // CPLD's IRQ_WAKEUP pin
-    uint8_t gpio0;  // GPIO
-    uint8_t gpio1;  // GPIO
-    uint8_t den;    // The DEN_AG pin on the carpals IMU.
+    CPLDPins(
+      uint8_t _reset,
+      uint8_t _req,
+      uint8_t _irq,
+      uint8_t _clk,
+      uint8_t _oe,
+      uint8_t _gpio,
+      uint8_t _s1_cs,
+      uint8_t _s1_clk,
+      uint8_t _s1_mosi,
+      uint8_t _s1_miso,
+      uint8_t _s2_cs,
+      uint8_t _s2_clk,
+      uint8_t _s2_mosi
+    ) :
+      reset(_reset),
+      req(_req),
+      irq(_irq),
+      clk(_clk),
+      oe(_oe),
+      gpio(_gpio),
+      s1_cs(_s1_cs),
+      s1_clk(_s1_clk),
+      s1_mosi(_s1_mosi),
+      s1_miso(_s1_miso),
+      s2_cs(_s2_cs),
+      s2_clk(_s2_clk),
+      s2_mosi(_s2_mosi)
+    {};
+
+    const uint8_t reset;    // CPLD's reset pin
+    const uint8_t req;      // Transfer REQ pin
+    const uint8_t irq;      // CPLD's IRQ_WAKEUP pin
+    const uint8_t clk;      // Clock input pin
+    const uint8_t oe;       // CPLD's OE pin
+    const uint8_t gpio;     // CPLD's GPIO pin
+    const uint8_t s1_cs;    //
+    const uint8_t s1_clk;   //
+    const uint8_t s1_mosi;  //
+    const uint8_t s1_miso;  //
+    const uint8_t s2_cs;    //
+    const uint8_t s2_clk;   //
+    const uint8_t s2_mosi;  //
 };
 
 
@@ -651,7 +694,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     ManuvrMsg event_spi_timeout;
     ManuvrMsg _periodic_debug;
 
-    CPLDPins _pins;
+    const CPLDPins _pins;
 
     /* List of pending callbacks for bus transactions. */
     PriorityQueue<SPIBusOp*> callback_queue;

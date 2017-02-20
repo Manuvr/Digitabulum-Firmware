@@ -219,8 +219,7 @@ bool irq_demands_service(uint8_t bit) {
 /**
 * Constructor. Also populates the global pointer reference.
 */
-CPLDDriver::CPLDDriver(const CPLDPins* p) : EventReceiver("CPLDDriver"), BusAdapter(CPLD_SPI_MAX_QUEUE_DEPTH) {
-  memcpy(&_pins, p, sizeof(CPLDPins));
+CPLDDriver::CPLDDriver(const CPLDPins* p) : EventReceiver("CPLDDriver"), BusAdapter(CPLD_SPI_MAX_QUEUE_DEPTH), _pins(p) {
 
   if (nullptr == cpld) {
     cpld = this;
@@ -266,22 +265,21 @@ void CPLDDriver::gpioSetup() {
     gpioDefine(_pins.reset, OUTPUT);
     setPin(_pins.reset, false);  // Hold the CPLD in reset.
   }
-  if (255 != _pins.tx_rdy) {
-    gpioDefine(_pins.tx_rdy, OUTPUT);
-    setPin(_pins.tx_rdy, false);
+  if (255 != _pins.req) {
+    gpioDefine(_pins.req, OUTPUT);
+    setPin(_pins.req, false);
   }
   if (255 != _pins.irq) {
     setPinFxn(_pins.irq, FALLING, cpld_wakeup_isr);
   }
-  if (255 != _pins.gpio0) {
-    //setPinFxn(_pins.gpio0, CHANGE, cpld_gpio_isr_0);
+  if (255 != _pins.clk) {
+    gpioDefine(_pins.clk, OUTPUT);
   }
-  if (255 != _pins.gpio1) {
-    setPinFxn(_pins.gpio1, CHANGE, cpld_gpio_isr_1);
+  if (255 != _pins.oe) {
+    gpioDefine(_pins.oe, OUTPUT);
   }
-  if (255 != _pins.den) {
-    gpioDefine(_pins.den, OUTPUT);
-    setPin(_pins.den, true);
+  if (255 != _pins.gpio) {
+    setPinFxn(_pins.gpio, CHANGE, cpld_gpio_isr_1);
   }
 }
 
@@ -453,7 +451,7 @@ int8_t CPLDDriver::queue_io_job(BusOp* _op) {
       if (getVerbosity() > 3) Kernel::log("Tried to fire a bus op that is not in IDLE state.\n");
       return -4;
     }
-    op->setCSPin(_pins.tx_rdy);
+    op->setCSPin(_pins.req);
 
     if ((nullptr == current_job) && (work_queue.size() == 0)){
       // If the queue is empty, fire the operation now.
@@ -643,7 +641,7 @@ void CPLDDriver::purge_stalled_job() {
 */
 SPIBusOp* CPLDDriver::new_op() {
   SPIBusOp* return_value = BusAdapter::new_op();
-  return_value->setCSPin(_pins.tx_rdy);
+  return_value->setCSPin(_pins.req);
   return_value->csActiveHigh(true);
   return return_value;
 }
@@ -1188,11 +1186,11 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
         case 2:
           local_log.concatf("---< CPLD Pin assignments >--------------\n");
           local_log.concatf("-- reset        %d\n", _pins.reset);
-          local_log.concatf("-- tx_rdy       %d\n", _pins.tx_rdy);
+          local_log.concatf("-- req          %d\n", _pins.req);
           local_log.concatf("-- irq          %d\n", _pins.irq);
-          local_log.concatf("-- gpio0        %d\n", _pins.gpio0);
-          local_log.concatf("-- gpio1        %d\n", _pins.gpio1);
-          local_log.concatf("-- den          %d\n\n", _pins.den);
+          local_log.concatf("-- clk          %d\n", _pins.clk);
+          local_log.concatf("-- oe           %d\n", _pins.oe);
+          local_log.concatf("-- gpio         %d\n\n", _pins.gpio);
           break;
         case 3:
           local_log.concatf("---< Digit states >----------------------\n");
