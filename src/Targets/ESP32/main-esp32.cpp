@@ -47,7 +47,7 @@ Kernel* kernel = nullptr;
 * Pin defs given here assume a WROOM32 module.
 */
 const CPLDPins cpld_pins(
-  17,  // CPLD's reset pin
+  17,  // IO17 (reset)
   255, //18,  // Transfer request
   255, //19,  // CPLD's IRQ_WAKEUP pin
   25,  // CPLD clock input
@@ -57,9 +57,9 @@ const CPLDPins cpld_pins(
   255, //26,  // SPI1 CLK
   255, //27,  // SPI1 MOSI
   255, //32,  // SPI1 MISO
-  255, //33,  // SPI2 CS
-  255, //34,  // SPI2 CLK
-  255  //35   // SPI2 MOSI
+  33,  // IO33 (input-only) (SPI2 CS)
+  34,  // IO34 (input-only) (SPI2 CLK)
+  35   // IO35 (input-only) (SPI2 MOSI)
 );
 
 
@@ -81,7 +81,7 @@ IO13  // i2c
 IO14  // i2c
 IO15  // LED
 IO16  // LED
-IO17
+IO17  // CPLD's reset pin
 IO18
 IO19
 IO21
@@ -97,7 +97,10 @@ IO35
 */
 
 #if defined (__MANUVR_FREERTOS)
-void loopTask(void *pvParameters) {
+/****************************************************************************************************
+* Main function                                                                                     *
+****************************************************************************************************/
+void app_main() {
   printf("******************* loopTask()\n");
   /*
   * The platform object is created on the stack, but takes no action upon
@@ -123,43 +126,21 @@ void loopTask(void *pvParameters) {
   platform.bootstrap();
   printf("******************* bootstrap()\n");
 
-  gpioDefine(22, GPIOMode::OUTPUT);
+  gpioDefine(27, GPIOMode::OUTPUT);
 
   unsigned long ms_0 = millis();
   unsigned long ms_1 = ms_0;
-
-  StringBuilder local_log;
-  unsigned int p_it = 1;
+  bool odd_even = false;
 
   while (1) {
     kernel->procIdleFlags();
     ms_1 = millis();
     kernel->advanceScheduler(ms_1 - ms_0);
     ms_0 = ms_1;
-
-    setPin(22, (1 == p_it % 2));
-
-    if (0 == p_it % 10000) {
-      kernel->printProfiler(&local_log);
-      p_it = 0;
-    }
-
-    if (local_log.length() > 0) {
-      printf("%s\n", local_log.string());
-      local_log.clear();
-    }
-    p_it++;
+    setPin(27, odd_even);
+    odd_even = !odd_even;
   }
 }
-
-
-/****************************************************************************************************
-* Main function                                                                                     *
-****************************************************************************************************/
-void app_main() {
-  xTaskCreatePinnedToCore(loopTask, "loopTask", 32768, NULL, 1, NULL, 1);
-}
-
 #endif  // __MANUVR_FREERTOS
 
 

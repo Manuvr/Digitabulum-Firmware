@@ -35,6 +35,8 @@ TODO: Until something smarter is done, it is assumed that this file will be
 
 #include "driver/ledc.h"
 
+
+
 /**
 * Should undo all the effects of the init functions.
 */
@@ -91,12 +93,12 @@ void CPLDDriver::init_ext_clk() {
 * @param  cpha  Clock phase
 */
 void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
+
 }
 
 
 /**
-* Init of SPI peripheral 1. This is broken out because we might be bringing it
-*   up and down in a single runtime for debug reasons.
+* Init of the SPI peripheral tasked with interrupt data.
 *
 * @param  cpol  Clock polartiy
 * @param  cpha  Clock phase
@@ -132,6 +134,7 @@ void CPLDDriver::externalOscillator(bool on) {
 *******************************************************************************/
 
 int8_t CPLDDriver::bus_init() {
+  init_spi(1, 0);   // CPOL=1, CPHA=0, HW-driven
   return 0;
 }
 

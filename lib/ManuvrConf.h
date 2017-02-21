@@ -19,8 +19,7 @@ This is where definition of (application or device)-specific parameters ought to
 #define EVENT_MANAGER_PREALLOC_COUNT     8
 #define SCHEDULER_MAX_SKIP_BEFORE_RESET  6
 #define PLATFORM_RNG_CARRY_CAPACITY     32
-//#define MANUVR_HAS_CRYPT_WRAPPER
-//#define WITH_MBEDTLS
+#define WITH_MBEDTLS
 //#define WITH_BLIND_CRYPTO
 //#define MANUVR_OVER_THE_WIRE
 //#define MANUVR_SUPPORT_MQTT
@@ -45,7 +44,6 @@ This is where definition of (application or device)-specific parameters ought to
 #define MANUVR_DEBUG
 //#define MANUVR_PIPE_DEBUG
 #define MANUVR_IMU_DEBUG
-
 
 // This is the string that identifies this Manuvrable to other Manuvrables. In MHB's case, this
 //   will select the mEngine.
