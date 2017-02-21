@@ -23,30 +23,64 @@ These are platform-specific functions for dealing with Digitabulum's sensor
 This file contains functions for running firmware on the ESP32. We will be
   assuming the WROOM32 configuration.
 
+SPI1 and SPI2 on the CPLD will be SPI2 and SPI3 on the ESP32, respectively.
+For clarity...
+SPI0   SPI2   HSPI
+SPI1   SPI3   VSPI
+
+
 TODO: Until something smarter is done, it is assumed that this file will be
   #include'd by pre-processor choice in CPLDDriver.cpp.
 */
 
+#include "driver/ledc.h"
 
 /**
 * Should undo all the effects of the init functions.
 */
 void CPLDDriver::_deinit() {
+  ledc_stop(LEDC_HIGH_SPEED_MODE, (ledc_channel_t) LEDC_TIMER_0, 1);
 }
 
 /**
 * Init the timer to provide the CPLD with an external clock. This clock is the
 *   most-flexible, and we use it by default.
 */
-bool CPLDDriver::_set_timer_base(uint16_t _period) {
-  return true;
+bool CPLDDriver::_set_timer_base(uint16_t _freq) {
+  return (ESP_OK == ledc_set_freq(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0, _freq)) ;
 }
 
 /**
-* Init the timer to provide the CPLD with an external clock. This clock is the
-*   most-flexible, and we use it by default.
+* On the ESP32, we use the LED peripheral to provide the CPLD with an external
+*   clock. This clock is the most-flexible, and we use it by default.
 */
 void CPLDDriver::init_ext_clk() {
+  ledc_timer_config_t timer_conf = {
+    speed_mode : LEDC_HIGH_SPEED_MODE, // TODO: Doc says this is the only mode supported.
+    bit_num    : LEDC_TIMER_10_BIT,   // We only need a constant duty-cycle. Flip fewer bits.
+    timer_num  : LEDC_TIMER_0,       // TODO: Understand implications of this choice.
+    freq_hz    : 4000               // PWM frequency.
+  };
+  ledc_channel_config_t channel_conf = {
+    gpio_num   : _pins.clk,            // The CLK output pin.
+    speed_mode : LEDC_HIGH_SPEED_MODE, // TODO: Doc says this is the only mode supported.
+    channel    : LEDC_CHANNEL_0,       // We use channel0 for this.
+    intr_type  : LEDC_INTR_DISABLE,    // No IRQ required.
+    timer_sel  : LEDC_TIMER_0,
+    duty       : 511          // range is 0 ~ ((2**bit_num)-1)
+  };
+
+  if (ESP_OK == ledc_timer_config(&timer_conf)) {
+    if (ESP_OK == ledc_channel_config(&channel_conf)) {
+      // Success. Clock should be running.
+    }
+    else {
+      Kernel::log("CPLDDriver::init_ext_clk(): Failed to configure channel.\n");
+    }
+  }
+  else {
+    Kernel::log("CPLDDriver::init_ext_clk(): Failed to configure timer.\n");
+  }
 }
 
 /**
@@ -81,8 +115,10 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
 void CPLDDriver::externalOscillator(bool on) {
   _er_set_flag(CPLD_FLAG_EXT_OSC, on);
   if (on) {
+    ledc_timer_resume(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0);
   }
   else {
+    ledc_timer_pause(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0);
   }
 }
 

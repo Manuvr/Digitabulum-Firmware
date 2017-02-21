@@ -42,51 +42,24 @@ Intended target is an WROOM32 SoC module.
 /* This global makes this source file read better. */
 Kernel* kernel = nullptr;
 
-volatile void _hack_sadvance() {
-  if (kernel) kernel->advanceScheduler();
-}
-
 
 /*
-* Pin defs for this module.
-*
-* These Port B pins are push-pull outputs:
-* #  Default  r1  Purpose
-* -------------------------------------------------
-* 9     0     25  ~CPLD Reset
-* 14    0     30  SPI2_MISO  (SPI2 is slave and Rx-only)
-*
-* These Port C pins are inputs with a wakeup ISR attached to
-*    the rising-edge.
-* #  Default  r1  Purpose
-* ---------------------------------------------------
-* 13    0     45  IRQ_WAKEUP
-*
-* These Port E pins are inputs:
-* #  Default  r1  Purpose
-* ---------------------------------------------------
-* 11    0     75  CPLD_GPIO_0
-* 14    0     78  CPLD_GPIO_1
-*
-* These Port C pins are push-pull outputs:
-* #  Default  r1  Purpose
-* ---------------------------------------------------
-* 2     1     33  DEN_AG_CARPALS
+* Pin defs given here assume a WROOM32 module.
 */
 const CPLDPins cpld_pins(
   17,  // CPLD's reset pin
-  18,  // Transfer request
-  19,  // CPLD's IRQ_WAKEUP pin
-  21,  // CPLD clock input
-  22,  // CPLD OE pin
-  23,  // CPLD GPIO
-  25,  // SPI1 CS
-  26,  // SPI1 CLK
-  27,  // SPI1 MOSI
-  32,  // SPI1 MISO
-  33,  // SPI2 CS
-  34,  // SPI2 CLK
-  35   // SPI2 MOSI
+  255, //18,  // Transfer request
+  255, //19,  // CPLD's IRQ_WAKEUP pin
+  25,  // CPLD clock input
+  255, //22,  // CPLD OE pin
+  255, //23,  // CPLD GPIO
+  255, //21,  // SPI1 CS
+  255, //26,  // SPI1 CLK
+  255, //27,  // SPI1 MOSI
+  255, //32,  // SPI1 MISO
+  255, //33,  // SPI2 CS
+  255, //34,  // SPI2 CLK
+  255  //35   // SPI2 MOSI
 );
 
 
@@ -94,6 +67,11 @@ const I2CAdapterOptions i2c_opts(
   0,   // Device number
   13,  // IO13 (sda)
   14   // IO14 (scl)
+);
+
+const ADP8866Pins adp_opts(
+  15,  // IO15 (Reset)
+  16   // IO16 (IRQ)
 );
 
 /*
@@ -142,18 +120,35 @@ void loopTask(void *pvParameters) {
   //i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
   //kernel->subscribe((EventReceiver*) &leds);
 
-  printf("******************* micros()\t %lu\n", micros());
-  printf("******************* millis()\t %lu\n", millis());
   platform.bootstrap();
   printf("******************* bootstrap()\n");
 
+  gpioDefine(22, GPIOMode::OUTPUT);
+
+  unsigned long ms_0 = millis();
+  unsigned long ms_1 = ms_0;
+
+  StringBuilder local_log;
+  unsigned int p_it = 1;
+
   while (1) {
     kernel->procIdleFlags();
-    if (0 == millis() % 5000) {
-      StringBuilder local_log;
-      kernel->printDebug(&local_log);
-      printf("%s\n", local_log.string());
+    ms_1 = millis();
+    kernel->advanceScheduler(ms_1 - ms_0);
+    ms_0 = ms_1;
+
+    setPin(22, (1 == p_it % 2));
+
+    if (0 == p_it % 10000) {
+      kernel->printProfiler(&local_log);
+      p_it = 0;
     }
+
+    if (local_log.length() > 0) {
+      printf("%s\n", local_log.string());
+      local_log.clear();
+    }
+    p_it++;
   }
 }
 

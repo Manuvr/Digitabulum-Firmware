@@ -32,13 +32,9 @@ Intended target is an STM32F7.
 #include <XenoSession/Console/ManuvrConsole.h>
 
 #include "Digitabulum/USB/STM32F7USB.h"
-//#include "Digitabulum/CPLDDriver/CPLDDriver.h"
-//#include "Digitabulum/RovingNetworks/RN4677/RN4677.h"
-//#include "Digitabulum/ManuLegend/ManuManager.h"
-//#include "Digitabulum/IREmitter/IREmitter.h"
-//#include "Digitabulum/HapticStrap/HapticStrap.h"
+#include "Digitabulum/CPLDDriver/CPLDDriver.h"
+#include "Digitabulum/ManuLegend/ManuManager.h"
 #include "Digitabulum/SDCard/SDCard.h"
-//#include "Digitabulum/DigitabulumPMU/DigitabulumPMU.h"
 
 #ifdef __cplusplus
   extern "C" {
@@ -278,6 +274,32 @@ void assert_failed(uint8_t* file, uint32_t line) {
 
 
 
+/*
+* Pin defs given here assume a WROOM32 module.
+*/
+const CPLDPins cpld_pins(
+  255, //17,  // CPLD's reset pin
+  255, //18,  // Transfer request
+  255, //19,  // CPLD's IRQ_WAKEUP pin
+  255, //21,  // CPLD clock input
+  255, //22,  // CPLD OE pin
+  255, //23,  // CPLD GPIO
+  255, //25,  // SPI1 CS
+  255, //26,  // SPI1 CLK
+  255, //27,  // SPI1 MOSI
+  255, //32,  // SPI1 MISO
+  255, //33,  // SPI2 CS
+  255, //34,  // SPI2 CLK
+  255  //35   // SPI2 MOSI
+);
+
+
+const I2CAdapterOptions i2c_opts(
+  0,   // Device number
+  13,  // IO13 (sda)
+  14   // IO14 (scl)
+);
+
 /****************************************************************************************************
 * Main function                                                                                     *
 * TODO: We should sort-out what can be in CCM and what cannot be, and after we've allocated all the *
@@ -299,35 +321,23 @@ int main() {
   platform.platformPreInit();
   kernel = platform.kernel();
 
-  //CPLDDriver _cpld;
-  //kernel->subscribe(&_cpld);
+  CPLDDriver _cpld(&cpld_pins);
+  kernel->subscribe(&_cpld);
 
-  //ManuManager _legend_manager(&_cpld);
-  //kernel->subscribe(&_legend_manager);
+  ManuManager _legend_manager(&_cpld);
+  kernel->subscribe(&_legend_manager);
 
-  I2CAdapter i2c(1, 25, 24);
+  I2CAdapter i2c(&i2c_opts);
   kernel->subscribe(&i2c);
 
   // Pins 30 and 31 are the reset and IRQ pin, respectively.
   // This is translated to pins D11 and D12 on the Disco's arduino harness.
-  ADP8866 leds(30, 31, 0x27);
+  ADP8866 leds(255, 255);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
   kernel->subscribe((EventReceiver*) &leds);
 
-  //INA219 ina219(0x4A);
-  //i2c.addSlaveDevice(&ina219);
-
   SDCard sd;
   kernel->subscribe((EventReceiver*) &sd);
-
-  //IREmitter ir;
-  //kernel->subscribe((EventReceiver*) &ir);
-
-  //HapticStrap strap;
-  //kernel->subscribe((EventReceiver*) &strap);
-
-  //PMU pmu(&ina219);
-  //kernel->subscribe((EventReceiver*) &pmu);
 
   platform.bootstrap();
 

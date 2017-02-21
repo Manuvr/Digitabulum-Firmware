@@ -13,5 +13,6 @@ CFLAGS += -D__MANUVR_ESP32
 CPPFLAGS += -D__MANUVR_ESP32
 
 COMPONENT_SRCDIRS := CPLDDriver LSM9DS1 ManuLegend
+#COMPONENT_ADD_LDFLAGS := -L$(OUTPUT_PATH)/Digitabulum
 
 COMPONENT_OBJS := CPLDDriver/CPLDDriver.o LSM9DS1/LSM9DS1.o LSM9DS1/RegPtrMap.o ManuLegend/SensorFrame.o ManuLegend/Integrator.o ManuLegend/ManuManager.o ManuLegend/ManuLegend.o

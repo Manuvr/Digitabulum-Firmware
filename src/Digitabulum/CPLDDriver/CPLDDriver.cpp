@@ -262,21 +262,22 @@ CPLDDriver::~CPLDDriver() {
 */
 void CPLDDriver::gpioSetup() {
   if (255 != _pins.reset) {
-    gpioDefine(_pins.reset, OUTPUT);
+    gpioDefine(_pins.reset, GPIOMode::OUTPUT);
     setPin(_pins.reset, false);  // Hold the CPLD in reset.
   }
   if (255 != _pins.req) {
-    gpioDefine(_pins.req, OUTPUT);
+    gpioDefine(_pins.req, GPIOMode::OUTPUT);
     setPin(_pins.req, false);
   }
   if (255 != _pins.irq) {
+    gpioDefine(_pins.req, GPIOMode::INPUT_PULLUP);
     setPinFxn(_pins.irq, FALLING, cpld_wakeup_isr);
   }
   if (255 != _pins.clk) {
-    gpioDefine(_pins.clk, OUTPUT);
+    gpioDefine(_pins.clk, GPIOMode::OUTPUT);
   }
   if (255 != _pins.oe) {
-    gpioDefine(_pins.oe, OUTPUT);
+    gpioDefine(_pins.oe, GPIOMode::OUTPUT);
   }
   if (255 != _pins.gpio) {
     setPinFxn(_pins.gpio, CHANGE, cpld_gpio_isr_1);
@@ -1006,6 +1007,10 @@ int8_t CPLDDriver::attached() {
     //platform.kernel()->addSchedule(&event_spi_timeout);
 
     reset();
+
+    if (255 != _pins.irq) {
+      gpio_wakeup_enable((gpio_num_t) _pins.irq, GPIO_INTR_POSEDGE);
+    }
     return 1;
   }
   return 0;

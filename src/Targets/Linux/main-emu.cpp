@@ -38,7 +38,6 @@ This is the firmware emulation test-bench.
 #include <Transports/StandardIO/StandardIO.h>
 #include "Digitabulum/CPLDDriver/CPLDDriver.h"
 #include "Digitabulum/ManuLegend/ManuManager.h"
-#include "Digitabulum/DigitabulumPMU/DigitabulumPMU.h"
 
 
 /* This global makes this source file read better. */
@@ -56,38 +55,22 @@ BufferPipe* _pipe_factory_2(BufferPipe* _n, BufferPipe* _f) {
 
 
 /*
-* Pin defs for this module.
-*
-* These Port B pins are push-pull outputs:
-* #  Default  r1  Purpose
-* -------------------------------------------------
-* 9     0     25  ~CPLD Reset
-* 14    0     30  SPI2_MISO  (SPI2 is slave and Rx-only)
-*
-* These Port C pins are inputs with a wakeup ISR attached to
-*    the rising-edge.
-* #  Default  r1  Purpose
-* ---------------------------------------------------
-* 13    0     45  IRQ_WAKEUP
-*
-* These Port E pins are inputs:
-* #  Default  r1  Purpose
-* ---------------------------------------------------
-* 11    0     75  CPLD_GPIO_0
-* 14    0     78  CPLD_GPIO_1
-*
-* These Port C pins are push-pull outputs:
-* #  Default  r1  Purpose
-* ---------------------------------------------------
-* 2     1     33  DEN_AG_CARPALS
+* Pin defs
 */
 const CPLDPins cpld_pins(
-  255, // CPLD's reset pin
-  255, // AKA: SPI2_MISO
-  255, // CPLD's IRQ_WAKEUP pin
-  255, // GPIO
-  255, // GPIO
-  255 // The DEN_AG pin on the carpals IMU.
+  255, //17,  // CPLD's reset pin
+  255, //18,  // Transfer request
+  255, //19,  // CPLD's IRQ_WAKEUP pin
+  255, //21,  // CPLD clock input
+  255, //22,  // CPLD OE pin
+  255, //23,  // CPLD GPIO
+  255, //25,  // SPI1 CS
+  255, //26,  // SPI1 CLK
+  255, //27,  // SPI1 MOSI
+  255, //32,  // SPI1 MISO
+  255, //33,  // SPI2 CS
+  255, //34,  // SPI2 CLK
+  255  //35   // SPI2 MOSI
 );
 
 const I2CAdapterOptions i2c_opts(
@@ -129,12 +112,9 @@ int main(int argc, const char *argv[]) {
 
   // Pins 58 and 63 are the reset and IRQ pin, respectively.
   // This is translated to pins 10 and 13 on PortD.
-  ADP8866 leds(58, 63, 0x27);
+  ADP8866 leds(255, 255);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
   kernel->subscribe((EventReceiver*) &leds);
-
-  INA219 ina219(0x4A);
-  i2c.addSlaveDevice(&ina219);
 
   // Pipe strategy planning...
   const uint8_t pipe_plan_clients[] = {2, 0};
