@@ -116,12 +116,12 @@ void app_main() {
   ManuManager _legend_manager(&_cpld);
   kernel->subscribe(&_legend_manager);
 
-  //I2CAdapter i2c(&i2c_opts);
-  //kernel->subscribe(&i2c);
+  I2CAdapter i2c(&i2c_opts);
+  kernel->subscribe(&i2c);
 
-  //ADP8866 leds(15, 16);
-  //i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
-  //kernel->subscribe((EventReceiver*) &leds);
+  ADP8866 leds(&adp_opts);
+  i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
+  kernel->subscribe((EventReceiver*) &leds);
 
   platform.bootstrap();
   printf("******************* bootstrap()\n");

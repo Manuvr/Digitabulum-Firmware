@@ -25,8 +25,11 @@ This file contains functions for running firmware on the ESP32. We will be
 
 SPI1 and SPI2 on the CPLD will be SPI2 and SPI3 on the ESP32, respectively.
 For clarity...
-SPI0   SPI2   HSPI
-SPI1   SPI3   VSPI
+
+CPLD   ESP32  ESP32 (Name)
+--------------------------
+SPI0    SPI2     HSPI
+SPI1    SPI3     VSPI
 
 
 TODO: Until something smarter is done, it is assumed that this file will be
@@ -85,6 +88,25 @@ void CPLDDriver::init_ext_clk() {
   }
 }
 
+
+/**
+* Pass 'true' to enable the CPLD osciallator. False to disable it.
+* This oscillator being enabled is a precondition for various other features
+*   in the CPLD, so we keep track of the state in this class.
+*
+* @param  on  Should the osciallator be enabled?
+*/
+void CPLDDriver::externalOscillator(bool on) {
+  _er_set_flag(CPLD_FLAG_EXT_OSC, on);
+  if (on) {
+    ledc_timer_resume(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0);
+  }
+  else {
+    ledc_timer_pause(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0);
+  }
+}
+
+
 /**
 * Init of SPI peripheral 1. This is broken out because we might be bringing it
 *   up and down in a single runtime for debug reasons.
@@ -104,24 +126,6 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
 * @param  cpha  Clock phase
 */
 void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
-}
-
-
-/**
-* Pass 'true' to enable the CPLD osciallator. False to disable it.
-* This oscillator being enabled is a precondition for various other features
-*   in the CPLD, so we keep track of the state in this class.
-*
-* @param  on  Should the osciallator be enabled?
-*/
-void CPLDDriver::externalOscillator(bool on) {
-  _er_set_flag(CPLD_FLAG_EXT_OSC, on);
-  if (on) {
-    ledc_timer_resume(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0);
-  }
-  else {
-    ledc_timer_pause(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0);
-  }
 }
 
 
