@@ -47,7 +47,7 @@ Kernel* kernel = nullptr;
 * Pin defs given here assume a WROOM32 module.
 */
 const CPLDPins cpld_pins(
-  17,  // IO17 (reset)
+  27,  // IO27 (reset)
   255, //18,  // Transfer request
   255, //19,  // CPLD's IRQ_WAKEUP pin
   25,  // CPLD clock input
@@ -56,7 +56,7 @@ const CPLDPins cpld_pins(
   255, //21,  // SPI1 CS
   255, //26,  // SPI1 CLK
   255, //27,  // SPI1 MOSI
-  255, //32,  // SPI1 MISO
+  255, //16,  // SPI1 MISO
   33,  // IO33 (input-only) (SPI2 CS)
   34,  // IO34 (input-only) (SPI2 CLK)
   35   // IO35 (input-only) (SPI2 MOSI)
@@ -70,18 +70,19 @@ const I2CAdapterOptions i2c_opts(
 );
 
 const ADP8866Pins adp_opts(
-  15,  // IO15 (Reset)
-  16   // IO16 (IRQ)
+  12,  // IO12 (Reset)
+  32   // IO32 (IRQ)
 );
 
 /*
 Pins
 -------------
-IO13  // i2c
-IO14  // i2c
-IO15  // LED
-IO16  // LED
-IO17  // CPLD's reset pin
+IO12
+IO13
+IO14
+IO15
+IO16
+IO17
 IO18
 IO19
 IO21
@@ -101,7 +102,6 @@ IO35
 * Main function                                                                                     *
 ****************************************************************************************************/
 void app_main() {
-  printf("******************* loopTask()\n");
   /*
   * The platform object is created on the stack, but takes no action upon
   *   construction. The first thing that should be done is to call the preinit
