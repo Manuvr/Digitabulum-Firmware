@@ -35,6 +35,7 @@ This is where definition of (application or device)-specific parameters ought to
 #define __MANUVR_FREERTOS
 //#define MANUVR_JSON
 
+
 #define CPLD_SPI_PREALLOC_COUNT   10
 #define CPLD_SPI_MAX_QUEUE_DEPTH  40
 #define CPLD_SPI_MAX_QUEUE_PRINT   3
@@ -42,6 +43,7 @@ This is where definition of (application or device)-specific parameters ought to
 
 #define MANUVR_EVENT_PROFILER
 #define MANUVR_DEBUG
+#define MANUVR_TEST_DRIVER
 //#define MANUVR_PIPE_DEBUG
 #define MANUVR_IMU_DEBUG
 

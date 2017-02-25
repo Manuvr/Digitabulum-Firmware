@@ -108,19 +108,19 @@ void CPLDDriver::externalOscillator(bool on) {
 
 
 /**
-* Init of SPI peripheral 1. This is broken out because we might be bringing it
+* Init of SPI2. This is broken out because we might be bringing it
 *   up and down in a single runtime for debug reasons.
 *
 * @param  cpol  Clock polartiy
 * @param  cpha  Clock phase
 */
 void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
-
+  //SPI3
 }
 
 
 /**
-* Init of the SPI peripheral tasked with interrupt data.
+* Init of SPI3. Tasked with interrupt data.
 *
 * @param  cpol  Clock polartiy
 * @param  cpha  Clock phase
