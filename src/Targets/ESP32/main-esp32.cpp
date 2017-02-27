@@ -47,7 +47,7 @@ Kernel* kernel = nullptr;
 * Pin defs given here assume a WROOM32 module.
 */
 const CPLDPins cpld_pins(
-  27,  // IO27 (reset)
+  26,  // IO26 (reset)
   255, //18,  // Transfer request
   255, //19,  // CPLD's IRQ_WAKEUP pin
   25,  // CPLD clock input

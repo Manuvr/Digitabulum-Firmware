@@ -991,7 +991,7 @@ int8_t CPLDDriver::attached() {
     gpioSetup();
     bus_init();
 
-    init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
+    init_spi2(0, 0);  // CPOL=1, CPHA=0, HW-driven
 
     init_ext_clk();
 
@@ -1190,21 +1190,22 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
           break;
         case 2:
           local_log.concatf("---< CPLD Pin assignments >--------------\n");
-          local_log.concatf("-- reset        %d\n", _pins.reset);
-          local_log.concatf("-- req          %d\n", _pins.req);
-          local_log.concatf("-- irq          %d\n", _pins.irq);
-          local_log.concatf("-- clk          %d\n", _pins.clk);
-          local_log.concatf("-- oe           %d\n", _pins.oe);
-          local_log.concatf("-- gpio         %d\n\n", _pins.gpio);
+          local_log.concatf("\tspi1_cs    %d\tspi2_cs    %d\n", _pins.s1_cs, _pins.s2_cs);
+          local_log.concatf("\tspi1_clk   %d\tspi2_clk   %d\n", _pins.s1_clk, _pins.s2_clk);
+          local_log.concatf("\tspi1_mosi  %d\tspi2_mosi  %d\n", _pins.s1_mosi, _pins.s2_mosi);
+          local_log.concatf("\tspi1_miso  %d\n\n", _pins.s1_miso);
+          local_log.concatf("\treset  %d\tclk    %d\n", _pins.reset, _pins.clk);
+          local_log.concatf("\treq    %d\toe     %d\n", _pins.req, _pins.oe);
+          local_log.concatf("\tirq    %d\tgpio   %d\n\n", _pins.irq, _pins.gpio);
           break;
         case 3:
           local_log.concatf("---< Digit states >----------------------\n");
-          local_log.concatf("-- mc:  %s\n",   digitStateToString(digitState(DigitPort::MC)));
-          local_log.concatf("-- 1:   %s\n",   digitStateToString(digitState(DigitPort::PORT_1)));
-          local_log.concatf("-- 2:   %s\n",   digitStateToString(digitState(DigitPort::PORT_2)));
-          local_log.concatf("-- 3:   %s\n",   digitStateToString(digitState(DigitPort::PORT_3)));
-          local_log.concatf("-- 4:   %s\n",   digitStateToString(digitState(DigitPort::PORT_4)));
-          local_log.concatf("-- 5:   %s\n\n", digitStateToString(digitState(DigitPort::PORT_5)));
+          local_log.concatf("\tmc:  %s\n",   digitStateToString(digitState(DigitPort::MC)));
+          local_log.concatf("\t1:   %s\n",   digitStateToString(digitState(DigitPort::PORT_1)));
+          local_log.concatf("\t2:   %s\n",   digitStateToString(digitState(DigitPort::PORT_2)));
+          local_log.concatf("\t3:   %s\n",   digitStateToString(digitState(DigitPort::PORT_3)));
+          local_log.concatf("\t4:   %s\n",   digitStateToString(digitState(DigitPort::PORT_4)));
+          local_log.concatf("\t5:   %s\n\n", digitStateToString(digitState(DigitPort::PORT_5)));
           break;
         default:
           printDebug(&local_log);
