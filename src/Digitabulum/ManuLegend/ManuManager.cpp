@@ -1408,7 +1408,7 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     case 'k':
-      if ((temp_byte < 6) && (temp_byte >= 0)) {
+      if (temp_byte < 6) {
         init_iius();
         local_log.concatf("Broadcasting IMU_INIT for stage %u...\n", temp_byte);
 

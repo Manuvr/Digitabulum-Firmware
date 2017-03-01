@@ -221,11 +221,11 @@ class RegPtrMap {
 
     const uint8_t* regPtr(RegID) const;
 
-    static RegID regIdFromAddr(uint8_t, uint8_t);
-    static const uint8_t regAddr(RegID);
-    static const uint8_t regWidth(RegID);
-    static const bool    regWritable(RegID);
-    static const char*   regNameString(RegID);
+    static RegID   regIdFromAddr(const uint8_t, const uint8_t);
+    static uint8_t regAddr(const RegID);
+    static uint8_t regWidth(const RegID);
+    static bool    regWritable(const RegID);
+    static const char*   regNameString(const RegID);
 
 
   private:
@@ -246,6 +246,12 @@ class RegPtrMap {
     const uint8_t* M_STATUS;    // M_STATUS_REG
     const uint8_t* M_INT_SRC;   // M_INT_SRC
     const uint16_t* M_INT_TSH;  // 16-bit: M_INT_TSH
+
+    static const uint8_t _imu_address_map[];
+    static const uint8_t _imu_reg_defaults[];
+    static const uint8_t _imu_register_width_map[];
+    static const bool    _imu_register_writable_map[];
+    static const char*   _imu_register_names[];
 };
 
 

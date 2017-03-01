@@ -35,7 +35,7 @@ limitations under the License.
 *******************************************************************************/
 
 /* The addresses of the registers named in the enum class RegID. */
-const uint8_t _imu_address_map[] = {
+const uint8_t RegPtrMap::_imu_address_map[] = {
   0x05, 0x07, 0x09,  // M: 16-bit offset registers
   0x0f, 0x20,
   0x21, 0x22, 0x23, 0x24, 0x27,
@@ -61,7 +61,7 @@ const uint8_t _imu_address_map[] = {
 * Some of these values should be construed as being 16-bit, but the size of
 *   these arrays must remain the same.
 */
-const uint8_t _imu_reg_defaults[] = {
+const uint8_t RegPtrMap::_imu_reg_defaults[] = {
   0x00, 0x00, 0x00,  // M: 16-bit offset registers
   0x3d, 0x40,
   0x00, 0x03, 0x00, 0x00, 0x00,
@@ -84,7 +84,7 @@ const uint8_t _imu_reg_defaults[] = {
 
 
 /* The widths of the registers named in the enum class RegID. */
-const uint8_t _imu_register_width_map[] = {
+const uint8_t RegPtrMap::_imu_register_width_map[] = {
   2, 2, 2,  // M: 16-bit offset registers
   1, 1,
   1, 1, 1, 1, 1,
@@ -107,7 +107,7 @@ const uint8_t _imu_register_width_map[] = {
 
 
 /* The widths of the registers named in the enum class RegID. */
-const bool _imu_register_writable_map[] = {
+const bool RegPtrMap::_imu_register_writable_map[] = {
   true,  true,  true,   // M: 16-bit offset registers
   false, true,
   true,  true,  true,  true,  false,
@@ -128,8 +128,9 @@ const bool _imu_register_writable_map[] = {
   true
 };
 
+
 /* The string representations of the registers named in the enum class RegID. */
-const char* _imu_register_names[] = {
+const char* RegPtrMap::_imu_register_names[] = {
   "M_OFFSET_X", "M_OFFSET_Y", "M_OFFSET_Z",
   "M_WHO_AM_I", "M_CTRL_REG1",
   "M_CTRL_REG2", "M_CTRL_REG3", "M_CTRL_REG4", "M_CTRL_REG5", "M_STATUS_REG",
@@ -155,7 +156,7 @@ const char* _imu_register_names[] = {
 
 
 // TODO: Incurring two branches might be cheaper than a const map. Investigate.
-RegID RegPtrMap::regIdFromAddr(uint8_t dev_addr, uint8_t reg_addr) {
+RegID RegPtrMap::regIdFromAddr(const uint8_t dev_addr, const uint8_t reg_addr) {
   switch (reg_addr & 0x3F) {
     case 0x04: return RegID::AG_ACT_THS;
     case 0x06: return RegID::A_INT_GEN_CFG;
@@ -208,20 +209,20 @@ RegID RegPtrMap::regIdFromAddr(uint8_t dev_addr, uint8_t reg_addr) {
 *
 * @return const char*
 */
-const char* RegPtrMap::regNameString(RegID id) {
-  return _imu_register_names[(uint8_t) id];
+const char* RegPtrMap::regNameString(const RegID id) {
+  return _imu_register_names[(const uint8_t) id];
 }
 
-const uint8_t RegPtrMap::regAddr(RegID id) {
-  return _imu_address_map[(uint8_t) id];
+uint8_t RegPtrMap::regAddr(const RegID id) {
+  return _imu_address_map[(const uint8_t) id];
 }
 
-const uint8_t RegPtrMap::regWidth(RegID id) {
-  return _imu_register_width_map[(uint8_t) id];
+uint8_t RegPtrMap::regWidth(const RegID id) {
+  return _imu_register_width_map[(const uint8_t) id];
 }
 
-const bool RegPtrMap::regWritable(RegID id) {
-  return _imu_register_writable_map[(uint8_t) id];
+bool RegPtrMap::regWritable(const RegID id) {
+  return _imu_register_writable_map[(const uint8_t) id];
 }
 
 
