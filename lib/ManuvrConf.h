@@ -30,6 +30,7 @@ This is where definition of (application or device)-specific parameters ought to
 //#define MANUVR_SUPPORT_TCPSOCKET
 //#define MANUVR_SUPPORT_UDP
 #define MANUVR_SUPPORT_I2C
+#define MANUVR_STORAGE
 //#define MANUVR_GPS_PIPE
 #define MANUVR_CBOR
 #define __MANUVR_FREERTOS
