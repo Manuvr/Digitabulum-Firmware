@@ -45,7 +45,6 @@ extern "C" {
 
 #include "../../Targets/ESP32/spi_common.h"
 
-static uint32_t _irq_rx_count = 0;
 
 static void IRAM_ATTR spi3_isr(void *arg) {
   if (SPI3.slave.trans_done) {
@@ -65,9 +64,8 @@ static void IRAM_ATTR spi3_isr(void *arg) {
       _irq_accum[i] |= _irq_diff[i];
     }
 
-    Kernel::isrRaiseEvent(&_irq_data_arrival);
+    Kernel::isrRaiseEvent(&_irq_data_arrival);   // TODO: Audit for mem layout.
     SPI3.slave.trans_done  = 0;  // Clear interrupt.
-    _irq_rx_count++;
     return;
   }
   SPI3.slave.rd_sta_inten  = 0;  // Mask interrupt.
@@ -197,7 +195,7 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
     SPI3.ctrl2.miso_delay_num   = 0;  //
     SPI3.ctrl2.mosi_delay_num   = 0;  //
 
-    SPI3.pin.ck_dis         = 1;  // We have no need of a clock output.
+    //SPI3.pin.ck_dis         = 1;  // We have no need of a clock output.
 
     SPI3.slave.trans_done   = 0;  // Interrupt conditions.
     SPI3.slave.trans_inten  = 1;  //
@@ -205,6 +203,10 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
     SPI3.slv_wrbuf_dlen.bit_len   = 79;
     SPI3.slv_rdbuf_dlen.bit_len   = 79;
     SPI3.slv_rd_bit.slv_rdata_bit = 79;
+
+    SPI3.slave.cs_i_mode   = 2;  // Double-buffered CS signal.
+    SPI3.slave.sync_reset  = 1;  // Reset the pins(?)
+
 
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_cs],   PIN_FUNC_GPIO);
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_clk],  PIN_FUNC_GPIO);
@@ -216,11 +218,8 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
 
     gpio_matrix_in( p_cs,   VSPICS0_IN_IDX,  false);
     gpio_matrix_in( p_clk,  VSPICLK_IN_IDX,  false);
-    gpio_matrix_in( p_mosi, VSPID_IN_IDX,    false);
     //gpio_matrix_in( p_mosi, VSPIQ_IN_IDX,    false);
-    //gpio_matrix_out(p_cs,   VSPICS0_OUT_IDX, false, false);
-    //gpio_matrix_out(p_clk,  VSPICLK_OUT_IDX, false, false);
-    //gpio_matrix_out(p_mosi, VSPID_OUT_IDX,   false, false);
+    gpio_matrix_in( p_mosi, VSPID_IN_IDX,    false);
   }
   periph_module_enable(PERIPH_VSPI_MODULE);
   esp_intr_alloc(ETS_SPI3_INTR_SOURCE, ESP_INTR_FLAG_IRAM, spi3_isr, nullptr, nullptr);
@@ -252,31 +251,46 @@ int8_t CPLDDriver::bus_deinit() {
 */
 void CPLDDriver::printHardwareState(StringBuilder *output) {
   output->concatf("-- SPI2 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI1_READY)?"on":"OFF"));
+  for (int i = 0; i < 16; i+=4) {
+    output->concatf(
+      "--\t SPI2.data_buf[%2d-%2d]:   0x%08x  0x%08x  0x%08x  0x%08x\n",
+      i, i+3,
+      (uint32_t) SPI2.data_buf[i + 0],
+      (uint32_t) SPI2.data_buf[i + 1],
+      (uint32_t) SPI2.data_buf[i + 2],
+      (uint32_t) SPI2.data_buf[i + 3]
+    );
+  }
 
   output->concatf("\n-- SPI3 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI2_READY)?"on":"OFF"));
-  output->concatf("-- Ops:                0x%08x\n", _irq_rx_count);
-  output->concatf("-- Last State:         0x%02x\n", (uint8_t) SPI3.slave.last_state);
-  output->concatf("-- Ext2.State:         0x%02x\n", (uint8_t) SPI3.ext2.st);
+  output->concatf("--\t Ops:         0x%08x\n", SPI3.slave.trans_cnt);
+  output->concatf("--\t Last State:  0x%02x\n", (uint8_t) SPI3.slave.last_state);
+  output->concatf("--\t Last CMD:    0x%02x\n", (uint8_t) SPI3.slave.last_command);
+  output->concatf("--\t Ext2.State:  0x%02x\n", (uint8_t) SPI3.ext2.st);
+  output->concatf("--\t mosi_dlen:   0x%08x\n", SPI3.mosi_dlen.val);
+  output->concatf("--\t miso_dlen:   0x%08x\n", SPI3.miso_dlen.val);
+  output->concatf("--\t user:        0x%08x\n", SPI3.user.val);
+  output->concatf("--\t user1:       0x%08x\n", SPI3.user1.val);
+  output->concatf("--\t user2:       0x%08x\n", SPI3.user2.val);
+  output->concatf("--\t pin:         0x%08x\n", SPI3.pin.val);
+  output->concatf("--\t slave:       0x%08x\n", SPI3.slave.val);
+  output->concatf("--\t slave1:      0x%08x\n", SPI3.slave1.val);
+  output->concatf("--\t slave2:      0x%08x\n", SPI3.slave2.val);
+  output->concatf("--\t slave3:      0x%08x\n", SPI3.slave3.val);
 
-  output->concatf("-- slv_wrbuf_dlen.bit_len    0x%06x\n", (uint32_t) SPI3.slv_wrbuf_dlen.bit_len  );
-  output->concatf("-- slv_rdbuf_dlen.bit_len    0x%06x\n", (uint32_t) SPI3.slv_rdbuf_dlen.bit_len  );
-  output->concatf("-- slv_rd_bit.slv_rdata_bit  0x%06x\n", (uint32_t) SPI3.slv_rd_bit.slv_rdata_bit);
-  output->concatf("-- SPI3.data_buf[0]:   0x%08x\n", (uint32_t) SPI3.data_buf[0]);
-  output->concatf("-- SPI3.data_buf[1]:   0x%08x\n", (uint32_t) SPI3.data_buf[1]);
-  output->concatf("-- SPI3.data_buf[2]:   0x%08x\n", (uint32_t) SPI3.data_buf[2]);
-  output->concatf("-- SPI3.data_buf[3]:   0x%08x\n", (uint32_t) SPI3.data_buf[3]);
-  output->concatf("-- SPI3.data_buf[4]:   0x%08x\n", (uint32_t) SPI3.data_buf[4]);
-  output->concatf("-- SPI3.data_buf[5]:   0x%08x\n", (uint32_t) SPI3.data_buf[5]);
-  output->concatf("-- SPI3.data_buf[6]:   0x%08x\n", (uint32_t) SPI3.data_buf[6]);
-  output->concatf("-- SPI3.data_buf[7]:   0x%08x\n", (uint32_t) SPI3.data_buf[7]);
-  output->concatf("-- SPI3.data_buf[8]:   0x%08x\n", (uint32_t) SPI3.data_buf[8]);
-  output->concatf("-- SPI3.data_buf[9]:   0x%08x\n", (uint32_t) SPI3.data_buf[9]);
-  output->concatf("-- SPI3.data_buf[a]:   0x%08x\n", (uint32_t) SPI3.data_buf[10]);
-  output->concatf("-- SPI3.data_buf[b]:   0x%08x\n", (uint32_t) SPI3.data_buf[11]);
-  output->concatf("-- SPI3.data_buf[c]:   0x%08x\n", (uint32_t) SPI3.data_buf[12]);
-  output->concatf("-- SPI3.data_buf[d]:   0x%08x\n", (uint32_t) SPI3.data_buf[13]);
-  output->concatf("-- SPI3.data_buf[e]:   0x%08x\n", (uint32_t) SPI3.data_buf[14]);
-  output->concatf("-- SPI3.data_buf[f]:   0x%08x\n", (uint32_t) SPI3.data_buf[15]);
+  output->concatf("--\t slv_wrbuf_dlen.bit_len    0x%06x\n", (uint32_t) SPI3.slv_wrbuf_dlen.bit_len  );
+  output->concatf("--\t slv_rdbuf_dlen.bit_len    0x%06x\n", (uint32_t) SPI3.slv_rdbuf_dlen.bit_len  );
+  output->concatf("--\t slv_rd_bit.slv_rdata_bit  0x%06x\n", (uint32_t) SPI3.slv_rd_bit.slv_rdata_bit);
+  for (int i = 0; i < 16; i+=4) {
+    output->concatf(
+      "--\t SPI3.data_buf[%2d-%2d]:   0x%08x  0x%08x  0x%08x  0x%08x\n",
+      i, i+3,
+      (uint32_t) SPI3.data_buf[i + 0],
+      (uint32_t) SPI3.data_buf[i + 1],
+      (uint32_t) SPI3.data_buf[i + 2],
+      (uint32_t) SPI3.data_buf[i + 3]
+    );
+  }
 }
 
 

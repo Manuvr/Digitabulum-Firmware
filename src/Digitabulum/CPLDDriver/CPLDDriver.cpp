@@ -1180,11 +1180,11 @@ void CPLDDriver::printDebug(StringBuilder *output) {
 void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
-  uint8_t temp_byte = ((*(str) != 0) ? atoi((char*) str+1) : 0);
+  int temp_int = ((*(str) != 0) ? atoi((char*) str+1) : 0);
 
   switch (*(str)) {
     case 'i':        // Readback test
-      switch (temp_byte) {
+      switch (temp_int) {
         case 1:
           getCPLDVersion();
           break;
@@ -1214,7 +1214,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     case 's':     // SPI1 initialization...
-      switch (temp_byte) {
+      switch (temp_int) {
         case 1:
           init_spi(1, 0);  // CPOL=1, CPHA=0, HW-driven
           local_log.concat("Re-initialized SPI1.\n");
@@ -1233,8 +1233,8 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'b':
       timeout_punch = false;
-      bus_timeout_millis = temp_byte;
-      if (0 == temp_byte) {
+      bus_timeout_millis = temp_int;
+      if (0 == temp_int) {
         if (event_spi_timeout.isScheduled()) {
           event_spi_timeout.isScheduled(false);
         }
@@ -1246,7 +1246,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     case 't':     // Set the SPI1 timeout.
-      if (temp_byte) SPIBusOp::spi_wait_timeout = temp_byte * 10;
+      if (temp_int) SPIBusOp::spi_wait_timeout = temp_int * 10;
       local_log.concatf("SPIBusOp::spi_wait_timeout is %uuS...\n", SPIBusOp::spi_wait_timeout);
       break;
     case 'g':     // SPI1 queue-guard (overflow protection).
@@ -1254,7 +1254,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       local_log.concatf("CPLD guarding SPI queue from overflow?  %s\n", _er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no");
       break;
     case 'm':     // Set the number of callbacks per event.
-      if (temp_byte) spi_cb_per_event = temp_byte;
+      if (temp_int) spi_cb_per_event = temp_int;
       local_log.concatf("CPLD spi_cb_per_event:  %d\n", spi_cb_per_event);
       break;
 
@@ -1268,14 +1268,14 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
     case 'O':        // CPLD external oscillator.
       local_log.concatf(
         "%sabling CPLD %sternal oscillator...\n",
-        (temp_byte ? "En" : "Dis"),
+        (temp_int ? "En" : "Dis"),
         ('O' == *(str) ? "ex" : "in")
       );
       if ('O' == *(str)) {
-        externalOscillator(temp_byte > 0);
+        externalOscillator(temp_int > 0);
       }
       else {
-        internalOscillator(temp_byte > 0);
+        internalOscillator(temp_int > 0);
       }
       break;
 
@@ -1285,7 +1285,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     case 'd':
-      switch (temp_byte) {
+      switch (temp_int) {
         case 0:
           local_log.concat("Disabling SPI interrupts...\n");
           //SPI_I2S_ITConfig(SPI1, SPI_I2S_IT_RXNE | SPI_I2S_IT_TXE, DISABLE);
@@ -1306,9 +1306,8 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     case '%':   // Ext clock rate.
-      temp_byte = temp_byte % 16;
-      if (setCPLDClkFreq(1 << temp_byte)) {
-        local_log.concatf("Set ext clock period to %d.\n", 1 << temp_byte);
+      if (setCPLDClkFreq(strict_min(temp_int, 1)*1000)) {
+        local_log.concatf("Set ext clock period to %d kHz.\n", strict_min(temp_int, 1));
       }
       else {
         local_log.concat("Failed to set ext clock period.\n");
@@ -1316,8 +1315,8 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     case '^':
-      local_log.concatf("WAKEUP ISR bound to IRQ signal %d.\n", temp_byte);
-      setWakeupSignal(temp_byte);
+      local_log.concatf("WAKEUP ISR bound to IRQ signal %d.\n", temp_int);
+      setWakeupSignal(temp_int);
       break;
     case 'E':
     case 'e':
@@ -1371,53 +1370,12 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'Z':
     case 'z':
-      if (temp_byte) {
-        _periodic_debug.alterSchedulePeriod(temp_byte * 10);
+      if (temp_int) {
+        _periodic_debug.alterSchedulePeriod(temp_int * 10);
       }
       _periodic_debug.enableSchedule(*(str) == 'Z');
       local_log.concatf("%s periodic reader.\n", (*(str) == 'z' ? "Stopping" : "Starting"));
       break;
-
-    //case 'C':    // Individual IMU access tests...
-    //case 'c':    // Individual IMU access tests...
-    //  if (temp_byte < 0x22) {
-    //    active_imu_position = temp_byte;
-    //    for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
-    //    SPIBusOp* op = new_op(BusOpcode::RX, this);
-    //    op->setParams((temp_byte | 0x80), 0x01, 0x01, 0x8F);
-    //    op->setBuffer(__hack_buffer, (*(str) == 'C' ? 5 : 1));
-    //    queue_io_job((BusOp*) op);
-    //  }
-    //  else {
-    //    local_log.concat("IMU out of bounds.\n");
-    //  }
-    //  break;
-
-    //case 'n':    // Many bytes for a given address...
-    //  if (temp_byte < 35) {
-    //    for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
-    //    SPIBusOp* op = new_op(BusOpcode::RX, this);
-    //    op->setParams((active_imu_position | 0x80), temp_byte, 0x01, 0x8F);
-    //    op->setBuffer(__hack_buffer, temp_byte);
-    //    queue_io_job((BusOp*) op);
-    //  }
-    //  else {
-    //    local_log.concat("Length out of bounds.\n");
-    //  }
-    //  break;
-
-    //case 'N':    // Single byte for a multiple access...
-    //  if (temp_byte < 35) {
-    //    for (int z = 0; z < 34; z++) __hack_buffer[z] = 0;
-    //    SPIBusOp* op = new_op(BusOpcode::RX, this);
-    //    op->setParams((active_imu_position | 0x80), 0x01, temp_byte, 0x8F);
-    //    op->setBuffer(__hack_buffer, temp_byte);
-    //    queue_io_job((BusOp*) op);
-    //  }
-    //  else {
-    //    local_log.concat("Length out of bounds.\n");
-    //  }
-    //  break;
 
     default:
       EventReceiver::procDirectDebugInstruction(input);
