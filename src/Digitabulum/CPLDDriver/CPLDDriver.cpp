@@ -991,7 +991,7 @@ int8_t CPLDDriver::attached() {
     gpioSetup();
     bus_init();
 
-    init_spi2(0, 0);  // CPOL=1, CPHA=0, HW-driven
+    init_spi2(0, 0);  // CPOL=0, CPHA=0, HW-driven
 
     init_ext_clk();
 
@@ -1375,6 +1375,27 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       }
       _periodic_debug.enableSchedule(*(str) == 'Z');
       local_log.concatf("%s periodic reader.\n", (*(str) == 'z' ? "Stopping" : "Starting"));
+      break;
+
+    case 'M':
+      switch (temp_int) {
+        default:
+          init_spi2(0, 0);  // CPOL=1, CPHA=0, HW-driven
+          local_log.concat("IRQ SPI is now in mode 0.\n");
+          break;
+        case 1:
+          init_spi2(0, 1);  // CPOL=1, CPHA=0, HW-driven
+          local_log.concat("IRQ SPI is now in mode 1.\n");
+          break;
+        case 2:
+          init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
+          local_log.concat("IRQ SPI is now in mode 2.\n");
+          break;
+        case 3:
+          init_spi2(1, 1);  // CPOL=1, CPHA=0, HW-driven
+          local_log.concat("IRQ SPI is now in mode 3.\n");
+          break;
+      }
       break;
 
     default:

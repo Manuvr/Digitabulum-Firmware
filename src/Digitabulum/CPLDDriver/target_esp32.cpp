@@ -58,7 +58,8 @@ static void IRAM_ATTR spi3_isr(void *arg) {
       _irq_data_ptr = (uint8_t*) _irq_data_0;
       previous_buf  = (uint8_t*) _irq_data_1;
     }
-    memcpy((void*)_irq_data_ptr, &words[0], 10);
+
+    memcpy((void*) _irq_data_ptr, (void*) &words[0], 10);
     for (int i = 0; i < 10; i++) {
       _irq_diff[i]   = previous_buf[i] ^ _irq_data_ptr[i];
       _irq_accum[i] |= _irq_diff[i];
@@ -66,6 +67,7 @@ static void IRAM_ATTR spi3_isr(void *arg) {
 
     Kernel::isrRaiseEvent(&_irq_data_arrival);   // TODO: Audit for mem layout.
     SPI3.slave.trans_done  = 0;  // Clear interrupt.
+    SPI3.cmd.usr = 1;  // Start the transfer.
     return;
   }
   SPI3.slave.rd_sta_inten  = 0;  // Mask interrupt.
@@ -175,37 +177,43 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
   for (int i = 0; i < 16; i++) SPI3.data_buf[i] = 0;
 
   if (GPIO_IS_VALID_GPIO(p_cs) && GPIO_IS_VALID_GPIO(p_clk) && GPIO_IS_VALID_GPIO(p_mosi)) {
-    SPI3.ctrl.fastrd_mode   = 0;  // No need of multi-lane SPI.
-
     SPI3.slave.slave_mode   = 1;
     SPI3.slave.wr_rd_buf_en = 1;
+    SPI3.slave.cs_i_mode    = 2;  // Double-buffered CS signal.
+    SPI3.slave.sync_reset   = 1;  // Reset the pins.
+    //SPI3.slave.cmd_define   = 1;  // Use the custom slave command mode.
 
     SPI3.user.doutdin       = 1;  // Full-duplex. Needed to avoid command/status interpretation.
     SPI3.user.usr_miso_highpart = 1;  // The (non-existent) TX buffer should use W8-15.
+    SPI3.user.usr_mosi      = 1;  // Enable this shift register.
 
-    SPI3.user.usr_mosi      = 1;  // TODO: One of these can go.
-    SPI3.user.usr_miso      = 1;  // TODO: One of these can go.
-    SPI3.user.usr_command   = 0;  // Peripheral should not interpret content.
+    // TODO: For some reason, these settings are required, or no clocks are recognized.
+    SPI3.user.usr_command   = 1;
+    SPI3.cmd.usr = 1;
 
+    SPI3.user2.usr_command_bitlen = 0;
+
+    SPI3.pin.ck_dis             = 1;  // We have no need of a clock output.
     SPI3.pin.ck_idle_edge       = cpol ? 1 : 0;  // CPOL
     SPI3.user.ck_i_edge         = (cpol ^ cpha) ? 1 : 0;
     SPI3.ctrl2.mosi_delay_mode  = (cpol ^ cpha) ? 1 : 2;
-
     SPI3.ctrl2.miso_delay_mode  = 0;  //
+
     SPI3.ctrl2.miso_delay_num   = 0;  //
     SPI3.ctrl2.mosi_delay_num   = 0;  //
 
-    //SPI3.pin.ck_dis         = 1;  // We have no need of a clock output.
+    SPI3.ctrl.fastrd_mode   = 0;  // No need of multi-lane SPI.
+
+    SPI3.user1.val          = 0;  // No address phase.
+
+    SPI3.clock.clkcnt_l     = 0;  // Must be 0 in slave mode.
+    SPI3.clock.clkcnt_h     = 0;  // Must be 0 in slave mode.
 
     SPI3.slave.trans_done   = 0;  // Interrupt conditions.
     SPI3.slave.trans_inten  = 1;  //
 
-    SPI3.slv_wrbuf_dlen.bit_len   = 79;
     SPI3.slv_rdbuf_dlen.bit_len   = 79;
-    SPI3.slv_rd_bit.slv_rdata_bit = 79;
 
-    SPI3.slave.cs_i_mode   = 2;  // Double-buffered CS signal.
-    SPI3.slave.sync_reset  = 1;  // Reset the pins(?)
 
 
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_cs],   PIN_FUNC_GPIO);
@@ -218,12 +226,12 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
 
     gpio_matrix_in( p_cs,   VSPICS0_IN_IDX,  false);
     gpio_matrix_in( p_clk,  VSPICLK_IN_IDX,  false);
-    //gpio_matrix_in( p_mosi, VSPIQ_IN_IDX,    false);
     gpio_matrix_in( p_mosi, VSPID_IN_IDX,    false);
+
+    periph_module_enable(PERIPH_VSPI_MODULE);
+    esp_intr_alloc(ETS_SPI3_INTR_SOURCE, ESP_INTR_FLAG_IRAM, spi3_isr, nullptr, nullptr);
+    _er_set_flag(CPLD_FLAG_SPI2_READY, true);
   }
-  periph_module_enable(PERIPH_VSPI_MODULE);
-  esp_intr_alloc(ETS_SPI3_INTR_SOURCE, ESP_INTR_FLAG_IRAM, spi3_isr, nullptr, nullptr);
-  _er_set_flag(CPLD_FLAG_SPI2_READY, true);
 }
 
 
@@ -269,18 +277,30 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
   output->concatf("--\t Ext2.State:  0x%02x\n", (uint8_t) SPI3.ext2.st);
   output->concatf("--\t mosi_dlen:   0x%08x\n", SPI3.mosi_dlen.val);
   output->concatf("--\t miso_dlen:   0x%08x\n", SPI3.miso_dlen.val);
+  output->concatf("--\t cmd:         0x%08x\n", SPI3.cmd.val);
+  output->concatf("--\t ctrl:        0x%08x\n", SPI3.ctrl.val);
+  output->concatf("--\t ctrl1:       0x%08x\n", SPI3.ctrl1.val);
+  output->concatf("--\t ctrl2:       0x%08x\n", SPI3.ctrl2.val);
+  output->concatf("--\t rd_status:   0x%08x\n", SPI3.rd_status.val);
+
   output->concatf("--\t user:        0x%08x\n", SPI3.user.val);
   output->concatf("--\t user1:       0x%08x\n", SPI3.user1.val);
   output->concatf("--\t user2:       0x%08x\n", SPI3.user2.val);
   output->concatf("--\t pin:         0x%08x\n", SPI3.pin.val);
+  output->concatf("--\t clock:       0x%08x\n", SPI3.clock.val);
   output->concatf("--\t slave:       0x%08x\n", SPI3.slave.val);
   output->concatf("--\t slave1:      0x%08x\n", SPI3.slave1.val);
   output->concatf("--\t slave2:      0x%08x\n", SPI3.slave2.val);
   output->concatf("--\t slave3:      0x%08x\n", SPI3.slave3.val);
+  output->concatf("--\t ext0:        0x%08x\n", SPI3.ext0.val);
+  output->concatf("--\t ext1:        0x%08x\n", SPI3.ext1.val);
+  output->concatf("--\t ext2:        0x%08x\n", SPI3.ext2.val);
+  output->concatf("--\t ext3:        0x%08x\n", SPI3.ext3.val);
+  output->concatf("--\t date:        0x%08x\n", SPI3.date.val);
 
-  output->concatf("--\t slv_wrbuf_dlen.bit_len    0x%06x\n", (uint32_t) SPI3.slv_wrbuf_dlen.bit_len  );
-  output->concatf("--\t slv_rdbuf_dlen.bit_len    0x%06x\n", (uint32_t) SPI3.slv_rdbuf_dlen.bit_len  );
-  output->concatf("--\t slv_rd_bit.slv_rdata_bit  0x%06x\n", (uint32_t) SPI3.slv_rd_bit.slv_rdata_bit);
+  output->concatf("--\t slv_wrbuf_dlen:  0x%06x\n", (uint32_t) SPI3.slv_wrbuf_dlen.bit_len  );
+  output->concatf("--\t slv_rdbuf_dlen:  0x%06x\n", (uint32_t) SPI3.slv_rdbuf_dlen.bit_len  );
+  output->concatf("--\t slv_rd_bit:      0x%06x\n", (uint32_t) SPI3.slv_rd_bit.slv_rdata_bit);
   for (int i = 0; i < 16; i+=4) {
     output->concatf(
       "--\t SPI3.data_buf[%2d-%2d]:   0x%08x  0x%08x  0x%08x  0x%08x\n",
