@@ -267,17 +267,19 @@ void CPLDDriver::gpioSetup() {
   }
   if (255 != _pins.req) {
     gpioDefine(_pins.req, GPIOMode::OUTPUT);
-    setPin(_pins.req, false);
+    setPin(_pins.req, true);     // CPLD has internal pullup on this pin.
   }
   if (255 != _pins.irq) {
-    gpioDefine(_pins.req, GPIOMode::INPUT_PULLUP);
+    gpioDefine(_pins.irq, GPIOMode::INPUT_PULLUP);
     setPinFxn(_pins.irq, FALLING, cpld_wakeup_isr);
   }
   if (255 != _pins.clk) {
     gpioDefine(_pins.clk, GPIOMode::OUTPUT);
+    setPin(_pins.clk, true);
   }
   if (255 != _pins.oe) {
     gpioDefine(_pins.oe, GPIOMode::OUTPUT);
+    setPin(_pins.oe, true);   // CPLD has internal pullup on this pin.
   }
   if (255 != _pins.gpio) {
     setPinFxn(_pins.gpio, CHANGE, cpld_gpio_isr_1);

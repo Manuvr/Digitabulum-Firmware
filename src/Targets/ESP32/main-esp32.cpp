@@ -39,24 +39,21 @@ Intended target is an WROOM32 SoC module.
 #endif
 
 
-/* This global makes this source file read better. */
-Kernel* kernel = nullptr;
-
 
 /*
 * Pin defs given here assume a WROOM32 module.
 */
 const CPLDPins cpld_pins(
-  26,  // IO26 (reset)
-  255, //18,  // Transfer request
-  255, //19,  // CPLD's IRQ_WAKEUP pin
+  15,  // Reset
+  18,  // Transfer request
+  255, // CPLD's IRQ_WAKEUP pin
   25,  // CPLD clock input
   255, //22,  // CPLD OE pin
   255, //23,  // CPLD GPIO
-  255, //21,  // SPI1 CS
-  255, //26,  // SPI1 CLK
-  255, //27,  // SPI1 MOSI
-  255, //16,  // SPI1 MISO
+  19,  // SPI1 CS
+  23,  // SPI1 CLK
+  22,  // SPI1 MOSI
+  21,  // SPI1 MISO
   33,  // IO33 (input-only) (SPI2 CS)
   34,  // IO34 (input-only) (SPI2 CLK)
   35   // IO35 (input-only) (SPI2 MOSI)
@@ -65,13 +62,13 @@ const CPLDPins cpld_pins(
 
 const I2CAdapterOptions i2c_opts(
   0,   // Device number
-  13,  // IO13 (sda)
-  14   // IO14 (scl)
+  14,  // IO14 (sda)
+  13   // IO13 (scl)
 );
 
 const ADP8866Pins adp_opts(
-  12,  // IO12 (Reset)
-  32   // IO32 (IRQ)
+  27,  // IO27 (Reset)
+  12   // IO12 (IRQ)
 );
 
 /*
@@ -108,7 +105,7 @@ void app_main() {
   *   function to setup the defaults of the platform.
   */
   platform.platformPreInit();
-  kernel = platform.kernel();
+  Kernel* kernel = platform.kernel();
 
   CPLDDriver _cpld(&cpld_pins);
   kernel->subscribe(&_cpld);
@@ -124,9 +121,8 @@ void app_main() {
   kernel->subscribe((EventReceiver*) &leds);
 
   platform.bootstrap();
-  printf("******************* bootstrap()\n");
 
-  gpioDefine(27, GPIOMode::OUTPUT);
+  gpioDefine(26, GPIOMode::OUTPUT);
 
   unsigned long ms_0 = millis();
   unsigned long ms_1 = ms_0;
@@ -137,7 +133,7 @@ void app_main() {
     ms_1 = millis();
     kernel->advanceScheduler(ms_1 - ms_0);
     ms_0 = ms_1;
-    setPin(27, odd_even);
+    setPin(26, odd_even);
     odd_even = !odd_even;
   }
 }

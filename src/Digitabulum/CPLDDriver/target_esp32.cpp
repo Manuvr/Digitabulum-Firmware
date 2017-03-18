@@ -45,6 +45,24 @@ extern "C" {
 
 #include "../../Targets/ESP32/spi_common.h"
 
+static uint16_t spi2_op_counter_0 = 0;
+static uint16_t spi2_op_counter_1 = 0;
+static uint16_t spi2_op_counter_2 = 0;
+
+static void IRAM_ATTR spi2_isr(void *arg) {
+  if (SPI2.slave.trans_done) {
+    spi2_op_counter_0++;
+    //Kernel::isrRaiseEvent(&_irq_data_arrival);   // TODO: Audit for mem layout.
+    SPI2.slave.trans_done  = 0;  // Clear interrupt.
+    SPI2.cmd.usr = 1;  // Start the transfer.
+    return;
+  }
+  SPI2.slave.rd_sta_inten  = 0;  // Mask interrupt.
+  SPI2.slave.wr_sta_inten  = 0;  // Mask interrupt.
+  SPI2.slave.rd_buf_inten  = 0;  // Mask interrupt.
+  SPI2.slave.wr_buf_inten  = 0;  // Mask interrupt.
+}
+
 
 static void IRAM_ATTR spi3_isr(void *arg) {
   if (SPI3.slave.trans_done) {
@@ -157,9 +175,61 @@ void CPLDDriver::externalOscillator(bool on) {
 * @param  cpha  Clock phase
 */
 void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
-  //SPI2
+  gpio_num_t p_cs    = (gpio_num_t) _pins.s1_cs;
+  gpio_num_t p_clk   = (gpio_num_t) _pins.s1_clk;
+  gpio_num_t p_mosi  = (gpio_num_t) _pins.s1_mosi;
+  gpio_num_t p_miso  = (gpio_num_t) _pins.s1_miso;
+
   for (int i = 0; i < 16; i++) SPI2.data_buf[i] = 0;
   _er_set_flag(CPLD_FLAG_SPI1_READY, false);
+  if (GPIO_IS_VALID_GPIO(p_cs) && GPIO_IS_VALID_GPIO(p_clk) && GPIO_IS_VALID_GPIO(p_mosi) && GPIO_IS_VALID_OUTPUT_GPIO(p_miso)) {
+    SPI2.slave.slave_mode   = 1;
+    SPI2.slave.wr_rd_buf_en = 1;
+    SPI2.slave.cs_i_mode    = 2;  // Double-buffered CS signal.
+    SPI2.slave.sync_reset   = 1;  // Reset the pins.
+    //SPI2.slave.cmd_define   = 1;  // Use the custom slave command mode.
+
+    SPI2.user.doutdin       = 1;  // Full-duplex. Needed to avoid command/status interpretation.
+    SPI2.user.usr_miso_highpart = 1;  // The (non-existent) TX buffer should use W8-15.
+    SPI2.user.usr_mosi      = 1;  // Enable this shift register.
+    // TODO: For some reason, these settings are required, or no clocks are recognized.
+    SPI2.user.usr_command   = 1;
+    SPI2.cmd.usr = 1;
+    SPI2.user2.usr_command_bitlen = 0;
+    SPI2.pin.ck_dis             = 1;  // We have no need of a clock output.
+    SPI2.pin.ck_idle_edge       = cpol ? 1 : 0;  // CPOL
+    SPI2.user.ck_i_edge         = (cpol ^ cpha) ? 1 : 0;
+    SPI2.ctrl2.mosi_delay_mode  = (cpol ^ cpha) ? 1 : 2;
+    SPI2.ctrl2.miso_delay_mode  = 0;  //
+    SPI2.ctrl2.miso_delay_num   = 0;  //
+    SPI2.ctrl2.mosi_delay_num   = 0;  //
+    SPI2.ctrl.fastrd_mode   = 0;  // No need of multi-lane SPI.
+    SPI2.user1.val          = 0;  // No address phase.
+    SPI2.clock.clkcnt_l     = 0;  // Must be 0 in slave mode.
+    SPI2.clock.clkcnt_h     = 0;  // Must be 0 in slave mode.
+    SPI2.slave.trans_done   = 0;  // Interrupt conditions.
+    SPI2.slave.trans_inten  = 1;  //
+    SPI2.slv_rdbuf_dlen.bit_len   = 79;
+
+    PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_cs],   PIN_FUNC_GPIO);
+    PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_clk],  PIN_FUNC_GPIO);
+    PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_mosi], PIN_FUNC_GPIO);
+    PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_miso], PIN_FUNC_GPIO);
+
+    gpio_set_direction(p_cs,   GPIO_MODE_INPUT);
+    gpio_set_direction(p_clk,  GPIO_MODE_INPUT);
+    gpio_set_direction(p_mosi, GPIO_MODE_INPUT);
+    gpio_set_direction(p_miso, GPIO_MODE_OUTPUT);
+
+    gpio_matrix_in( p_cs,    HSPICS0_IN_IDX,  false);
+    gpio_matrix_in( p_clk,   HSPICLK_IN_IDX,  false);
+    gpio_matrix_in( p_mosi,  HSPID_IN_IDX,    false);
+    gpio_matrix_out( p_miso, HSPIQ_OUT_IDX,   false);
+
+    periph_module_enable(PERIPH_HSPI_MODULE);
+    esp_intr_alloc(ETS_SPI2_INTR_SOURCE, ESP_INTR_FLAG_IRAM, spi2_isr, nullptr, nullptr);
+    _er_set_flag(CPLD_FLAG_SPI2_READY, true);
+  }
 }
 
 
@@ -214,8 +284,6 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
 
     SPI3.slv_rdbuf_dlen.bit_len   = 79;
 
-
-
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_cs],   PIN_FUNC_GPIO);
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_clk],  PIN_FUNC_GPIO);
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_mosi], PIN_FUNC_GPIO);
@@ -258,7 +326,38 @@ int8_t CPLDDriver::bus_deinit() {
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
 void CPLDDriver::printHardwareState(StringBuilder *output) {
-  output->concatf("-- SPI2 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI1_READY)?"on":"OFF"));
+  output->concatf("\n-- SPI2 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI1_READY)?"on":"OFF"));
+  output->concatf("--\t op_count_0:  0x%04x\n", spi2_op_counter_0);
+  output->concatf("--\t op_count_1:  0x%04x\n", spi2_op_counter_1);
+  output->concatf("--\t op_count_2:  0x%04x\n", spi2_op_counter_2);
+  output->concatf("--\t Ops:         0x%08x\n", SPI2.slave.trans_cnt);
+  output->concatf("--\t Last State:  0x%02x\n", (uint8_t) SPI2.slave.last_state);
+  output->concatf("--\t Last CMD:    0x%02x\n", (uint8_t) SPI2.slave.last_command);
+  output->concatf("--\t Ext2.State:  0x%02x\n", (uint8_t) SPI2.ext2.st);
+  output->concatf("--\t mosi_dlen:   0x%08x\n", SPI2.mosi_dlen.val);
+  output->concatf("--\t miso_dlen:   0x%08x\n", SPI2.miso_dlen.val);
+  output->concatf("--\t cmd:         0x%08x\n", SPI2.cmd.val);
+  output->concatf("--\t ctrl:        0x%08x\n", SPI2.ctrl.val);
+  output->concatf("--\t ctrl1:       0x%08x\n", SPI2.ctrl1.val);
+  output->concatf("--\t ctrl2:       0x%08x\n", SPI2.ctrl2.val);
+  output->concatf("--\t rd_status:   0x%08x\n", SPI2.rd_status.val);
+  output->concatf("--\t user:        0x%08x\n", SPI2.user.val);
+  output->concatf("--\t user1:       0x%08x\n", SPI2.user1.val);
+  output->concatf("--\t user2:       0x%08x\n", SPI2.user2.val);
+  output->concatf("--\t pin:         0x%08x\n", SPI2.pin.val);
+  output->concatf("--\t clock:       0x%08x\n", SPI2.clock.val);
+  output->concatf("--\t slave:       0x%08x\n", SPI2.slave.val);
+  output->concatf("--\t slave1:      0x%08x\n", SPI2.slave1.val);
+  output->concatf("--\t slave2:      0x%08x\n", SPI2.slave2.val);
+  output->concatf("--\t slave3:      0x%08x\n", SPI2.slave3.val);
+  output->concatf("--\t ext0:        0x%08x\n", SPI2.ext0.val);
+  output->concatf("--\t ext1:        0x%08x\n", SPI2.ext1.val);
+  output->concatf("--\t ext2:        0x%08x\n", SPI2.ext2.val);
+  output->concatf("--\t ext3:        0x%08x\n", SPI2.ext3.val);
+  output->concatf("--\t date:        0x%08x\n", SPI2.date.val);
+  output->concatf("--\t slv_wrbuf_dlen:  0x%06x\n", (uint32_t) SPI2.slv_wrbuf_dlen.bit_len  );
+  output->concatf("--\t slv_rdbuf_dlen:  0x%06x\n", (uint32_t) SPI2.slv_rdbuf_dlen.bit_len  );
+  output->concatf("--\t slv_rd_bit:      0x%06x\n", (uint32_t) SPI2.slv_rd_bit.slv_rdata_bit);
   for (int i = 0; i < 16; i+=4) {
     output->concatf(
       "--\t SPI2.data_buf[%2d-%2d]:   0x%08x  0x%08x  0x%08x  0x%08x\n",
@@ -271,36 +370,34 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
   }
 
   output->concatf("\n-- SPI3 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI2_READY)?"on":"OFF"));
-  output->concatf("--\t Ops:         0x%08x\n", SPI3.slave.trans_cnt);
-  output->concatf("--\t Last State:  0x%02x\n", (uint8_t) SPI3.slave.last_state);
-  output->concatf("--\t Last CMD:    0x%02x\n", (uint8_t) SPI3.slave.last_command);
-  output->concatf("--\t Ext2.State:  0x%02x\n", (uint8_t) SPI3.ext2.st);
-  output->concatf("--\t mosi_dlen:   0x%08x\n", SPI3.mosi_dlen.val);
-  output->concatf("--\t miso_dlen:   0x%08x\n", SPI3.miso_dlen.val);
-  output->concatf("--\t cmd:         0x%08x\n", SPI3.cmd.val);
-  output->concatf("--\t ctrl:        0x%08x\n", SPI3.ctrl.val);
-  output->concatf("--\t ctrl1:       0x%08x\n", SPI3.ctrl1.val);
-  output->concatf("--\t ctrl2:       0x%08x\n", SPI3.ctrl2.val);
-  output->concatf("--\t rd_status:   0x%08x\n", SPI3.rd_status.val);
-
-  output->concatf("--\t user:        0x%08x\n", SPI3.user.val);
-  output->concatf("--\t user1:       0x%08x\n", SPI3.user1.val);
-  output->concatf("--\t user2:       0x%08x\n", SPI3.user2.val);
-  output->concatf("--\t pin:         0x%08x\n", SPI3.pin.val);
-  output->concatf("--\t clock:       0x%08x\n", SPI3.clock.val);
-  output->concatf("--\t slave:       0x%08x\n", SPI3.slave.val);
-  output->concatf("--\t slave1:      0x%08x\n", SPI3.slave1.val);
-  output->concatf("--\t slave2:      0x%08x\n", SPI3.slave2.val);
-  output->concatf("--\t slave3:      0x%08x\n", SPI3.slave3.val);
-  output->concatf("--\t ext0:        0x%08x\n", SPI3.ext0.val);
-  output->concatf("--\t ext1:        0x%08x\n", SPI3.ext1.val);
-  output->concatf("--\t ext2:        0x%08x\n", SPI3.ext2.val);
-  output->concatf("--\t ext3:        0x%08x\n", SPI3.ext3.val);
-  output->concatf("--\t date:        0x%08x\n", SPI3.date.val);
-
-  output->concatf("--\t slv_wrbuf_dlen:  0x%06x\n", (uint32_t) SPI3.slv_wrbuf_dlen.bit_len  );
-  output->concatf("--\t slv_rdbuf_dlen:  0x%06x\n", (uint32_t) SPI3.slv_rdbuf_dlen.bit_len  );
-  output->concatf("--\t slv_rd_bit:      0x%06x\n", (uint32_t) SPI3.slv_rd_bit.slv_rdata_bit);
+  //output->concatf("--\t Ops:         0x%08x\n", SPI3.slave.trans_cnt);
+  //output->concatf("--\t Last State:  0x%02x\n", (uint8_t) SPI3.slave.last_state);
+  //output->concatf("--\t Last CMD:    0x%02x\n", (uint8_t) SPI3.slave.last_command);
+  //output->concatf("--\t Ext2.State:  0x%02x\n", (uint8_t) SPI3.ext2.st);
+  //output->concatf("--\t mosi_dlen:   0x%08x\n", SPI3.mosi_dlen.val);
+  //output->concatf("--\t miso_dlen:   0x%08x\n", SPI3.miso_dlen.val);
+  //output->concatf("--\t cmd:         0x%08x\n", SPI3.cmd.val);
+  //output->concatf("--\t ctrl:        0x%08x\n", SPI3.ctrl.val);
+  //output->concatf("--\t ctrl1:       0x%08x\n", SPI3.ctrl1.val);
+  //output->concatf("--\t ctrl2:       0x%08x\n", SPI3.ctrl2.val);
+  //output->concatf("--\t rd_status:   0x%08x\n", SPI3.rd_status.val);
+  //output->concatf("--\t user:        0x%08x\n", SPI3.user.val);
+  //output->concatf("--\t user1:       0x%08x\n", SPI3.user1.val);
+  //output->concatf("--\t user2:       0x%08x\n", SPI3.user2.val);
+  //output->concatf("--\t pin:         0x%08x\n", SPI3.pin.val);
+  //output->concatf("--\t clock:       0x%08x\n", SPI3.clock.val);
+  //output->concatf("--\t slave:       0x%08x\n", SPI3.slave.val);
+  //output->concatf("--\t slave1:      0x%08x\n", SPI3.slave1.val);
+  //output->concatf("--\t slave2:      0x%08x\n", SPI3.slave2.val);
+  //output->concatf("--\t slave3:      0x%08x\n", SPI3.slave3.val);
+  //output->concatf("--\t ext0:        0x%08x\n", SPI3.ext0.val);
+  //output->concatf("--\t ext1:        0x%08x\n", SPI3.ext1.val);
+  //output->concatf("--\t ext2:        0x%08x\n", SPI3.ext2.val);
+  //output->concatf("--\t ext3:        0x%08x\n", SPI3.ext3.val);
+  //output->concatf("--\t date:        0x%08x\n", SPI3.date.val);
+  //output->concatf("--\t slv_wrbuf_dlen:  0x%06x\n", (uint32_t) SPI3.slv_wrbuf_dlen.bit_len  );
+  //output->concatf("--\t slv_rdbuf_dlen:  0x%06x\n", (uint32_t) SPI3.slv_rdbuf_dlen.bit_len  );
+  //output->concatf("--\t slv_rd_bit:      0x%06x\n", (uint32_t) SPI3.slv_rd_bit.slv_rdata_bit);
   for (int i = 0; i < 16; i+=4) {
     output->concatf(
       "--\t SPI3.data_buf[%2d-%2d]:   0x%08x  0x%08x  0x%08x  0x%08x\n",
