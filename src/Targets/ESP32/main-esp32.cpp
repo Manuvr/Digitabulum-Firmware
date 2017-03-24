@@ -29,6 +29,7 @@ Intended target is an WROOM32 SoC module.
 #include <Platform/Platform.h>
 #include <Platform/Peripherals/I2C/I2CAdapter.h>
 #include <Drivers/ADP8866/ADP8866.h>
+#include <Drivers/ATECC508/ATECC508.h>
 #include <XenoSession/Console/ManuvrConsole.h>
 
 #include "Digitabulum/CPLDDriver/CPLDDriver.h"
@@ -64,6 +65,10 @@ const I2CAdapterOptions i2c_opts(
   0,   // Device number
   14,  // IO14 (sda)
   13   // IO13 (scl)
+);
+
+const ATECC508Opts atecc_opts(
+  (uint8_t) 0
 );
 
 const ADP8866Pins adp_opts(
@@ -115,6 +120,10 @@ void app_main() {
 
   I2CAdapter i2c(&i2c_opts);
   kernel->subscribe(&i2c);
+
+  ATECC508 atec(&atecc_opts);
+  i2c.addSlaveDevice((I2CDevice*) &atec);
+  kernel->subscribe((EventReceiver*) &atec);
 
   ADP8866 leds(&adp_opts);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);

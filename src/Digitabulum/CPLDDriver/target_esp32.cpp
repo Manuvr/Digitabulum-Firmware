@@ -57,10 +57,19 @@ static void IRAM_ATTR spi2_isr(void *arg) {
     SPI2.cmd.usr = 1;  // Start the transfer.
     return;
   }
-  SPI2.slave.rd_sta_inten  = 0;  // Mask interrupt.
-  SPI2.slave.wr_sta_inten  = 0;  // Mask interrupt.
-  SPI2.slave.rd_buf_inten  = 0;  // Mask interrupt.
-  SPI2.slave.wr_buf_inten  = 0;  // Mask interrupt.
+
+  if (SPI2.slave.rd_sta_inten) {
+    SPI2.slave.rd_sta_inten  = 0;  // Clear interrupt.
+  }
+  if (SPI2.slave.wr_sta_inten) {
+    SPI2.slave.wr_sta_inten  = 0;  // Clear interrupt.
+  }
+  if (SPI2.slave.rd_buf_inten) {
+    SPI2.slave.rd_buf_inten  = 0;  // Clear interrupt.
+  }
+  if (SPI2.slave.wr_buf_inten) {
+    SPI2.slave.wr_buf_inten  = 0;  // Clear interrupt.
+  }
 }
 
 
@@ -224,7 +233,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
     gpio_matrix_in( p_cs,    HSPICS0_IN_IDX,  false);
     gpio_matrix_in( p_clk,   HSPICLK_IN_IDX,  false);
     gpio_matrix_in( p_mosi,  HSPID_IN_IDX,    false);
-    gpio_matrix_out( p_miso, HSPIQ_OUT_IDX,   false);
+    gpio_matrix_out( p_miso, HSPIQ_OUT_IDX,   false, false);
 
     periph_module_enable(PERIPH_HSPI_MODULE);
     esp_intr_alloc(ETS_SPI2_INTR_SOURCE, ESP_INTR_FLAG_IRAM, spi2_isr, nullptr, nullptr);

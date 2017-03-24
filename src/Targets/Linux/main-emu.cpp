@@ -80,6 +80,11 @@ const I2CAdapterOptions i2c_opts(
 );
 
 
+const ADP8866Pins adp_opts(
+  255,  // (Reset)
+  255   // (IRQ)
+);
+
 /*******************************************************************************
 * The main function.                                                           *
 *******************************************************************************/
@@ -112,7 +117,7 @@ int main(int argc, const char *argv[]) {
 
   // Pins 58 and 63 are the reset and IRQ pin, respectively.
   // This is translated to pins 10 and 13 on PortD.
-  ADP8866 leds(255, 255);
+  ADP8866 leds(&adp_opts);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
   kernel->subscribe((EventReceiver*) &leds);
 
