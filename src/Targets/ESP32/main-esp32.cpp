@@ -25,7 +25,6 @@ limitations under the License.
 Intended target is an WROOM32 SoC module.
 */
 
-#include <Kernel.h>
 #include <Platform/Platform.h>
 #include <Platform/Peripherals/I2C/I2CAdapter.h>
 #include <Drivers/ADP8866/ADP8866.h>
@@ -68,7 +67,7 @@ const I2CAdapterOptions i2c_opts(
 );
 
 const ATECC508Opts atecc_opts(
-  (uint8_t) 0
+  (uint8_t) 255
 );
 
 const ADP8866Pins adp_opts(

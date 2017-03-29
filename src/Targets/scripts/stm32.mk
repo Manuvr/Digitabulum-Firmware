@@ -121,6 +121,10 @@ MANUVR_OPTIONS += -DMANUVR_CBOR
 MANUVR_OPTIONS += -DMANUVR_CONSOLE_SUPPORT
 MANUVR_OPTIONS += -DMANUVR_SUPPORT_I2C
 
+# Enables ATECC provisioning-related features...
+MANUVR_OPTIONS += -DATECC508_CAPABILITY_OTP_RW
+MANUVR_OPTIONS += -DATECC508_CAPABILITY_CONFIG_UNLOCK
+
 # Options that build for certain threading models (if any).
 ifeq ($(THREADS),1)
 INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS
