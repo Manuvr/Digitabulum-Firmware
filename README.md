@@ -37,6 +37,31 @@ Specific build instructions and platform issues are located in the corresponding
 #### Building the CPLD
 Altera's software is required to build the CPLD. It is presently outside the scope of this document.
 
+---------------------------------------------
+
+#### ATECC508a carve-up:
+
+| Slot | Size |     Name |  Imparted At | Use | Attributes |
+|------|------|----------|--------------|-----|------------|
+|    0 |   36 | Hardware Root | Provisioning | Validate hardware for support.  | Locked, Private, Signing capable, no user alteration, No pub key read-out. |
+|    1 |   36 | API TLS key | Provisioning | Authenticate with public API. | Locked, Private, Signing capable, no user alteration. |
+|    2 |   36 | Firmware Assoc | First boot | Optional hardware auth for firmware use. | Private, Signing capable. |
+|    3 |   36 | User ||||
+|    4 |   36 | User ||||
+|    5 |   36 | User ||||
+|    6 |   36 | User ||||
+|    7 |   36 | User ||||
+|    8 |  416 | BirthCertificate | Provisioning | Store HW info. | No user alteration. |
+|    9 |   72 | Manufacturer Pub | Provisioning | Key for manufacturer. |Verify, no user alteration |
+|   10 |   72 | Provisioner Pub | Provisioning | Provisioner that built slot 8. |Verify, no user alteration |
+|   11 |   72 | User ||||
+|   12 |   72 | User ||||
+|   13 |   72 | User ||||
+|   14 |   72 | User ||||
+|   15 |   72 | User ||||
+
+Because digits are interchangable, and the slot is barely large enough for it, IMU calibration data will be stored in the microcontroller-bound memory. If the application demands, the microcontroller firmware can optionally setup a trust relationship with the hardware to detect when it is connected to a different board.
+
 ----------------------
 #### License
 Original code is Apache 2.0.
