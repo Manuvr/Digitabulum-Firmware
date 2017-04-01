@@ -267,7 +267,7 @@ void CPLDDriver::gpioSetup() {
   }
   if (255 != _pins.req) {
     gpioDefine(_pins.req, GPIOMode::OUTPUT);
-    setPin(_pins.req, true);     // CPLD has internal pullup on this pin.
+    setPin(_pins.req, false);  // Xfer is triggered on the rising-edge.
   }
   if (255 != _pins.irq) {
     gpioDefine(_pins.irq, GPIOMode::INPUT_PULLUP);
@@ -307,6 +307,8 @@ void CPLDDriver::reset() {
 
   purge_queued_work();          // Purge the SPI queue...
   purge_stalled_job();
+
+  setPin(_pins.req,   false);  // Reset the transfer pin.
 
   // Fire the oneshot to bring us out of reset after several ms...
   raiseEvent(Kernel::returnEvent(DIGITABULUM_MSG_CPLD_RESET_CALLBACK));
@@ -454,7 +456,8 @@ int8_t CPLDDriver::queue_io_job(BusOp* _op) {
       if (getVerbosity() > 3) Kernel::log("Tried to fire a bus op that is not in IDLE state.\n");
       return -4;
     }
-    op->setCSPin(_pins.req);
+    op->csActiveHigh(true);   // We enfoce this here to prevent having to
+    op->setCSPin(_pins.req);  //   enforce it in many places.
 
     if ((nullptr == current_job) && (work_queue.size() == 0)){
       // If the queue is empty, fire the operation now.
@@ -643,10 +646,7 @@ void CPLDDriver::purge_stalled_job() {
 * @return an SPIBusOp to be used. Only NULL if out-of-mem.
 */
 SPIBusOp* CPLDDriver::new_op() {
-  SPIBusOp* return_value = BusAdapter::new_op();
-  return_value->setCSPin(_pins.req);
-  return_value->csActiveHigh(true);
-  return return_value;
+  return (SPIBusOp*) BusAdapter::new_op();
 }
 
 

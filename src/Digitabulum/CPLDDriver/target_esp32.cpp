@@ -47,15 +47,37 @@ extern "C" {
 
 static uint16_t spi2_op_counter_0 = 0;
 static uint16_t spi2_op_counter_1 = 0;
-static uint16_t spi2_op_counter_2 = 0;
+
+static SPIBusOp* _threaded_op = nullptr;
 
 static void IRAM_ATTR spi2_isr(void *arg) {
   if (SPI2.slave.trans_done) {
     spi2_op_counter_0++;
-    //Kernel::isrRaiseEvent(&_irq_data_arrival);   // TODO: Audit for mem layout.
+    if (_threaded_op) {
+      if (2 == _threaded_op->buf_len) {
+        uint32_t word = SPI2.data_buf[0];
+        *(_threaded_op->buf+0) = (uint8_t) word & 0xFF;
+        *(_threaded_op->buf+1) = (uint8_t) ((word & 0xFF00) >> 8);
+      }
+      else {
+        uint32_t words[8] = {
+          SPI2.data_buf[0],
+          SPI2.data_buf[1],
+          SPI2.data_buf[2],
+          SPI2.data_buf[3],
+          SPI2.data_buf[4],
+          SPI2.data_buf[5],
+          SPI2.data_buf[6],
+          SPI2.data_buf[7]
+        };
+        uint16_t bytes = _threaded_op->buf_len & 0x1F;  // Cheesy cap to not overrun.
+        memcpy((void*) _threaded_op->buf, (void*) &words[0], bytes);
+      }
+      _threaded_op = nullptr;
+    }
+    Kernel::isrRaiseEvent(&SPIBusOp::event_spi_queue_ready);   // TODO: Audit for mem layout.
     SPI2.slave.trans_done  = 0;  // Clear interrupt.
     SPI2.cmd.usr = 1;  // Start the transfer.
-    return;
   }
 
   if (SPI2.slave.rd_sta_inten) {
@@ -76,6 +98,7 @@ static void IRAM_ATTR spi2_isr(void *arg) {
 static void IRAM_ATTR spi3_isr(void *arg) {
   if (SPI3.slave.trans_done) {
     uint32_t words[3] = {SPI3.data_buf[0], SPI3.data_buf[1], SPI3.data_buf[2]};
+    spi2_op_counter_1++;
     uint8_t* previous_buf;
     if (_irq_data_ptr == _irq_data_0) {
       _irq_data_ptr = (uint8_t*) _irq_data_1;
@@ -199,8 +222,9 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
     //SPI2.slave.cmd_define   = 1;  // Use the custom slave command mode.
 
     SPI2.user.doutdin       = 1;  // Full-duplex. Needed to avoid command/status interpretation.
-    SPI2.user.usr_miso_highpart = 1;  // The (non-existent) TX buffer should use W8-15.
+    SPI2.user.usr_miso_highpart = 1;  // The TX buffer should use W8-15.
     SPI2.user.usr_mosi      = 1;  // Enable this shift register.
+    SPI2.user.usr_miso      = 1;  // Enable this shift register.
     // TODO: For some reason, these settings are required, or no clocks are recognized.
     SPI2.user.usr_command   = 1;
     SPI2.cmd.usr = 1;
@@ -338,7 +362,6 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
   output->concatf("\n-- SPI2 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI1_READY)?"on":"OFF"));
   output->concatf("--\t op_count_0:  0x%04x\n", spi2_op_counter_0);
   output->concatf("--\t op_count_1:  0x%04x\n", spi2_op_counter_1);
-  output->concatf("--\t op_count_2:  0x%04x\n", spi2_op_counter_2);
   output->concatf("--\t Ops:         0x%08x\n", SPI2.slave.trans_cnt);
   output->concatf("--\t Last State:  0x%02x\n", (uint8_t) SPI2.slave.last_state);
   output->concatf("--\t Last CMD:    0x%02x\n", (uint8_t) SPI2.slave.last_command);
@@ -434,22 +457,53 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
 */
 XferFault SPIBusOp::begin() {
   //time_began    = micros();
-  if (0 == _param_len) {
-    // Obvious invalidity. We must have at least one transfer parameter.
-    abort(XferFault::BAD_PARAM);
-    return XferFault::BAD_PARAM;
+  if (_threaded_op) {
+    abort(XferFault::BUS_BUSY);
+    return XferFault::BUS_BUSY;
   }
 
-  set_state(XferState::INITIATE);  // Indicate that we now have bus control.
+  uint32_t first_four = 0;
+  switch (_param_len) {
+    case 4:
+    case 2:
+      if (csAsserted()) {
+        abort(XferFault::BUS_BUSY);
+        return XferFault::BUS_BUSY;
+      }
+      set_state(XferState::INITIATE);  // Indicate that we now have bus control.
+      break;
+    case 3:
+    case 1:
+    case 0:
+    default:
+      abort(XferFault::BAD_PARAM);
+      return XferFault::BAD_PARAM;
+  }
+
+  _threaded_op = this;
+
 
   if ((opcode == BusOpcode::TX) || (2 < _param_len)) {
     set_state((0 == buf_len) ? XferState::TX_WAIT : XferState::ADDR);
-    //__HAL_SPI_ENABLE_IT(&hspi1, (SPI_IT_TXE));
+    SPI2.data_buf[8] = xfer_params[0] + (xfer_params[1] << 8) + (xfer_params[2] << 16) + (xfer_params[3] << 24);
   }
   else {
-    set_state((0 == buf_len) ? XferState::RX_WAIT : XferState::ADDR);
-    // We can afford to read two bytes into the same space as our xfer_params...
+    // We know that we have two params.
+    SPI2.data_buf[8] = xfer_params[0] + (xfer_params[1] << 8);
+    if (0 == buf_len) {
+      set_state(XferState::RX_WAIT);
+      // We can afford to read two bytes into the same space as our xfer_params,
+      // We don't need DMA. Load the transfer parameters into the FIFO.
+      // LSB will be first over the bus.
+      buf = &xfer_params[2];  // Careful....
+      buf_len = 2;
+    }
+    else {
+      set_state(XferState::ADDR);
+    }
+    SPI2.data_buf[8] = xfer_params[0] + (xfer_params[1] << 8);
   }
+  _assert_cs(true);
 
   return XferFault::NONE;
 }
