@@ -67,7 +67,7 @@ ManuvrMsg _irq_data_arrival;
 
 // These are debug. Cut them.
 uint8_t active_imu_position = 0;
-
+bool op_abuse_test = false;
 
 /**
 * ISR for CPLD GPIO.
@@ -334,12 +334,17 @@ void CPLDDriver::_process_conf_update(uint8_t nu) {
       _er_set_flag(CPLD_FLAG_INT_OSC, false);
     }
   }
-  if (diff & CPLD_CONF_BIT_GPIO_0) {
+  if (diff & CPLD_CONF_BIT_GPIO) {
+    if (op_abuse_test) {
+      // Causes endless bus traffic to toggle the GPIO pin.
+      setCPLDConfig(CPLD_CONF_BIT_GPIO, !(nu & CPLD_CONF_BIT_GPIO));
+    }
   }
-  if (diff & CPLD_CONF_BIT_GPIO_1) {
+  if (diff & CPLD_CONF_BIT_DEN_AG_C) {
+    _er_set_flag(CPLD_CONF_BIT_DEN_AG_C, (nu & CPLD_CONF_BIT_DEN_AG_C));
   }
-  if (diff & CPLD_CONF_BIT_DEN_AG_0) {
-    _er_set_flag(CPLD_CONF_BIT_DEN_AG_0, (nu & CPLD_CONF_BIT_DEN_AG_0));
+  if (diff & CPLD_CONF_BIT_DEN_AG_MC) {
+    _er_set_flag(CPLD_CONF_BIT_DEN_AG_MC, (nu & CPLD_CONF_BIT_DEN_AG_MC));
   }
   cpld_conf_value = nu;
 }
@@ -778,22 +783,12 @@ int8_t CPLDDriver::writeRegister(uint8_t reg_addr, uint8_t val) {
 }
 
 /**
-* Change the frequency of the timer-generated external CPLD clock.
-*
-* @param  _freq  The desired frequency, in Hz.
-* @return 0 on success. Nonzero on failure.
-*/
-int CPLDDriver::setCPLDClkFreq(int _period) {
-  return (_set_timer_base((uint16_t) _period) ? 1 : 0);
-}
-
-
-/**
 * The CPLD has an internal oscillator that can continue running if we put the
 *   CPU to sleep.
 * If we are about to disable the internal oscillator, be sure to fire up the
 *   external clock first. Otherwise, the transfer will never complete. When the
-*   I/O callback arrives, disable the timer.
+*   I/O callback arrives, disable the external oscillator if you want the CPLD
+*   clock to be at DC.
 *
 * @param  on  Should the osciallator be enabled?
 */
@@ -1140,17 +1135,18 @@ void CPLDDriver::printDebug(StringBuilder *output) {
   //if (getVerbosity() > 6) output->concatf("-- volatile *cpld      0x%08x\n--\n", cpld);
   output->concatf("-- Conf                0x%02x\n",      cpld_conf_value);
   output->concatf("-- Osc (Int/Ext)       %s / %s\n",       (_er_flag(CPLD_FLAG_INT_OSC) ? "on":"off"), (_er_flag(CPLD_FLAG_EXT_OSC) ? "on":"off"));
-  //if (_er_flag(CPLD_FLAG_EXT_OSC)) {
+  if (_er_flag(CPLD_FLAG_EXT_OSC)) {
   //  output->concatf("-- Base GetState       0x%02x\n", HAL_TIM_Base_GetState(&htim1));
+    output->concatf("   Ext freq:           %u\n", _ext_clk_freq);
   //  output->concatf("-- PWM GetState        0x%02x\n", HAL_TIM_PWM_GetState(&htim1));
-  //}
-  output->concatf("-- DEN_AG Main         %s\n", (_er_flag(CPLD_FLAG_DEN_AG_STATE) ? "on":"off"));
+  }
+  output->concatf("-- DEN_AG (C/MC)       %s / %s\n", (_conf_bits_set(CPLD_CONF_BIT_DEN_AG_C) ? "on":"off"), (_conf_bits_set(CPLD_CONF_BIT_DEN_AG_MC) ? "on":"off"));
   output->concatf("-- Bus power conserve  %s\n", ((cpld_conf_value & CPLD_CONF_BIT_PWR_CONSRV) ? "on":"off"));
   if (cpld_wakeup_source & 0x80) {
     output->concatf("-- WAKEUP Signal       %d\n", (cpld_wakeup_source & 0x7F));
   }
 
-  output->concatf("--\n-- CPLD_GPIO (0/1)     %s / %s\n--\n",       (readPin(75) ? "hi":"lo"), (readPin(78) ? "hi":"lo"));
+  output->concatf("--\n-- CPLD_GPIO           %s\n--\n", (_conf_bits_set(CPLD_CONF_BIT_GPIO) ? "hi":"lo"));
 
   printHardwareState(output);
   if (getVerbosity() > 2) {
@@ -1215,24 +1211,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
-    case 's':     // SPI1 initialization...
-      switch (temp_int) {
-        case 1:
-          init_spi(1, 0);  // CPOL=1, CPHA=0, HW-driven
-          local_log.concat("Re-initialized SPI1.\n");
-          break;
-        case 2:
-          init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
-          local_log.concat("Re-initialized SPI2 into Mode-2.\n");
-          break;
-      }
-      break;
-
-    case '*':
-      raiseEvent(Kernel::returnEvent(DIGITABULUM_MSG_IMU_IRQ_RAISED));   // Raise an event
-      local_log.concat("Manual IRQ raise.\n");
-      break;
-
     case 'b':
       timeout_punch = false;
       bus_timeout_millis = temp_int;
@@ -1258,12 +1236,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
     case 'm':     // Set the number of callbacks per event.
       if (temp_int) spi_cb_per_event = temp_int;
       local_log.concatf("CPLD spi_cb_per_event:  %d\n", spi_cb_per_event);
-      break;
-
-
-    case 'k':     // SPI IRQ service?
-      _er_flip_flag(CPLD_FLAG_SVC_IRQS);
-      local_log.concatf("CPLD servicing IRQs?  %s\n", _er_flag(CPLD_FLAG_SVC_IRQS)?"yes":"no");
       break;
 
     case 'o':        // CPLD internal oscillator.
@@ -1302,14 +1274,9 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
-    case '&':
-      local_log.concatf("Advanced CPLD SPI work queue.\n");
-      Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, nullptr);   // Raise an event
-      break;
-
     case '%':   // Ext clock rate.
-      if (setCPLDClkFreq(strict_min(temp_int, 1)*1000)) {
-        local_log.concatf("Set ext clock period to %d kHz.\n", strict_min(temp_int, 1));
+      if (setCPLDClkFreq(strict_max(temp_int, 1)*1000)) {
+        local_log.concatf("Set ext clock period to %d kHz.\n", strict_max(temp_int, 1));
       }
       else {
         local_log.concat("Failed to set ext clock period.\n");
@@ -1322,55 +1289,50 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       break;
     case 'E':
     case 'e':
-      local_log.concatf("%s IRQ 74.\n", (*(str) == '_' ? "Clearing" : "Setting"));
-      setCPLDConfig(CPLD_CONF_BIT_IRQ_74, (*(str) == 'E'));
+      local_log.concatf("%s IRQ 74.\n", (*(str) == 'E' ? "Setting" : "Clearing"));
+      setIRQ74(*(str) == 'E');
       break;
     case 'A':
     case 'a':
-      local_log.concatf("%sabling IRQ scanning.\n", (*(str) == 'A' ? "En" : "Dis"));
-      setCPLDConfig(CPLD_CONF_BIT_IRQ_SCAN, (*(str) == 'A'));
+      local_log.concatf("IRQ scanning %sabled.\n", (*(str) == 'A' ? "Dis" : "En"));
+      disableIRQScan(*(str) == 'A');
       break;
-    case 'W':
-    case 'w':
-      local_log.concatf("%sabling constant IRQ streaming.\n", (*(str) == 'W' ? "En" : "Dis"));
-      setCPLDConfig(CPLD_CONF_BIT_IRQ_STREAM, (*(str) == 'W'));
-      break;
-
     case ':':
     case ';':
       local_log.concatf("%sabling bus power conservation.\n", (*(str) == ':' ? "En" : "Dis"));
       setCPLDConfig(CPLD_CONF_BIT_PWR_CONSRV, (*(str) == ':'));
       break;
-
-    case '_':
-    case '-':
-      local_log.concatf("enableCarpalAG(%s)\n", (*(str) == '-' ? "true" : "false"));
-      enableCarpalAG(*(str) == '-');
-      break;
-
     case '+':
     case '=':
-      local_log.concatf("enableMetacarpalAG(%s)\n", (*(str) == '+' ? "true" : "false"));
-      enableMetacarpalAG(*(str) == '+');
+      local_log.concatf("%s CPLD_GPIO.\n", (*(str) == '+' ? "Setting" : "Clearing"));
+      setGPIO(*(str) == '+');
       break;
-
     case '[':
     case '{':
-      local_log.concatf("%s CPLD_GPIO_0.\n", (*(str) == '[' ? "Clearing" : "Setting"));
-      setCPLDConfig(CPLD_CONF_BIT_GPIO_0, (*(str) == '{'));
+      local_log.concatf("DEN_AG Carpals(%s)\n", (*(str) == '{' ? "true" : "false"));
+      enableCarpalAG(*(str) == '{');
       break;
-
     case ']':
     case '}':
-      local_log.concatf("%s CPLD_GPIO_1.\n", (*(str) == ']' ? "Clearing" : "Setting"));
-      setCPLDConfig(CPLD_CONF_BIT_GPIO_1, (*(str) == '}'));
+      local_log.concatf("DEN_AG Metacarpals(%s)\n", (*(str) == '}' ? "true" : "false"));
+      enableMetacarpalAG(*(str) == '}');
       break;
-
-    case 'r':
+    case 'r':  /* Reset the CPLD. */
       reset();
       break;
 
-    case 'Z':
+
+    case 'W':  // TODO: Cut once system is fully validated.
+    case 'w':
+      local_log.concatf("%sabling constant IRQ streaming.\n", (*(str) == 'W' ? "En" : "Dis"));
+      setCPLDConfig(CPLD_CONF_BIT_IRQ_STREAM, (*(str) == 'W'));
+      break;
+    case '_':  // TODO: Cut once system is fully validated.
+    case '-':
+      local_log.concatf("op_abuse_test <--- (%s)\n", (*(str) == '_' ? "true" : "false"));
+      op_abuse_test = (*(str) == '_');
+      break;
+    case 'Z':  // TODO: Cut once system is fully validated.
     case 'z':
       if (temp_int) {
         _periodic_debug.alterSchedulePeriod(temp_int * 10);
@@ -1378,27 +1340,53 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
       _periodic_debug.enableSchedule(*(str) == 'Z');
       local_log.concatf("%s periodic reader.\n", (*(str) == 'z' ? "Stopping" : "Starting"));
       break;
-
-    case 'M':
-      switch (temp_int) {
-        default:
-          init_spi2(0, 0);  // CPOL=1, CPHA=0, HW-driven
-          local_log.concat("IRQ SPI is now in mode 0.\n");
-          break;
-        case 1:
-          init_spi2(0, 1);  // CPOL=1, CPHA=0, HW-driven
-          local_log.concat("IRQ SPI is now in mode 1.\n");
-          break;
-        case 2:
-          init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
-          local_log.concat("IRQ SPI is now in mode 2.\n");
-          break;
-        case 3:
-          init_spi2(1, 1);  // CPOL=1, CPHA=0, HW-driven
-          local_log.concat("IRQ SPI is now in mode 3.\n");
-          break;
-      }
+    case '&':  // TODO: Cut once system is fully validated.
+      local_log.concatf("Advanced CPLD SPI work queue.\n");
+      Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, nullptr);   // Raise an event
       break;
+
+    case 'k':  // TODO: Cut once system is fully validated.
+      _er_flip_flag(CPLD_FLAG_SVC_IRQS);
+      local_log.concatf("CPLD servicing IRQs?  %s\n", _er_flag(CPLD_FLAG_SVC_IRQS)?"yes":"no");
+      break;
+    case '*':  // TODO: Cut once system is fully validated.
+      raiseEvent(Kernel::returnEvent(DIGITABULUM_MSG_IMU_IRQ_RAISED));   // Raise an event
+      local_log.concat("Manual IRQ raise.\n");
+      break;
+
+    //case 's':  // TODO: Cut once system is fully validated.
+    //  switch (temp_int) {
+    //    case 1:     // SPI1 initialization...
+    //      init_spi(1, 0);  // CPOL=1, CPHA=0, HW-driven
+    //      local_log.concat("Re-initialized SPI1.\n");
+    //      break;
+    //    case 2:     // SPI2 initialization...
+    //      init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
+    //      local_log.concat("Re-initialized SPI2 into Mode-2.\n");
+    //      break;
+    //  }
+    //  break;
+
+    //case 'M':  // TODO: Cut once system is fully validated.
+    //  switch (temp_int) {
+    //    default:
+    //      init_spi2(0, 0);  // CPOL=1, CPHA=0, HW-driven
+    //      local_log.concat("IRQ SPI is now in mode 0.\n");
+    //      break;
+    //    case 1:
+    //      init_spi2(0, 1);  // CPOL=1, CPHA=0, HW-driven
+    //      local_log.concat("IRQ SPI is now in mode 1.\n");
+    //      break;
+    //    case 2:
+    //      init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
+    //      local_log.concat("IRQ SPI is now in mode 2.\n");
+    //      break;
+    //    case 3:
+    //      init_spi2(1, 1);  // CPOL=1, CPHA=0, HW-driven
+    //      local_log.concat("IRQ SPI is now in mode 3.\n");
+    //      break;
+    //  }
+    //  break;
 
     default:
       EventReceiver::procDirectDebugInstruction(input);

@@ -43,7 +43,33 @@ TODO: Until something smarter is done, it is assumed that this file will be
 extern "C" {
 #endif
 
-#include "../../Targets/ESP32/spi_common.h"
+//#include "../../Targets/ESP32/spi_common.h"
+#include "soc/spi_reg.h"
+#include "soc/gpio_sig_map.h"
+#include "soc/dport_reg.h"
+#include "soc/spi_struct.h"
+#include "soc/rtc_cntl_reg.h"
+
+#include "rom/ets_sys.h"
+#include "esp_types.h"
+#include "esp_attr.h"
+#include "esp_intr.h"
+#include "esp_intr_alloc.h"
+#include "esp_log.h"
+#include "esp_err.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "freertos/xtensa_api.h"
+#include "freertos/task.h"
+#include "freertos/ringbuf.h"
+#include "rom/lldesc.h"
+#include "driver/gpio.h"
+#include "driver/periph_ctrl.h"
+#include "esp_heap_alloc_caps.h"
+
+// The default frequency for the external clock, if it isn't otherwise supplied.
+#define DEFAULT_CPLD_FREQ 70000
+
 
 static uint16_t spi2_op_counter_0 = 0;
 static uint16_t spi2_op_counter_1 = 0;
@@ -73,9 +99,10 @@ static void IRAM_ATTR spi2_isr(void *arg) {
         uint16_t bytes = _threaded_op->buf_len & 0x1F;  // Cheesy cap to not overrun.
         memcpy((void*) _threaded_op->buf, (void*) &words[0], bytes);
       }
+      SPIBusOp* tmp = _threaded_op;
       _threaded_op = nullptr;
+      tmp->markComplete();
     }
-    Kernel::isrRaiseEvent(&SPIBusOp::event_spi_queue_ready);   // TODO: Audit for mem layout.
     SPI2.slave.trans_done  = 0;  // Clear interrupt.
     SPI2.cmd.usr = 1;  // Start the transfer.
   }
@@ -97,21 +124,38 @@ static void IRAM_ATTR spi2_isr(void *arg) {
 
 static void IRAM_ATTR spi3_isr(void *arg) {
   if (SPI3.slave.trans_done) {
-    uint32_t words[3] = {SPI3.data_buf[0], SPI3.data_buf[1], SPI3.data_buf[2]};
     spi2_op_counter_1++;
-    uint8_t* previous_buf;
-    if (_irq_data_ptr == _irq_data_0) {
-      _irq_data_ptr = (uint8_t*) _irq_data_1;
-      previous_buf  = (uint8_t*) _irq_data_0;
-    }
-    else {
-      _irq_data_ptr = (uint8_t*) _irq_data_0;
-      previous_buf  = (uint8_t*) _irq_data_1;
-    }
+    uint8_t* hw_buf;
+    uint8_t* prior_buf;
 
-    memcpy((void*) _irq_data_ptr, (void*) &words[0], 10);
+    // TODO: Would be better to use the hardware's idea of buffer.
+    if (_irq_data_ptr == _irq_data_0) {  // Double-buffer "Tock"
+      prior_buf     = (uint8_t*) _irq_data_0;
+      _irq_data_ptr = (uint8_t*) _irq_data_1;
+    }
+    else {  // Double-buffer "Tick"
+      prior_buf     = (uint8_t*) _irq_data_1;
+      _irq_data_ptr = (uint8_t*) _irq_data_0;
+    }
+    hw_buf        = (uint8_t*) &SPI3.data_buf[0];
+
+    // TODO: Code below will be better.
+    //if (SPI3.user.usr_mosi_highpart) {  // Double-buffer "Tock"
+    //  hw_buf        = (uint8_t*) &SPI3.data_buf[8];
+    //  prior_buf     = (uint8_t*) _irq_data_0;
+    //  _irq_data_ptr = (uint8_t*) _irq_data_1;
+    //  SPI3.user.usr_mosi_highpart = 0;
+    //}
+    //else {  // Double-buffer "Tick"
+    //  hw_buf        = (uint8_t*) &SPI3.data_buf[0];
+    //  prior_buf     = (uint8_t*) _irq_data_1;
+    //  _irq_data_ptr = (uint8_t*) _irq_data_0;
+    //  SPI3.user.usr_mosi_highpart = 1;
+    //}
+
+    memcpy((void*) _irq_data_ptr, (void*) hw_buf, 10);
     for (int i = 0; i < 10; i++) {
-      _irq_diff[i]   = previous_buf[i] ^ _irq_data_ptr[i];
+      _irq_diff[i]   = prior_buf[i] ^ _irq_data_ptr[i];
       _irq_accum[i] |= _irq_diff[i];
     }
 
@@ -142,20 +186,26 @@ void CPLDDriver::_deinit() {
 * Init the timer to provide the CPLD with an external clock. This clock is the
 *   most-flexible, and we use it by default.
 */
-bool CPLDDriver::_set_timer_base(uint16_t _freq) {
-  return (ESP_OK == ledc_set_freq(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0, _freq)) ;
+bool CPLDDriver::_set_timer_base(int hz) {
+  if (ESP_OK == ledc_set_freq(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0, hz)) {
+    _ext_clk_freq = hz;
+    return true;
+  }
+  return false;
 }
+
 
 /**
 * On the ESP32, we use the LED peripheral to provide the CPLD with an external
 *   clock. This clock is the most-flexible, and we use it by default.
 */
 void CPLDDriver::init_ext_clk() {
+  _er_set_flag(CPLD_FLAG_EXT_OSC, false);
   ledc_timer_config_t timer_conf = {
     speed_mode : LEDC_HIGH_SPEED_MODE, // TODO: Doc says this is the only mode supported.
     bit_num    : LEDC_TIMER_10_BIT,   // We only need a constant duty-cycle. Flip fewer bits.
     timer_num  : LEDC_TIMER_0,       // TODO: Understand implications of this choice.
-    freq_hz    : 4000               // PWM frequency.
+    freq_hz    : DEFAULT_CPLD_FREQ  // PWM frequency.
   };
   ledc_channel_config_t channel_conf = {
     gpio_num   : _pins.clk,            // The CLK output pin.
@@ -169,6 +219,8 @@ void CPLDDriver::init_ext_clk() {
   if (ESP_OK == ledc_timer_config(&timer_conf)) {
     if (ESP_OK == ledc_channel_config(&channel_conf)) {
       // Success. Clock should be running.
+      _ext_clk_freq = DEFAULT_CPLD_FREQ;
+      _er_set_flag(CPLD_FLAG_EXT_OSC, true);
     }
     else {
       Kernel::log("CPLDDriver::init_ext_clk(): Failed to configure channel.\n");
@@ -188,13 +240,11 @@ void CPLDDriver::init_ext_clk() {
 * @param  on  Should the osciallator be enabled?
 */
 void CPLDDriver::externalOscillator(bool on) {
-  _er_set_flag(CPLD_FLAG_EXT_OSC, on);
-  if (on) {
-    ledc_timer_resume(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0);
-  }
-  else {
+  esp_err_t ret = (on) ?
+    ledc_timer_resume(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0) :
     ledc_timer_pause(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0);
-  }
+
+  if (ESP_OK == ret) _er_set_flag(CPLD_FLAG_EXT_OSC, on);
 }
 
 
@@ -287,7 +337,7 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
     //SPI3.slave.cmd_define   = 1;  // Use the custom slave command mode.
 
     SPI3.user.doutdin       = 1;  // Full-duplex. Needed to avoid command/status interpretation.
-    SPI3.user.usr_miso_highpart = 1;  // The (non-existent) TX buffer should use W8-15.
+    SPI3.user.usr_mosi_highpart = 0;
     SPI3.user.usr_mosi      = 1;  // Enable this shift register.
 
     // TODO: For some reason, these settings are required, or no clocks are recognized.

@@ -100,6 +100,7 @@ Most cases would want to drive the clock signal in direct proportion to their
 The clock source can be changed at any time. Bus operations can continue
   uninterrupted throughout the transition between clock domains.
 
+Using the internal oscilllator will result in an SPI bus clock of ~2.8MHz.
 
 These are the hardware pin assignments and descriptions for the CPLD:
 --------------------------------------------------------------------------------
@@ -436,7 +437,7 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #define CPLD_FLAG_QUEUE_GUARD  0x10    // Prevent bus queue floods?
 #define CPLD_FLAG_SPI1_READY   0x20    // Is SPI1 initialized?
 #define CPLD_FLAG_SPI2_READY   0x40    // Is SPI2 initialized?
-#define CPLD_FLAG_DEN_AG_STATE 0x80    // DEN_AG state.
+//#define CPLD_FLAG_DEN_AG_STATE 0x80    // DEN_AG state.
 
 
 /* Event codes that are specific to Digitabulum's IMU apparatus. */
@@ -512,9 +513,9 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #define CPLD_CONF_BIT_IRQ_74     0x04  // Set IRQ bit-74
 #define CPLD_CONF_BIT_PWR_CONSRV 0x08  // Prevent bus driving on absent digits.
 #define CPLD_CONF_BIT_IRQ_STREAM 0x10  // Constantly stream IRQ data
-#define CPLD_CONF_BIT_GPIO_0     0x20  // Set GPIO_0 source
-#define CPLD_CONF_BIT_GPIO_1     0x40  // Set GPIO_1 state
-#define CPLD_CONF_BIT_DEN_AG_0   0x80  // Set The MC IMU DEN_AG pin
+#define CPLD_CONF_BIT_GPIO       0x20  // Set GPIO source
+#define CPLD_CONF_BIT_DEN_AG_C   0x40  // Set DEN_AG pin for the C IMU
+#define CPLD_CONF_BIT_DEN_AG_MC  0x80  // Set DEN_AG pin for the MC IMU
 
 
 //TODO: These values are not correct, but the pattern is.
@@ -672,12 +673,23 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     inline int8_t digitSleep(uint8_t x) {    return 0;       };   // TODO: When digits arrive.
     DigitState digitState(DigitPort);
 
-    /* The wrist-moun */
-    inline void enableCarpalAG(bool x) {     setPin(33, x);                             };
-    inline void enableMetacarpalAG(bool x) { setCPLDConfig(CPLD_CONF_BIT_DEN_AG_0, x);  };
+    /* Nice API break-out to CONFIG register bits. */
+    inline void setIRQ74(bool x) {           setCPLDConfig(CPLD_CONF_BIT_IRQ_74, x);     };
+    inline void setGPIO(bool x) {            setCPLDConfig(CPLD_CONF_BIT_GPIO, x);       };
+    inline void conserveDigitDrive(bool x) { setCPLDConfig(CPLD_CONF_BIT_PWR_CONSRV, x); };
+    inline void disableIRQScan(bool x) {     setCPLDConfig(CPLD_CONF_BIT_IRQ_SCAN, x);   };
+    inline void enableCarpalAG(bool x) {     setCPLDConfig(CPLD_CONF_BIT_DEN_AG_C, x);   };
+    inline void enableMetacarpalAG(bool x) { setCPLDConfig(CPLD_CONF_BIT_DEN_AG_MC, x);  };
 
-    /* Power vs performance */
-    int      setCPLDClkFreq(int);      // Set the CPLD external clock frequency.
+
+    /**
+    * Change the frequency of the timer-generated external CPLD clock.
+    *
+    * @param  _freq  The desired frequency, in Hz.
+    * @return 0 on success. Nonzero on failure.
+    */
+    inline int setCPLDClkFreq(int hz) {   return (_set_timer_base(hz) ? 1:0); };
+
     inline int8_t setWakeupSignal(uint8_t _val) {
       return writeRegister(CPLD_REG_WAKEUP_IRQ, _val | 0x80);
     };
@@ -698,6 +710,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
 
     /* List of pending callbacks for bus transactions. */
     PriorityQueue<SPIBusOp*> callback_queue;
+    uint32_t  _ext_clk_freq      = 0;  // In Hz.
     uint32_t  bus_timeout_millis = 5;  // How long to spend in IO_WAIT?
     uint8_t   spi_cb_per_event   = 3;  // Limit the number of callbacks processed per event.
     uint16_t  _digit_flags       = 0;  // Digit sleep state tracking flags.
@@ -705,6 +718,8 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     /* These values represent where in the IRQ buffer this IIU's bits lie. */
     inline uint8_t _irq_offset_byte(int idx) {  return (idx >> 1);     };
     inline uint8_t _irq_offset_bit(int idx) {   return (idx << 2);     };
+
+    inline bool    _conf_bits_set(uint8_t x) {  return (x == (cpld_conf_value & x)); };
 
     void _deinit();
     int8_t readRegister(uint8_t reg_addr);
@@ -718,7 +733,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
 
     /* Setup and init fxns. */
     void gpioSetup();
-    bool _set_timer_base(uint16_t);
+    bool _set_timer_base(int hz);
     void init_ext_clk();
     void init_spi(uint8_t cpol, uint8_t cpha);  // Pass 0 for CPHA 0.
     void init_spi2(uint8_t cpol, uint8_t cpha);  // Pass 0 for CPHA 0.
