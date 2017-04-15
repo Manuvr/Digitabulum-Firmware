@@ -24,6 +24,17 @@ limitations under the License.
 
 
 /*******************************************************************************
+* The cryptic debug commands and static formats are becoming a serious pain.
+* This is an experiment to be migrated upstream into Manuvr if it works well
+* enough.
+*******************************************************************************/
+
+typedef struct cli_cmd_def_t {
+  // TODO: Might-should use lambdas for function pointer?
+  const char* help_text;
+} CLICmdDef;
+
+/*******************************************************************************
 * .-. .----..----.    .-.     .--.  .-. .-..----.
 * | |{ {__  | {}  }   | |    / {} \ |  `| || {}  \
 * | |.-._} }| .-. \   | `--./  /\  \| |\  ||     /
@@ -72,15 +83,8 @@ bool op_abuse_test = false;
 /**
 * ISR for CPLD GPIO.
 */
-void cpld_gpio_isr_0() {
-  Kernel::log((readPin(75) ? "CPLD_GPIO_0 HIGH\n":"CPLD_GPIO_0 LOw\n"));
-}
-
-/**
-* ISR for CPLD GPIO.
-*/
-void cpld_gpio_isr_1() {
-  Kernel::log((readPin(78) ? "CPLD_GPIO_1 HIGH\n":"CPLD_GPIO_1 LOw\n"));
+void cpld_gpio_isr() {
+  Kernel::log("cpld_gpio_isr()\n");
 }
 
 /**
@@ -282,7 +286,7 @@ void CPLDDriver::gpioSetup() {
     setPin(_pins.oe, true);   // CPLD has internal pullup on this pin.
   }
   if (255 != _pins.gpio) {
-    setPinFxn(_pins.gpio, CHANGE, cpld_gpio_isr_1);
+    setPinFxn(_pins.gpio, CHANGE, cpld_gpio_isr);
   }
 }
 
@@ -1057,8 +1061,6 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
   switch (active_event->eventCode()) {
     /* General system events */
-    case MANUVR_MSG_INTERRUPTS_MASKED:
-      break;
     case MANUVR_MSG_SYS_REBOOT:
     case MANUVR_MSG_SYS_BOOTLOADER:
       // If we are to go down for reboot, reset the CPLD.

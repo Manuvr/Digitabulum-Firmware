@@ -74,7 +74,26 @@ extern "C" {
 static uint16_t spi2_op_counter_0 = 0;
 static uint16_t spi2_op_counter_1 = 0;
 
+/*******************************************************************************
+* .-. .----..----.    .-.     .--.  .-. .-..----.
+* | |{ {__  | {}  }   | |    / {} \ |  `| || {}  \
+* | |.-._} }| .-. \   | `--./  /\  \| |\  ||     /
+* `-'`----' `-' `-'   `----'`-'  `-'`-' `-'`----'
+*
+* Interrupt service routine support functions. Everything in this block
+*   executes under an ISR. Keep it brief...
+*******************************************************************************/
+
 static SPIBusOp* _threaded_op = nullptr;
+
+void reset_spi2_dma() {
+  SPI2.dma_conf.val |= (SPI_OUT_RST | SPI_AHBM_RST | SPI_AHBM_FIFO_RST);
+  SPI2.dma_out_link.start = 0;
+  SPI2.dma_in_link.start  = 0;
+  SPI2.dma_conf.val &= ~(SPI_OUT_RST | SPI_AHBM_RST | SPI_AHBM_FIFO_RST);
+}
+
+
 
 static void IRAM_ATTR spi2_isr(void *arg) {
   if (SPI2.slave.trans_done) {
@@ -185,6 +204,7 @@ void CPLDDriver::_deinit() {
 /**
 * Init the timer to provide the CPLD with an external clock. This clock is the
 *   most-flexible, and we use it by default.
+* TODO: Might not use the LED driver for this. Can't drive this clock to 40MHz.
 */
 bool CPLDDriver::_set_timer_base(int hz) {
   if (ESP_OK == ledc_set_freq(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0, hz)) {
@@ -293,6 +313,11 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
     SPI2.slave.trans_done   = 0;  // Interrupt conditions.
     SPI2.slave.trans_inten  = 1;  //
     SPI2.slv_rdbuf_dlen.bit_len   = 79;
+
+    // Setup DMA. We should never be dealing with the SPI FIFO directly
+    //   on this bus, since the hardware has linked-list support.
+    reset_spi2_dma();
+
 
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_cs],   PIN_FUNC_GPIO);
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_clk],  PIN_FUNC_GPIO);

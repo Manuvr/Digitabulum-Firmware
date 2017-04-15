@@ -44,7 +44,7 @@ This is where definition of (application or device)-specific parameters ought to
 
 #define MANUVR_EVENT_PROFILER
 #define MANUVR_DEBUG
-#define MANUVR_TEST_DRIVER
+#define CONFIG_MANUVR_BENCHMARKS
 //#define MANUVR_PIPE_DEBUG
 #define MANUVR_IMU_DEBUG
 
