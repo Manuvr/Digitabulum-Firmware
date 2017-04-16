@@ -99,8 +99,11 @@ static void IRAM_ATTR spi2_isr(void *arg) {
   if (SPI2.slave.trans_done) {
     spi2_op_counter_0++;
     if (_threaded_op) {
-      if (2 == _threaded_op->buf_len) {
+      if (2 == _threaded_op->transferParamLength()) {
+        // Internal CPLD register access doesn't use DMA, and expects us to
+        // shuffle bytes around to avoid heaped buffers and DMA overhead.
         uint32_t word = SPI2.data_buf[0];
+        // These should be xfer_param[2] and xfer_param[3].
         *(_threaded_op->buf+0) = (uint8_t) word & 0xFF;
         *(_threaded_op->buf+1) = (uint8_t) ((word & 0xFF00) >> 8);
       }
@@ -118,7 +121,7 @@ static void IRAM_ATTR spi2_isr(void *arg) {
         uint16_t bytes = _threaded_op->buf_len & 0x1F;  // Cheesy cap to not overrun.
         memcpy((void*) _threaded_op->buf, (void*) &words[0], bytes);
       }
-      SPIBusOp* tmp = _threaded_op;
+      SPIBusOp* tmp = _threaded_op;  // Concurrency "safety".
       _threaded_op = nullptr;
       tmp->markComplete();
     }
@@ -314,10 +317,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
     SPI2.slave.trans_inten  = 1;  //
     SPI2.slv_rdbuf_dlen.bit_len   = 79;
 
-    // Setup DMA. We should never be dealing with the SPI FIFO directly
-    //   on this bus, since the hardware has linked-list support.
     reset_spi2_dma();
-
 
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_cs],   PIN_FUNC_GPIO);
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_clk],  PIN_FUNC_GPIO);
@@ -537,8 +537,7 @@ XferFault SPIBusOp::begin() {
     return XferFault::BUS_BUSY;
   }
 
-  uint32_t first_four = 0;
-  switch (_param_len) {
+  switch (_param_len) {  // Length dictates our transfer setup.
     case 4:
     case 2:
       if (csAsserted()) {
@@ -546,6 +545,12 @@ XferFault SPIBusOp::begin() {
         return XferFault::BUS_BUSY;
       }
       set_state(XferState::INITIATE);  // Indicate that we now have bus control.
+      _threaded_op = this;
+
+      // Setup DMA. We should never be dealing with the SPI FIFO directly
+      //   on this bus, since the hardware has linked-list support.
+      reset_spi2_dma();
+
       break;
     case 3:
     case 1:
@@ -555,28 +560,29 @@ XferFault SPIBusOp::begin() {
       return XferFault::BAD_PARAM;
   }
 
-  _threaded_op = this;
 
-
-  if ((opcode == BusOpcode::TX) || (2 < _param_len)) {
-    set_state((0 == buf_len) ? XferState::TX_WAIT : XferState::ADDR);
+  if (2 != _param_len) {
+    set_state(XferState::ADDR);
     SPI2.data_buf[8] = xfer_params[0] + (xfer_params[1] << 8) + (xfer_params[2] << 16) + (xfer_params[3] << 24);
+    // TODO: This will be a DMA transfer. Code it as two linked lists with the initial
+    //   4 bytes from the read-side of the transfer consigned to a bit-bucket.
+    //   The first two bytes will contain the version and conf as always, but
+    //   IMU traffic should not be bothered with validating this.
   }
   else {
     // We know that we have two params.
     SPI2.data_buf[8] = xfer_params[0] + (xfer_params[1] << 8);
     if (0 == buf_len) {
-      set_state(XferState::RX_WAIT);
       // We can afford to read two bytes into the same space as our xfer_params,
       // We don't need DMA. Load the transfer parameters into the FIFO.
       // LSB will be first over the bus.
       buf = &xfer_params[2];  // Careful....
       buf_len = 2;
+      set_state(opcode == BusOpcode::TX ? XferState::TX_WAIT : XferState::RX_WAIT);
     }
     else {
       set_state(XferState::ADDR);
     }
-    SPI2.data_buf[8] = xfer_params[0] + (xfer_params[1] << 8);
   }
   _assert_cs(true);
 
@@ -606,9 +612,8 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
       return 0;
 
     case XferState::FAULT:
-      return 0;
+      return -1;
 
-    case XferState::QUEUED:
     case XferState::ADDR:
       if (buf_len > 0) {
         if (opcode == BusOpcode::TX) {
@@ -619,6 +624,8 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
         }
       }
       return 0;
+
+    case XferState::QUEUED:
     case XferState::STOP:
     case XferState::UNDEF:
 
@@ -626,7 +633,7 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
     case XferState::INITIATE:
     case XferState::IDLE:
       abort(XferFault::ILLEGAL_STATE);
-      return 0;
+      break;
   }
 
   return -1;

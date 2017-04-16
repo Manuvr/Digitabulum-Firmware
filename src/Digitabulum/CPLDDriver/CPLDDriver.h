@@ -411,6 +411,9 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #include <Platform/Peripherals/SPI/SPIBusOp.h>
 #include <Platform/Platform.h>
 
+#define CPLD_MINIMUM_VERSION  0x0D
+#define CPLD_GUARD_BIT_VALUE  0x03
+
 
 /* Compile-time bounds on memory usage. */
 #ifndef CPLD_SPI_MAX_QUEUE_PRINT
@@ -664,6 +667,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
       void procDirectDebugInstruction(StringBuilder*);
       void printDebug(StringBuilder*);
       void printHardwareState(StringBuilder*);
+      void printIRQs(StringBuilder*);
     #endif  //MANUVR_CONSOLE_SUPPORT
 
     /* High-level hardware control and discovery. */
@@ -743,7 +747,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     void internalOscillator(bool on);    // Enable or disable the CPLD internal oscillator.
     void setCPLDConfig(uint8_t mask, bool enable);
 
-    void _process_conf_update(uint8_t nu);
+    int _process_cpld_base_return(uint8_t nu_ver, uint8_t nu_conf);
 
     int8_t iiu_group_irq();
 

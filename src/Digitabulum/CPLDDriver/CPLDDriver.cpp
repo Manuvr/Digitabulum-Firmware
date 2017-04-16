@@ -321,37 +321,67 @@ void CPLDDriver::reset() {
 
 /**
 * This function evaluates the last-known state against the new state of the
-*   the configuration register, and processes consequences.
+*   the version and configuration registers, and processes consequences.
+* This function will be called as a result of every access (read or write) to
+*   a CPLD internal register. The return code decides if the class will proceed.
 *
 * @param  nu  The updated value of the config register.
+* @return 0 on nominal conditions, nonzero otherwise.
 */
-void CPLDDriver::_process_conf_update(uint8_t nu) {
-  uint8_t diff = cpld_conf_value ^ nu;
-  if (diff & CPLD_CONF_BIT_INT_CLK) {
-    if (nu & CPLD_CONF_BIT_INT_CLK) {
-      // TODO: Optimize the branches out of this once it is shown to work.
-      _er_set_flag(CPLD_FLAG_INT_OSC, true);
-      // We needed to wait for the last write operation before doing this...
-      externalOscillator(false);
+int CPLDDriver::_process_cpld_base_return(uint8_t _version, uint8_t _conf) {
+  if ((_version >= CPLD_MINIMUM_VERSION) && (0xFF != _version)) {
+    // This block means the version code that cxame back was ok.
+    if (_version != cpld_version) {
+      // If the version changed, it can only mean we are getting our first
+      //   confirmation of correct operation following reset.
+      cpld_version = _version;
+      Kernel::raiseEvent(DIGITABULUM_MSG_CPLD_RESET_COMPLETE, nullptr);
     }
-    else {
-      _er_set_flag(CPLD_FLAG_INT_OSC, false);
+    // Now deal with the config/status byte.
+    uint8_t diff = cpld_conf_value ^ _conf;
+    if (diff) {
+      if (diff & CPLD_CONF_BIT_INT_CLK) {
+        if (_conf & CPLD_CONF_BIT_INT_CLK) {
+          // TODO: Optimize the branches out of this once it is shown to work.
+          _er_set_flag(CPLD_FLAG_INT_OSC, true);
+          // We needed to wait for the last write operation before doing this...
+          externalOscillator(false);
+        }
+        else {
+          _er_set_flag(CPLD_FLAG_INT_OSC, false);
+        }
+      }
+      if (diff & CPLD_CONF_BIT_GPIO) {
+        if (op_abuse_test) {
+          // Causes endless bus traffic to toggle the GPIO pin.
+          setCPLDConfig(CPLD_CONF_BIT_GPIO, !(_conf & CPLD_CONF_BIT_GPIO));
+        }
+      }
+      if (diff & CPLD_CONF_BIT_DEN_AG_C) {
+        _er_set_flag(CPLD_CONF_BIT_DEN_AG_C, (_conf & CPLD_CONF_BIT_DEN_AG_C));
+      }
+      if (diff & CPLD_CONF_BIT_DEN_AG_MC) {
+        _er_set_flag(CPLD_CONF_BIT_DEN_AG_MC, (_conf & CPLD_CONF_BIT_DEN_AG_MC));
+      }
+      if (diff & CPLD_CONF_BIT_IRQ_SCAN) {
+      }
+      if (diff & CPLD_CONF_BIT_IRQ_74) {
+        // We ought to be expecting a message from the IRQ subsystem.
+      }
+      if (diff & CPLD_CONF_BIT_PWR_CONSRV) {
+      }
+      if (diff & CPLD_CONF_BIT_IRQ_STREAM) {
+      }
+      cpld_conf_value = _conf;
     }
+    return 0;
   }
-  if (diff & CPLD_CONF_BIT_GPIO) {
-    if (op_abuse_test) {
-      // Causes endless bus traffic to toggle the GPIO pin.
-      setCPLDConfig(CPLD_CONF_BIT_GPIO, !(nu & CPLD_CONF_BIT_GPIO));
-    }
+  if (getVerbosity() > 1) {
+    local_log.concatf("CPLD returned a bad version code: 0x%02x (Extant: 0x%02x), CONFIG: 0x%02x\n", _version, cpld_version, _conf);
   }
-  if (diff & CPLD_CONF_BIT_DEN_AG_C) {
-    _er_set_flag(CPLD_CONF_BIT_DEN_AG_C, (nu & CPLD_CONF_BIT_DEN_AG_C));
-  }
-  if (diff & CPLD_CONF_BIT_DEN_AG_MC) {
-    _er_set_flag(CPLD_CONF_BIT_DEN_AG_MC, (nu & CPLD_CONF_BIT_DEN_AG_MC));
-  }
-  cpld_conf_value = nu;
+  return -1;
 }
+
 
 
 
@@ -390,7 +420,6 @@ int8_t CPLDDriver::io_op_callahead(BusOp* _op) {
   return 0;
 }
 
-
 /**
 * When a bus operation completes, it is passed back to its issuing class.
 *
@@ -408,27 +437,27 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
 
   switch (op->getTransferParam(0)) {
     case CPLD_REG_VERSION:
-      {
-        uint8_t _version = op->getTransferParam(3);
-        if (getVerbosity() > 3) local_log.concatf("CPLD r%d.\n", _version);
-        if ((0 != _version) && (0xFF != _version)) {
-          if (_version != cpld_version) {
-            Kernel::raiseEvent(DIGITABULUM_MSG_CPLD_RESET_COMPLETE, nullptr);
-          }
-        }
-        else {
-          if (getVerbosity() > 1) local_log.concatf("CPLD returned a bad version code: 0x%02x\n", cpld_version);
-        }
+      if (0 == _process_cpld_base_return(op->getTransferParam(2), op->getTransferParam(3))) {
+        if (getVerbosity() > 3) local_log.concatf("CPLD r%d\n\tCONFIG:  0x%02x\n", cpld_version, cpld_conf_value);
       }
       break;
     case CPLD_REG_CONFIG:
-      _process_conf_update(op->getTransferParam(1));
+      // No special consequences on return, but we need to check rx/tx to decide
+      //   which byte is most-current.
+      _process_cpld_base_return(
+        op->getTransferParam(2),
+        op->getTransferParam(BusOpcode::TX == op->get_opcode() ? 3 : 1)
+      );
       break;
     case CPLD_REG_WAKEUP_IRQ:
-      cpld_wakeup_source = op->getTransferParam(1);
+      if (0 == _process_cpld_base_return(op->getTransferParam(2), op->getTransferParam(3))) {
+        cpld_wakeup_source = op->getTransferParam(1);
+      }
       break;
     case CPLD_REG_DIGIT_FORSAKE:
-      forsaken_digits = op->getTransferParam(1);
+      if (0 == _process_cpld_base_return(op->getTransferParam(2), op->getTransferParam(3))) {
+        forsaken_digits = op->getTransferParam(1);
+      }
       break;
     default:
       if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->getTransferParam(0));
@@ -880,73 +909,73 @@ bool CPLDDriver::digitExists(DigitPort x) {
 * @return the minimum number of signals outstanding, or -1 on error.
 */
 int8_t CPLDDriver::iiu_group_irq() {
-  int8_t return_value = 0;
+  int8_t return_value = -1;
+  if (CPLD_GUARD_BIT_VALUE == (_irq_accum[9] & 0x0F)) {
+    return_value = 0;
+    // This class cares about these IRQs...
+    // 68  Metacarpals present.
+    // 69  Digit 1 present.
+    // 70  Digit 2 present.
+    // 71  Digit 3 present.
+    // 72  Digit 4 present.
+    // 73  Digit 5 present.
+    // 74  CONFIG register, bit 2.
+    // 75  CPLD_OE
 
-  // This class cares about these IRQs...
-  // 68  Metacarpals present.
-  // 69  Digit 1 present.
-  // 70  Digit 2 present.
-  // 71  Digit 3 present.
-  // 72  Digit 4 present.
-  // 73  Digit 5 present.
-  // 74  CONFIG register, bit 2.
-  // 75  CPLD_OE
+    // TODO: Next CPLD revision should align these bits better.
+    if (_irq_accum[8] & 0xF0) {  // We only care about the upper-half here.
+      uint8_t reset_bits = 0xFF;   // These are bit we wish to preserve.
+      if (_irq_accum[8] & 0x10) {
+        reset_bits &= ~0x10;
+        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): MC PRESENT %s\n", irq_is_presently_high(68) ? "L->H":"H->L");
+      }
+      if (_irq_accum[8] & 0x20) {
+        reset_bits &= ~0x20;
+        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_1 %s\n", irq_is_presently_high(69) ? "L->H":"H->L");
+      }
+      if (_irq_accum[8] & 0x40) {
+        reset_bits &= ~0x40;
+        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_2 %s\n", irq_is_presently_high(70) ? "L->H":"H->L");
+      }
+      if (_irq_accum[8] & 0x80) {
+        reset_bits &= ~0x80;
+        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_3 %s\n", irq_is_presently_high(71) ? "L->H":"H->L");
+      }
+      _irq_accum[8] &= reset_bits;
+    }
 
-  // TODO: Next CPLD revision should align these bits better.
-  if (_irq_accum[8] & 0xF0) {  // We only care about the upper-half here.
-    uint8_t reset_bits = 0xFF;   // These are bit we wish to preserve.
-    if (_irq_accum[8] & 0x10) {
-      reset_bits &= ~0x10;
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): MC PRESENT %s\n", irq_is_presently_high(68) ? "L->H":"H->L");
+    if (_irq_accum[9] & 0xF0) {  // We only care about the upper-half here.
+      uint8_t reset_bits = 0xFF;   // These are bit we wish to preserve.
+      if (_irq_accum[9] & 0x80) {
+        reset_bits &= ~0x80;
+        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_4 %s\n", irq_is_presently_high(72) ? "L->H":"H->L");
+      }
+      if (_irq_accum[9] & 0x40) {
+        reset_bits &= ~0x40;
+        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_5 %s\n", irq_is_presently_high(73) ? "L->H":"H->L");
+      }
+      if (_irq_accum[9] & 0x20) {
+        reset_bits &= ~0x20;
+        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): CONFIG[2] %s\n", irq_is_presently_high(74) ? "L->H":"H->L");
+      }
+      if (_irq_accum[9] & 0x10) {
+        reset_bits &= ~0x10;
+        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): CPLD_OE %s.\n", irq_is_presently_high(75) ? "L->H":"H->L");
+      }
+      _irq_accum[9] &= reset_bits;  // Clear serviced bits.
     }
-    if (_irq_accum[8] & 0x20) {
-      reset_bits &= ~0x20;
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_1 %s\n", irq_is_presently_high(69) ? "L->H":"H->L");
+
+    // Now we will scan across the IMU signals looking for the data ready signals.
+    // If all the present digits have their signals raised, we fire the frame
+    //   read for that sensor aspect.
+    bool fire_m = true;
+    bool fire_i = true;
+    for (int i = 0; i < 9; i++) {  // We don't care about the last byte.
+      if (_irq_accum[i]) {
+        return_value++;
+      }
     }
-    if (_irq_accum[8] & 0x40) {
-      reset_bits &= ~0x40;
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_2 %s\n", irq_is_presently_high(70) ? "L->H":"H->L");
-    }
-    if (_irq_accum[8] & 0x80) {
-      reset_bits &= ~0x80;
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_3 %s\n", irq_is_presently_high(71) ? "L->H":"H->L");
-    }
-    _irq_accum[8] &= reset_bits;
   }
-
-  if (_irq_accum[9] & 0x0F) {  // We only care about the lower-half here.
-    uint8_t reset_bits = 0xFF;   // These are bit we wish to preserve.
-    if (_irq_accum[9] & 0x01) {
-      reset_bits &= ~0x01;
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_4 %s\n", irq_is_presently_high(72) ? "L->H":"H->L");
-    }
-    if (_irq_accum[9] & 0x02) {
-      reset_bits &= ~0x02;
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_5 %s\n", irq_is_presently_high(73) ? "L->H":"H->L");
-    }
-    if (_irq_accum[9] & 0x04) {
-      reset_bits &= ~0x04;
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): CONFIG[2] %s\n", irq_is_presently_high(74) ? "L->H":"H->L");
-    }
-    if (_irq_accum[9] & 0x08) {
-      reset_bits &= ~0x08;
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): CPLD_OE %s.\n", irq_is_presently_high(75) ? "L->H":"H->L");
-    }
-    _irq_accum[9] &= reset_bits;  // Clear serviced bits.
-  }
-
-  // Now we will scan across the IMU signals looking for the data ready signals.
-  // If all the present digits have their signals raised, we fire the frame
-  //   read for that sensor aspect.
-  bool fire_m = true;
-  bool fire_i = true;
-  for (int i = 0; i < 9; i++) {  // We don't care about the last byte.
-    if (_irq_accum[i]) {
-      return_value++;
-    }
-  }
-
-
   flushLocalLog();
   return return_value;
 }
@@ -1112,10 +1141,18 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
       break;
 
     case DIGITABULUM_MSG_CPLD_RESET_CALLBACK:
-      setPin(_pins.reset, true);
-      //if (getVerbosity() > 4) local_log.concat("CPLD reset.\n");
       return_value = 1;
-      //getCPLDVersion();
+      if (getVerbosity() > 4) local_log.concat("CPLD reset. Testing IRQs...\n");
+      // Release the reset pin and set the INT74 bit in the config register.
+      // This bit is off by default, and setting it will cause (in this order):
+      //  1) The IRQ aggregation machinary in the CPLD to send a frame, thus
+      //     allowing us to test for its proper operation when the message
+      //     arrives in the near-future.
+      //  2) The return bytes in the message carry version information and
+      //     initial configuration data. This allows us to check compatibility
+      //     and gives us proof of proper operation.
+      setPin(_pins.reset, true);
+      setIRQ74(true);
       break;
     default:
       return_value += EventReceiver::notify(active_event);
@@ -1132,7 +1169,7 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
-void CPLDDriver::printDebug(StringBuilder *output) {
+void CPLDDriver::printDebug(StringBuilder* output) {
   EventReceiver::printDebug(output);
   //if (getVerbosity() > 6) output->concatf("-- volatile *cpld      0x%08x\n--\n", cpld);
   output->concatf("-- Conf                0x%02x\n",      cpld_conf_value);
@@ -1161,8 +1198,19 @@ void CPLDDriver::printDebug(StringBuilder *output) {
   if (getVerbosity() > 3) {
     printWorkQueue(output, CPLD_SPI_MAX_QUEUE_PRINT);
   }
+  output->concat("\n\n");
+}
 
-  output->concatf("--\n-- Valid IRQ buffer:   %d\n", _irq_data_ptr == _irq_data_0 ? 0 : 1);
+/**
+* Debug support method. This fxn is only present in debug builds.
+*
+* @param   StringBuilder* The buffer into which this fxn should write its output.
+*/
+void CPLDDriver::printIRQs(StringBuilder* output) {
+  output->concatf("---< IRQ Aggregator >--------------------\n");
+  output->concatf("-- Constant scan:      %s\n", (_conf_bits_set(CPLD_CONF_BIT_IRQ_SCAN) ? "on":"off"));
+  output->concatf("-- IRQ74:              %c\n", (_conf_bits_set(CPLD_CONF_BIT_IRQ_74) ? '1':'0'));
+  output->concatf("-- Valid IRQ buffer:   %d\n", _irq_data_ptr == _irq_data_0 ? 0 : 1);
   output->concatf("-- IRQ service:        %sabled", (_er_flag(CPLD_FLAG_SVC_IRQS)?"en":"dis"));
   output->concat("\n--    _irq_data_0:     ");
   for (int i = 0; i < 10; i++) { output->concatf("%02x", _irq_data_0[i]); }
@@ -1177,7 +1225,7 @@ void CPLDDriver::printDebug(StringBuilder *output) {
 
 
 #if defined(MANUVR_CONSOLE_SUPPORT)
-void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
+void CPLDDriver::procDirectDebugInstruction(StringBuilder* input) {
   char* str = input->position(0);
 
   int temp_int = ((*(str) != 0) ? atoi((char*) str+1) : 0);
@@ -1206,6 +1254,9 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder *input) {
           local_log.concatf("\t3:   %s\n",   digitStateToString(digitState(DigitPort::PORT_3)));
           local_log.concatf("\t4:   %s\n",   digitStateToString(digitState(DigitPort::PORT_4)));
           local_log.concatf("\t5:   %s\n\n", digitStateToString(digitState(DigitPort::PORT_5)));
+          break;
+        case 4:
+          printIRQs(&local_log);
           break;
         default:
           printDebug(&local_log);
