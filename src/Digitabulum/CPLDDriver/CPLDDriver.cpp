@@ -446,7 +446,7 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
       //   which byte is most-current.
       _process_cpld_base_return(
         op->getTransferParam(2),
-        op->getTransferParam(BusOpcode::TX == op->get_opcode() ? 3 : 1)
+        op->getTransferParam(BusOpcode::TX == op->get_opcode() ? 1 : 3)
       );
       break;
     case CPLD_REG_WAKEUP_IRQ:
@@ -1176,21 +1176,22 @@ void CPLDDriver::printDebug(StringBuilder* output) {
   output->concatf("-- Osc (Int/Ext)       %s / %s\n",       (_er_flag(CPLD_FLAG_INT_OSC) ? "on":"off"), (_er_flag(CPLD_FLAG_EXT_OSC) ? "on":"off"));
   if (_er_flag(CPLD_FLAG_EXT_OSC)) {
   //  output->concatf("-- Base GetState       0x%02x\n", HAL_TIM_Base_GetState(&htim1));
-    output->concatf("   Ext freq:           %u\n", _ext_clk_freq);
+    output->concatf("-- Ext freq:           %u\n", _ext_clk_freq);
   //  output->concatf("-- PWM GetState        0x%02x\n", HAL_TIM_PWM_GetState(&htim1));
   }
-  output->concatf("-- DEN_AG (C/MC)       %s / %s\n", (_conf_bits_set(CPLD_CONF_BIT_DEN_AG_C) ? "on":"off"), (_conf_bits_set(CPLD_CONF_BIT_DEN_AG_MC) ? "on":"off"));
-  output->concatf("-- Bus power conserve  %s\n", ((cpld_conf_value & CPLD_CONF_BIT_PWR_CONSRV) ? "on":"off"));
+
   if (cpld_wakeup_source & 0x80) {
     output->concatf("-- WAKEUP Signal       %d\n", (cpld_wakeup_source & 0x7F));
   }
+  output->concatf("-- DEN_AG (C/MC)       %s / %s\n", (_conf_bits_set(CPLD_CONF_BIT_DEN_AG_C) ? "on":"off"), (_conf_bits_set(CPLD_CONF_BIT_DEN_AG_MC) ? "on":"off"));
+  output->concatf("-- CPLD_GPIO           %s\n", (_conf_bits_set(CPLD_CONF_BIT_GPIO) ? "hi":"lo"));
+  output->concatf("-- Bus power conserve  %s\n--\n", ((cpld_conf_value & CPLD_CONF_BIT_PWR_CONSRV) ? "on":"off"));
 
-  output->concatf("--\n-- CPLD_GPIO           %s\n--\n", (_conf_bits_set(CPLD_CONF_BIT_GPIO) ? "hi":"lo"));
 
   printHardwareState(output);
   if (getVerbosity() > 2) {
-    output->concatf("-- Guarding queue      %s\n",       (_er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no"));
-    output->concatf("-- spi_cb_per_event    %d\n--\n",   spi_cb_per_event);
+    output->concatf("-- Guarding queue      %s\n",   (_er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no"));
+    output->concatf("-- spi_cb_per_event    %d\n\n", spi_cb_per_event);
   }
   printAdapter(output);
   output->concatf("-- callback q depth    %d\n--\n", callback_queue.size());
@@ -1207,11 +1208,16 @@ void CPLDDriver::printDebug(StringBuilder* output) {
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
 void CPLDDriver::printIRQs(StringBuilder* output) {
-  output->concatf("---< IRQ Aggregator >--------------------\n");
-  output->concatf("-- Constant scan:      %s\n", (_conf_bits_set(CPLD_CONF_BIT_IRQ_SCAN) ? "on":"off"));
-  output->concatf("-- IRQ74:              %c\n", (_conf_bits_set(CPLD_CONF_BIT_IRQ_74) ? '1':'0'));
-  output->concatf("-- Valid IRQ buffer:   %d\n", _irq_data_ptr == _irq_data_0 ? 0 : 1);
-  output->concatf("-- IRQ service:        %sabled", (_er_flag(CPLD_FLAG_SVC_IRQS)?"en":"dis"));
+  output->concat("\n---< IRQ Aggregator >--------------------\n");
+  output->concatf("-- IRQ service         %sabled\n", (_er_flag(CPLD_FLAG_SVC_IRQS)?"en":"dis"));
+  output->concatf("-- Constant scan       %s\n", (_conf_bits_set(CPLD_CONF_BIT_IRQ_SCAN) ? "on":"off"));
+  output->concatf("-- IRQ74 (conf/agg)    %c / %c\n",
+    (_conf_bits_set(CPLD_CONF_BIT_IRQ_74) ? '1':'0'),
+    (irq_is_presently_high(74) ? '1':'0')
+  );
+  output->concatf("-- OE Pin              %c\n", (irq_is_presently_high(75) ? '1':'0'));
+  output->concatf("-- Valid IRQ buffer    %d", _irq_data_ptr == _irq_data_0 ? 0 : 1);
+
   output->concat("\n--    _irq_data_0:     ");
   for (int i = 0; i < 10; i++) { output->concatf("%02x", _irq_data_0[i]); }
   output->concat("\n--    _irq_data_1:     ");
@@ -1257,6 +1263,9 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder* input) {
           break;
         case 4:
           printIRQs(&local_log);
+          break;
+        case 5:
+          printHardwareState(&local_log);
           break;
         default:
           printDebug(&local_log);
