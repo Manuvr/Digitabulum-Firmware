@@ -83,7 +83,8 @@ extern "C" {
 
 static uint32_t spi2_byte_sink    = 0;
 static uint16_t spi2_op_counter_0 = 0;
-static uint16_t spi2_op_counter_1 = 0;
+static uint32_t spi2_op_counter_1 = 0;
+static uint16_t spi2_op_counter_2 = 0;
 
 static lldesc_t _ll_tx_1;
 static lldesc_t _ll_rx_1;
@@ -99,6 +100,20 @@ static lldesc_t _ll_rx_0;
 static SPIBusOp* _threaded_op = nullptr;
 
 void reset_spi2_dma() {
+  // Blindly clear all interrupts.
+  SPI2.dma_int_clr.val = (
+    SPI_OUT_TOTAL_EOF_INT_CLR |
+    SPI_OUT_EOF_INT_CLR |
+    SPI_OUT_DONE_INT_CLR |
+    SPI_IN_SUC_EOF_INT_CLR |
+    SPI_IN_ERR_EOF_INT_CLR |
+    SPI_IN_DONE_INT_CLR |
+    SPI_INLINK_DSCR_ERROR_INT_CLR |
+    SPI_OUTLINK_DSCR_ERROR_INT_CLR |
+    SPI_INLINK_DSCR_EMPTY_INT_CLR);
+  SPI2.dma_int_clr.val = 0;
+  SPI2.data_buf[0] = 0;  // TODO: Safety during debug.
+  SPI2.data_buf[8] = 0;  // TODO: Safety during debug.
   SPI2.dma_conf.val |= (SPI_OUT_RST | SPI_IN_RST | SPI_AHBM_RST | SPI_AHBM_FIFO_RST);
   SPI2.dma_out_link.start = 0;
   SPI2.dma_out_link.addr  = 0;
@@ -109,35 +124,46 @@ void reset_spi2_dma() {
 
 
 static void IRAM_ATTR dma_isr(void *arg) {
+  uint32_t isr_val = SPI2.dma_int_st.val;  // Current interrupt bits.
   spi2_op_counter_1++;
   if (SPI2.dma_int_st.inlink_dscr_empty) {   /* lack of enough inlink descriptors.*/
     //Kernel::log("dma_isr(): inlink_dscr_empty\n");
+    spi2_op_counter_1+=0x00000010;
   }
   if (SPI2.dma_int_st.outlink_dscr_error) {  /* outlink descriptor error.*/
     //Kernel::log("dma_isr(): outlink_dscr_error\n");
+    spi2_op_counter_1+=0x00000040;
   }
   if (SPI2.dma_int_st.inlink_dscr_error) {   /* inlink descriptor error.*/
     //Kernel::log("dma_isr(): inlink_dscr_error\n");
+    spi2_op_counter_1+=0x00000100;
   }
   if (SPI2.dma_int_st.in_done) {             /* completing usage of a inlink descriptor.*/
     //Kernel::log("dma_isr(): in_done\n");
+    spi2_op_counter_1+=0x00000400;
   }
   if (SPI2.dma_int_st.in_err_eof) {          /* receiving error.*/
     //Kernel::log("dma_isr(): in_err_eof\n");
+    spi2_op_counter_1+=0x00001000;
   }
   if (SPI2.dma_int_st.in_suc_eof) {          /* completing receiving all the packets from host.*/
     //Kernel::log("dma_isr(): in_suc_eof\n");
+    spi2_op_counter_1+=0x00004000;
   }
   if (SPI2.dma_int_st.out_done) {            /* completing usage of a outlink descriptor .*/
     //Kernel::log("dma_isr(): out_done\n");
+    spi2_op_counter_1+=0x00010000;
   }
   if (SPI2.dma_int_st.out_eof) {             /* sending a packet to host done.*/
     //Kernel::log("dma_isr(): out_eof\n");
+    spi2_op_counter_1+=0x00040000;
   }
   if (SPI2.dma_int_st.out_total_eof) {       /* sending all the packets to host done.*/
     //Kernel::log("dma_isr(): out_total_eof\n");
+    spi2_op_counter_1+=0x01000000;
   }
-  SPI2.dma_int_clr.val = 0x0000001F;  // Blindly clear all interrupts.
+  SPI2.dma_int_clr.val = isr_val;  // Blindly clear all interrupts.
+  SPI2.dma_int_clr.val = 0x00000000;  // Blindly clear all interrupts.
 }
 
 
@@ -148,20 +174,20 @@ static void IRAM_ATTR spi2_isr(void *arg) {
       if (2 == _threaded_op->transferParamLength()) {
         // Internal CPLD register access doesn't use DMA, and expects us to
         // shuffle bytes around to avoid heaped buffers and DMA overhead.
-        uint32_t word = SPI2.data_buf[0];
+        uint32_t word = SPI2.data_buf[8];
         // These should be xfer_param[2] and xfer_param[3].
         *(_threaded_op->buf+0) = (uint8_t) word & 0xFF;
         *(_threaded_op->buf+1) = (uint8_t) ((word & 0xFF00) >> 8);
       }
       else {
         // This was a DMA transaction. That ISR should deal with data movement.
+        spi2_op_counter_0+=0x0100;
       }
       SPIBusOp* tmp = _threaded_op;  // Concurrency "safety".
       _threaded_op = nullptr;
       tmp->markComplete();
     }
     SPI2.slave.trans_done  = 0;  // Clear interrupt.
-    SPI2.dma_int_clr.val = 0x0000001F;  // Blindly clear all DMA interrupts.
     //SPI3.cmd.usr = 1;  // Start the transfer afresh.
   }
 
@@ -328,11 +354,11 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
     SPI2.slave.cs_i_mode    = 2;  // Double-buffered CS signal.
     SPI2.slave.sync_reset   = 1;  // Reset the pins.
     //SPI2.slave.cmd_define   = 1;  // Use the custom slave command mode.
-    SPI2.user.usr_miso_highpart = 1;  // The TX buffer should use W8-15.
 
     SPI2.user.doutdin       = 1;  // Full-duplex. Needed to avoid command/status interpretation.
     //SPI2.user.usr_miso_highpart = 1;  // The TX buffer should use W8-15.
     //SPI2.user.usr_mosi_highpart = 0;  // The RX buffer should use W0-7.
+    SPI2.user.usr_mosi_highpart = 1;  // The RX buffer should use W8-15.
     SPI2.user.usr_miso_highpart = 0;  // The TX buffer should use W0-7.
     SPI2.user.usr_mosi      = 1;  // Enable RX shift register.
     SPI2.user.usr_miso      = 1;  // Enable TX shift register.
@@ -356,13 +382,14 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
     SPI2.slv_rdbuf_dlen.bit_len   = 2048;  // TODO: Arbitrary as long as >length?
     SPI2.slv_wrbuf_dlen.bit_len   = 2048;  // TODO: Arbitrary as long as >length?
 
-    //SPI2.dma_conf.out_eof_mode    = 1;  //
-    SPI2.dma_conf.out_eof_mode    = 0;  //
+    SPI2.dma_conf.out_eof_mode    = 1;  //
+    //SPI2.dma_conf.out_eof_mode    = 0;  //
     SPI2.dma_conf.dma_continue    = 1;  //
     SPI2.dma_conf.out_auto_wrback = 1;  //
 
     reset_spi2_dma();
-    uint32_t intrpt_mask = (
+
+    SPI2.dma_int_ena.val  = (
       SPI_OUT_TOTAL_EOF_INT_ENA |
       SPI_OUT_EOF_INT_ENA |
       SPI_OUT_DONE_INT_ENA |
@@ -372,9 +399,6 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
       SPI_INLINK_DSCR_ERROR_INT_ENA |
       SPI_OUTLINK_DSCR_ERROR_INT_ENA |
       SPI_INLINK_DSCR_EMPTY_INT_ENA);
-
-    SPI2.dma_int_clr.val  = intrpt_mask;
-    SPI2.dma_int_ena.val  = intrpt_mask;
 
     SET_PERI_REG_BITS(DPORT_SPI_DMA_CHAN_SEL_REG, 3, 1, 2);   // Point DMA channel to HSPI.
 
@@ -395,7 +419,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
 
     periph_module_enable(PERIPH_HSPI_MODULE);
     esp_intr_alloc(ETS_SPI2_INTR_SOURCE, ESP_INTR_FLAG_IRAM, spi2_isr, nullptr, nullptr);
-    //esp_intr_alloc(ETS_SPI2_DMA_INTR_SOURCE, ESP_INTR_FLAG_IRAM, dma_isr, nullptr, nullptr);
+    esp_intr_alloc(ETS_SPI2_DMA_INTR_SOURCE, ESP_INTR_FLAG_IRAM, dma_isr, nullptr, nullptr);
     _er_set_flag(CPLD_FLAG_SPI1_READY, true);
   }
 }
@@ -488,6 +512,8 @@ int8_t CPLDDriver::bus_deinit() {
 }
 
 
+uint8_t _debug_in_buf[40];
+
 /**
 * Debug support method. This fxn is only present in debug builds.
 *
@@ -496,7 +522,7 @@ int8_t CPLDDriver::bus_deinit() {
 void CPLDDriver::printHardwareState(StringBuilder *output) {
   output->concatf("\n-- SPI2 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI1_READY)?"on":"OFF"));
   output->concatf("--\t Ops(HW/ISR): 0x%08x / 0x%04x\n", SPI2.slave.trans_cnt, spi2_op_counter_0);
-  output->concatf("--\t op_count_1:  0x%04x\n", spi2_op_counter_1);
+  output->concatf("--\t op_count_1:  0x%08x\n", spi2_op_counter_1);
   output->concatf("--\t Last State:  0x%02x\n", (uint8_t) SPI2.slave.last_state);
   output->concatf("--\t Last CMD:    0x%02x\n", (uint8_t) SPI2.slave.last_command);
   output->concatf("--\t Ext2.State:  0x%02x\n", (uint8_t) SPI2.ext2.st);
@@ -529,9 +555,9 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
   output->concatf("--\t dma_conf:        0x%08x\n", SPI2.dma_conf.val);
   output->concatf("--\t dma_status (rx/tx):  %c / %c\n", SPI2.dma_status.rx_en?'1':'0', SPI2.dma_status.tx_en?'1':'0');
   //output->concatf("--\t   reserved2 (byte count?):  0x%08x\n--\n", SPI2.dma_status.reserved2);
-  output->concatf("--\n--\t spi2_byte_sink:  (%p) 0x%08x\n", (uintptr_t) &spi2_byte_sink, spi2_byte_sink);
+  output->concatf("--\n--\t spi2_byte_sink:  (%p) 0x%08x\n--\n", (uintptr_t) &spi2_byte_sink, spi2_byte_sink);
   output->concatf("--\t &_ll_(t/r)x_0:   %p / %p\n", (uintptr_t) &_ll_tx_0, (uintptr_t) &_ll_rx_0);
-  output->concatf("--\t DMA_(OUT/IN)STATUS: 0x%08x / 0x%08x\n", SPI2.dma_rx_status, SPI2.dma_tx_status);
+  output->concatf("--\t DMA_(RX/TX)STATUS: 0x%08x / 0x%08x\n", SPI2.dma_rx_status, SPI2.dma_tx_status);
   output->concatf("--\t DMA_OUT_EOF_DESC_ADDR: %p\n--\n", (uintptr_t) SPI2.dma_out_eof_des_addr);
   output->concatf("--\t Current (out/in):      %p / %p\n", (uintptr_t) SPI2.dma_outlink_dscr, (uintptr_t) SPI2.dma_inlink_dscr);
   output->concatf("--\t outlink_dscr_bf(0/1):  %p / %p\n", (uintptr_t) SPI2.dma_outlink_dscr_bf0, (uintptr_t) SPI2.dma_outlink_dscr_bf1);
@@ -545,6 +571,15 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
       (uint32_t) SPI2.data_buf[i + 1],
       (uint32_t) SPI2.data_buf[i + 2],
       (uint32_t) SPI2.data_buf[i + 3]
+    );
+  }
+
+  for (int i = 0; i < 40; i+=4) {
+    output->concatf(
+      "--\t _debug_in_buf[%2d-%2d]:   0x%02x 0x%02x 0x%02x 0x%02x\n",
+      i, i+3,
+      (uint8_t) _debug_in_buf[i + 0], (uint8_t) _debug_in_buf[i + 1],
+      (uint8_t) _debug_in_buf[i + 2], (uint8_t) _debug_in_buf[i + 3]
     );
   }
 
@@ -596,6 +631,7 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
 *  |   / / \ o     |  _  |_              from the BusOp class.
 * _|_ /  \_/ o   \_| (_) |_)
 *******************************************************************************/
+
 /**
 * Calling this member will cause the bus operation to be started.
 *
@@ -631,30 +667,34 @@ XferFault SPIBusOp::begin() {
       return XferFault::BAD_PARAM;
   }
 
+  bzero(&_debug_in_buf[0], 40);
+
   if (2 != _param_len) {
     set_state(XferState::ADDR);
     // This will be a DMA transfer. Code it as two linked lists with the initial
     //   4 bytes from the read-side of the transfer consigned to a bit-bucket.
     //   The first two bytes will contain the version and conf as always, but
     //   IMU traffic should not be bothered with validating this.
-    _ll_tx_0.length = 4;
+    /*_ll_tx_0.length = 4;
     _ll_tx_0.size   = 4;
     _ll_tx_0.owner  = LLDESC_HW_OWNED;
     _ll_tx_0.sosf   = 0;
     _ll_tx_0.offset = 0;
     _ll_tx_0.empty  = 0;
     _ll_tx_0.buf    = &xfer_params[0];
+    */
+
+    SPI2.data_buf[0] = xfer_params[0] + (xfer_params[1] << 8) + (xfer_params[2] << 16) + (xfer_params[3] << 24);
 
     //SPI2.mosi_dlen.usr_mosi_dbitlen = (32 + (buf_len << 3)) - 1;
     //SPI2.miso_dlen.usr_miso_dbitlen = (32 + (buf_len << 3)) - 1;
-    SPI2.dma_out_link.addr  = ((uint32_t) &_ll_tx_0) & LLDESC_ADDR_MASK;  // TODO: Only 20 of these bits matter?
 
     switch (opcode) {
       case BusOpcode::TX:
         // For a transmission, the the buffer will contain outbound data.
         // There is no RX component here, so we can simply load in two lists.
         _ll_tx_0.empty  = (uint32_t) &_ll_tx_1;
-        _ll_tx_0.sosf   = 1;
+        _ll_tx_0.sosf   = 0; //1;
         _ll_tx_0.eof    = 0;
 
         _ll_tx_1.length = buf_len;   // TODO: Is this a blocksize/count situation?
@@ -672,7 +712,7 @@ XferFault SPIBusOp::begin() {
         // We need to shunt the first four bytes to come back into a bit-bucket.
         _ll_tx_0.eof    = 1;   // Implies that the first TX is the only TX.
 
-        _ll_rx_0.length = 4;
+        /*_ll_rx_0.length = 4;
         _ll_rx_0.size   = 4;
         _ll_rx_0.owner  = LLDESC_HW_OWNED;
         _ll_rx_0.sosf   = 1;
@@ -689,15 +729,26 @@ XferFault SPIBusOp::begin() {
         _ll_rx_1.empty  = 0;
         _ll_rx_1.eof    = 1;
         _ll_rx_1.buf    = buf;
+        */
+        _ll_rx_0.length = buf_len + 4;
+        _ll_rx_0.size   = buf_len + 4;
+        _ll_rx_0.owner  = LLDESC_HW_OWNED;
+        _ll_rx_0.sosf   = 0;
+        _ll_rx_0.offset = 0;
+        _ll_rx_0.empty  = 0;
+        _ll_rx_0.eof    = 1;
+        _ll_rx_0.buf    = (uint8_t*) &_debug_in_buf[0];
 
-        SPI2.dma_in_link.addr   = ((uint32_t) &_ll_rx_0) & LLDESC_ADDR_MASK;  // TODO: Only 20 of these bits matter?
-        SPI2.dma_in_link.start  = 1;  // Signify DMA readiness.
+
+        //SPI2.dma_in_link.addr   = ((uint32_t) &_ll_rx_0) & LLDESC_ADDR_MASK;  // TODO: Only 20 of these bits matter?
+        //SPI2.dma_in_link.start  = 1;  // Signify DMA readiness.
         break;
 
       default:
         break;
     }
-    SPI2.dma_out_link.start = 1;  // Signify DMA readiness.
+    //SPI2.dma_out_link.addr  = ((uint32_t) &_ll_tx_0) & LLDESC_ADDR_MASK;  // TODO: Only 20 of these bits matter?
+    //SPI2.dma_out_link.start = 1;  // Signify DMA readiness.
   }
   else {
     //SPI2.user.usr_mosi      = 1;  // We turn on the RX shift-register.

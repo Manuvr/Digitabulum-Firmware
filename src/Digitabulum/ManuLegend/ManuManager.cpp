@@ -1649,6 +1649,21 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
       queue_io_job(&_preformed_fifo_read);
       break;
 
+    case '(':   // CPLD debug
+    case ')':   // CPLD debug
+      {
+        bzero(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
+        // Because the identity address is the same for both aspects, and their addresses
+        //   are continuous, we just read 1 byte from 34 sensors.
+        SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
+        //  op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
+        //op->setBuffer(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
+        op->setParams(((*(str) == '(' ? CPLD_REG_IMU_DM_P_M : CPLD_REG_IMU_DM_P_I) | 0x80), 0x01, 16, 0x8F);
+        op->setBuffer(&_reg_block_ident[0], 16);
+        queue_io_job(op);
+      }
+      break;
+
     default:
       EventReceiver::procDirectDebugInstruction(input);
       break;
@@ -1673,6 +1688,8 @@ int8_t ManuManager::read_identities() {
   // Because the identity address is the same for both aspects, and their addresses
   //   are continuous, we just read 1 byte from 34 sensors.
   SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
+//  op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
+  //op->setBuffer(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
   op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
   op->setBuffer(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
   return queue_io_job(op);
