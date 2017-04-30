@@ -70,7 +70,7 @@ int16_t _reg_block_m_data[3 * LEGEND_DATASET_IIU_COUNT];
 
 /* Identity registers for both sensor aspects. */
 uint8_t _reg_block_ident[2 * LEGEND_DATASET_IIU_COUNT];
-
+uint8_t _reg_block_ident_guard[2];
 
 /****** Ranked-access registers below this line. ******************************/
 /*
@@ -644,7 +644,7 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
     case RegID::M_WHO_AM_I:
     case RegID::AG_WHO_AM_I:  // This is a bulk identity check.
       for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
-        if ((0x3d == _reg_block_ident[i]) && (0x68 == _reg_block_ident[i+LEGEND_DATASET_IIU_COUNT])) {
+        if ((0x68 == _reg_block_ident[i]) && (0x3d == _reg_block_ident[i+LEGEND_DATASET_IIU_COUNT])) {
           // If the identity bytes match, set the IMU state appropriately...
           fetchIMU(i)->setDesiredState(IMUState::STAGE_1);
         }
@@ -1098,7 +1098,7 @@ int8_t ManuManager::notify(ManuvrMsg* active_event) {
 */
 void ManuManager::printIMURollCall(StringBuilder *output) {
   EventReceiver::printDebug(output);
-  output->concat("-- Intertial integration units: id(M/I)\n--\n-- Dgt      Prx        Imt        Dst        Reports\n");
+  output->concat("-- Intertial integration units: id(I/M)\n--\n-- Dgt      Prx        Imt        Dst        Reports\n");
   // TODO: Audit usage of length-specified integers as iterators. Cut where not
   //   important and check effects on optimization, as some arch's take a
   //   runtime hit for access in any length less than thier ALU widths.
@@ -1131,6 +1131,7 @@ void ManuManager::printIMURollCall(StringBuilder *output) {
     output->concatf("%02u(%02x/%02x)  ", i, _reg_block_ident[i], _reg_block_ident[i+LEGEND_DATASET_IIU_COUNT]);
   }
   output->concatf("%c\n\n", _bus->digitExists(DigitPort::PORT_5) ? 'Y' : ' ');
+  output->concatf("Guard bytes (%02x/%02x)\n\n", _reg_block_ident_guard[0], _reg_block_ident_guard[1]);
 }
 
 
@@ -1658,8 +1659,32 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
         SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
         //  op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
         //op->setBuffer(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
-        op->setParams(((*(str) == '(' ? CPLD_REG_IMU_DM_P_M : CPLD_REG_IMU_DM_P_I) | 0x80), 0x01, 16, 0x8F);
-        op->setBuffer(&_reg_block_ident[0], 16);
+        op->setParams(((*(str) == '(' ? CPLD_REG_IMU_DM_P_M : CPLD_REG_IMU_DM_P_I) | 0x80), 0x01, 17, 0x8F);
+        op->setBuffer(&_reg_block_ident[(*(str) == '(' ? 0 : 17)], 17);
+        queue_io_job(op);
+      }
+      break;
+
+    case '0':   // CPLD debug
+    case '1':   // CPLD debug
+    case '2':   // CPLD debug
+    case '3':   // CPLD debug
+    case '4':   // CPLD debug
+    case '5':   // CPLD debug
+    case '6':   // CPLD debug
+    case '7':   // CPLD debug
+    case '8':   // CPLD debug
+    case '9':   // CPLD debug
+      {
+        bzero(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
+        // Because the identity address is the same for both aspects, and their addresses
+        //   are continuous, we just read 1 byte from 34 sensors.
+        SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
+        //  op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
+        //op->setBuffer(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
+        uint8_t imu_num = (uint8_t) atoi(str) % 17;
+        op->setParams((imu_num | 0x80), 0x01, 17, 0x8F);
+        op->setBuffer(&_reg_block_ident[imu_num], 17);
         queue_io_job(op);
       }
       break;

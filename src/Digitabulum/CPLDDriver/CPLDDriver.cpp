@@ -1415,12 +1415,12 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder* input) {
       raiseEvent(Kernel::returnEvent(DIGITABULUM_MSG_IMU_IRQ_RAISED));   // Raise an event
       local_log.concat("Manual IRQ raise.\n");
       break;
-    case '~':  // TODO: Cut once system is fully validated.
-      if (_threaded_op) {
-        _threaded_op->_assert_cs(true);
-        local_log.concat("Asserting chip-select.\n");
-      }
-      break;
+    //case '~':  // TODO: Cut once system is fully validated.
+    //  if (_threaded_op) {
+    //    _threaded_op->_assert_cs(true);
+    //    local_log.concat("Asserting chip-select.\n");
+    //  }
+    //  break;
 
     //case 's':  // TODO: Cut once system is fully validated.
     //  switch (temp_int) {

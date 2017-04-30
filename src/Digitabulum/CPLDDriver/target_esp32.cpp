@@ -112,8 +112,6 @@ void IRAM_ATTR reset_spi2_dma() {
     SPI_OUTLINK_DSCR_ERROR_INT_CLR |
     SPI_INLINK_DSCR_EMPTY_INT_CLR);
   SPI2.dma_int_clr.val = 0;
-  //SPI2.dma_conf.dma_rx_stop = 1;  // We run DMA in continuous mode.
-  //SPI2.dma_conf.dma_tx_stop = 1;
   SPI2.dma_conf.val |= (SPI_OUT_RST | SPI_IN_RST | SPI_AHBM_RST | SPI_AHBM_FIFO_RST | SPI_DMA_TX_STOP | SPI_DMA_RX_STOP);
   SPI2.dma_out_link.val  = 0x10000000;  // Clear everything but the stop bit.
   SPI2.dma_in_link.val   = 0x10000000;  // Clear everything but the stop bit.
@@ -124,41 +122,32 @@ static void IRAM_ATTR dma_isr(void *arg) {
   uint32_t isr_val = SPI2.dma_int_st.val;  // Current interrupt bits.
   spi2_op_counter_1++;
   if (SPI2.dma_int_st.inlink_dscr_empty) {   /* lack of enough inlink descriptors.*/
-    //Kernel::log("dma_isr(): inlink_dscr_empty\n");
     spi2_op_counter_1+=0x00000010;
     SPI2.dma_in_link.val   = 0x10000000;  // Clear everything but the stop bit.
   }
   if (SPI2.dma_int_st.outlink_dscr_error) {  /* outlink descriptor error.*/
-    //Kernel::log("dma_isr(): outlink_dscr_error\n");
     spi2_op_counter_1+=0x00000040;
   }
   if (SPI2.dma_int_st.inlink_dscr_error) {   /* inlink descriptor error.*/
-    //Kernel::log("dma_isr(): inlink_dscr_error\n");
     spi2_op_counter_1+=0x00000100;
   }
   if (SPI2.dma_int_st.in_done) {             /* completing usage of a inlink descriptor.*/
-    //Kernel::log("dma_isr(): in_done\n");
     spi2_op_counter_1+=0x00000400;
   }
   if (SPI2.dma_int_st.in_err_eof) {          /* receiving error.*/
-    //Kernel::log("dma_isr(): in_err_eof\n");
     spi2_op_counter_1+=0x00001000;
   }
   if (SPI2.dma_int_st.in_suc_eof) {          /* completing receiving all the packets from host.*/
-    //Kernel::log("dma_isr(): in_suc_eof\n");
     spi2_op_counter_1+=0x00004000;
     SPI2.dma_in_link.val   = 0x10000000;  // Clear everything but the stop bit.
   }
   if (SPI2.dma_int_st.out_done) {            /* completing usage of a outlink descriptor .*/
-    //Kernel::log("dma_isr(): out_done\n");
     spi2_op_counter_1+=0x00010000;
   }
   if (SPI2.dma_int_st.out_eof) {             /* sending a packet to host done.*/
-    //Kernel::log("dma_isr(): out_eof\n");
     spi2_op_counter_1+=0x00040000;
   }
   if (SPI2.dma_int_st.out_total_eof) {       /* sending all the packets to host done.*/
-    //Kernel::log("dma_isr(): out_total_eof\n");
     spi2_op_counter_1+=0x01000000;
     SPI2.dma_out_link.val  = 0x10000000;  // Clear everything but the stop bit.
   }
@@ -235,8 +224,8 @@ static void IRAM_ATTR spi3_isr(void *arg) {
     //  SPI3.user.usr_mosi_highpart = 1;
     //}
 
-    memcpy((void*) _irq_data_ptr, (void*) hw_buf, 10);
     for (int i = 0; i < 10; i++) {
+      *(_irq_data_ptr + i) = *(hw_buf + i);
       _irq_diff[i]   = prior_buf[i] ^ _irq_data_ptr[i];
       _irq_accum[i] |= _irq_diff[i];
     }
@@ -516,8 +505,8 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
   output->concatf("\n-- SPI2 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI1_READY)?"on":"OFF"));
   output->concatf("--\t Ops(HW/ISR): 0x%08x / 0x%04x\n", SPI2.slave.trans_cnt, spi2_op_counter_0);
   output->concatf("--\t op_count_1:  0x%08x\n", spi2_op_counter_1);
-  output->concatf("--\t Last State:  0x%02x\n", (uint8_t) SPI2.slave.last_state);
-  output->concatf("--\t Last CMD:    0x%02x\n", (uint8_t) SPI2.slave.last_command);
+  //output->concatf("--\t Last State:  0x%02x\n", (uint8_t) SPI2.slave.last_state);
+  //output->concatf("--\t Last CMD:    0x%02x\n", (uint8_t) SPI2.slave.last_command);
   output->concatf("--\t Ext2.State:  0x%02x\n", (uint8_t) SPI2.ext2.st);
   output->concatf("--\t mosi_dlen:   0x%08x\n", SPI2.mosi_dlen.val);
   output->concatf("--\t miso_dlen:   0x%08x\n", SPI2.miso_dlen.val);
@@ -528,14 +517,14 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
   output->concatf("--\t rd_status:   0x%08x\n", SPI2.rd_status.val);
   output->concatf("--\t user:        0x%08x\n", SPI2.user.val);
   //output->concatf("--\t user1:       0x%08x\n", SPI2.user1.val);
-  output->concatf("--\t user2:       0x%08x\n", SPI2.user2.val);
+  //output->concatf("--\t user2:       0x%08x\n", SPI2.user2.val);
 
   //output->concatf("--\t pin:         0x%08x\n", SPI2.pin.val);
   //output->concatf("--\t clock:       0x%08x\n", SPI2.clock.val);
   output->concatf("--\t slave:       0x%08x\n", SPI2.slave.val);
-  output->concatf("--\t slave1:      0x%08x\n", SPI2.slave1.val);
-  output->concatf("--\t slave2:      0x%08x\n", SPI2.slave2.val);
-  output->concatf("--\t slave3:      0x%08x\n", SPI2.slave3.val);
+  //output->concatf("--\t slave1:      0x%08x\n", SPI2.slave1.val);
+  //output->concatf("--\t slave2:      0x%08x\n", SPI2.slave2.val);
+  //output->concatf("--\t slave3:      0x%08x\n", SPI2.slave3.val);
   //output->concatf("--\t ext0:        0x%08x\n", SPI2.ext0.val);
   //output->concatf("--\t ext1:        0x%08x\n", SPI2.ext1.val);
   //output->concatf("--\t ext2:        0x%08x\n", SPI2.ext2.val);
@@ -549,7 +538,7 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
   output->concatf("--\t dma_status (rx/tx):  %c / %c\n", SPI2.dma_status.rx_en?'1':'0', SPI2.dma_status.tx_en?'1':'0');
   //output->concatf("--\t   reserved2 (byte count?):  0x%08x\n--\n", SPI2.dma_status.reserved2);
   output->concatf("--\n--\t spi2_byte_sink:  (%p) 0x%08x\n--\n", (uintptr_t) &spi2_byte_sink, spi2_byte_sink);
-  output->concatf("--\t &_ll_(t/r)x_0:   %p / %p\n", (uintptr_t) &_ll_tx_0, (uintptr_t) &_ll_rx_0);
+  //output->concatf("--\t &_ll_(t/r)x_0:   %p / %p\n", (uintptr_t) &_ll_tx_0, (uintptr_t) &_ll_rx_0);
   output->concatf("--\t DMA_(RX/TX)STATUS: 0x%08x / 0x%08x\n", SPI2.dma_rx_status, SPI2.dma_tx_status);
   output->concatf("--\t DMA_OUT_EOF_DESC_ADDR: %p\n--\n", (uintptr_t) SPI2.dma_out_eof_des_addr);
   output->concatf("--\t Current (out/in):      %p / %p\n", (uintptr_t) SPI2.dma_outlink_dscr, (uintptr_t) SPI2.dma_inlink_dscr);
@@ -635,12 +624,6 @@ XferFault SPIBusOp::begin() {
         abort(XferFault::BUS_BUSY);
         return XferFault::BUS_BUSY;
       }
-      set_state(XferState::INITIATE);  // Indicate that we now have bus control.
-      _threaded_op = this;
-
-      // Setup DMA. We should never be dealing with the SPI FIFO directly
-      //   on this bus, since the hardware has linked-list support.
-      reset_spi2_dma();
       break;
 
     case 3:
@@ -650,6 +633,10 @@ XferFault SPIBusOp::begin() {
       abort(XferFault::BAD_PARAM);
       return XferFault::BAD_PARAM;
   }
+
+  set_state(XferState::INITIATE);  // Indicate that we now have bus control.
+  _threaded_op = this;
+  reset_spi2_dma();
 
   SPI2.data_buf[0] = 0;  // TODO: Safety during debug.
   SPI2.data_buf[8] = 0;  // TODO: Safety during debug.
@@ -688,7 +675,7 @@ XferFault SPIBusOp::begin() {
         break;
 
       case BusOpcode::RX:
-    {
+        {
         // For a reception, the the buffer will be filled from the bus.
         // We need to shunt the first four bytes to come back into a bit-bucket.
         SPI2.data_buf[0] = xfer_params[0] + (xfer_params[1] << 8) + (xfer_params[2] << 16) + (xfer_params[3] << 24);
@@ -704,10 +691,10 @@ XferFault SPIBusOp::begin() {
 
         // Doc says this must be a multiple of 4.
         // TODO: Over-running a buffer on purpose feels very dangerous.
-        //uint32_t padded_len = buf_len + ((4 - (buf_len & 0x00000003)) & 0x00000003);
+        uint32_t padded_len = buf_len + ((4 - (buf_len & 0x00000003)) & 0x00000003);
         //uint32_t padded_len = buf_len & 0xFFFFFFFC;
-        _ll_rx_1.length = buf_len;
-        _ll_rx_1.size   = buf_len;
+        _ll_rx_1.length = padded_len;
+        _ll_rx_1.size   = padded_len;
         _ll_rx_1.owner  = LLDESC_HW_OWNED;
         _ll_rx_1.sosf   = 0;
         _ll_rx_1.offset = 0;
@@ -718,7 +705,7 @@ XferFault SPIBusOp::begin() {
         SPI2.dma_in_link.addr   = ((uint32_t) &_ll_rx_0) & LLDESC_ADDR_MASK;  // TODO: Only 20 of these bits matter?
         SPI2.dma_in_link.stop   = 0;  // Signify DMA readiness.
         SPI2.dma_in_link.start  = 1;
-      }
+        }
         break;
 
       default:
@@ -733,7 +720,6 @@ XferFault SPIBusOp::begin() {
   }
   else {
     //SPI2.user.usr_mosi      = 1;  // We turn on the RX shift-register.
-    //SPI2.user.usr_miso      = 1;  // We turn on the TX shift-register.
     // We know that we have two params.
     SPI2.data_buf[0] = xfer_params[0] + (xfer_params[1] << 8);
     if (0 == buf_len) {
