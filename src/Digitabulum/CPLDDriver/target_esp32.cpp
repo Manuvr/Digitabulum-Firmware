@@ -36,18 +36,19 @@ TODO: Until something smarter is done, it is assumed that this file will be
   #include'd by pre-processor choice in CPLDDriver.cpp.
 */
 
-#include "driver/ledc.h"
-
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-//#include "../../Targets/ESP32/spi_common.h"
-#include "soc/spi_reg.h"
+#include "driver/ledc.h"
+
 #include "soc/gpio_sig_map.h"
+#include "soc/spi_reg.h"
 #include "soc/dport_reg.h"
+#include "soc/dport_access.h"
 #include "soc/spi_struct.h"
+
 #include "soc/rtc_cntl_reg.h"
 
 #include "rom/ets_sys.h"
@@ -123,7 +124,9 @@ static void IRAM_ATTR dma_isr(void *arg) {
   spi2_op_counter_1++;
   if (SPI2.dma_int_st.inlink_dscr_empty) {   /* lack of enough inlink descriptors.*/
     spi2_op_counter_1+=0x00000010;
+    // TODO: We need to disengage DMA so that excess bytes end up in the FIFO for later recovery.
     SPI2.dma_in_link.val   = 0x10000000;  // Clear everything but the stop bit.
+    SPI2.dma_conf.val |= (SPI_IN_RST | SPI_DMA_RX_STOP);
   }
   if (SPI2.dma_int_st.outlink_dscr_error) {  /* outlink descriptor error.*/
     spi2_op_counter_1+=0x00000040;
@@ -139,7 +142,9 @@ static void IRAM_ATTR dma_isr(void *arg) {
   }
   if (SPI2.dma_int_st.in_suc_eof) {          /* completing receiving all the packets from host.*/
     spi2_op_counter_1+=0x00004000;
+    //SPI2.dma_conf.dma_rx_stop   = 1;  //
     SPI2.dma_in_link.val   = 0x10000000;  // Clear everything but the stop bit.
+    SPI2.dma_conf.val |= (SPI_IN_RST | SPI_DMA_RX_STOP);
   }
   if (SPI2.dma_int_st.out_done) {            /* completing usage of a outlink descriptor .*/
     spi2_op_counter_1+=0x00010000;
@@ -158,18 +163,28 @@ static void IRAM_ATTR dma_isr(void *arg) {
 
 static void IRAM_ATTR spi2_isr(void *arg) {
   if (SPI2.slave.trans_done) {
-    spi2_op_counter_0++;
-    if (_threaded_op) {
+    if ((SPI2.slv_rd_bit.slv_rdata_bit == SPI2.slv_rdbuf_dlen.bit_len) && (_threaded_op)) {
+      spi2_op_counter_0++;
+      uint32_t word = SPI2.data_buf[8];
       if (2 == _threaded_op->transferParamLength()) {
         // Internal CPLD register access doesn't use DMA, and expects us to
         // shuffle bytes around to avoid heaped buffers and DMA overhead.
-        uint32_t word = SPI2.data_buf[8];
-        // These should be xfer_param[2] and xfer_param[3].
+        // buf+0/1 should be xfer_param[2/3].
         *(_threaded_op->buf+0) = (uint8_t) word & 0xFF;
         *(_threaded_op->buf+1) = (uint8_t) ((word & 0xFF00) >> 8);
       }
       else {
-        // This was a DMA transaction. That ISR should deal with data movement.
+        // This was a DMA transaction.
+        int i = 0;
+        // If we have trailing data following DMA, copy from the FIFO.
+        switch (_threaded_op->buf_len & 0xFFFFFFFC) {
+          case 3:   *(_threaded_op->buf + i++) = (uint8_t) ((word >> 16) & 0xFF);
+          case 2:   *(_threaded_op->buf + i++) = (uint8_t) ((word >> 8) & 0xFF);
+          case 1:   *(_threaded_op->buf + i++) = (uint8_t) (word & 0xFF);
+          case 0:
+          default:
+            break;
+        }
         reset_spi2_dma();
       }
       SPIBusOp* tmp = _threaded_op;  // Concurrency "safety".
@@ -366,10 +381,12 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
     SPI2.slave.trans_done         = 0;  // Clear txfr-done bit.
     SPI2.slave.trans_inten        = 1;  // Enable txfr-done interrupt.
 
-    SPI2.dma_conf.out_eof_mode    = 1;  //
-    //SPI2.dma_conf.out_eof_mode    = 0;  //
-    //SPI2.dma_conf.dma_continue    = 1;  //
-    SPI2.dma_conf.out_auto_wrback = 1;  //
+    SPI2.dma_conf.out_eof_mode     = 1;  //
+    //SPI2.dma_conf.out_eof_mode     = 0;  //
+    //SPI2.dma_conf.dma_continue     = 1;  //
+    SPI2.dma_conf.out_auto_wrback  = 1;  //
+    //SPI2.dma_conf.outdscr_burst_en = 1;  // TX operations are bursted out of memory.
+    //SPI2.dma_conf.indscr_burst_en  = 1;  // RX operations are bursted into memory.
 
     reset_spi2_dma();
 
@@ -384,7 +401,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
       SPI_OUTLINK_DSCR_ERROR_INT_ENA |
       SPI_INLINK_DSCR_EMPTY_INT_ENA);
 
-    SET_PERI_REG_BITS(DPORT_SPI_DMA_CHAN_SEL_REG, 3, 1, 2);   // Point DMA channel to HSPI.
+    DPORT_SET_PERI_REG_BITS(DPORT_SPI_DMA_CHAN_SEL_REG, 3, 1, 2);   // Point DMA channel to HSPI.
 
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_cs],   PIN_FUNC_GPIO);
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_clk],  PIN_FUNC_GPIO);
@@ -647,6 +664,11 @@ XferFault SPIBusOp::begin() {
     //   4 bytes from the read-side of the transfer consigned to a bit-bucket.
     //   The first two bytes will contain the version and conf as always, but
     //   IMU traffic should not be bothered with validating this.
+
+    // Doc says this must be a multiple of 4.
+    // TODO: Over-running a buffer on purpose feels very dangerous.
+    uint32_t padded_len = buf_len + ((4 - (buf_len & 0x00000003)) & 0x00000003);
+    //uint32_t padded_len = buf_len & 0xFFFFFFFC;
     switch (opcode) {
       case BusOpcode::TX:
         // For a transmission, the the buffer will contain outbound data.
@@ -663,7 +685,7 @@ XferFault SPIBusOp::begin() {
         _ll_tx_1.length = buf_len;   // TODO: Is this a blocksize/count situation?
         _ll_tx_1.size   = buf_len;   // TODO: Doc says this must be a multiple of 4.
         _ll_tx_1.owner  = LLDESC_HW_OWNED;
-        _ll_tx_1.sosf   = 1;
+        _ll_tx_1.sosf   = 0;
         _ll_tx_1.offset = 0;
         _ll_tx_1.empty  = 0;
         _ll_tx_1.eof    = 1;
@@ -672,10 +694,12 @@ XferFault SPIBusOp::begin() {
         //SPI2.dma_out_link.addr  = ((uint32_t) &_ll_tx_0) & LLDESC_ADDR_MASK;  // TODO: Only 20 of these bits matter?
         //SPI2.dma_out_link.stop    = 0;  // Signify DMA readiness.
         //SPI2.dma_out_link.start = 1;
+
+        SPI2.slv_rdbuf_dlen.bit_len   = 0;
+        SPI2.slv_wrbuf_dlen.bit_len   = (32 + (buf_len << 3)) - 1;
         break;
 
       case BusOpcode::RX:
-        {
         // For a reception, the the buffer will be filled from the bus.
         // We need to shunt the first four bytes to come back into a bit-bucket.
         SPI2.data_buf[0] = xfer_params[0] + (xfer_params[1] << 8) + (xfer_params[2] << 16) + (xfer_params[3] << 24);
@@ -689,10 +713,6 @@ XferFault SPIBusOp::begin() {
         _ll_rx_0.eof    = 0;
         _ll_rx_0.buf    = (uint8_t*) &spi2_byte_sink;
 
-        // Doc says this must be a multiple of 4.
-        // TODO: Over-running a buffer on purpose feels very dangerous.
-        uint32_t padded_len = buf_len + ((4 - (buf_len & 0x00000003)) & 0x00000003);
-        //uint32_t padded_len = buf_len & 0xFFFFFFFC;
         _ll_rx_1.length = padded_len;
         _ll_rx_1.size   = padded_len;
         _ll_rx_1.owner  = LLDESC_HW_OWNED;
@@ -705,7 +725,10 @@ XferFault SPIBusOp::begin() {
         SPI2.dma_in_link.addr   = ((uint32_t) &_ll_rx_0) & LLDESC_ADDR_MASK;  // TODO: Only 20 of these bits matter?
         SPI2.dma_in_link.stop   = 0;  // Signify DMA readiness.
         SPI2.dma_in_link.start  = 1;
-        }
+
+        SPI2.slv_rd_bit.slv_rdata_bit = (32 + (buf_len << 3)) - 1;
+        SPI2.slv_rdbuf_dlen.bit_len   = (32 + (buf_len << 3)) - 1;
+        SPI2.slv_wrbuf_dlen.bit_len   = 31;
         break;
 
       default:
@@ -713,8 +736,6 @@ XferFault SPIBusOp::begin() {
     }
     SPI2.dma_conf.val &= ~(SPI_DMA_TX_STOP | SPI_DMA_RX_STOP);  // If in continuous mode.
     SPI2.dma_conf.val &= ~(SPI_OUT_RST | SPI_IN_RST | SPI_AHBM_RST | SPI_AHBM_FIFO_RST);
-    SPI2.slv_rdbuf_dlen.bit_len   = (32 + (buf_len << 3)) - 1;
-    SPI2.slv_wrbuf_dlen.bit_len   = (32 + (buf_len << 3)) - 1;
     //SPI2.mosi_dlen.usr_mosi_dbitlen = (32 + (buf_len << 3)) - 1;
     //SPI2.miso_dlen.usr_miso_dbitlen = (32 + (buf_len << 3)) - 1;
   }

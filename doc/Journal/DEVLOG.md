@@ -97,11 +97,6 @@ This test will have to repeated with the magnetometers engaged to measure the in
 Ran for 5 minutes. 380mA @5v. ~2 deg C increase over ambient.
 I am convinced of the trace integrity and thermal relief.
 
-------
-
-##### Notes on ESP32 DMA
-
-
 
 ---J. Ian Lindsay 2017.04.29
 

@@ -70,7 +70,7 @@ int16_t _reg_block_m_data[3 * LEGEND_DATASET_IIU_COUNT];
 
 /* Identity registers for both sensor aspects. */
 uint8_t _reg_block_ident[2 * LEGEND_DATASET_IIU_COUNT];
-uint8_t _reg_block_ident_guard[2];
+uint8_t _reg_block_ident_guard[2];   // TODO: This is only here long enough to fix ESP32 DMA issues.
 
 /****** Ranked-access registers below this line. ******************************/
 /*
@@ -1130,8 +1130,11 @@ void ManuManager::printIMURollCall(StringBuilder *output) {
     }
     output->concatf("%02u(%02x/%02x)  ", i, _reg_block_ident[i], _reg_block_ident[i+LEGEND_DATASET_IIU_COUNT]);
   }
-  output->concatf("%c\n\n", _bus->digitExists(DigitPort::PORT_5) ? 'Y' : ' ');
-  output->concatf("Guard bytes (%02x/%02x)\n\n", _reg_block_ident_guard[0], _reg_block_ident_guard[1]);
+  //output->concatf("%c\n\n", _bus->digitExists(DigitPort::PORT_5) ? 'Y' : ' ');
+  output->concatf("%c\n", _bus->digitExists(DigitPort::PORT_5) ? 'Y' : ' ');
+  output->concatf("ID/Guard     (%p/%p)\n", &_reg_block_ident_guard[0], &_reg_block_ident[0]);
+  output->concatf("Guard bytes  (%02x/%02x)\n", _reg_block_ident[34], _reg_block_ident[35]);
+  output->concatf("Extend bytes (%02x/%02x)\n\n", _reg_block_ident_guard[0], _reg_block_ident_guard[1]);
 }
 
 
