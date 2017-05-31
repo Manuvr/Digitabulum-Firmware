@@ -44,26 +44,26 @@ Intended target is an WROOM32 SoC module.
 * Pin defs given here assume a WROOM32 module.
 */
 const CPLDPins cpld_pins(
-  15,  // Reset
-  18,  // Transfer request
-  255, // CPLD's IRQ_WAKEUP pin
-  25,  // CPLD clock input
-  255, //22,  // CPLD OE pin
+  26,  // Reset
+  21,  // Transfer request
+  255, // IO33 (input-only) CPLD's IRQ_WAKEUP pin
+  2,   // CPLD clock input
+  25,  // CPLD OE pin
   255, //23,  // CPLD GPIO
-  19,  // SPI1 CS
-  23,  // SPI1 CLK
-  22,  // SPI1 MOSI
-  21,  // SPI1 MISO
-  33,  // IO33 (input-only) (SPI2 CS)
+  5,   // SPI1 CS
+  17,  // SPI1 CLK
+  16,  // SPI1 MOSI
+  4,   // SPI1 MISO
+  35,  // IO35 (SPI2 CS)
   34,  // IO34 (input-only) (SPI2 CLK)
-  35   // IO35 (input-only) (SPI2 MOSI)
+  32   // IO32 (input-only) (SPI2 MOSI)
 );
 
 
 const I2CAdapterOptions i2c_opts(
   0,   // Device number
   14,  // IO14 (sda)
-  13   // IO13 (scl)
+  12   // IO12 (scl)
 );
 
 const ATECC508Opts atecc_opts(
@@ -71,8 +71,8 @@ const ATECC508Opts atecc_opts(
 );
 
 const ADP8866Pins adp_opts(
-  27,  // IO27 (Reset)
-  12   // IO12 (IRQ)
+  19,  // IO19 (Reset)
+  18   // IO18 (IRQ)
 );
 
 /*
@@ -130,7 +130,9 @@ void app_main() {
 
   platform.bootstrap();
 
-  gpioDefine(26, GPIOMode::OUTPUT);
+  gpioDefine(15, GPIOMode::OUTPUT);
+  gpioDefine(27, GPIOMode::OUTPUT);
+  setPin(27, true);
 
   unsigned long ms_0 = millis();
   unsigned long ms_1 = ms_0;
@@ -141,7 +143,7 @@ void app_main() {
     ms_1 = millis();
     kernel->advanceScheduler(ms_1 - ms_0);
     ms_0 = ms_1;
-    setPin(26, odd_even);
+    setPin(15, odd_even);
     odd_even = !odd_even;
   }
 }

@@ -209,6 +209,9 @@ static void IRAM_ATTR spi2_isr(void *arg) {
 }
 
 
+/**
+* ISR for receiving IRQ data.
+*/
 static void IRAM_ATTR spi3_isr(void *arg) {
   if (SPI3.slave.trans_done) {
     uint8_t* hw_buf;
