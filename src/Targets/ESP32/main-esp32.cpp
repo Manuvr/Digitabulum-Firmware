@@ -29,6 +29,8 @@ Intended target is an WROOM32 SoC module.
 #include <Platform/Peripherals/I2C/I2CAdapter.h>
 #include <Drivers/ADP8866/ADP8866.h>
 #include <Drivers/ATECC508/ATECC508.h>
+#include <Drivers/PMIC/BQ24155/BQ24155.h>
+#include <Drivers/PMIC/LTC294x/LTC294x.h>
 #include <XenoSession/Console/ManuvrConsole.h>
 
 #include "Digitabulum/CPLDDriver/CPLDDriver.h"
@@ -74,6 +76,18 @@ const ADP8866Pins adp_opts(
   19,  // IO19 (Reset)
   18   // IO18 (IRQ)
 );
+
+const LTC294xOpts gas_gauge_opts(
+  13   // IO13 (Alert pin)
+);
+
+const BQ24155Opts charger_opts(
+  255, // N/A (STAT)
+  23   // IO23 (ISEL)
+);
+
+#define ESP32_LED_PIN             15  // This is an LED.
+#define ESP32_AUX_REGULATOR_PIN   27
 
 /*
 Pins
@@ -128,22 +142,31 @@ void app_main() {
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
   kernel->subscribe((EventReceiver*) &leds);
 
+  BQ24155 charger(&charger_opts);
+  i2c.addSlaveDevice((I2CDeviceWithRegisters*) &charger);
+
+  LTC294x gas_gauge(&gas_gauge_opts);
+  i2c.addSlaveDevice((I2CDeviceWithRegisters*) &gas_gauge);
+
   platform.bootstrap();
 
-  gpioDefine(15, GPIOMode::OUTPUT);
-  gpioDefine(27, GPIOMode::OUTPUT);
-  setPin(27, true);
+  // This is the ~SHUTDOWN signal to the secondary regulator. Setting it high
+  //   will cause the CPLD board to be powered at 3.3v.
+  gpioDefine(ESP32_AUX_REGULATOR_PIN, GPIOMode::OUTPUT);
+  setPin(ESP32_AUX_REGULATOR_PIN, true);
 
   unsigned long ms_0 = millis();
   unsigned long ms_1 = ms_0;
   bool odd_even = false;
+
+  gpioDefine(ESP32_LED_PIN, GPIOMode::OUTPUT);
 
   while (1) {
     kernel->procIdleFlags();
     ms_1 = millis();
     kernel->advanceScheduler(ms_1 - ms_0);
     ms_0 = ms_1;
-    setPin(15, odd_even);
+    setPin(ESP32_LED_PIN, odd_even);
     odd_even = !odd_even;
   }
 }
