@@ -51,7 +51,7 @@ const CPLDPins cpld_pins(
   255, // IO33 (input-only) CPLD's IRQ_WAKEUP pin
   2,   // CPLD clock input
   25,  // CPLD OE pin
-  255, //23,  // CPLD GPIO
+  255, // N/A (CPLD GPIO)
   5,   // SPI1 CS
   17,  // SPI1 CLK
   16,  // SPI1 MOSI
@@ -82,6 +82,7 @@ const LTC294xOpts gas_gauge_opts(
 );
 
 const BQ24155Opts charger_opts(
+  68,  // Sense resistor is 68 mOhm.
   255, // N/A (STAT)
   23   // IO23 (ISEL)
 );
@@ -144,11 +145,13 @@ void app_main() {
 
   BQ24155 charger(&charger_opts);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &charger);
+  kernel->subscribe((EventReceiver*) &charger);
 
   LTC294x gas_gauge(&gas_gauge_opts);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &gas_gauge);
 
   platform.bootstrap();
+
 
   // This is the ~SHUTDOWN signal to the secondary regulator. Setting it high
   //   will cause the CPLD board to be powered at 3.3v.
