@@ -1,5 +1,5 @@
 /*
-File:   DigitabulumPMU.h
+File:   DigitabulumPMU-r1.h
 Author: J. Ian Lindsay
 Date:   2015.11.25
 

@@ -1,5 +1,5 @@
 /*
-File:   DigitabulumPMU.cpp
+File:   DigitabulumPMU-r1.cpp
 Author: J. Ian Lindsay
 Date:   2016.03.31
 
@@ -20,7 +20,7 @@ limitations under the License.
 */
 
 
-#include "DigitabulumPMU.h"
+#include "DigitabulumPMU-r1.h"
 #include <DataStructures/StringBuilder.h>
 
 #include <Platform/Platform.h>
