@@ -126,38 +126,38 @@ uint8_t CPLDDriver::cpld_wakeup_source = 0;  // WAKEUP mapping.
 SPIBusOp  CPLDDriver::preallocated_bus_jobs[CPLD_SPI_PREALLOC_COUNT];
 
 const unsigned char MSG_ARGS_IMU_READ[] = {
-  UINT8_FM, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM, 0  // IMU id and a collection of readings.
+  (uint8_t)TCode::UINT8, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT, 0  // IMU id and a collection of readings.
 };
 
 
 const unsigned char MSG_ARGS_IMU_LEGEND[] = {
-  UINT8_FM, UINT16_FM, UINT16_FM,
-  UINT16_FM, UINT16_FM, UINT16_FM, UINT16_FM,
-  UINT16_FM, UINT16_FM, UINT16_FM, UINT16_FM,
-  UINT16_FM, UINT16_FM, UINT16_FM, UINT16_FM,
-  UINT16_FM, UINT16_FM, UINT16_FM, UINT16_FM,
+  (uint8_t)TCode::UINT8,  (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16,
+  (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16,
+  (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16,
+  (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16,
+  (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16,
   0     // 37 bytes: An IMU Legend broadcast.
 };
 
 /* There are only two grammatical forms represented here. A zero-length, and a giant block of Vectors. */
 const unsigned char MSG_ARGS_IMU_MAP_STATE[] = {
-  VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
-    VECT_4_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, VECT_3_FLOAT, FLOAT_FM,
+  (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
+    (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
+    (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
+    (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
+    (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
+    (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
+    (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
+    (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
+    (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
+    (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
+    (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
+    (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
+    (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
+    (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
+    (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
+    (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
+    (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
   0   // (17 IMUs * 3 vectors + 1 float per IMU) * (4 bytes per float) = 680) bytes: Statement of debug map.
 };    // 0 bytes: Request for present map.
 
