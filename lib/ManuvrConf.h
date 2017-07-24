@@ -15,7 +15,6 @@ This is where definition of (application or device)-specific parameters ought to
 * Particulars of this Manuvrable.
 */
 
-//#define MANUVR_STORAGE
 #define EVENT_MANAGER_PREALLOC_COUNT     8
 #define SCHEDULER_MAX_SKIP_BEFORE_RESET  6
 #define PLATFORM_RNG_CARRY_CAPACITY     32
@@ -33,7 +32,6 @@ This is where definition of (application or device)-specific parameters ought to
 #define MANUVR_STORAGE
 //#define MANUVR_GPS_PIPE
 #define MANUVR_CBOR
-#define __MANUVR_FREERTOS
 //#define MANUVR_JSON
 
 

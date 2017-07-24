@@ -40,7 +40,7 @@ void CPLDDriver::_deinit() {
 * Init the timer to provide the CPLD with an external clock. This clock is the
 *   most-flexible, and we use it by default.
 */
-bool CPLDDriver::_set_timer_base(uint16_t _period) {
+bool CPLDDriver::_set_timer_base(int hz) {
   return true;
 }
 

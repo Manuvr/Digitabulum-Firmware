@@ -31,6 +31,9 @@ This is the firmware emulation test-bench.
 #include <Kernel.h>
 #include <Platform/Peripherals/I2C/I2CAdapter.h>
 #include <Drivers/ADP8866/ADP8866.h>
+#include <Drivers/ATECC508/ATECC508.h>
+#include <Drivers/PMIC/BQ24155/BQ24155.h>
+#include <Drivers/PMIC/LTC294x/LTC294x.h>
 #include <XenoSession/Console/ManuvrConsole.h>
 #include <XenoSession/Manuvr/ManuvrSession.h>
 
@@ -58,19 +61,19 @@ BufferPipe* _pipe_factory_2(BufferPipe* _n, BufferPipe* _f) {
 * Pin defs
 */
 const CPLDPins cpld_pins(
-  255, //17,  // CPLD's reset pin
-  255, //18,  // Transfer request
-  255, //19,  // CPLD's IRQ_WAKEUP pin
-  255, //21,  // CPLD clock input
-  255, //22,  // CPLD OE pin
-  255, //23,  // CPLD GPIO
-  255, //25,  // SPI1 CS
-  255, //26,  // SPI1 CLK
-  255, //27,  // SPI1 MOSI
-  255, //32,  // SPI1 MISO
-  255, //33,  // SPI2 CS
-  255, //34,  // SPI2 CLK
-  255  //35   // SPI2 MOSI
+  255,  // CPLD's reset pin
+  255,  // Transfer request
+  255,  // CPLD's IRQ_WAKEUP pin
+  255,  // CPLD clock input
+  255,  // CPLD OE pin
+  255,  // CPLD GPIO
+  255,  // SPI1 CS
+  255,  // SPI1 CLK
+  255,  // SPI1 MOSI
+  255,  // SPI1 MISO
+  255,  // SPI2 CS
+  255,  // SPI2 CLK
+  255   // SPI2 MOSI
 );
 
 const I2CAdapterOptions i2c_opts(
@@ -79,11 +82,26 @@ const I2CAdapterOptions i2c_opts(
   255  // scl
 );
 
+const ATECC508Opts atecc_opts(
+  (uint8_t) 255
+);
 
 const ADP8866Pins adp_opts(
   255,  // (Reset)
   255   // (IRQ)
 );
+
+const LTC294xOpts gas_gauge_opts(
+  255,    // N/A (Alert pin)
+  2600    // We will assume a common 18650 for now. 2600mAh capacity.
+);
+
+const BQ24155Opts charger_opts(
+  68,   // Sense resistor is 68 mOhm.
+  255,  // N/A (STAT)
+  255   // N/A (ISEL)
+);
+
 
 /*******************************************************************************
 * The main function.                                                           *
@@ -115,11 +133,22 @@ int main(int argc, const char *argv[]) {
   I2CAdapter i2c(&i2c_opts);
   kernel->subscribe((EventReceiver*) &i2c);
 
+  ATECC508 atec(&atecc_opts);
+  i2c.addSlaveDevice((I2CDevice*) &atec);
+  kernel->subscribe((EventReceiver*) &atec);
+
   // Pins 58 and 63 are the reset and IRQ pin, respectively.
   // This is translated to pins 10 and 13 on PortD.
   ADP8866 leds(&adp_opts);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
   kernel->subscribe((EventReceiver*) &leds);
+
+  BQ24155 charger(&charger_opts);
+  i2c.addSlaveDevice((I2CDeviceWithRegisters*) &charger);
+  kernel->subscribe((EventReceiver*) &charger);
+
+  LTC294x gas_gauge(&gas_gauge_opts);
+  i2c.addSlaveDevice((I2CDeviceWithRegisters*) &gas_gauge);
 
   // Pipe strategy planning...
   const uint8_t pipe_plan_clients[] = {2, 0};

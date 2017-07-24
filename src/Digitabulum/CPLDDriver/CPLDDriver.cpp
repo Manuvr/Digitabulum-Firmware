@@ -1039,7 +1039,7 @@ int8_t CPLDDriver::attached() {
     reset();
 
     if (255 != _pins.irq) {
-      gpio_wakeup_enable((gpio_num_t) _pins.irq, GPIO_INTR_POSEDGE);
+      //gpio_wakeup_enable((gpio_num_t) _pins.irq, GPIO_INTR_POSEDGE);
     }
     return 1;
   }

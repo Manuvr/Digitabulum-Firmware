@@ -30,7 +30,7 @@ export MAKE    = $(shell which make)
 ###########################################################################
 CXXFLAGS     = -fno-rtti -fno-exceptions
 CFLAGS       = -Wall
-LIBS         = -lc -lm -lpthread -lmanuvr
+LIBS         = -lc -lm -lpthread -lmanuvr -lmbedtls -lmbedx509 -lmbedcrypto
 
 # Enforce a 32-bit build.
 CFLAGS      += -m32
@@ -65,18 +65,15 @@ CXX_SRCS  += src/Digitabulum/ManuLegend/ManuLegend.cpp
 ###########################################################################
 # Option conditionals
 ###########################################################################
-MANUVR_OPTIONS += -DMANUVR_STDIO
-MANUVR_OPTIONS += -DMANUVR_CONSOLE_SUPPORT
-MANUVR_OPTIONS += -DMANUVR_SUPPORT_I2C
 MANUVR_OPTIONS += -DMANUVR_OVER_THE_WIRE
-MANUVR_OPTIONS += -DMANUVR_SUPPORT_TCPSOCKET
-MANUVR_OPTIONS += -DMANUVR_CBOR
-MANUVR_OPTIONS += -DMANUVR_STORAGE
+MANUVR_OPTIONS += -DMANUVR_OVER_THE_WIRE
+MANUVR_OPTIONS += -DMANUVR_SUPPORT_OSC
 MANUVR_OPTIONS += -D__MANUVR_LINUX
 
 # Enables ATECC provisioning-related features...
 MANUVR_OPTIONS += -DATECC508_CAPABILITY_OTP_RW
 MANUVR_OPTIONS += -DATECC508_CAPABILITY_CONFIG_UNLOCK
+MANUVR_OPTIONS += -DMBEDTLS_CONFIG_FILE='<mbedTLS_conf.h>'
 
 # Debugging options...
 ifeq ($(DEBUG),1)
@@ -101,7 +98,7 @@ CFLAGS += $(MANUVR_OPTIONS) $(OPTIMIZATION) $(INCLUDES)
 ANALYZER_FLAGS  = $(MANUVR_OPTIONS) $(INCLUDES)
 ANALYZER_FLAGS +=  --std=c++11 --report-progress --force -j6
 
-#export MANUVR_PLATFORM = LINUX
+export MANUVR_PLATFORM = LINUX
 export CFLAGS
 export CXXFLAGS += $(CFLAGS)
 export ANALYZER_FLAGS
