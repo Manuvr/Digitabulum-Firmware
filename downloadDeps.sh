@@ -6,4 +6,8 @@
 
 # Manuvr
 #rm -rf lib/ManuvrOS
-git clone https://github.com/jspark311/ManuvrOS lib/ManuvrOS
+git clone https://github.com/Manuvr/ManuvrOS lib/ManuvrOS
+
+# mbedTLS...
+rm -rf lib/mbedtls
+git clone https://github.com/ARMmbed/mbedtls.git lib/mbedtls

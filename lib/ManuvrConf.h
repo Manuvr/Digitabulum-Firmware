@@ -40,11 +40,7 @@ This is where definition of (application or device)-specific parameters ought to
 #define CPLD_SPI_MAX_QUEUE_PRINT   3
 #define PREALLOCD_IMU_FRAMES      11
 
-#define MANUVR_EVENT_PROFILER
-#define MANUVR_DEBUG
 #define CONFIG_MANUVR_BENCHMARKS
-//#define MANUVR_PIPE_DEBUG
-#define MANUVR_IMU_DEBUG
 
 // This is the string that identifies this Manuvrable to other Manuvrables. In MHB's case, this
 //   will select the mEngine.

@@ -30,7 +30,7 @@ export MAKE    = $(shell which make)
 ###########################################################################
 CXXFLAGS     = -fno-rtti -fno-exceptions
 CFLAGS       = -Wall
-LIBS         = -lc -lm -lpthread -lmanuvr -lmbedtls -lmbedx509 -lmbedcrypto
+LIBS         = -lc -lm -lpthread -lmanuvr
 
 # Enforce a 32-bit build.
 CFLAGS      += -m32
@@ -66,7 +66,6 @@ CXX_SRCS  += src/Digitabulum/ManuLegend/ManuLegend.cpp
 # Option conditionals
 ###########################################################################
 MANUVR_OPTIONS += -DMANUVR_OVER_THE_WIRE
-MANUVR_OPTIONS += -DMANUVR_OVER_THE_WIRE
 MANUVR_OPTIONS += -DMANUVR_SUPPORT_OSC
 MANUVR_OPTIONS += -D__MANUVR_LINUX
 
@@ -74,6 +73,12 @@ MANUVR_OPTIONS += -D__MANUVR_LINUX
 MANUVR_OPTIONS += -DATECC508_CAPABILITY_OTP_RW
 MANUVR_OPTIONS += -DATECC508_CAPABILITY_CONFIG_UNLOCK
 MANUVR_OPTIONS += -DMBEDTLS_CONFIG_FILE='<mbedTLS_conf.h>'
+
+# Debugging options...
+ifeq ($(SECURE),1)
+  LIBS += -lmbedtls -lmbedx509 -lmbedcrypto
+  export SECURE=1
+endif
 
 # Debugging options...
 ifeq ($(DEBUG),1)
@@ -96,7 +101,7 @@ OBJS = $(C_SRCS:.c=.o) $(CXX_SRCS:.cpp=.o)
 CFLAGS += $(MANUVR_OPTIONS) $(OPTIMIZATION) $(INCLUDES)
 
 ANALYZER_FLAGS  = $(MANUVR_OPTIONS) $(INCLUDES)
-ANALYZER_FLAGS +=  --std=c++11 --report-progress --force -j6
+ANALYZER_FLAGS += --std=c++11 --report-progress --force -j6
 
 export MANUVR_PLATFORM = LINUX
 export CFLAGS
@@ -123,7 +128,7 @@ all: $(OUTPUT_PATH)/$(FIRMWARE_NAME)
 
 libs:
 	mkdir -p $(OUTPUT_PATH)
-	$(MAKE) -C lib
+	$(MAKE) -C lib/
 
 $(OUTPUT_PATH)/$(FIRMWARE_NAME): $(OBJS) libs
 	$(CXX) $(OBJS) -o $@ $(CXXFLAGS) -std=$(CXX_STANDARD) $(LDFLAGS)
