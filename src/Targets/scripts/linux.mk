@@ -23,6 +23,7 @@ export CP      = $(shell which objcopy)
 export OD      = $(shell which objdump)
 export SZ      = $(shell which size)
 export MAKE    = $(shell which make)
+export GCOV    = $(shell which gcov)
 
 
 ###########################################################################
@@ -82,10 +83,12 @@ endif
 
 # Debugging options...
 ifeq ($(DEBUG),1)
+OPTIMIZATION    = -O0 -g
 MANUVR_OPTIONS += -DMANUVR_DEBUG
 #MANUVR_OPTIONS += -DMANUVR_PIPE_DEBUG
 MANUVR_OPTIONS += -DMANUVR_IMU_DEBUG
 MANUVR_OPTIONS += -DMANUVR_EVENT_PROFILER
+CFLAGS         += -fprofile-arcs -ftest-coverage
 #CFLAGS += -g -ggdb
 #CXXFLAGS += -fno-use-linker-plugin
 #CXXFLAGS += -fstack-usage
@@ -95,18 +98,20 @@ endif
 ###########################################################################
 # exports, consolidation....
 ###########################################################################
+# Groups of files...
 OBJS = $(C_SRCS:.c=.o) $(CXX_SRCS:.cpp=.o)
+COV_FILES  = $(OBJS:.o=.gcda) $(OBJS:.o=.gcno)
 
 # Merge our choices and export them to the downstream Makefiles...
 CFLAGS += $(MANUVR_OPTIONS) $(OPTIMIZATION) $(INCLUDES)
-
 ANALYZER_FLAGS  = $(MANUVR_OPTIONS) $(INCLUDES)
 ANALYZER_FLAGS += --std=c++11 --report-progress --force -j6
 
 export MANUVR_PLATFORM = LINUX
+export ANALYZER_FLAGS
 export CFLAGS
 export CXXFLAGS += $(CFLAGS)
-export ANALYZER_FLAGS
+
 
 
 ###########################################################################
@@ -132,6 +137,12 @@ libs:
 
 $(OUTPUT_PATH)/$(FIRMWARE_NAME): $(OBJS) libs
 	$(CXX) $(OBJS) -o $@ $(CXXFLAGS) -std=$(CXX_STANDARD) $(LDFLAGS)
+
+coverage: $(OUTPUT_PATH)/$(FIRMWARE_NAME)
+	#$(OUTPUT_PATH)/$(FIRMWARE_NAME) --run-tests
+	$(GCOV) --demangled-names --preserve-paths --source-prefix $(BUILD_ROOT) $(CXX_SRCS) $(C_SRCS)
+	lcov --capture --directory . --output-file coverage.info
+	genhtml coverage.info --output-directory doc/coverage
 
 clean:
 	rm -rf $(OUTPUT_PATH)

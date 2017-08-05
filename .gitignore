@@ -1,8 +1,15 @@
+.directory
 *.gch
 *.o
 *.out
 *.map
-.directory
+*.gcda
+*.gcno
+coverage.info
+
+# Generated doc
+doc/doxygen/
+doc/coverage/
 
 sdkconfig
 sdkconfig.old
@@ -12,3 +19,4 @@ build/
 emu/
 lib/ManuvrOS
 lib/telehash-c
+lib/mbedtls/
