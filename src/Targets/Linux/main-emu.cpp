@@ -167,6 +167,7 @@ int main(int argc, const char *argv[]) {
     *   TCP client connects. Get a simulated connection to firmware by running...
     *       nc -t 127.0.0.1 2319
     */
+    printf("%s: Setting up TCP listener...\n", argv[0]);
     ManuvrTCP tcp_srv((const char*) "0.0.0.0", 2319);
     tcp_srv.setPipeStrategy(pipe_plan_clients);
     kernel->subscribe(&tcp_srv);

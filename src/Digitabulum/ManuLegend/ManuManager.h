@@ -118,6 +118,7 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     int8_t queue_io_job(BusOp*);
 
 
+    void printHelp(StringBuilder*);
     void dumpPreformedElements(StringBuilder*);
 
     int8_t setLegend(ManuLegend*);
@@ -129,6 +130,11 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     /* Expose our idea about handedness to other modules. */
     inline Chirality getChirality() {  return (Chirality) _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_MASK);  };
     inline bool chiralityKnown() {     return _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_KNOWN);  };
+
+    inline bool legendStable() {         return (_er_flag(LEGEND_MGR_FLAGS_LEGEND_STABLE));         };
+    inline void legendStable(bool nu) {  return (_er_set_flag(LEGEND_MGR_FLAGS_LEGEND_STABLE, nu)); };
+    inline bool legendSent() {           return (_er_flag(LEGEND_MGR_FLAGS_LEGEND_SENT));           };
+    inline void legendSent(bool nu) {    return (_er_set_flag(LEGEND_MGR_FLAGS_LEGEND_SENT, nu));   };
 
     inline uint32_t totalSamples() {   return sample_count;   };
 
@@ -181,6 +187,7 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     LSM9DS1* fetchIMU(uint8_t idx);
 
     int8_t reconfigure_data_map();    // Calling causes a pointer dance that reconfigures the data we send to the host.
+    void broadcast_legend(ManuLegend*);
 
     void printIMURollCall(StringBuilder*);
     void printTemperatures(StringBuilder*);

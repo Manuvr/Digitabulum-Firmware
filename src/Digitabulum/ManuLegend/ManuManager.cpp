@@ -356,7 +356,6 @@ ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") 
 
   *(_ptr_sequence) = 0;
 
-  _er_set_flag(LEGEND_MGR_FLAGS_LEGEND_STABLE, true);  // Ick....
   operating_legend = new ManuLegend();
   operating_legend->sensorEnabled(true);
   //operating_legend->accNullGravity(true);
@@ -367,9 +366,13 @@ ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") 
   operating_legend->temperature(true);
   if (operating_legend->finallize()) {
     local_log.concat("ManuLegend failed to finallize().\n");
+    delete operating_legend;
+    operating_legend = nullptr;
   }
-  reconfigure_data_map();
-  setLegend(operating_legend);
+  else {
+    reconfigure_data_map();
+    setLegend(operating_legend);
+  }
 }
 
 
@@ -399,8 +402,7 @@ LSM9DS1* ManuManager::fetchIMU(uint8_t idx) {
 * @return non-zero on error.
 */
 int8_t ManuManager::send_map_event() {
-  event_legend_frame_ready.specific_target = nullptr;
-  if (operating_legend && _er_flag(LEGEND_MGR_FLAGS_LEGEND_SENT)) {
+  if (operating_legend && legendSent()) {
     operating_legend->copy_frame();
     Kernel::staticRaiseEvent(&event_legend_frame_ready);
     return 0;
@@ -445,10 +447,10 @@ int8_t ManuManager::reconfigure_data_map() {
 // Calling causes a pointer dance that reconfigures the data we send to the host.
 // Don't do anything unless the legend is stable. This is concurrency-control.
 int8_t ManuManager::setLegend(ManuLegend* nu_legend) {
-  if (_er_flag(LEGEND_MGR_FLAGS_LEGEND_STABLE)) {
+  if (legendStable()) {
     // Only reconfigure if stable.
-    _er_clear_flag(LEGEND_MGR_FLAGS_LEGEND_STABLE);   // Mark as unstable.
-    _er_clear_flag(LEGEND_MGR_FLAGS_LEGEND_SENT);
+    legendStable(false);   // Mark as unstable.
+    legendSent(false);
 
     if (!nu_legend->finallized()) {
       // Finallize the ManuLegend prior to installing it.
@@ -467,16 +469,12 @@ int8_t ManuManager::setLegend(ManuLegend* nu_legend) {
     event_legend_frame_ready.clearArgs();
     event_legend_frame_ready.addArg((void*) nu_legend->dataset_local, nu_legend->datasetSize());
 
+    legendStable(true);
+
     // Now we need to declare the new IMU Legend to the rest of the system. We will not re-enable
     //   the frame broadcast until the callback for this event happens. This assures that the message
     //   order to anyone listening is what we intend.
-    StringBuilder* legend_string = new StringBuilder();
-    nu_legend->formLegendString(legend_string);
-    ManuvrMsg* legend_broadcast     = Kernel::returnEvent(DIGITABULUM_MSG_IMU_LEGEND);
-    legend_broadcast->specific_target = nu_legend->owner;
-    legend_broadcast->priority(EVENT_PRIORITY_LOWEST + 1);
-    legend_broadcast->setOriginator((EventReceiver*) this);
-    legend_broadcast->addArg(legend_string)->reapValue(true);
+    broadcast_legend(nu_legend);
 
     if (should_enable_pid) {
       event_legend_frame_ready.enableSchedule(true);
@@ -486,6 +484,16 @@ int8_t ManuManager::setLegend(ManuLegend* nu_legend) {
   return -1;
 }
 
+
+void ManuManager::broadcast_legend(ManuLegend* nu_legend) {
+  StringBuilder* legend_string = new StringBuilder();
+  nu_legend->formLegendString(legend_string);
+  ManuvrMsg* legend_broadcast = Kernel::returnEvent(DIGITABULUM_MSG_IMU_LEGEND, this);
+  legend_broadcast->specific_target = nu_legend->owner;
+  legend_broadcast->priority(EVENT_PRIORITY_LOWEST + 1);
+  legend_broadcast->addArg(legend_string)->reapValue(true);
+  raiseEvent(legend_broadcast);
+}
 
 
 void ManuManager::enableAutoscale(SampleType s_type, bool enabled) {
@@ -918,6 +926,10 @@ int8_t ManuManager::attached() {
     quat_crunch_event.specific_target = (EventReceiver*) this;
     //quat_crunch_event.priority(4);
 
+    platform.kernel()->addSchedule(&event_legend_frame_ready);
+    platform.kernel()->addSchedule(&event_iiu_read);
+    platform.kernel()->addSchedule(&quat_crunch_event);
+
     return 1;
   }
   return 0;
@@ -958,16 +970,10 @@ int8_t ManuManager::callback_proc(ManuvrMsg* event) {
 
     case DIGITABULUM_MSG_IMU_LEGEND:
       // We take this as an indication that our notice of altered Legend was sent.
-      _er_set_flag(LEGEND_MGR_FLAGS_LEGEND_SENT);
+      legendSent(true);
       break;
 
     case DIGITABULUM_MSG_IMU_MAP_STATE:
-      *(_ptr_sequence) = *(_ptr_sequence) + 1;
-      if (operating_legend && _er_flag(LEGEND_MGR_FLAGS_LEGEND_SENT)) {
-        operating_legend->copy_frame();
-        Kernel::staticRaiseEvent(&event_legend_frame_ready);
-        return 0;
-      }
       break;
 
     case DIGITABULUM_MSG_IMU_QUAT_CRUNCH:
@@ -1036,13 +1042,7 @@ int8_t ManuManager::notify(ManuvrMsg* active_event) {
       break;
 
     case DIGITABULUM_MSG_IMU_MAP_STATE:
-      //if (0 == active_event->argCount()) {
-        // No args means a request. Send it.
-      //  send_map_event();
-      //  return_value++;
-      //}
       break;
-
 
     case DIGITABULUM_MSG_CPLD_RESET_COMPLETE:
       if (getVerbosity() > 3) local_log.concatf("Initializing IMUs...\n");
@@ -1145,14 +1145,14 @@ void ManuManager::printIMURollCall(StringBuilder *output) {
 */
 void ManuManager::printTemperatures(StringBuilder *output) {
   EventReceiver::printDebug(output);
-  output->concat("-- Intertial integration units: id(deg-C)\n--\n-- Dgt      Prx        Imt        Dst\n");
+  output->concat("-- Intertial integration units: id(deg-C)\n--\n-- Dgt      Prx      Imt      Dst\n");
   // TODO: Audit usage of length-specified integers as iterators. Cut where not
   //   important and check effects on optimization, as some arch's take a
   //   runtime hit for access in any length less than thier ALU widths.
   for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
     switch (i) {
       case 1:   // Skip output for the IMU that doesn't exist at digit0.
-        output->concat("  <N/A>  ");
+        output->concat("<N/A>    ");
         break;
       case 0:
         output->concat("-- 0(MC)    ");
@@ -1188,14 +1188,14 @@ void ManuManager::printTemperatures(StringBuilder *output) {
 */
 void ManuManager::printFIFOLevels(StringBuilder *output) {
   EventReceiver::printDebug(output);
-  output->concat("-- Intertial integration units: fifo_lvl(hex)\n--\n-- Dgt      Prx        Imt        Dst\n");
+  output->concat("-- Intertial integration units: fifo_lvl(hex)\n--\n-- Dgt      Prx     Imt     Dst\n");
   // TODO: Audit usage of length-specified integers as iterators. Cut where not
   //   important and check effects on optimization, as some arch's take a
   //   runtime hit for access in any length less than thier ALU widths.
   for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
     switch (i) {
       case 1:   // Skip output for the IMU that doesn't exist at digit0.
-        output->concat("   <N/A>   ");
+        output->concat("<N/A>   ");
         break;
       case 0:
         output->concat("-- 0(MC)    ");
@@ -1226,12 +1226,13 @@ void ManuManager::printFIFOLevels(StringBuilder *output) {
 
 #if defined(MANUVR_DEBUG)
 void ManuManager::dumpPreformedElements(StringBuilder* output) {
-  output->concat("--- Quat-crunch event\n");
+  output->concat("--- Predefined events:\n");
+  event_legend_frame_ready.printDebug(output);
+  event_iiu_read.printDebug(output);
   quat_crunch_event.printDebug(output);
   output->concat("\n");
 }
 #endif
-
 
 
 /**
@@ -1245,6 +1246,8 @@ void ManuManager::printDebug(StringBuilder *output) {
     // Print just the aggregate sample count and return.
   }
   output->concatf("-- Chirality           %s\n", chiralityString(getChirality()));
+  output->concatf("-- Legend Sent         %c\n", legendSent()?'y':'n');
+  output->concatf("-- Legend Stable       %c\n", legendStable()?'y':'n');
 
   if (getVerbosity() > 3) {
     output->concatf("-- __dataset location  %p\n", (uintptr_t) __dataset);
@@ -1252,7 +1255,6 @@ void ManuManager::printDebug(StringBuilder *output) {
   }
 
   float grav_consensus = 0.0;
-  output->concat("-- Intertial integration units:\n");
   for (uint8_t i = 0; i < 17; i++) {
     //grav_consensus += imus[i].grav_scalar;
   }
@@ -1265,12 +1267,6 @@ void ManuManager::printDebug(StringBuilder *output) {
 
   if (getVerbosity() > 3) {
     output->concatf("-- MAX_DATASET_SIZE    %u\n",    (unsigned long) LEGEND_MGR_MAX_DATASET_SIZE);
-    #if defined(MANUVR_DEBUG)
-      if (getVerbosity() > 5) {
-        event_legend_frame_ready.printDebug(output);
-        event_iiu_read.printDebug(output);
-      }
-    #endif
   }
 
   #if defined(MANUVR_DEBUG)
@@ -1278,19 +1274,49 @@ void ManuManager::printDebug(StringBuilder *output) {
   #endif
 
   output->concat("-- Intertial integration units:\n");
-  for (uint8_t i = 0; i < 17; i++) {
-    output->concatf("\tIIU %d\t ", i);
+  //for (uint8_t i = 0; i < 17; i++) {
+    //output->concatf("\tIIU %d\t ", i);
     //imus[i].dumpDevRegs(output);
     //output->concatf("--- noise_floor_mag     (%d, %d, %d)\n", noise_floor_mag[i].x, noise_floor_mag[i].y, noise_floor_mag[i].z);
     //output->concatf("--- noise_floor_acc     (%d, %d, %d)\n", noise_floor_acc[i].x, noise_floor_acc[i].y, noise_floor_acc[i].z);
     //output->concatf("--- noise_floor_gyr     (%d, %d, %d)\n", noise_floor_gyr[i].x, noise_floor_gyr[i].y, noise_floor_gyr[i].z);
-  }
+  //}
   output->concat("\n");
 }
 
 
 
 #if defined(MANUVR_CONSOLE_SUPPORT)
+/**
+* Debug support method. This fxn is only present in debug builds.
+*
+* @param   StringBuilder* The buffer into which this fxn should write its output.
+*/
+void ManuManager::printHelp(StringBuilder *output) {
+  EventReceiver::printDebug(output);
+  output->concat("\t-- Schedules\n");
+  output->concat("\t--------------------------------\n");
+  output->concat("\td0        Disable frame broadcasts.\n");
+  output->concat("\td[1-253]  Frame broadcasts every ms*10.\n");
+  output->concat("\td254      Enable frame broadcasts.\n");
+  output->concat("\td255      Manually fire a frame broadcast.\n");
+  output->concat("\tf0        Disable IMU read schedule.\n");
+  output->concat("\tf[1-253]  IMU read schedule ms*10.\n");
+  output->concat("\tf254      Enable IMU read schedule.\n");
+  output->concat("\tf255      Manually fire an IMU read.\n");
+  output->concat("\n\t-- IMU\n");
+  output->concat("\t--------------------------------\n");
+  output->concat("\tc [x]     Dump registers for IMU x.\n");
+  output->concat("\tk[x]      Broadcast INITx to all IMUs.\n");
+  output->concat("\ts [x[,y]] Get/Set IMU x state.\n");
+  output->concat("\ts 255,[y] Set all IMUs to state y.\n");
+  output->concat("\tV [x[,y]] Get/Set IMU x to verbosity level y.\n");
+  output->concat("\n\t-- Misc\n");
+  output->concat("\t--------------------------------\n");
+  output->concat("\tV [x[,y]] Get/Set IMU x to verbosity level y.\n");
+}
+
+
 void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
   char* str = input->position(0);
 
@@ -1300,15 +1326,17 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
   }
 
   StringBuilder parse_mule;
+  if (input->count() > 1) {
+    parse_mule.concat(input->position(1));
+    parse_mule.split(",");
+  }
 
   switch (*(str)) {
-    case 'v':
-      parse_mule.concat(str);
-      local_log.concatf("parse_mule split (%s) into %d positions.\n", str, parse_mule.split(","));
-      parse_mule.drop_position(0);
+    case 'V':
+      temp_byte = parse_mule.position_as_int(0);
       if (temp_byte < 17) {
-        if (parse_mule.count() > 0) {
-          int temp_int = parse_mule.position_as_int(0);
+        if (parse_mule.count() > 1) {
+          int temp_int = parse_mule.position_as_int(1);
           imus[temp_byte].setVerbosity(temp_int);
         }
         local_log.concatf("Verbosity on IMU %d is %d.\n", temp_byte, imus[temp_byte].getVerbosity());
@@ -1317,6 +1345,9 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'i':
       switch (temp_byte) {
+        case 0:
+          printDebug(&local_log);
+          break;
         case 1:
           #if defined(MANUVR_DEBUG)
             dumpPreformedElements(&local_log);
@@ -1326,14 +1357,9 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           break;
 
         case 2:
-          if (operating_legend) {
-            operating_legend->printDebug(&local_log);
-          }
-          else {
-            local_log.concat("No operating ManuLegend.\n");
-          }
           break;
         case 3:
+          local_log.concat("Reading sensor identities...\n");
           read_identities();  // Read the sensor's identity registers.
           break;
         case 4:
@@ -1343,12 +1369,12 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           integrator.dumpPointers(&local_log);
           break;
         case 6:
-          local_log.concatf("sizeof(ManuManager)      %u\n", sizeof(ManuManager));
-          local_log.concatf("sizeof(Integrator)       %u\n", sizeof(Integrator));
-          local_log.concatf("sizeof(SensorFrame)      %u\n", sizeof(SensorFrame));
-          local_log.concatf("sizeof(LSM9DS1)          %u\n", sizeof(LSM9DS1));
-          local_log.concatf("sizeof(RegPtrMap)        %u\n", sizeof(RegPtrMap));
-          local_log.concatf("sizeof(_frame_buf_i)     %u\n", sizeof(_frame_buf_i));
+          local_log.concatf("sizeof(ManuManager) \t%u\n", sizeof(ManuManager));
+          local_log.concatf("sizeof(Integrator)  \t%u\n", sizeof(Integrator));
+          local_log.concatf("sizeof(SensorFrame) \t%u\n", sizeof(SensorFrame));
+          local_log.concatf("sizeof(LSM9DS1)     \t%u\n", sizeof(LSM9DS1));
+          local_log.concatf("sizeof(RegPtrMap)   \t%u\n", sizeof(RegPtrMap));
+          local_log.concatf("sizeof(_frame_buf_i)\t%u\n", sizeof(_frame_buf_i));
           break;
         case 7:
           {
@@ -1365,23 +1391,35 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           printTemperatures(&local_log);   // Show us the temperatures.
           break;
         default:
-          {
-            int8_t old_verbosity = getVerbosity();
-            if (temp_byte && (temp_byte < 7)) setVerbosity(temp_byte);
-            printDebug(&local_log);
-            if (temp_byte && (temp_byte < 7)) setVerbosity(old_verbosity);
-          }
+          printHelp(&local_log);
           break;
       }
       break;
 
-    case '-':
+
+    case 'l':
       if (operating_legend) {
-        operating_legend->copy_frame();
-        local_log.concat("Frame copied.\n");
-        operating_legend->printDataset(&local_log);
+        switch (temp_byte) {
+          case 1:
+            broadcast_legend(operating_legend);
+            local_log.concat("Legend broadcast.\n");
+            break;
+          case 2:
+            operating_legend->copy_frame();
+            local_log.concat("Frame copied.\n");
+          case 3:
+            operating_legend->printDataset(&local_log);
+            break;
+          default:
+            operating_legend->printDebug(&local_log);
+            break;
+        }
+      }
+      else {
+        local_log.concat("No operating ManuLegend.\n");
       }
       break;
+
 
     // IMU DEBUG //////////////////////////////////////////////////////////////////
     case 'c':
@@ -1392,11 +1430,9 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
 
     // IMU STATE CONTROL //////////////////////////////////////////////////////////
     case 's':
-      parse_mule.concat(str);
-      parse_mule.split(",");
-      parse_mule.drop_position(0);
-      if (parse_mule.count() > 0) {
-        int temp_int = parse_mule.position_as_int(0);
+      temp_byte = parse_mule.position_as_int(0);
+      if (parse_mule.count() > 1) {
+        int temp_int = parse_mule.position_as_int(1);
 
         if (255 == temp_byte) {
           for (uint8_t i = 0; i < 17; i++) {
@@ -1407,7 +1443,6 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           local_log.concatf("Setting the state of IMU %d to %d\n", temp_byte, temp_int);
           imus[temp_byte].setDesiredState((IMUState) temp_int);
         }
-
       }
       break;
 
@@ -1588,20 +1623,11 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
       switch (temp_byte) {
         case 255:
           event_legend_frame_ready.fireNow();  // Fire a single frame transmission.
-          local_log.concat("We are manually firing the IMU frame broadcasts schedule.\n");
+          local_log.concat("Frame broadcasts schedule fired.\n");
           break;
         case 254:
           event_legend_frame_ready.enableSchedule(true);  // Enable the periodic read.
           local_log.concat("Enabled frame broadcasts.\n");
-          break;
-        #if defined(MANUVR_DEBUG)
-          case 253:
-            event_legend_frame_ready.printDebug(&local_log);
-            break;
-        #endif
-        case 252:
-          send_map_event();
-          local_log.concat("We are manually firing the IMU frame broadcasts schedule.\n");
           break;
         default:
           if (temp_byte) {
@@ -1620,7 +1646,7 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
       switch (temp_byte) {
         case 255:
           event_iiu_read.fireNow();
-          local_log.concat("We are manually firing the IMU read schedule.\n");
+          local_log.concat("IMU read schedule fired.\n");
           break;
         case 254:
           event_iiu_read.enableSchedule(true);

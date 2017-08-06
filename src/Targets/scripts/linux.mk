@@ -68,6 +68,7 @@ CXX_SRCS  += src/Digitabulum/ManuLegend/ManuLegend.cpp
 ###########################################################################
 MANUVR_OPTIONS += -DMANUVR_OVER_THE_WIRE
 MANUVR_OPTIONS += -DMANUVR_SUPPORT_OSC
+MANUVR_OPTIONS += -DMANUVR_SUPPORT_TCPSOCKET
 MANUVR_OPTIONS += -D__MANUVR_LINUX
 
 # Enables ATECC provisioning-related features...
