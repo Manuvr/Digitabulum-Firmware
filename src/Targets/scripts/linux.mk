@@ -53,8 +53,10 @@ LDFLAGS += -L. -L$(OUTPUT_PATH)
 ###########################################################################
 # Source file definitions...
 ###########################################################################
-CXX_SRCS   = src/Targets/Linux/main-emu.cpp
-CXX_SRCS  += src/Digitabulum/CPLDDriver/CPLDDriver.cpp
+DRIVER_SRCS   = src/Targets/Linux/host-driver.cpp
+FIRMWARE_SRCS = src/Targets/Linux/main-emu.cpp
+
+CXX_SRCS   = src/Digitabulum/CPLDDriver/CPLDDriver.cpp
 CXX_SRCS  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp
 CXX_SRCS  += src/Digitabulum/LSM9DS1/RegPtrMap.cpp
 CXX_SRCS  += src/Digitabulum/ManuLegend/SensorFrame.cpp
@@ -62,12 +64,11 @@ CXX_SRCS  += src/Digitabulum/ManuLegend/Integrator.cpp
 CXX_SRCS  += src/Digitabulum/ManuLegend/ManuManager.cpp
 CXX_SRCS  += src/Digitabulum/ManuLegend/ManuLegend.cpp
 
-
 ###########################################################################
 # Option conditionals
 ###########################################################################
 MANUVR_OPTIONS += -DMANUVR_OVER_THE_WIRE
-MANUVR_OPTIONS += -DMANUVR_SUPPORT_OSC
+#MANUVR_OPTIONS += -DMANUVR_SUPPORT_OSC
 MANUVR_OPTIONS += -DMANUVR_SUPPORT_TCPSOCKET
 MANUVR_OPTIONS += -D__MANUVR_LINUX
 
@@ -100,8 +101,12 @@ endif
 # exports, consolidation....
 ###########################################################################
 # Groups of files...
-OBJS = $(C_SRCS:.c=.o) $(CXX_SRCS:.cpp=.o)
-COV_FILES  = $(OBJS:.o=.gcda) $(OBJS:.o=.gcno)
+OBJS          = $(C_SRCS:.c=.o) $(CXX_SRCS:.cpp=.o)
+FIRMWARE_OBJS = $(FIRMWARE_SRCS:.cpp=.o)
+DRIVER_OBJS   = $(DRIVER_SRCS:.cpp=.o)
+COV_FILES     = $(OBJS:.o=.gcda) $(OBJS:.o=.gcno)
+COV_FILES    += $(FIRMWARE_OBJS:.o=.gcda) $(FIRMWARE_OBJS:.o=.gcno)
+COV_FILES    += $(DRIVER_OBJS:.o=.gcda) $(DRIVER_OBJS:.o=.gcno)
 
 # Merge our choices and export them to the downstream Makefiles...
 CFLAGS += $(MANUVR_OPTIONS) $(OPTIMIZATION) $(INCLUDES)
@@ -123,7 +128,7 @@ vpath %.a $(OUTPUT_PATH)
 
 .PHONY: all
 
-all: $(OUTPUT_PATH)/$(FIRMWARE_NAME)
+all: firmware driver
 	$(SZ) $(OUTPUT_PATH)/$(FIRMWARE_NAME)
 
 %.o : %.c
@@ -136,8 +141,11 @@ libs:
 	mkdir -p $(OUTPUT_PATH)
 	$(MAKE) -C lib/
 
-$(OUTPUT_PATH)/$(FIRMWARE_NAME): $(OBJS) libs
-	$(CXX) $(OBJS) -o $@ $(CXXFLAGS) -std=$(CXX_STANDARD) $(LDFLAGS)
+firmware: $(OBJS) $(FIRMWARE_OBJS) libs
+	$(CXX) $(FIRMWARE_OBJS) $(OBJS) -o $(OUTPUT_PATH)/$(FIRMWARE_NAME) $(CXXFLAGS) -std=$(CXX_STANDARD) $(LDFLAGS)
+
+driver: $(OBJS) $(DRIVER_OBJS) libs
+	$(CXX) $(DRIVER_OBJS) $(OBJS) -o $(OUTPUT_PATH)/demo-driver $(CXXFLAGS) -std=$(CXX_STANDARD) $(LDFLAGS)
 
 coverage: $(OUTPUT_PATH)/$(FIRMWARE_NAME)
 	#$(OUTPUT_PATH)/$(FIRMWARE_NAME) --run-tests
