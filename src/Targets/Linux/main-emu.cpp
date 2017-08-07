@@ -158,6 +158,9 @@ int main(int argc, const char *argv[]) {
     exit(1);
   }
 
+  printf("%s: Booting Digitabulum emulator (PID %u)....\n", argv[0], getpid());
+  platform.bootstrap();
+
 
   #if defined(MANUVR_SUPPORT_TCPSOCKET)
     /*
@@ -167,17 +170,29 @@ int main(int argc, const char *argv[]) {
     *   TCP client connects. Get a simulated connection to firmware by running...
     *       nc -t 127.0.0.1 2319
     */
-    printf("%s: Setting up TCP listener...\n", argv[0]);
-    ManuvrTCP tcp_srv((const char*) "0.0.0.0", 2319);
-    tcp_srv.setPipeStrategy(pipe_plan_clients);
-    kernel->subscribe(&tcp_srv);
-  #endif
+    if (opts) {
+      char* addr_str = "127.0.0.1";
+      char* port_str = "2319";
+      opts->getValueAs("tcp-port", &port_str);
+      int port_num = atoi(port_str);
 
-  printf("%s: Booting Digitabulum emulator (PID %u)....\n", argv[0], getpid());
-  platform.bootstrap();
+      if (0 == opts->getValueAs("tcp-srv", &addr_str)) {
+        ManuvrTCP* tcp = new ManuvrTCP((const char*) addr_str, port_num);
+        tcp->setPipeStrategy(pipe_plan_clients);
+        kernel->subscribe(tcp);
+        printf("%s: Listening on %s:%s (TCP)...\n", argv[0], addr_str, port_str);
+        tcp->listen();
+      }
+      else if (0 == opts->getValueAs("tcp-cli", &addr_str)) {
+        ManuvrTCP* tcp = new ManuvrTCP((const char*) addr_str, port_num);
+        tcp->setPipeStrategy(pipe_plan_clients);
+        kernel->subscribe(tcp);
+        printf("%s: Connecting to %s:%s (TCP)...\n", argv[0], addr_str, port_str);
+        tcp->connect();
+      }
+    }
 
-  #if defined(MANUVR_SUPPORT_TCPSOCKET)
-    tcp_srv.listen();
+
   #endif
 
   //platform.forsakeMain();

@@ -356,22 +356,21 @@ ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") 
 
   *(_ptr_sequence) = 0;
 
-  operating_legend = new ManuLegend();
-  operating_legend->sensorEnabled(true);
-  //operating_legend->accNullGravity(true);
-  operating_legend->accRaw(true);
-  operating_legend->gyro(true);
-  operating_legend->mag(true);
-  operating_legend->orientation(true);
-  operating_legend->temperature(true);
-  if (operating_legend->finallize()) {
+  ManuLegend* leg = new ManuLegend();
+  leg->sensorEnabled(true);
+  //leg->accNullGravity(true);
+  leg->accRaw(true);
+  leg->gyro(true);
+  leg->mag(true);
+  leg->orientation(true);
+  leg->temperature(true);
+  if (leg->finallize()) {
     local_log.concat("ManuLegend failed to finallize().\n");
-    delete operating_legend;
-    operating_legend = nullptr;
+    delete leg;
   }
   else {
     reconfigure_data_map();
-    setLegend(operating_legend);
+    setLegend(leg);
   }
 }
 
@@ -412,7 +411,8 @@ int8_t ManuManager::send_map_event() {
 
 
 /**
-* Calling this fxn will cause the initial address assignment and dataset to be fed to the IIUs.
+* Calling this fxn will cause the initial address assignment and dataset to be
+*   fed to the IIUs.
 *
 * @return non-zero on error.
 */
@@ -447,36 +447,52 @@ int8_t ManuManager::reconfigure_data_map() {
 // Calling causes a pointer dance that reconfigures the data we send to the host.
 // Don't do anything unless the legend is stable. This is concurrency-control.
 int8_t ManuManager::setLegend(ManuLegend* nu_legend) {
-  if (legendStable()) {
+  if (nullptr == nu_legend) {
+    return -2;
+  }
+  if ((nullptr == operating_legend) || legendStable()) {
     // Only reconfigure if stable.
     legendStable(false);   // Mark as unstable.
-    legendSent(false);
+    legendSent(false);     // If we change the data, we will need to resend this.
 
-    if (!nu_legend->finallized()) {
-      // Finallize the ManuLegend prior to installing it.
-      nu_legend->finallize();
-    }
-
+    // JiC, we're going to suspend the frame send schedule, noting if we need to
+    //   turn it back on later.
     bool should_enable_pid = false;
     if (event_legend_frame_ready.isScheduled()) {
       event_legend_frame_ready.enableSchedule(false);
       should_enable_pid = true;
     }
 
+    if (!nu_legend->finallized()) {
+      // Finallize the ManuLegend prior to installing it.
+      nu_legend->finallize();
+    }
+
+    nu_legend->dataset_global = __dataset;
+
+    if (operating_legend) {
+      // Clean up the prior legend if necessary.
+      delete operating_legend;
+      operating_legend = nullptr;
+    }
+
+    operating_legend = nu_legend;
+
     // Store a pointer to our dataset in the event that is to carry them.
     // It is important that this argument NOT be reaped.
     event_legend_frame_ready.abort();      // We don't want this to proc while the dataset is in flux.
     event_legend_frame_ready.clearArgs();
-    event_legend_frame_ready.addArg((void*) nu_legend->dataset_local, nu_legend->datasetSize());
+    event_legend_frame_ready.addArg((void*) operating_legend->dataset_local, operating_legend->datasetSize());
 
     legendStable(true);
 
     // Now we need to declare the new IMU Legend to the rest of the system. We will not re-enable
     //   the frame broadcast until the callback for this event happens. This assures that the message
     //   order to anyone listening is what we intend.
-    broadcast_legend(nu_legend);
+    broadcast_legend(operating_legend);
 
     if (should_enable_pid) {
+      // Re-enable frame braodcasts if they were happening before.
       event_legend_frame_ready.enableSchedule(true);
     }
     return 0;
@@ -1042,6 +1058,10 @@ int8_t ManuManager::notify(ManuvrMsg* active_event) {
       break;
 
     case DIGITABULUM_MSG_IMU_MAP_STATE:
+      if (operating_legend) {
+        // TODO: Ugly to front-load the operation this way...
+        operating_legend->copy_frame();
+      }
       break;
 
     case DIGITABULUM_MSG_CPLD_RESET_COMPLETE:
@@ -1269,11 +1289,6 @@ void ManuManager::printDebug(StringBuilder *output) {
     output->concatf("-- MAX_DATASET_SIZE    %u\n",    (unsigned long) LEGEND_MGR_MAX_DATASET_SIZE);
   }
 
-  #if defined(MANUVR_DEBUG)
-    dumpPreformedElements(output);
-  #endif
-
-  output->concat("-- Intertial integration units:\n");
   //for (uint8_t i = 0; i < 17; i++) {
     //output->concatf("\tIIU %d\t ", i);
     //imus[i].dumpDevRegs(output);
@@ -1311,9 +1326,12 @@ void ManuManager::printHelp(StringBuilder *output) {
   output->concat("\ts [x[,y]] Get/Set IMU x state.\n");
   output->concat("\ts 255,[y] Set all IMUs to state y.\n");
   output->concat("\tV [x[,y]] Get/Set IMU x to verbosity level y.\n");
-  output->concat("\n\t-- Misc\n");
+  output->concat("\n\t-- Legend\n");
   output->concat("\t--------------------------------\n");
-  output->concat("\tV [x[,y]] Get/Set IMU x to verbosity level y.\n");
+  output->concat("\tl         Legend summary.\n");
+  output->concat("\tl1        Broadcast ManuLegend.\n");
+  output->concat("\tl2        Copy frame.\n");
+  output->concat("\tl3        Print dataset.\n");
 }
 
 

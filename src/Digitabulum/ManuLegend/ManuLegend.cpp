@@ -58,17 +58,17 @@ ManuLegend::~ManuLegend() {
 * Call this fxn to finalize our choices about the Legend and allocate the memory.
 */
 int8_t ManuLegend::finallize() {
-  if (dataset_local) {
-    // We have already carved out space for a dataset. We will need to re-allocate.
-    free(dataset_local);
-    dataset_local = nullptr;
-  }
-
-  // Nominal case: The dataset has yet to be created.
   if (datasetSize() > 0) {
+    if (dataset_local) {
+      // We have already carved out space for a dataset. We will need to re-allocate.
+      free(dataset_local);
+      dataset_local = nullptr;
+    }
     dataset_local = (uint8_t*) malloc(ds_size);
-    for (uint16_t i = 0; i < ds_size; i++) *(dataset_local + i) = 0;
-    return 0;
+    if (dataset_local) {
+      for (uint16_t i = 0; i < ds_size; i++) *(dataset_local + i) = 0;
+      return 0;
+    }
   }
   return -1;  // Failure.
 }
@@ -78,7 +78,7 @@ int8_t ManuLegend::finallize() {
 * Calling this will cause the class to copy the data the owner requested from the global data map.
 */
 int8_t ManuLegend::copy_frame() {
-  if (nullptr == dataset_local) return -1;  // Bailout clause.
+  if ((nullptr == dataset_global) || (nullptr == dataset_local)) return -1;  // Bailout clause.
   StringBuilder output;
   uint16_t accumulated_offset = 0;
   if (sequence()) {

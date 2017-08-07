@@ -159,9 +159,9 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 
 class ManuLegend {
   public:
-    uint8_t*       dataset_global = NULL;   // This is the dataset common to all ManuLegends.
-    uint8_t*       dataset_local  = NULL;   // This is the dataset the EventReceiver asked for.
-    EventReceiver* owner          = NULL;   // This is the owner of this ManuLegend.
+    uint8_t*       dataset_global = nullptr;  // The dataset common to all ManuLegends.
+    uint8_t*       dataset_local  = nullptr;  // The dataset the EventReceiver asked for.
+    EventReceiver* owner          = nullptr;  // The owner of this ManuLegend.
 
     ManuLegend();
     ~ManuLegend();
