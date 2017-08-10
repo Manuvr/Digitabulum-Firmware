@@ -6,9 +6,9 @@ This is a map of the pathways traversed by sensor data in the firmware.
 
 #### Hardware (This is the easy part)
 
-The two aspects of this sensor are pysically divided in the package, with separate data and chip-select lines.
+The two aspects of this sensor are physically divided in the IMU's package, with separate data and chip-select lines. The interface is unified by the CPLD. From that point, the CPU is responsible for processing the data and shuttling the results to a transport.
 
-  ```{mermaid}
+  ```mermaid
   graph TD
     a(LSM9DS1 inertial aspect)
     b(LSM9DS1 magnetic aspect)
@@ -37,7 +37,7 @@ The two aspects of this sensor are pysically divided in the package, with separa
 
 This graph is distinct from the control flow. The sensor data is scaled, upgraded to float, filtered, and fused before being deposited in a ManuLegend for transmission to other firmware modules (typically a counter-party via a comm link).
 
-  ```{mermaid}
+  ```mermaid
   graph TD
     subgraph Color Key
     key0[Asynchronous break]
@@ -50,7 +50,7 @@ This graph is distinct from the control flow. The sensor data is scaled, upgrade
     style key2 fill:#e95,stroke:#222,stroke-width:2px;
   ```
 
-  ```{mermaid}
+  ```mermaid
   graph TD
     a(Scaling, Float upgrade,<br />and application of error)
     b(Scaling, Float upgrade,<br />and application of error)
@@ -78,25 +78,25 @@ This graph is distinct from the control flow. The sensor data is scaled, upgrade
     z -->|Temperature| t
     z -->|Scale| t
     i --> a
-    a --> k
     j --> b
     b --> k
+    b --> p
+    a --> p
+    u --> p
+    k --> p
+    v --> p
+    w --> p
+    a --> k
     k --> u
     u --> v
     v --> w
-    k --> p
-
-    k --> p
-    u --> p
-    v --> p
-    w --> p
     end
 
     subgraph Single read
-    p --> t
     h --> n
     n --> m
     p -.-> q
+    p --> t
     q --> r
     end
 
@@ -124,8 +124,7 @@ This graph is distinct from the control flow. The sensor data is scaled, upgrade
 
 Data-driven demands from the integrator need to ultimately result in register changes in the IMUs.
 
-
-  ```{mermaid}
+  ```mermaid
   graph TD
     a(LSM9DS1)
     b(ManuManager)
