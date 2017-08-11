@@ -210,38 +210,36 @@ uint16_t ManuLegend::datasetSize() {
 * 6    | IMU-2 data bitmask (MSB)
 * ....and so on.
 */
-void ManuLegend::formLegendString(StringBuilder *output) {
-  output->concat((unsigned char) LEGEND_DATASET_IIU_COUNT);
-  output->concat((uint8_t*) &_legend_flags, 2);
-  output->concat((uint8_t*) per_iiu_data, (LEGEND_DATASET_IIU_COUNT * 2));
-  output->string();   // Save a little memory.
+void ManuLegend::formLegendString(StringBuilder* output) {
+  StringBuilder scratchpad;
+  scratchpad.concat((unsigned char) LEGEND_DATASET_IIU_COUNT);
+  scratchpad.concat((uint8_t*) &_legend_flags, 2);
+  scratchpad.concat((uint8_t*) per_iiu_data, (LEGEND_DATASET_IIU_COUNT * 2));
+  scratchpad.string();   // Save a little memory.
+  output->concatHandoff(&scratchpad);
 }
 
 
 void ManuLegend::printDebug(StringBuilder *output) {
-  output->concatf("--------------------------------\n---Legend\n--------------------------------\n");
-  output->concatf("-- dataset_global         0x%08x\n",    (unsigned long) dataset_global);
-  output->concatf("-- dataset_local          0x%08x\n",    (unsigned long) dataset_local);
-  output->concatf("-- dataset_size           %u\n",        (unsigned long) ds_size);
+  output->concat("-- ManuLegend\n--------------------------------\n");
+  output->concatf("  dataset_global \t%p\n", (uintptr_t) dataset_global);
+  output->concatf("  dataset_local  \t%p\n", (uintptr_t) dataset_local);
+  output->concatf("  dataset_size   \t%u\n",     (unsigned long) ds_size);
+  output->concat("-- Enabled data:\n");
+  if (sequence())       output->concatf("\t Seq number \t %u\n", (unsigned long) *((uint32_t*) dataset_local));
+  if (positionGlobal()) output->concatf("\t Position   \t\n");
+  if (deltaT())         output->concatf("\t DeltaT     \t\n");
 
-  output->concat("--- Enabled data:\n");
-  if (sequence()) output->concatf("--- Sequence number     %u\n",        (unsigned long) *((uint32_t*) dataset_local));
+  char* cap_str = (char*) alloca(13);
+  *(cap_str+12) = 0;
 
+  output->concat("\t          agmtoavpagmt\n\t          cyamrneossss\n\t          crgpiglscccc\n");
   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) {
-    output->concatf("\t IIU %02u \t", idx);
-    if (accRaw(idx))             output->concat("accRaw  ");
-    if (gyro(idx))               output->concat("gyro  ");
-    if (mag(idx))                output->concat("mag  ");
-    if (temperature(idx))        output->concat("temperature  ");
-    if (orientation(idx))        output->concat("orientation  ");
-    if (accNullGravity(idx))     output->concat("accNullGravity  ");
-    if (velocity(idx))           output->concat("velocity  ");
-    if (position(idx))           output->concat("position  ");
-    if (samplesAcc(idx))         output->concat("samplesAcc  ");
-    if (samplesGyro(idx))        output->concat("samplesGyro  ");
-    if (samplesMag(idx))         output->concat("samplesMag  ");
-    if (samplesTemperature(idx)) output->concat("samplesTemperature  ");
-    output->concat("\n");
+    uint16_t d_opts = iiu_data_opts(idx);
+    for (uint8_t bit = 0; bit < 12; bit++) {
+      *(cap_str+bit) = (1 == ((d_opts >> bit) && 1)) ? '*' : ' ';
+    }
+    output->concatf("\t IIU %02u:  %s\n", idx, cap_str);
   }
 }
 
@@ -251,7 +249,7 @@ void ManuLegend::printDebug(StringBuilder *output) {
 void ManuLegend::printDataset(StringBuilder *output) {
   output->concat("--------------------------------\n--- Dataset\n--------------------------------\n");
   for (uint8_t i = 0; i < datasetSize()/4; i++) {
-    output->concatf(" 0x%08x%s",  *((uint32_t*) (i + dataset_local)), (i%8 ? "" : "\n"));
+    output->concatf("0x%08x%s",  *((uint32_t*) (i + dataset_local)), (i%8 ? " " : "\n"));
   }
   output->concat("\n\n");
 }
