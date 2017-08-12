@@ -33,6 +33,12 @@ This is a container class for an IMU measurement frame.
 #endif  // MANUVR_IMU_DEBUG
 
 /*
+* Flags for SensorFrames
+*/
+#define  MANUFRAME_FLAGS_COMPLETE          0x01   // Is the data complete?
+
+
+/*
 * This is a container class that is pushed downstream to the Integrator class,
 *   which will integrate it into a sensible representation of position and
 *   orientation, taking error into account.
@@ -40,13 +46,16 @@ This is a container class for an IMU measurement frame.
 */
 class SensorFrame {
   public:
-    Vector3<float> g_data[17];  // The vector of the gyro data.
+    // TODO: The dynamic memory pool code that was in ManuLegend should be moved here.
+    Vector4f         quat[17];  // Orientation
     Vector3<float> a_data[17];  // The vector of the accel data.
+    Vector3<float> g_data[17];  // The vector of the gyro data.
     Vector3<float> m_data[17];  // The vector of the mag data.
-    Vector3<float> v_data[17];  // Velocity
     Vector3<float> n_data[17];  // Null-grav
+    Vector3<float> v_data[17];  // Velocity
     Vector3<float> p_data[17];  // Position
-    Vector4f         quat[17];    // Orientation
+    float     temperature[17];  // Temperature
+    Vector3<float> hand_position;
 
     SensorFrame();
 
@@ -55,8 +64,9 @@ class SensorFrame {
       void printDebug(StringBuilder* output);
     #endif
 
-    inline float time() {          return read_time;  };
-    inline void  time(float nu) {  read_time = nu;    };
+    inline uint32_t seq() {         return _seq;       };
+    inline float   time() {         return _read_time; };
+    inline void    time(float x) {  _read_time = x;    };
 
     inline void setI(uint8_t i, float ax, float ay, float az, float gx, float gy, float gz) {
       a_data[i](ax, ay, az);
@@ -80,10 +90,16 @@ class SensorFrame {
     };
 
 
+
+    static void resetSequenceCounter();
+
+
   private:
-    uint32_t seq;          // Sequence number
-    float    temperature;  //
-    float    read_time;    // Derived from the system time when the values arrived from the sensor.
+    uint32_t _seq        = 0;     // Sequence number
+    float    _read_time  = 0.0f;  // Derived from the system time when the values arrived from the sensor.
+
+
+    static uint32_t _total_sequences;  // We try to
 };
 
 #endif  //__IIU_MEASUREMENT_H__

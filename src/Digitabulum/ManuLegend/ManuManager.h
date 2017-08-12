@@ -64,7 +64,6 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #define DIGITABULUM_MSG_IMU_LEGEND           0x0600 // No args? Asking for this legend. One arg: Legend provided.
 #define DIGITABULUM_MSG_IMU_INIT             0x0604 //
 #define DIGITABULUM_MSG_IMU_READ             0x0605 // Signal to read a given set of IMUs.
-#define DIGITABULUM_MSG_IMU_MAP_STATE        0x0606
 #define DIGITABULUM_MSG_IMU_QUAT_CRUNCH      0x0609 // The given IMU has samples to grind into a quat.
 #define DIGITABULUM_MSG_IMU_TAP              0x060A // The given IMU experienced a tap.
 #define DIGITABULUM_MSG_IMU_DOUBLE_TAP       0x060B // The given IMU experienced a double tap.
@@ -122,7 +121,7 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     void dumpPreformedElements(StringBuilder*);
 
     int8_t setLegend(ManuLegend*);
-    inline ManuLegend* getActiveLegend() {    return operating_legend;    }
+    inline ManuLegend* getActiveLegend() {    return &_legends[0];    }
 
     int8_t read_ag_frame();
     int8_t read_mag_frame();
@@ -131,8 +130,6 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     inline Chirality getChirality() {  return (Chirality) _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_MASK);  };
     inline bool chiralityKnown() {     return _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_KNOWN);  };
 
-    inline bool legendStable() {         return (_er_flag(LEGEND_MGR_FLAGS_LEGEND_STABLE));         };
-    inline void legendStable(bool nu) {  return (_er_set_flag(LEGEND_MGR_FLAGS_LEGEND_STABLE, nu)); };
     inline bool legendSent() {           return (_er_flag(LEGEND_MGR_FLAGS_LEGEND_SENT));           };
     inline void legendSent(bool nu) {    return (_er_set_flag(LEGEND_MGR_FLAGS_LEGEND_SENT, nu));   };
 
@@ -149,11 +146,10 @@ class ManuManager : public EventReceiver, public BusOpCallback {
 
 
   private:
-    uint32_t  sample_count       = 0;         // How many samples have we read since init?
+    uint32_t  sample_count   = 0;         // How many samples have we read since init?
 
-    CPLDDriver* _bus             = nullptr;   // This is the gateway to the hardware.
-    ManuLegend* operating_legend = nullptr;
-
+    CPLDDriver* _bus         = nullptr;   // This is the gateway to the hardware.
+    ManuLegend _legends[2];               // Data demand slots. Two for now.
     Integrator integrator;
 
     /* This is the dataset that we export. */
@@ -164,7 +160,6 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     uint32_t*       _ptr_sequence = nullptr;
     float*          _ptr_delta_t  = nullptr;
 
-    ManuvrMsg event_legend_frame_ready;
     ManuvrMsg event_iiu_read;
     ManuvrMsg quat_crunch_event;
 

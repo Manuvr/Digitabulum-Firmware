@@ -179,6 +179,7 @@ uint32_t Integrator::totalSamples() {
 
 
 /*
+TODO: DEPRECATED Slow. Too complicated.
 */
 int8_t Integrator::pushMeasurement(SampleType data_type, float x, float y, float z, float d_t) {
   uint32_t read_time = micros();
@@ -373,18 +374,18 @@ void Integrator::setVerbosity(int8_t nu) {
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
 void Integrator::printDebug(StringBuilder* output) {
-  output->concatf("\n-------------------------------------------------------\n--- Integrator\n-------------------------------------------------------\n--- %s legend\n--- Samples:\t ", (legend_writable()?"writable":"invalid"));
-  output->concatf("--- measurements\n--- frame_queue:\t %d measurements\n", frame_queue.size());
-  output->concatf("--- temperature: %.2fC\n--- delta_t:\t %.4fms\n--- Quat:\t ", ((double) delta_t * 1000), (double)*(_ptr_temperature));
+  output->concatf("\n-------------------------------------------------------\n--- Integrator\n-------------------------------------------------------\n-- %s legend\n-- Samples:\t \n", (legend_writable()?"writable":"invalid"));
+  output->concatf("-- measurements\n-- frame_queue:\t %d measurements\n", frame_queue.size());
+  output->concatf("-- temperature: %.2fC\n-- delta_t:\t %.4fms\n-- Quat:\t ", ((double) delta_t * 1000), (double)*(_ptr_temperature));
   #if defined(MANUVR_DEBUG)
     _ptr_quat->printDebug(output);  // OK
   #endif
   output->concat("\n");
   if (verbosity > 2) {
-    if (verbosity > 3) output->concatf("--- GyroMeasDrift:    %.4f\n",  (double) GyroMeasDrift);
-    output->concatf("--- Gravity: %s (%.4f, %.4f, %.4f)  %.4G\n", (nullifyGravity() ? "(nulled)":"        "), (double)(_grav.x), (double)(_grav.y), (double)(_grav.z), (double) (grav_scalar));
-    output->concatf("--- offset_angle_y      %5.2f\n", (double) offset_angle_y);
-    output->concatf("--- offset_angle_z      %5.2f\n", (double) offset_angle_z);
+    if (verbosity > 3) output->concatf("-- GyroMeasDrift:    %.4f\n",  (double) GyroMeasDrift);
+    output->concatf("-- Gravity: %s (%.4f, %.4f, %.4f)  %.4G\n", (nullifyGravity() ? "(nulled)":"        "), (double)(_grav.x), (double)(_grav.y), (double)(_grav.z), (double) (grav_scalar));
+    output->concatf("-- offset_angle_y      %5.2f\n", (double) offset_angle_y);
+    output->concatf("-- offset_angle_z      %5.2f\n", (double) offset_angle_z);
   }
 
   if (verbosity > 3) {
@@ -405,18 +406,18 @@ void Integrator::printDebug(StringBuilder* output) {
 
 
 void Integrator::dumpPointers(StringBuilder* output) {
-  output->concatf("\t _ptr_quat         \t 0x%08x\n",    (unsigned long)  _ptr_quat        );
-  output->concatf("\t _ptr_acc          \t 0x%08x\n",    (unsigned long)  _ptr_acc         );
-  output->concatf("\t _ptr_gyr          \t 0x%08x\n",    (unsigned long)  _ptr_gyr         );
-  output->concatf("\t _ptr_mag          \t 0x%08x\n",    (unsigned long)  _ptr_mag         );
-  output->concatf("\t _ptr_temperature  \t 0x%08x\n",    (unsigned long)  _ptr_temperature );
-  output->concatf("\t _ptr_vel          \t 0x%08x\n",    (unsigned long)  _ptr_vel         );
-  output->concatf("\t _ptr_null_grav    \t 0x%08x\n",    (unsigned long)  _ptr_null_grav   );
-  output->concatf("\t _ptr_position     \t 0x%08x\n",    (unsigned long)  _ptr_position    );
-  output->concatf("\t _ptr_s_count_acc  \t 0x%08x\n",    (unsigned long)  _ptr_s_count_acc );
-  output->concatf("\t _ptr_s_count_gyr  \t 0x%08x\n",    (unsigned long)  _ptr_s_count_gyr );
-  output->concatf("\t _ptr_s_count_mag  \t 0x%08x\n",    (unsigned long)  _ptr_s_count_mag );
-  output->concatf("\t _ptr_s_count_temp \t 0x%08x\n",    (unsigned long)  _ptr_s_count_temp);
+  output->concatf("\t _ptr_quat         \t 0x%08x\n", (unsigned long) _ptr_quat        );
+  output->concatf("\t _ptr_acc          \t 0x%08x\n", (unsigned long) _ptr_acc         );
+  output->concatf("\t _ptr_gyr          \t 0x%08x\n", (unsigned long) _ptr_gyr         );
+  output->concatf("\t _ptr_mag          \t 0x%08x\n", (unsigned long) _ptr_mag         );
+  output->concatf("\t _ptr_temperature  \t 0x%08x\n", (unsigned long) _ptr_temperature );
+  output->concatf("\t _ptr_vel          \t 0x%08x\n", (unsigned long) _ptr_vel         );
+  output->concatf("\t _ptr_null_grav    \t 0x%08x\n", (unsigned long) _ptr_null_grav   );
+  output->concatf("\t _ptr_position     \t 0x%08x\n", (unsigned long) _ptr_position    );
+  output->concatf("\t _ptr_s_count_acc  \t 0x%08x\n", (unsigned long) _ptr_s_count_acc );
+  output->concatf("\t _ptr_s_count_gyr  \t 0x%08x\n", (unsigned long) _ptr_s_count_gyr );
+  output->concatf("\t _ptr_s_count_mag  \t 0x%08x\n", (unsigned long) _ptr_s_count_mag );
+  output->concatf("\t _ptr_s_count_temp \t 0x%08x\n", (unsigned long) _ptr_s_count_temp);
 }
 
 

@@ -58,7 +58,7 @@ This graph is distinct from the control flow. The sensor data is scaled, upgrade
     i(Bias de-sat)
     j(Spherical aberration<br />correction)
     k(Orientation)
-    m(InertialMeasurement)
+    m(SensorFrame)
     u(Gravity nullification)
     v(Velocity)
     w(Position)

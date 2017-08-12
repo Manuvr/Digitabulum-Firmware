@@ -44,11 +44,21 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #include "Integrator.h"
 #include "../CPLDDriver/CPLDDriver.h"
 
+/*
+* Flags for Legend state and control (not data).
+*/
+#define  MANULEGEND_FLAGS_LEGEND_ACTIVE       0x01   // If set, this ManuLegend will be included in the sum.
+#define  MANULEGEND_FLAGS_LEGEND_SATISFIED    0x02   // If set, this ManuLegend is getting everything it needs.
+#define  MANULEGEND_FLAGS_LEGEND_STABLE       0x04   // This ManuLegend is stable and ready for operation.
 
-#define  DATA_LEGEND_FLAGS_SENSOR_ACTIVE      0x0001   // If set, this ManuLegend will be included in the sum.
-#define  DATA_LEGEND_FLAGS_REPORT_SEQUENCE    0x0002   //
-#define  DATA_LEGEND_FLAGS_REPORT_DELTA_T     0x0004   //
-#define  DATA_LEGEND_FLAGS_REPORT_GLOBAL_POS  0x0008   //
+#define  MANULEGEND_FLAGS_SHOULD_ACCEPT_MASK  (MANULEGEND_FLAGS_LEGEND_STABLE | MANULEGEND_FLAGS_LEGEND_ACTIVE)
+
+/*
+* Bitmask flags for frame-global data.
+*/
+#define  DATA_LEGEND_FLAGS_REPORT_SEQUENCE    0x01   // ManuLegend will append a seq number.
+#define  DATA_LEGEND_FLAGS_REPORT_DELTA_T     0x02   // Report the time between frames.
+#define  DATA_LEGEND_FLAGS_REPORT_GLOBAL_POS  0x04   // Report a summed position vecotr for the entire glove.
 
 /*
 * Bitmask flags for IMU data that makes its way into the map. This is the ManuLegend spec.
@@ -117,124 +127,138 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 * Offset map (converting from legend spec (bitmasks) to pointers).
 * ------------------------------------------------------------------------------------------
 * The global legend data leads the IMU data, always.
-* IMUs
-*
-* acc gyr mag
-*
-*
-*
-*
 */
 
 /* These are offsets in the main data table that are globals. These lead the IIU data. */
-#define LEGEND_DATASET_OFFSET_SEQUENCE   0
-#define LEGEND_DATASET_OFFSET_DELTA_T    4
-#define LEGEND_DATASET_OFFSET_G_POSITION 8
+#define LEGEND_DATASET_OFFSET_SEQUENCE    0
+#define LEGEND_DATASET_OFFSET_DELTA_T     4
+#define LEGEND_DATASET_OFFSET_G_POSITION  8
 #define LEGEND_DATASET_OFFSET_RESRVD     20
 
 /* These are offsets in the main data table that relate to a given IIU. */
-#define LEGEND_DATASET_OFFSET_QUAT      0
-#define LEGEND_DATASET_OFFSET_ACC       16
-#define LEGEND_DATASET_OFFSET_GYR       28
-#define LEGEND_DATASET_OFFSET_MAG       40
-#define LEGEND_DATASET_OFFSET_TEMP      52
-#define LEGEND_DATASET_OFFSET_VEL       56
-#define LEGEND_DATASET_OFFSET_SC_ACC    68
-#define LEGEND_DATASET_OFFSET_SC_GYR    72
-#define LEGEND_DATASET_OFFSET_SC_MAG    76
-#define LEGEND_DATASET_OFFSET_SC_TMEP   80
-#define LEGEND_DATASET_OFFSET_NULL_GRAV 84
-#define LEGEND_DATASET_OFFSET_POSITION  96
+#define LEGEND_DATASET_OFFSET_QUAT        0
+#define LEGEND_DATASET_OFFSET_ACC        16
+#define LEGEND_DATASET_OFFSET_GYR        28
+#define LEGEND_DATASET_OFFSET_MAG        40
+#define LEGEND_DATASET_OFFSET_TEMP       52
+#define LEGEND_DATASET_OFFSET_VEL        56
+#define LEGEND_DATASET_OFFSET_SC_ACC     68
+#define LEGEND_DATASET_OFFSET_SC_GYR     72
+#define LEGEND_DATASET_OFFSET_SC_MAG     76
+#define LEGEND_DATASET_OFFSET_SC_TMEP    80
+#define LEGEND_DATASET_OFFSET_NULL_GRAV  84
+#define LEGEND_DATASET_OFFSET_POSITION   96
 
-#define LEGEND_DATASET_RESRVD_SIZE       4
-#define LEGEND_DATASET_GLOBAL_SIZE      24
+#define LEGEND_DATASET_RESRVD_SIZE        4
+#define LEGEND_DATASET_GLOBAL_SIZE       24
 #define LEGEND_DATASET_PER_IMU_SIZE     108
-#define LEGEND_DATASET_IIU_COUNT        17
-
+#define LEGEND_DATASET_IIU_COUNT         17
 
 /* Therefore, the full map size is.... */
-#define LEGEND_MGR_MAX_DATASET_SIZE     LEGEND_DATASET_GLOBAL_SIZE + (LEGEND_DATASET_PER_IMU_SIZE * LEGEND_DATASET_IIU_COUNT)
+#define LEGEND_MGR_MAX_DATASET_SIZE (LEGEND_DATASET_GLOBAL_SIZE + (LEGEND_DATASET_PER_IMU_SIZE * LEGEND_DATASET_IIU_COUNT))
+
+enum class ManuEncoding {
+  LOG    = 0,
+  CBOR   = 1,
+  OSC    = 2,
+  MANUVR = 3
+};
 
 
 class ManuLegend {
   public:
-    uint8_t*       dataset_global = nullptr;  // The dataset common to all ManuLegends.
-    uint8_t*       dataset_local  = nullptr;  // The dataset the EventReceiver asked for.
-    EventReceiver* owner          = nullptr;  // The owner of this ManuLegend.
+    EventReceiver* owner = nullptr;  // The owner of this ManuLegend.
 
-    ManuLegend();
+    ManuLegend(ManuEncoding);
+    ManuLegend() : ManuLegend(ManuEncoding::LOG) {};
     ~ManuLegend();
 
-    /*
-    * Call this fxn to finalize our choices about the ManuLegend and allocate the memory.
-    */
-    int8_t finallize();
-    inline bool finallized()            {  return (NULL != dataset_local);    };
+    int8_t offer(SensorFrame*);
 
-    int8_t copy_frame();
     uint16_t datasetSize();
-    void printDebug(StringBuilder *);
-    void printDataset(StringBuilder *);
-    void formLegendString(StringBuilder *);
 
-    /* This is global data. */
-    inline bool sensorEnabled()         {  return (_legend_flags & DATA_LEGEND_FLAGS_SENSOR_ACTIVE);     };     // Should this sensor be represented in map reports?
-    inline bool positionGlobal()        {  return (_legend_flags & DATA_LEGEND_FLAGS_REPORT_GLOBAL_POS); };     // Global data: Should we return a global hand position?
-    inline bool sequence()              {  return (_legend_flags & DATA_LEGEND_FLAGS_REPORT_SEQUENCE);   };     // Global data: Should we return a sequence number?
-    inline bool deltaT()                {  return (_legend_flags & DATA_LEGEND_FLAGS_REPORT_DELTA_T);    };     // Global data: Should we return a deltaT since last frame?
+    void printDebug(StringBuilder*);
 
-    inline void sensorEnabled(bool en)  {  _legend_flags = (en) ? (_legend_flags | DATA_LEGEND_FLAGS_SENSOR_ACTIVE)     : (_legend_flags & ~(DATA_LEGEND_FLAGS_SENSOR_ACTIVE));      };
-    inline void positionGlobal(bool en) {  _legend_flags = (en) ? (_legend_flags | DATA_LEGEND_FLAGS_REPORT_GLOBAL_POS) : (_legend_flags & ~(DATA_LEGEND_FLAGS_REPORT_GLOBAL_POS));  };
-    inline void sequence(bool en)       {  _legend_flags = (en) ? (_legend_flags | DATA_LEGEND_FLAGS_REPORT_SEQUENCE)   : (_legend_flags & ~(DATA_LEGEND_FLAGS_REPORT_SEQUENCE));    };
-    inline void deltaT(bool en)         {  _legend_flags = (en) ? (_legend_flags | DATA_LEGEND_FLAGS_REPORT_DELTA_T)    : (_legend_flags & ~(DATA_LEGEND_FLAGS_REPORT_DELTA_T));     };
+    int8_t getLegendString(StringBuilder*);
+    int8_t setLegendString(StringBuilder*);
+
+    /* Used to enable or disable the Legend's activity. */
+    inline bool active() {            return (_flags & MANULEGEND_FLAGS_LEGEND_ACTIVE);     };
+    inline void active(bool en) {     _flags = (en) ? (_flags | MANULEGEND_FLAGS_LEGEND_ACTIVE) : (_flags & ~(MANULEGEND_FLAGS_LEGEND_ACTIVE));  };
+    inline bool satisfied() {         return (_flags & MANULEGEND_FLAGS_LEGEND_SATISFIED);  };
+    inline bool stable() {            return (_flags & MANULEGEND_FLAGS_LEGEND_STABLE);     };
+    inline void encoding(ManuEncoding e) {   _encoding = e;  };
+
+    /* This is frame-global data. */
+    inline bool handPosition() {  return (frame_data & DATA_LEGEND_FLAGS_REPORT_GLOBAL_POS); };     // Global data: Should we return a global hand position?
+    inline bool sequence() {      return (frame_data & DATA_LEGEND_FLAGS_REPORT_SEQUENCE);   };     // Global data: Should we return a sequence number?
+    inline bool deltaT() {        return (frame_data & DATA_LEGEND_FLAGS_REPORT_DELTA_T);    };     // Global data: Should we return a deltaT since last frame?
+
+    inline void handPosition(bool en) {  frame_data = (en) ? (frame_data | DATA_LEGEND_FLAGS_REPORT_GLOBAL_POS) : (frame_data & ~(DATA_LEGEND_FLAGS_REPORT_GLOBAL_POS));  };
+    inline void sequence(bool en) {      frame_data = (en) ? (frame_data | DATA_LEGEND_FLAGS_REPORT_SEQUENCE)   : (frame_data & ~(DATA_LEGEND_FLAGS_REPORT_SEQUENCE));    };
+    inline void deltaT(bool en) {        frame_data = (en) ? (frame_data | DATA_LEGEND_FLAGS_REPORT_DELTA_T)    : (frame_data & ~(DATA_LEGEND_FLAGS_REPORT_DELTA_T));     };
 
     /* This is per-sensor data. */
-    inline uint16_t iiu_data_opts(uint8_t idx)  {  return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT]);   };
-    inline bool accRaw(uint8_t idx)             {  return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_ACC           ); };
-    inline bool gyro(uint8_t idx)               {  return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_GYRO          ); };
-    inline bool mag(uint8_t idx)                {  return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_MAG           ); };
-    inline bool temperature(uint8_t idx)        {  return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_TEMP          ); };
-    inline bool orientation(uint8_t idx)        {  return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_ORIENTATION   ); };
-    inline bool accNullGravity(uint8_t idx)     {  return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_NULL_GRAV     ); };
-    inline bool velocity(uint8_t idx)           {  return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_VELOCITY      ); };
-    inline bool position(uint8_t idx)           {  return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_POSITION      ); };
-    inline bool samplesAcc(uint8_t idx)         {  return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_SC_ACC        ); };
-    inline bool samplesGyro(uint8_t idx)        {  return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_SC_GYRO       ); };
-    inline bool samplesMag(uint8_t idx)         {  return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_SC_MAG        ); };
+    inline uint16_t iiu_data_opts(uint8_t idx) {   return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT]);   };
+    inline bool accRaw(uint8_t idx) {              return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_ACC           ); };
+    inline bool gyro(uint8_t idx) {                return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_GYRO          ); };
+    inline bool mag(uint8_t idx) {                 return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_MAG           ); };
+    inline bool temperature(uint8_t idx) {         return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_TEMP          ); };
+    inline bool orientation(uint8_t idx) {         return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_ORIENTATION   ); };
+    inline bool accNullGravity(uint8_t idx) {      return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_NULL_GRAV     ); };
+    inline bool velocity(uint8_t idx) {            return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_VELOCITY      ); };
+    inline bool position(uint8_t idx) {            return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_POSITION      ); };
+    inline bool samplesAcc(uint8_t idx) {          return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_SC_ACC        ); };
+    inline bool samplesGyro(uint8_t idx) {         return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_SC_GYRO       ); };
+    inline bool samplesMag(uint8_t idx) {          return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_SC_MAG        ); };
     inline bool samplesTemperature(uint8_t idx) {  return (per_iiu_data[idx % LEGEND_DATASET_IIU_COUNT] & DATA_LEGEND_FLAGS_IIU_SC_TEMPERATURE); };
 
-    inline void accRaw(uint8_t idx, bool en)             {   _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_ACC           );  };     // Primary data:  Return for the given IIU?
-    inline void gyro(uint8_t idx, bool en)               {   _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_GYRO          );  };     // Primary data:  Return for the given IIU?
-    inline void mag(uint8_t idx, bool en)                {   _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_MAG           );  };     // Primary data:  Return for the given IIU?
-    inline void temperature(uint8_t idx, bool en)        {   _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_TEMP          );  };     // Primary data:  Return for the given IIU?
-    inline void orientation(uint8_t idx, bool en)        {   _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_ORIENTATION   );  };     // Inferred data: Return for the given IIU?
-    inline void accNullGravity(uint8_t idx, bool en)     {   _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_NULL_GRAV     );  };     // Inferred data: Return for the given IIU?
-    inline void velocity(uint8_t idx, bool en)           {   _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_VELOCITY      );  };     // Inferred data: Return for the given IIU?
-    inline void position(uint8_t idx, bool en)           {   _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_POSITION      );  };     // Inferred data: Return for the given IIU?
-    inline void samplesAcc(uint8_t idx, bool en)         {   _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_SC_ACC        );  };     // Sample counts: Return for the given IIU?
-    inline void samplesGyro(uint8_t idx, bool en)        {   _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_SC_GYRO       );  };     // Sample counts: Return for the given IIU?
-    inline void samplesMag(uint8_t idx, bool en)         {   _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_SC_MAG        );  };     // Sample counts: Return for the given IIU?
+    inline void accRaw(uint8_t idx, bool en) {               _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_ACC           );  };     // Primary data:  Return for the given IIU?
+    inline void gyro(uint8_t idx, bool en) {                 _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_GYRO          );  };     // Primary data:  Return for the given IIU?
+    inline void mag(uint8_t idx, bool en) {                  _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_MAG           );  };     // Primary data:  Return for the given IIU?
+    inline void temperature(uint8_t idx, bool en) {          _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_TEMP          );  };     // Primary data:  Return for the given IIU?
+    inline void orientation(uint8_t idx, bool en) {          _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_ORIENTATION   );  };     // Inferred data: Return for the given IIU?
+    inline void accNullGravity(uint8_t idx, bool en) {       _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_NULL_GRAV     );  };     // Inferred data: Return for the given IIU?
+    inline void velocity(uint8_t idx, bool en) {             _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_VELOCITY      );  };     // Inferred data: Return for the given IIU?
+    inline void position(uint8_t idx, bool en) {             _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_POSITION      );  };     // Inferred data: Return for the given IIU?
+    inline void samplesAcc(uint8_t idx, bool en) {           _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_SC_ACC        );  };     // Sample counts: Return for the given IIU?
+    inline void samplesGyro(uint8_t idx, bool en) {          _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_SC_GYRO       );  };     // Sample counts: Return for the given IIU?
+    inline void samplesMag(uint8_t idx, bool en) {           _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_SC_MAG        );  };     // Sample counts: Return for the given IIU?
     inline void samplesTemperature(uint8_t idx, bool en) {   _internal_setter(idx % LEGEND_DATASET_IIU_COUNT, en, DATA_LEGEND_FLAGS_IIU_SC_TEMPERATURE);  };     // Sample counts: Return for the given IIU?
 
     /* This is per-sensor data, but changes ALL IIU classes in a single call. */
-    void accRaw(bool en)             {   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_ACC           );  };     // Primary data:  Return for all IIUs?
-    void gyro(bool en)               {   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_GYRO          );  };     // Primary data:  Return for all IIUs?
-    void mag(bool en)                {   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_MAG           );  };     // Primary data:  Return for all IIUs?
-    void temperature(bool en)        {   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_TEMP          );  };     // Primary data:  Return for all IIUs?
-    void orientation(bool en)        {   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_ORIENTATION   );  };     // Inferred data: Return for all IIUs?
-    void accNullGravity(bool en)     {   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_NULL_GRAV     );  };     // Inferred data: Return for all IIUs?
-    void velocity(bool en)           {   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_VELOCITY      );  };     // Inferred data: Return for all IIUs?
-    void position(bool en)           {   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_POSITION      );  };     // Inferred data: Return for all IIUs?
-    void samplesAcc(bool en)         {   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_SC_ACC        );  };     // Sample counts: Return for all IIUs?
-    void samplesGyro(bool en)        {   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_SC_GYRO       );  };     // Sample counts: Return for all IIUs?
-    void samplesMag(bool en)         {   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_SC_MAG        );  };     // Sample counts: Return for all IIUs?
+    void accRaw(bool en) {               for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_ACC           );  };     // Primary data:  Return for all IIUs?
+    void gyro(bool en) {                 for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_GYRO          );  };     // Primary data:  Return for all IIUs?
+    void mag(bool en) {                  for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_MAG           );  };     // Primary data:  Return for all IIUs?
+    void temperature(bool en) {          for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_TEMP          );  };     // Primary data:  Return for all IIUs?
+    void orientation(bool en) {          for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_ORIENTATION   );  };     // Inferred data: Return for all IIUs?
+    void accNullGravity(bool en) {       for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_NULL_GRAV     );  };     // Inferred data: Return for all IIUs?
+    void velocity(bool en) {             for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_VELOCITY      );  };     // Inferred data: Return for all IIUs?
+    void position(bool en) {             for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_POSITION      );  };     // Inferred data: Return for all IIUs?
+    void samplesAcc(bool en) {           for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_SC_ACC        );  };     // Sample counts: Return for all IIUs?
+    void samplesGyro(bool en) {          for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_SC_GYRO       );  };     // Sample counts: Return for all IIUs?
+    void samplesMag(bool en) {           for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_SC_MAG        );  };     // Sample counts: Return for all IIUs?
     void samplesTemperature(bool en) {   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) _internal_setter(idx, en, DATA_LEGEND_FLAGS_IIU_SC_TEMPERATURE);  };     // Sample counts: Return for all IIUs?
 
 
+    static const char* const encoding_label(ManuEncoding);
+
+
   private:
-    uint16_t _legend_flags = 0;
+    uint32_t _ms_last_send = 0;
+    uint32_t _ms_interval  = 100;
     uint16_t ds_size       = 0;
+    ManuEncoding _encoding = ManuEncoding::MANUVR;
+    uint8_t  _flags        = 0;
+    uint8_t  iiu_count     = LEGEND_DATASET_IIU_COUNT;
+
+    // TODO: Now that serialize is abstracted, make a typedef struct. Faster.
+    uint8_t  frame_data    = 0;
     uint16_t per_iiu_data[LEGEND_DATASET_IIU_COUNT];
+
+    inline void satisfied(bool en) {  _flags = (en) ? (_flags | MANULEGEND_FLAGS_LEGEND_SATISFIED) : (_flags & ~(MANULEGEND_FLAGS_LEGEND_SATISFIED)); };
+    inline void stable(bool en) {     _flags = (en) ? (_flags | MANULEGEND_FLAGS_LEGEND_STABLE)    : (_flags & ~(MANULEGEND_FLAGS_LEGEND_STABLE));    };
+    inline bool should_accept() {     return (_flags & MANULEGEND_FLAGS_SHOULD_ACCEPT_MASK);  };
 
     inline void _internal_setter(uint8_t idx, bool en, uint16_t x) {  per_iiu_data[idx] = (en) ? (per_iiu_data[idx] | x) : (per_iiu_data[idx]  & ~(x));   };
 };

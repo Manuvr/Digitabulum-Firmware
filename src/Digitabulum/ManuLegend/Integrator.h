@@ -67,7 +67,9 @@ Error should be integrated here as well to form a set of limit error values for
 #define IIU_DEG_TO_RAD_SCALAR   (3.14159f / 180.0f)
 
 
-#define PREALLOCD_IMU_FRAMES    11   // We retain this many frames.
+#ifndef PREALLOCD_IMU_FRAMES
+  #define PREALLOCD_IMU_FRAMES    10   // We retain this many frames.
+#endif
 
 
 enum class SampleType {
@@ -89,7 +91,6 @@ class Integrator {
     float beta;
     float grav_scalar = 0.0f;
 
-
     Integrator();
     ~Integrator();
 
@@ -109,6 +110,7 @@ class Integrator {
     /* These are meant to be called from the IMUs. */
     int8_t pushMeasurement(SampleType, float x, float y, float z, float delta_t);
     int8_t pushMeasurement(SensorFrame*);
+    SensorFrame* takeResult();
 
     void deposit_log(StringBuilder*);
 
@@ -227,6 +229,11 @@ class Integrator {
       if (nu < 10) madgwick_iterations = nu;
     }
 
+    /**
+    * @return nullptr when empty.
+    */
+    inline SensorFrame* take() {  return _complete.get();  };
+
 
     static float    mag_discard_threshold;
     static const char* getSourceTypeString(SampleType);
@@ -236,6 +243,8 @@ class Integrator {
 
 
   private:
+    RingBuffer<SensorFrame*> _complete(4);
+
     float delta_t      = 0.0f;
 
     //float GyroMeasError;
@@ -310,6 +319,7 @@ class Integrator {
     static uint32_t minimum_prealloc_level;
     static PriorityQueue<SensorFrame*>  preallocd_measurements;
     static SensorFrame __prealloc[PREALLOCD_IMU_FRAMES];
+
 
     static void reclaimMeasurement(SensorFrame*);
 };

@@ -21,6 +21,51 @@ limitations under the License.
 */
 
 #include "ManuLegend.h"
+#include <DataStructures/Argument.h>
+
+/*******************************************************************************
+*      _______.___________.    ___   .___________. __    ______     _______.
+*     /       |           |   /   \  |           ||  |  /      |   /       |
+*    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
+*     \   \       |  |      /  /_\  \    |  |     |  | |  |        \   \
+* .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
+* |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
+*
+* Static members and initializers should be located here.
+*******************************************************************************/
+
+const char* const ManuLegend::encoding_label(ManuEncoding e) {
+  switch (e) {
+    case ManuEncoding::LOG:    return "LOG";
+    case ManuEncoding::CBOR:   return "CBOR";
+    case ManuEncoding::OSC:    return "OSC";
+    case ManuEncoding::MANUVR: return "MANUVR";
+  }
+  return "";
+};
+
+const char* const get_imu_label(int idx) {
+  switch (idx) {
+    case 0:   return "c";
+    case 1:   return "mc";
+    case 2:   return "p1";
+    case 3:   return "i1";
+    case 4:   return "d1";
+    case 5:   return "p2";
+    case 6:   return "i2";
+    case 7:   return "d2";
+    case 8:   return "p3";
+    case 9:   return "i3";
+    case 10:  return "d3";
+    case 11:  return "p4";
+    case 12:  return "i4";
+    case 13:  return "d4";
+    case 14:  return "p5";
+    case 15:  return "i5";
+    case 16:  return "d5";
+    default:  return "mistake";
+  }
+};
 
 
 /****************************************************************************************************
@@ -32,11 +77,11 @@ limitations under the License.
 * Constructors/destructors, class initialization functions and so-forth...
 ****************************************************************************************************/
 
-
 /**
 * Constructor
 */
-ManuLegend::ManuLegend() {
+ManuLegend::ManuLegend(ManuEncoding e) {
+  _encoding = e;
   // Make the Legend NULL at first. Nothing requested.
   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) per_iiu_data[idx] = 0;
 }
@@ -45,125 +90,99 @@ ManuLegend::ManuLegend() {
 * Destructor
 */
 ManuLegend::~ManuLegend() {
-  if (dataset_local) {
-    free(dataset_local);
-    dataset_local = nullptr;
-    ds_size = 0;
-  }
-}
-
-
-
-/**
-* Call this fxn to finalize our choices about the Legend and allocate the memory.
-*/
-int8_t ManuLegend::finallize() {
-  if (datasetSize() > 0) {
-    if (dataset_local) {
-      // We have already carved out space for a dataset. We will need to re-allocate.
-      free(dataset_local);
-      dataset_local = nullptr;
-    }
-    dataset_local = (uint8_t*) malloc(ds_size);
-    if (dataset_local) {
-      for (uint16_t i = 0; i < ds_size; i++) *(dataset_local + i) = 0;
-      return 0;
-    }
-  }
-  return -1;  // Failure.
 }
 
 
 /**
-* Calling this will cause the class to copy the data the owner requested from the global data map.
+* Calling this will cause the class to copy the data the owner requested from the
+*   SensorFrame. We get data on a frame-by-frame basis, and we can assume that we only
+*   have a lock on the data within this fxn scope. So anything indirected must be
+*   copied here.
+*
+* @return non-zero on error.
 */
-int8_t ManuLegend::copy_frame() {
-  if ((nullptr == dataset_global) || (nullptr == dataset_local)) return -1;  // Bailout clause.
-  StringBuilder output;
-  uint16_t accumulated_offset = 0;
-  if (sequence()) {
-    // Sequence number is special, because it is specific to this copy of the map.
-    (*((uint32_t*) dataset_local))++;
-    accumulated_offset++;
-  }
-  if (deltaT()) {
-    *((uint32_t*) dataset_local + accumulated_offset) = *((uint32_t*) dataset_global + LEGEND_DATASET_OFFSET_DELTA_T/4);
-    accumulated_offset++;
-  }
-  if (positionGlobal()) {
-    *((uint32_t*) dataset_local + accumulated_offset + 0) = *((uint32_t*) dataset_global + 0 + LEGEND_DATASET_OFFSET_G_POSITION/4);
-    *((uint32_t*) dataset_local + accumulated_offset + 1) = *((uint32_t*) dataset_global + 1 + LEGEND_DATASET_OFFSET_G_POSITION/4);
-    *((uint32_t*) dataset_local + accumulated_offset + 2) = *((uint32_t*) dataset_global + 2 + LEGEND_DATASET_OFFSET_G_POSITION/4);
-    accumulated_offset += 3;
-  }
+int8_t ManuLegend::offer(SensorFrame* frame) {
+  if (should_accept()) {
+    if (_ms_last_send <= millis()) {
+      StringBuilder output;
+      switch (_encoding) {
+        case ManuEncoding::CBOR:
+        case ManuEncoding::MANUVR:
+          {
+            Argument* ret = nullptr;
+            if (sequence()) {
+              Argument* nu = new Argument(frame->seq());
+              nu->setKey("seq");
+              ret = (nullptr == ret) ? nu : ret->link(nu);
+            }
+            if (deltaT()) {
+              Argument* nu = new Argument(frame->time());
+              nu->setKey("dt");
+              ret = (nullptr == ret) ? nu : ret->link(nu);
+            }
+            if (handPosition()) {
+            }
 
-  for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) {
-    if (orientation(idx)) {
-      *((uint32_t*) dataset_local + accumulated_offset + 0) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 0 + LEGEND_DATASET_OFFSET_QUAT/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      *((uint32_t*) dataset_local + accumulated_offset + 1) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 1 + LEGEND_DATASET_OFFSET_QUAT/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      *((uint32_t*) dataset_local + accumulated_offset + 2) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 2 + LEGEND_DATASET_OFFSET_QUAT/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      *((uint32_t*) dataset_local + accumulated_offset + 3) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 3 + LEGEND_DATASET_OFFSET_QUAT/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      accumulated_offset += 4;
-    }
-    if (accNullGravity(idx)) {
-      *((uint32_t*) dataset_local + accumulated_offset + 0) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 0 + LEGEND_DATASET_OFFSET_NULL_GRAV/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      *((uint32_t*) dataset_local + accumulated_offset + 1) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 1 + LEGEND_DATASET_OFFSET_NULL_GRAV/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      *((uint32_t*) dataset_local + accumulated_offset + 2) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 2 + LEGEND_DATASET_OFFSET_NULL_GRAV/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      accumulated_offset += 3;
-    }
-    if (accRaw(idx)) {
-      *((uint32_t*) dataset_local + accumulated_offset + 0) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 0 + LEGEND_DATASET_OFFSET_ACC/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      *((uint32_t*) dataset_local + accumulated_offset + 1) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 1 + LEGEND_DATASET_OFFSET_ACC/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      *((uint32_t*) dataset_local + accumulated_offset + 2) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 2 + LEGEND_DATASET_OFFSET_ACC/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      accumulated_offset += 3;
-    }
-    if (gyro(idx)) {
-      *((uint32_t*) dataset_local + accumulated_offset + 0) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 0 + LEGEND_DATASET_OFFSET_GYR/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      *((uint32_t*) dataset_local + accumulated_offset + 1) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 1 + LEGEND_DATASET_OFFSET_GYR/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      *((uint32_t*) dataset_local + accumulated_offset + 2) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 2 + LEGEND_DATASET_OFFSET_GYR/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      accumulated_offset += 3;
-    }
-    if (mag(idx)) {
-      *((uint32_t*) dataset_local + accumulated_offset + 0) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 0 + LEGEND_DATASET_OFFSET_MAG/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      *((uint32_t*) dataset_local + accumulated_offset + 1) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 1 + LEGEND_DATASET_OFFSET_MAG/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      *((uint32_t*) dataset_local + accumulated_offset + 2) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 2 + LEGEND_DATASET_OFFSET_MAG/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      accumulated_offset += 3;
-    }
-    if (velocity(idx)) {
-      *((uint32_t*) dataset_local + accumulated_offset + 0) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 0 + LEGEND_DATASET_OFFSET_VEL/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      *((uint32_t*) dataset_local + accumulated_offset + 1) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 1 + LEGEND_DATASET_OFFSET_VEL/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      *((uint32_t*) dataset_local + accumulated_offset + 2) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 2 + LEGEND_DATASET_OFFSET_VEL/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      accumulated_offset += 3;
-    }
-    if (position(idx)) {
-      *((uint32_t*) dataset_local + accumulated_offset + 0) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 0 + LEGEND_DATASET_OFFSET_POSITION/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      *((uint32_t*) dataset_local + accumulated_offset + 1) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 1 + LEGEND_DATASET_OFFSET_POSITION/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      *((uint32_t*) dataset_local + accumulated_offset + 2) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 2 + LEGEND_DATASET_OFFSET_POSITION/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      accumulated_offset += 3;
-    }
-    if (temperature(idx)) {
-      *((uint32_t*) dataset_local + accumulated_offset + 0) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 0 + LEGEND_DATASET_OFFSET_TEMP/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      accumulated_offset++;
-    }
-    if (samplesAcc(idx)) {
-      *((uint32_t*) dataset_local + accumulated_offset + 0) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 0 + LEGEND_DATASET_OFFSET_SC_ACC/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      accumulated_offset++;
-    }
-    if (samplesGyro(idx)) {
-      *((uint32_t*) dataset_local + accumulated_offset + 0) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 0 + LEGEND_DATASET_OFFSET_SC_GYR/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      accumulated_offset++;
-    }
-    if (samplesMag(idx)) {
-      *((uint32_t*) dataset_local + accumulated_offset + 0) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 0 + LEGEND_DATASET_OFFSET_SC_MAG/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      accumulated_offset++;
-    }
-    if (samplesTemperature(idx)) {
-      *((uint32_t*) dataset_local + accumulated_offset + 0) = *((uint32_t*) dataset_global + LEGEND_DATASET_GLOBAL_SIZE/4 + 0 + LEGEND_DATASET_OFFSET_SC_TMEP/4 + (LEGEND_DATASET_PER_IMU_SIZE/4 * idx));
-      accumulated_offset++;
+            for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) {
+              Argument* imu_arg = nullptr;
+              if (orientation(idx)) {
+              }
+              if (accNullGravity(idx)) {
+              }
+              if (accRaw(idx)) {
+              }
+              if (gyro(idx)) {
+              }
+              if (mag(idx)) {
+              }
+              if (velocity(idx)) {
+              }
+              if (position(idx)) {
+              }
+              if (temperature(idx)) {
+                Argument* nu = new Argument(frame->temperature[idx]);
+                nu->setKey("temp");
+                imu_arg = (nullptr == imu_arg) ? nu : imu_arg->link(nu);
+              }
+              if (samplesAcc(idx)) {
+              }
+              if (samplesGyro(idx)) {
+              }
+              if (samplesMag(idx)) {
+              }
+              if (samplesTemperature(idx)) {
+              }
+              if (imu_arg) {
+                Argument* nu = new Argument(imu_arg);
+                nu->setKey(get_imu_label(idx));
+                ret = (nullptr == ret) ? nu : ret->link(nu);
+              }
+            }
+            StringBuilder temp;
+            if (ManuEncoding::CBOR == _encoding) {
+              output.concat("CBOR output:\n");
+              Argument::encodeToCBOR(ret, &temp);
+            }
+            else {
+              output.concat("MANUVR output:\n");
+              ret->serialize(&output);
+            }
+            temp.printDebug(&output);
+            output.concat("\n");
+            delete ret;
+          }
+          break;
+        case ManuEncoding::OSC:
+          break;
+        case ManuEncoding::LOG:
+          frame->printDebug(&output);
+          break;
+      }
+
+      _ms_last_send = millis() + _ms_interval;
+      Kernel::log(&output);
     }
   }
-
-  Kernel::log(&output);
   return 0;
 }
 
@@ -171,6 +190,9 @@ int8_t ManuLegend::copy_frame() {
 /*
 * Calling this will cause the class to compile an aggregate size of the data it represents,
 *   if it has not already done so.
+*
+* TODO: This is awful and slow and a style mess, despite the fact
+*   that it does exactly what it is supposed to do.
 */
 uint16_t ManuLegend::datasetSize() {
   if (ds_size > 0) return ds_size;
@@ -187,48 +209,108 @@ uint16_t ManuLegend::datasetSize() {
   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) if (samplesGyro(idx))        return_value += sizeof(uint32_t);
   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) if (samplesMag(idx))         return_value += sizeof(uint32_t);
   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) if (samplesTemperature(idx)) return_value += sizeof(uint32_t);
-  if (positionGlobal()) return_value += sizeof(Vector3<float>);
-  if (sequence())       return_value += sizeof(uint32_t);
-  if (deltaT())         return_value += sizeof(float);
+  if (handPosition()) return_value += sizeof(Vector3<float>);
+  if (sequence())     return_value += sizeof(uint32_t);
+  if (deltaT())       return_value += sizeof(float);
 
   ds_size = return_value;
   return return_value;
 }
 
 
-/*
+/**
 * When we re-configure the dataset, we typically need to broadcast the new Legend.
 * Format is....
 * Byte | Meaning
 * -----|--------------------------
 * 0    | IMU count
-* 1    | Global data bitmask (LSB)
-* 2    | Global data bitmask (MSB)
-* 3    | IMU-0 data bitmask (LSB)
-* 4    | IMU-0 data bitmask (MSB)
-* 5    | IMU-1 data bitmask (LSB)
-* 6    | IMU-2 data bitmask (MSB)
+* 1    | Global data bitmask
+* 2    | IMU-0 data bitmask (LSB)
+* 3    | IMU-0 data bitmask (MSB)
+* 4    | IMU-1 data bitmask (LSB)
+* 5    | IMU-1 data bitmask (MSB)
 * ....and so on.
+*
+* @return non-zero on error.
 */
-void ManuLegend::formLegendString(StringBuilder* output) {
+int8_t ManuLegend::getLegendString(StringBuilder* output) {
   StringBuilder scratchpad;
   scratchpad.concat((unsigned char) LEGEND_DATASET_IIU_COUNT);
-  scratchpad.concat((uint8_t*) &_legend_flags, 2);
-  scratchpad.concat((uint8_t*) per_iiu_data, (LEGEND_DATASET_IIU_COUNT * 2));
+  scratchpad.concat((unsigned char) frame_data);
+  scratchpad.concat((uint8_t*) per_iiu_data, (iiu_count << 1));
   scratchpad.string();   // Save a little memory.
   output->concatHandoff(&scratchpad);
+  return 0;
+}
+
+/**
+* When we re-configure the dataset, we typically need to broadcast the new Legend.
+* Format is....
+* TODO: Might-should longword align this data.
+* Byte | Meaning
+* -----|--------------------------
+* 0    | IMU count
+* 1    | Global data bitmask
+* 2    | IMU-0 data bitmask (LSB)
+* 3    | IMU-0 data bitmask (MSB)
+* 4    | IMU-1 data bitmask (LSB)
+* 5    | IMU-1 data bitmask (MSB)
+* ....and so on.
+*
+* @return non-zero on error.
+*/
+int8_t ManuLegend::setLegendString(StringBuilder* input) {
+  int8_t return_value = -1;
+  if (input) {
+    int len = input->length();
+    if (2 <= len) {
+      uint8_t* buf  = input->string();
+      uint8_t count = *(buf + 0);
+      if (LEGEND_DATASET_IIU_COUNT >= count) {
+        if (len == (3 + (count << 1))) {
+          frame_data = *(buf + 1);
+          int i = 0;
+          for (;i < count; i++) {
+            per_iiu_data[i] = parseUint16Fromchars(buf+3+(i << 1));
+          }
+          for (;i < LEGEND_DATASET_IIU_COUNT; i++) {
+            per_iiu_data[i] = 0;
+          }
+          ds_size = 0;
+          iiu_count = count;
+          return_value = 0;
+          datasetSize();
+        }
+        else {
+          // Declared and derived lengths don't match. Legent invalid.
+          return_value = -4;
+        }
+      }
+      else {
+        // Too many IIUs. Legend invalid.
+        return_value = -3;
+      }
+    }
+    else {
+      // Minimum Legend size not met. Legend invalid.
+      return_value = -2;
+    }
+  }
+  return return_value;
 }
 
 
 void ManuLegend::printDebug(StringBuilder *output) {
-  output->concat("-- ManuLegend\n--------------------------------\n");
-  output->concatf("  dataset_global \t%p\n", (uintptr_t) dataset_global);
-  output->concatf("  dataset_local  \t%p\n", (uintptr_t) dataset_local);
-  output->concatf("  dataset_size   \t%u\n",     (unsigned long) ds_size);
-  output->concat("-- Enabled data:\n");
-  if (sequence())       output->concatf("\t Seq number \t %u\n", (unsigned long) *((uint32_t*) dataset_local));
-  if (positionGlobal()) output->concatf("\t Position   \t\n");
-  if (deltaT())         output->concatf("\t DeltaT     \t\n");
+  output->concatf(
+    "-- ManuLegend  (%sactive %sstable)\n-----------------------------------\n",
+    (active() ? "" : "in"), (stable() ? "" : "un")
+  );
+  output->concatf("-- Encoding       \t%s\n", ManuLegend::encoding_label(_encoding));
+  output->concatf("-- dataset_size   \t%u\n", (unsigned long) ds_size);
+  output->concatf("-- Enabled data:  (%satisfied)\n", satisfied() ? "S" : "Uns");
+  output->concatf("\t Sequence num   \t%c\n", sequence() ? 'y' : 'n');
+  output->concatf("\t handPosition   \t%c\n", handPosition() ? 'y' : 'n');
+  output->concatf("\t Delta-T        \t%c\n", deltaT() ? 'y' : 'n');
 
   char* cap_str = (char*) alloca(13);
   *(cap_str+12) = 0;
@@ -237,19 +319,8 @@ void ManuLegend::printDebug(StringBuilder *output) {
   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) {
     uint16_t d_opts = iiu_data_opts(idx);
     for (uint8_t bit = 0; bit < 12; bit++) {
-      *(cap_str+bit) = (1 == ((d_opts >> bit) && 1)) ? '*' : ' ';
+      *(cap_str+bit) = (1 == ((d_opts >> bit) & 0x01)) ? '*' : ' ';
     }
     output->concatf("\t IIU %02u:  %s\n", idx, cap_str);
   }
-}
-
-
-
-
-void ManuLegend::printDataset(StringBuilder *output) {
-  output->concat("--------------------------------\n--- Dataset\n--------------------------------\n");
-  for (uint8_t i = 0; i < datasetSize()/4; i++) {
-    output->concatf("0x%08x%s",  *((uint32_t*) (i + dataset_local)), (i%8 ? " " : "\n"));
-  }
-  output->concat("\n\n");
 }

@@ -356,22 +356,16 @@ ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") 
 
   *(_ptr_sequence) = 0;
 
-  ManuLegend* leg = new ManuLegend();
-  leg->sensorEnabled(true);
-  //leg->accNullGravity(true);
-  leg->accRaw(true);
-  leg->gyro(true);
-  leg->mag(true);
-  leg->orientation(true);
-  leg->temperature(true);
-  if (leg->finallize()) {
-    local_log.concat("ManuLegend failed to finallize().\n");
-    delete leg;
-  }
-  else {
-    reconfigure_data_map();
-    setLegend(leg);
-  }
+  _legends[0].active(true);
+  _legends[0].sequence(true);
+  _legends[0].deltaT(true);
+  //_legends[0].accNullGravity(true);
+  _legends[0].accRaw(true);
+  _legends[0].gyro(true);
+  _legends[0].mag(true);
+  _legends[0].orientation(true);
+  _legends[0].temperature(true);
+  reconfigure_data_map();
 }
 
 
@@ -390,23 +384,6 @@ ManuManager::~ManuManager() {
 LSM9DS1* ManuManager::fetchIMU(uint8_t idx) {
   // TODO: We have no excuse for needing a modulus here. Too expensive. Never occured.
   return &imus[idx % LEGEND_DATASET_IIU_COUNT];
-}
-
-
-/**
-* Calling this method will cause the class to send the event that represents the
-*   current state of the IMU data. This is the means by which we send IMU data to
-*   a counterparty.
-*
-* @return non-zero on error.
-*/
-int8_t ManuManager::send_map_event() {
-  if (operating_legend && legendSent()) {
-    operating_legend->copy_frame();
-    Kernel::staticRaiseEvent(&event_legend_frame_ready);
-    return 0;
-  }
-  return -1;
 }
 
 
@@ -448,62 +425,22 @@ int8_t ManuManager::reconfigure_data_map() {
 // Don't do anything unless the legend is stable. This is concurrency-control.
 int8_t ManuManager::setLegend(ManuLegend* nu_legend) {
   if (nullptr == nu_legend) {
-    return -2;
+    return -1;
   }
-  if ((nullptr == operating_legend) || legendStable()) {
-    // Only reconfigure if stable.
-    legendStable(false);   // Mark as unstable.
-    legendSent(false);     // If we change the data, we will need to resend this.
+  // Only reconfigure if stable.
+  legendSent(false);     // If we change the data, we will need to resend this.
 
-    // JiC, we're going to suspend the frame send schedule, noting if we need to
-    //   turn it back on later.
-    bool should_enable_pid = false;
-    if (event_legend_frame_ready.isScheduled()) {
-      event_legend_frame_ready.enableSchedule(false);
-      should_enable_pid = true;
-    }
-
-    if (!nu_legend->finallized()) {
-      // Finallize the ManuLegend prior to installing it.
-      nu_legend->finallize();
-    }
-
-    nu_legend->dataset_global = __dataset;
-
-    if (operating_legend) {
-      // Clean up the prior legend if necessary.
-      delete operating_legend;
-      operating_legend = nullptr;
-    }
-
-    operating_legend = nu_legend;
-
-    // Store a pointer to our dataset in the event that is to carry them.
-    // It is important that this argument NOT be reaped.
-    event_legend_frame_ready.abort();      // We don't want this to proc while the dataset is in flux.
-    event_legend_frame_ready.clearArgs();
-    event_legend_frame_ready.addArg((void*) operating_legend->dataset_local, operating_legend->datasetSize());
-
-    legendStable(true);
-
-    // Now we need to declare the new IMU Legend to the rest of the system. We will not re-enable
-    //   the frame broadcast until the callback for this event happens. This assures that the message
-    //   order to anyone listening is what we intend.
-    broadcast_legend(operating_legend);
-
-    if (should_enable_pid) {
-      // Re-enable frame braodcasts if they were happening before.
-      event_legend_frame_ready.enableSchedule(true);
-    }
-    return 0;
-  }
-  return -1;
+  // Now we need to declare the new IMU Legend to the rest of the system. We will not re-enable
+  //   the frame broadcast until the callback for this event happens. This assures that the message
+  //   order to anyone listening is what we intend.
+  broadcast_legend(&_legends[0]);
+  return 0;
 }
 
 
 void ManuManager::broadcast_legend(ManuLegend* nu_legend) {
   StringBuilder* legend_string = new StringBuilder();
-  nu_legend->formLegendString(legend_string);
+  nu_legend->getLegendString(legend_string);
   ManuvrMsg* legend_broadcast = Kernel::returnEvent(DIGITABULUM_MSG_IMU_LEGEND, this);
   legend_broadcast->specific_target = nu_legend->owner;
   legend_broadcast->priority(EVENT_PRIORITY_LOWEST + 1);
@@ -814,6 +751,7 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
     case RegID::G_INT_GEN_SRC:
       break;
     case RegID::AG_DATA_TEMP:
+      // TODO: Is this data being captured elsewhere?
       break;
     case RegID::AG_STATUS_REG:
       break;
@@ -905,44 +843,12 @@ int8_t ManuManager::attached() {
       noise_floor_gyr[i].set(0, 0, 0);
     }
 
-    /* Get ready for a silly pointer dance....
-    *  This is an argument-heavy event, and we will be using it ALOT. So we build the Event arguments
-    *    once, and then change the data at the location being pointed at, and not the pointers in the
-    *    arguments. Technically, we could make this even faster by addingg a new type for Vector3<float>**,
-    *    but this will be a serious undertaking. We should ultimately implement ** types with a flag, not
-    *    a type_code.
-    *    Bassnectar - 04. You &amp; Me ft. W. Darling.mp3
-    *    Knife Party - 04. EDM Trend Machine.mp3
-    *    Bassnectar - 04 - Boomerang.mp3
-    *    Bassnectar - 01. F.U.N..mp3
-    *    ---J. Ian Lindsay   Thu Apr 09 04:04:41 MST 2015
-    */
-    event_iiu_read.repurpose(DIGITABULUM_MSG_IMU_READ, (EventReceiver*) this);
-    event_iiu_read.incRefs();
-    event_iiu_read.specific_target = (EventReceiver*) this;
-    event_iiu_read.priority(EVENT_PRIORITY_LOWEST);
-    event_iiu_read.alterSchedulePeriod(20);
-    event_iiu_read.alterScheduleRecurrence(-1);
-    event_iiu_read.autoClear(false);
-    event_iiu_read.enableSchedule(false);
-
-    // Build some pre-formed Events.
-    event_legend_frame_ready.repurpose(DIGITABULUM_MSG_IMU_MAP_STATE, (EventReceiver*) this);
-    event_legend_frame_ready.incRefs();
-    event_legend_frame_ready.specific_target = nullptr; //(EventReceiver*) this;
-    event_legend_frame_ready.priority(EVENT_PRIORITY_LOWEST);
-    event_legend_frame_ready.alterSchedulePeriod(25);
-    event_legend_frame_ready.alterScheduleRecurrence(-1);
-    event_legend_frame_ready.autoClear(false);
-    event_legend_frame_ready.enableSchedule(false);
-
     /* Setup our pre-formed quat crunch event. */
     quat_crunch_event.repurpose(DIGITABULUM_MSG_IMU_QUAT_CRUNCH, this);
     quat_crunch_event.incRefs();
     quat_crunch_event.specific_target = (EventReceiver*) this;
     //quat_crunch_event.priority(4);
 
-    platform.kernel()->addSchedule(&event_legend_frame_ready);
     platform.kernel()->addSchedule(&event_iiu_read);
     platform.kernel()->addSchedule(&quat_crunch_event);
 
@@ -989,9 +895,6 @@ int8_t ManuManager::callback_proc(ManuvrMsg* event) {
       legendSent(true);
       break;
 
-    case DIGITABULUM_MSG_IMU_MAP_STATE:
-      break;
-
     case DIGITABULUM_MSG_IMU_QUAT_CRUNCH:
       if (integrator.has_quats_left()) {
         return_value = EVENT_CALLBACK_RETURN_RECYCLE;
@@ -1027,7 +930,6 @@ int8_t ManuManager::notify(ManuvrMsg* active_event) {
       break;
 
     case MANUVR_MSG_SESS_ESTABLISHED:
-      event_legend_frame_ready.delaySchedule(1100);     // Enable the periodic frame broadcast.
       {
         ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
         event->addArg((uint8_t) 4);  // Set the desired init stage.
@@ -1039,7 +941,6 @@ int8_t ManuManager::notify(ManuvrMsg* active_event) {
       break;
 
     case MANUVR_MSG_SESS_HANGUP:
-      event_legend_frame_ready.enableSchedule(false);
       for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
         ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
         event->addArg((uint8_t) 4);  // Set the desired init stage.
@@ -1055,13 +956,6 @@ int8_t ManuManager::notify(ManuvrMsg* active_event) {
         imus[i].init();
       }
       return_value++;
-      break;
-
-    case DIGITABULUM_MSG_IMU_MAP_STATE:
-      if (operating_legend) {
-        // TODO: Ugly to front-load the operation this way...
-        operating_legend->copy_frame();
-      }
       break;
 
     case DIGITABULUM_MSG_CPLD_RESET_COMPLETE:
@@ -1247,7 +1141,6 @@ void ManuManager::printFIFOLevels(StringBuilder *output) {
 #if defined(MANUVR_DEBUG)
 void ManuManager::dumpPreformedElements(StringBuilder* output) {
   output->concat("--- Predefined events:\n");
-  event_legend_frame_ready.printDebug(output);
   event_iiu_read.printDebug(output);
   quat_crunch_event.printDebug(output);
   output->concat("\n");
@@ -1267,7 +1160,6 @@ void ManuManager::printDebug(StringBuilder *output) {
   }
   output->concatf("-- Chirality           %s\n", chiralityString(getChirality()));
   output->concatf("-- Legend Sent         %c\n", legendSent()?'y':'n');
-  output->concatf("-- Legend Stable       %c\n", legendStable()?'y':'n');
 
   if (getVerbosity() > 3) {
     output->concatf("-- __dataset location  %p\n", (uintptr_t) __dataset);
@@ -1373,8 +1265,8 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
             local_log.concat("Not a debug build.\n");
           #endif
           break;
-
         case 2:
+          integrator.printDebug(&local_log);
           break;
         case 3:
           local_log.concat("Reading sensor identities...\n");
@@ -1387,6 +1279,7 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           integrator.dumpPointers(&local_log);
           break;
         case 6:
+          local_log.concatf("sizeof(ManuLegend) \t%u\n",  sizeof(ManuLegend));
           local_log.concatf("sizeof(ManuManager) \t%u\n", sizeof(ManuManager));
           local_log.concatf("sizeof(Integrator)  \t%u\n", sizeof(Integrator));
           local_log.concatf("sizeof(SensorFrame) \t%u\n", sizeof(SensorFrame));
@@ -1414,27 +1307,64 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
-
+    // Legend DEBUG //////////////////////////////////////////////////////////////////
     case 'l':
-      if (operating_legend) {
-        switch (temp_byte) {
-          case 1:
-            broadcast_legend(operating_legend);
-            local_log.concat("Legend broadcast.\n");
-            break;
-          case 2:
-            operating_legend->copy_frame();
-            local_log.concat("Frame copied.\n");
-          case 3:
-            operating_legend->printDataset(&local_log);
-            break;
-          default:
-            operating_legend->printDebug(&local_log);
-            break;
-        }
+      switch (temp_byte) {
+        case 1:
+          broadcast_legend(&_legends[0]);
+          local_log.concat("Legend broadcast.\n");
+          break;
+        case 2:
+          _legends[0].offer(Integrator::fetchMeasurement());
+          local_log.concat("Cycled blank frame.\n");
+          break;
+        case 3:
+          break;
+        case 4:
+          {
+            uint8_t test_array[37];
+            random_fill(&test_array[1], 36);
+            test_array[0] = 17;  // IMU count.
+            StringBuilder shuttle(&test_array[0], 37);
+            int ret = _legends[0].setLegendString(&shuttle);
+            local_log.concat("setLegendString(");
+            shuttle.printDebug(&local_log);
+            local_log.concat(")\n");
+            local_log.concatf("setLegendString(buf, %u) returns %d\n", shuttle.length(), ret);
+          }
+        case 5:
+          {
+            local_log.concat("LegendString:\t");
+            StringBuilder shuttle;
+            _legends[0].getLegendString(&shuttle);
+            shuttle.printDebug(&local_log);
+          }
+          break;
+        case 6:
+        case 7:
+        case 8:
+        case 9:
+          {
+            ManuEncoding e = (ManuEncoding) (temp_byte - 6);
+            _legends[0].encoding(e);
+            local_log.concatf("Switched to ManuEncoding::%s\n", ManuLegend::encoding_label(e));
+          }
+          break;
+        default:
+          _legends[0].printDebug(&local_log);
+          break;
       }
-      else {
-        local_log.concat("No operating ManuLegend.\n");
+      break;
+
+    // Integrator DEBUG //////////////////////////////////////////////////////////////////
+    case 'I':
+      switch (temp_byte) {
+        case 1:
+          local_log.concat("Pushing SensorFrame into integrator...\n");
+          integrator.pushMeasurement(Integrator::fetchMeasurement());
+          break;
+        default:
+          break;
       }
       break;
 
@@ -1635,29 +1565,6 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
         imus[i].set_base_filter_param_acc(temp_byte);
       }
       local_log.concatf("Setting ACC base filter to %d.\n", temp_byte);
-      break;
-
-    case 'd':
-      switch (temp_byte) {
-        case 255:
-          event_legend_frame_ready.fireNow();  // Fire a single frame transmission.
-          local_log.concat("Frame broadcasts schedule fired.\n");
-          break;
-        case 254:
-          event_legend_frame_ready.enableSchedule(true);  // Enable the periodic read.
-          local_log.concat("Enabled frame broadcasts.\n");
-          break;
-        default:
-          if (temp_byte) {
-            event_legend_frame_ready.alterSchedulePeriod(temp_byte*10);
-            local_log.concatf("Set periodic frame broadcast to once every %dms.\n", temp_byte*10);
-          }
-          else {
-            event_legend_frame_ready.enableSchedule(false);  // Disable the periodic read.
-            local_log.concat("Disabled frame broadcasts.\n");
-          }
-          break;
-      }
       break;
 
     case 'f':

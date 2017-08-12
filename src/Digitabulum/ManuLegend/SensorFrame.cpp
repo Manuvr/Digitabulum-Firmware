@@ -22,18 +22,44 @@ limitations under the License.
 
 #include "SensorFrame.h"
 
+/*******************************************************************************
+*      _______.___________.    ___   .___________. __    ______     _______.
+*     /       |           |   /   \  |           ||  |  /      |   /       |
+*    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
+*     \   \       |  |      /  /_\  \    |  |     |  | |  |        \   \
+* .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
+* |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
+*
+* Static members and initializers should be located here.
+*******************************************************************************/
+
+uint32_t SensorFrame::_total_sequences = 0;
+
+void SensorFrame::resetSequenceCounter() {
+  _total_sequences = 0;
+}
+
+/*******************************************************************************
+*   ___ _              ___      _ _              _      _
+*  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
+* | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
+*  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
+*                                          |_|
+* Constructors/destructors, class initialization functions and so-forth...
+*******************************************************************************/
 /**
 * Vanilla constructor. Vector class will initiallize conponents to zero.
 */
 SensorFrame::SensorFrame() {
-  read_time = 0.0f;
+  _read_time = 0.0f;
+  _seq = 0;
 }
 
 /**
 * Wipes the instance. Sets all member data to 0.0.
 */
 void SensorFrame::wipe() {
-  read_time = 0.0f;
+  _read_time = 0.0f;
   for (int i = 0; i < 17; i++) {
     a_data[i](0.0f, 0.0f, 0.0f);
     g_data[i](0.0f, 0.0f, 0.0f);
@@ -48,10 +74,11 @@ void SensorFrame::wipe() {
 
 #if defined(MANUVR_IMU_DEBUG)
 void SensorFrame::printDebug(StringBuilder* output) {
-  output->concatf("Measurement (%p)  Delta-t = %f", (double) read_time);
+  output->concatf("SensorFrame (seq %u)  Delta-t = %f", _seq, (double) _read_time);
   StringBuilder a_line;
   StringBuilder g_line;
   StringBuilder m_line;
+  output->concatf("HP(%.4f, %.4f, %.4f)\n", (double)hand_position.x, (double)hand_position.y, (double)hand_position.z);
   for (int i = 0; i < 17; i++) {
     switch (i) {
       case 2:   // digit1 begins

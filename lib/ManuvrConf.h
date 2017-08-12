@@ -38,7 +38,7 @@ This is where definition of (application or device)-specific parameters ought to
 #define CPLD_SPI_PREALLOC_COUNT   10
 #define CPLD_SPI_MAX_QUEUE_DEPTH  40
 #define CPLD_SPI_MAX_QUEUE_PRINT   3
-#define PREALLOCD_IMU_FRAMES      11
+#define PREALLOCD_IMU_FRAMES       6
 
 #define CONFIG_MANUVR_BENCHMARKS
 
