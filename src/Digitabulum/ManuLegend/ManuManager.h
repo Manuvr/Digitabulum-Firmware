@@ -40,6 +40,8 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #define __DIGITABULUM_MANU_MGR_H_
 
 #include <Kernel.h>
+#include <DataStructures/RingBuffer.h>
+#include <DataStructures/ElementPool.h>
 #include "../CPLDDriver/CPLDDriver.h"
 #include "../LSM9DS1/LSM9DS1.h"
 #include "ManuLegend.h"
@@ -60,13 +62,12 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #define LEGEND_MGR_FLAGS_CHIRALITY_MASK        0x03   // Mask that maps to the enum class.
 
 
-/* Manuvr message defs. */
-#define DIGITABULUM_MSG_IMU_LEGEND           0x0600 // No args? Asking for this legend. One arg: Legend provided.
-#define DIGITABULUM_MSG_IMU_INIT             0x0604 //
-#define DIGITABULUM_MSG_IMU_READ             0x0605 // Signal to read a given set of IMUs.
-#define DIGITABULUM_MSG_IMU_QUAT_CRUNCH      0x0609 // The given IMU has samples to grind into a quat.
-#define DIGITABULUM_MSG_IMU_TAP              0x060A // The given IMU experienced a tap.
-#define DIGITABULUM_MSG_IMU_DOUBLE_TAP       0x060B // The given IMU experienced a double tap.
+#ifndef PREALLOCD_IMU_FRAMES
+  #define PREALLOCD_IMU_FRAMES    10   // We retain this many frames.
+#endif
+#ifndef CONFIG_INTEGRATOR_Q_DEPTH
+  #define CONFIG_INTEGRATOR_Q_DEPTH  PREALLOCD_IMU_FRAMES
+#endif
 
 
 enum class Chirality {
@@ -146,7 +147,9 @@ class ManuManager : public EventReceiver, public BusOpCallback {
 
 
   private:
-    uint32_t  sample_count   = 0;         // How many samples have we read since init?
+    ManuvrMsg event_iiu_read;
+    ManuvrMsg _event_integrator;
+    ElementPool<SensorFrame> _frame_pool;
 
     CPLDDriver* _bus         = nullptr;   // This is the gateway to the hardware.
     ManuLegend _legends[2];               // Data demand slots. Two for now.
@@ -159,9 +162,7 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     //   in the IIU class.
     uint32_t*       _ptr_sequence = nullptr;
     float*          _ptr_delta_t  = nullptr;
-
-    ManuvrMsg event_iiu_read;
-    ManuvrMsg quat_crunch_event;
+    uint32_t  sample_count   = 0;         // How many samples have we read since init?
 
     uint8_t  max_quats_per_event = 2;   // Cuts down on overhead if load is high.
 
@@ -208,6 +209,9 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     static SPIBusOp _preformed_read_m;
     static SPIBusOp _preformed_read_temp;
     static SPIBusOp _preformed_fifo_read;
+
+    /* The pool of SensorFrames is maintained by ManuManager. */
+    void reclaimMeasurement(SensorFrame*);
 };
 
 #endif  // __DIGITABULUM_MANU_MGR_H_

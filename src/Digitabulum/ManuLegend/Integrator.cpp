@@ -35,67 +35,7 @@ limitations under the License.
 
 static const Vector3<float> ZERO_VECTOR;
 float    Integrator::mag_discard_threshold         = 0.8f;  // In Gauss.
-uint32_t Integrator::measurement_heap_instantiated = 0;
-uint32_t Integrator::measurement_heap_freed        = 0;
-uint32_t Integrator::prealloc_starves              = 0;
-uint32_t Integrator::minimum_prealloc_level        = PREALLOCD_IMU_FRAMES;
 
-PriorityQueue<SensorFrame*>  Integrator::preallocd_measurements;
-SensorFrame Integrator::__prealloc[PREALLOCD_IMU_FRAMES];
-
-
-
-SensorFrame* Integrator::fetchMeasurement() {
-  SensorFrame* return_value;
-
-  if (0 == preallocd_measurements.size()) {
-    // We have exhausted our preallocated measurements. Note it.
-    prealloc_starves++;
-    return_value = new SensorFrame();
-    measurement_heap_instantiated++;
-    minimum_prealloc_level = 0;
-  }
-  else {
-    return_value = preallocd_measurements.dequeue();
-    minimum_prealloc_level = strict_min((uint32_t) preallocd_measurements.size(), minimum_prealloc_level);
-  }
-  return return_value;
-}
-
-
-/**
-* Reclaims the given SensorFrame so its memory can be re-used.
-*
-* At present, our criteria for preallocation is if the pointer address passed in
-*   falls within the range of our __prealloc array. I see nothing "non-portable"
-*   about this, it doesn't require a flag or class member, and it is fast to check.
-* However, this strategy only works for types that are never used in DMA or code
-*   execution on the STM32F4. It may work for other architectures (PIC32, x86?).
-*   I also feel like it ought to be somewhat slower than a flag or member, but not
-*   by such an amount that the memory savings are not worth the CPU trade-off.
-* Consider writing all new cyclical queues with preallocated members to use this
-*   strategy. Also, consider converting the most time-critical types to this strategy
-*   up until we hit the boundaries of the STM32 CCM.
-*                                 ---J. Ian Lindsay   Mon Apr 13 10:51:54 MST 2015
-*
-* @param SensorFrame* obj is the pointer to the object to be reclaimed.
-*/
-void Integrator::reclaimMeasurement(SensorFrame* obj) {
-  uintptr_t obj_addr = ((uintptr_t) obj);
-  uintptr_t pre_min  = ((uintptr_t) __prealloc);
-  uintptr_t pre_max  = pre_min + (sizeof(SensorFrame) * PREALLOCD_IMU_FRAMES);
-
-  if ((obj_addr < pre_max) && (obj_addr >= pre_min)) {
-    // If we are in this block, it means obj was preallocated. wipe and reclaim it.
-    obj->wipe();
-    preallocd_measurements.insert(obj);
-  }
-  else {
-    // We were created because our prealloc was starved. we are therefore a transient heap object.
-    measurement_heap_freed++;
-    delete obj;
-  }
-}
 
 
 const char* Integrator::getSourceTypeString(SampleType t) {
@@ -123,26 +63,16 @@ const char* Integrator::getSourceTypeString(SampleType t) {
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 
-Integrator::Integrator() {
+Integrator::Integrator() : _complete(CONFIG_INTEGRATOR_Q_DEPTH), _pending(CONFIG_INTEGRATOR_Q_DEPTH) {
   // Values for 9 DoF fusion and AHRS (Attitude and Heading Reference System)
   //GyroMeasError = 3.1415926535f * (40.0f / 180.0f);  // gyroscope measurement error in rads/s (shown as 3 deg/s)
   GyroMeasDrift = 3.1415926535f * (0.0f / 180.0f);   // gyroscope measurement drift in rad/s/s (shown as 0.0 deg/s/s)
   //beta = 0.866025404f * (3.1415926535f * GyroMeasError);   // compute beta
   beta = 0.2f;
-
-  /* Populate all the static preallocation slots for measurements. */
-  for (uint16_t i = 0; i < PREALLOCD_IMU_FRAMES; i++) {
-    __prealloc[i].wipe();
-    preallocd_measurements.insert(&__prealloc[i]);
-  }
 }
 
 
 Integrator::~Integrator() {
-  while (frame_queue.hasNext()) {
-    // We need to return the preallocated measurements we are holding.
-    reclaimMeasurement(frame_queue.dequeue());
-  }
 }
 
 
@@ -170,11 +100,6 @@ void Integrator::reset() {
   grav_scalar = 0.0f;
   offset_angle_y = 0.0f;
   offset_angle_z = 0.0f;
-}
-
-
-uint32_t Integrator::totalSamples() {
-  return *(_ptr_s_count_gyr) + *(_ptr_s_count_acc) + *(_ptr_s_count_mag);
 }
 
 
@@ -265,28 +190,33 @@ int8_t Integrator::pushMeasurement(SampleType data_type, float x, float y, float
   }
 
   if (processQuats() && isQuatDirty()) {
-    if (0 == frame_queue.size()) {
+    if (0 == _pending.count()) {
       // There was nothing in this queue, but there is about to be.
     }
-    SensorFrame* nu_measurement = fetchMeasurement();
-    //nu_measurement->set(_ptr_gyr, ((!dirty_mag && cleanMagZero()) ? (Vector3<float>*)&ZERO_VECTOR : _ptr_mag), _ptr_acc, delta_t);
-    if (dirty_mag) dirty_mag = 0;
-    dirty_acc = 0;
-    dirty_gyr = 0;
-
-    frame_queue.insert(nu_measurement);
+    //SensorFrame* nu_measurement = fetchMeasurement();
+    ////nu_measurement->set(_ptr_gyr, ((!dirty_mag && cleanMagZero()) ? (Vector3<float>*)&ZERO_VECTOR : _ptr_mag), _ptr_acc, delta_t);
+    //if (dirty_mag) dirty_mag = 0;
+    //dirty_acc = 0;
+    //dirty_gyr = 0;
+    //_pending.insert(nu_measurement);
   }
 
   return 0;
 }
 
-
-/*
+/**
+* This is the function that the processing thread (if any) would call repeatedly.
+*
+* @return The number of SensorFrames completed.
 */
-int8_t Integrator::pushMeasurement(SensorFrame* nu_measurement) {
-  frame_queue.insert(nu_measurement);
-  return 0;
+int8_t Integrator::churn() {
+  int8_t return_value = 0;
+  if ((0 < _complete.vacancy()) && MadgwickQuaternionUpdate()) {
+    return_value++;
+  }
+  return return_value;
 }
+
 
 
 void Integrator::assign_legend_pointers(void* a, void* g, void* m,
@@ -348,24 +278,10 @@ bool Integrator::nullifyGravity(bool en) {
 }
 
 
-
 void Integrator::deposit_log(StringBuilder* _log) {
   local_log.concatHandoff(_log);
   Kernel::log(&local_log);
 };
-
-
-
-
-void Integrator::setTemperature(float nu) {
-  if (_ptr_temperature)  *(_ptr_temperature) = nu;
-  if (_ptr_s_count_temp) *(_ptr_s_count_temp) = *(_ptr_s_count_temp)+1;
-}
-
-
-void Integrator::setVerbosity(int8_t nu) {
-  verbosity = nu;
-}
 
 
 /**
@@ -374,23 +290,14 @@ void Integrator::setVerbosity(int8_t nu) {
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
 void Integrator::printDebug(StringBuilder* output) {
-  output->concatf("\n-------------------------------------------------------\n--- Integrator\n-------------------------------------------------------\n-- %s legend\n-- Samples:\t \n", (legend_writable()?"writable":"invalid"));
-  output->concatf("-- measurements\n-- frame_queue:\t %d measurements\n", frame_queue.size());
-  output->concatf("-- temperature: %.2fC\n-- delta_t:\t %.4fms\n-- Quat:\t ", ((double) delta_t * 1000), (double)*(_ptr_temperature));
-  #if defined(MANUVR_DEBUG)
-    _ptr_quat->printDebug(output);  // OK
-  #endif
-  output->concat("\n");
+  output->concatf("\n-------------------------------------------------------\n--- Integrator\n-------------------------------------------------------\n-- %s legend\n-- Samples:\t%u\n", (legend_writable()?"writable":"invalid"), _frames_completed);
+  output->concatf("-- Measurements\n\t_pending:   %u\n\t_complete:  %u\n", _pending.count(), _complete.count());
+  output->concatf("-- delta_t:\t %3fms\n", ((double) delta_t * 1000));
   if (verbosity > 2) {
     if (verbosity > 3) output->concatf("-- GyroMeasDrift:    %.4f\n",  (double) GyroMeasDrift);
     output->concatf("-- Gravity: %s (%.4f, %.4f, %.4f)  %.4G\n", (nullifyGravity() ? "(nulled)":"        "), (double)(_grav.x), (double)(_grav.y), (double)(_grav.z), (double) (grav_scalar));
     output->concatf("-- offset_angle_y      %5.2f\n", (double) offset_angle_y);
     output->concatf("-- offset_angle_z      %5.2f\n", (double) offset_angle_z);
-  }
-
-  if (verbosity > 3) {
-    //output->concatf("-- __dataset location  %p\n", (uintptr_t) __dataset);
-    output->concatf("-- __prealloc location %p\n", (uintptr_t) __prealloc);
   }
 
   float grav_consensus = 0.0;
@@ -399,8 +306,6 @@ void Integrator::printDebug(StringBuilder* output) {
   }
   grav_consensus /= 17;
   output->concatf("-- Gravity consensus:  %.4fg\n",  (double) grav_consensus);
-  output->concatf("-- prealloc starves    %u\n-- minimum_prealloc    %u\n", (unsigned long) prealloc_starves, (unsigned long) minimum_prealloc_level);
-  output->concatf("-- Measurement queue info\n--\t Instantiated %u \t Freed: %u \t Prealloc queue depth: %d\n--\n", measurement_heap_instantiated, measurement_heap_freed, preallocd_measurements.size());
   output->concat("\n");
 }
 
@@ -442,16 +347,14 @@ void Integrator::dumpPointers(StringBuilder* output) {
 *   shall be chaos as several different systems rely on that data member being synchronized WRT to the _ptr_quat->
 */
 uint8_t Integrator::MadgwickQuaternionUpdate() {
-  SensorFrame* measurement;
-
-  if (frame_queue.hasNext()) {
-    measurement = frame_queue.dequeue();
-    float d_t = measurement->time();
+  SensorFrame* c_frame = _pending.get();
+  if (c_frame) {
+    float d_t = c_frame->time();
 
     if (verbosity > 3) {
       local_log.concatf("At delta-t = %f: ", (double)d_t);
       #if defined(MANUVR_DEBUG)
-        //measurement->printDebug(&local_log);
+        //c_frame->printDebug(&local_log);
         local_log.concat("\t");
         _ptr_quat->printDebug(&local_log);
       #endif
@@ -467,29 +370,29 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
     float hx, hy;
     float _2q0mx, _2q0my, _2q0mz, _2q1mx, _2bx, _2bz, _4bx, _4bz, _2q0, _2q1, _2q2, _2q3, q0q0, q0q1, q0q2, q0q3, q1q1, q1q2, q1q3, q2q2, q2q3, q3q3;
 
-    // Normalise mag measurement
+    // Normalise mag c_frame
     float mag_normal;
 
     // Now we'll start the float churn...
     for (int set_i = 0; set_i < LEGEND_DATASET_IIU_COUNT; set_i++) {
-      mag_normal = (measurement->m_data[set_i]).normalize();
+      mag_normal = (c_frame->m_data[set_i]).normalize();
 
       if (dropObviousBadMag() && (mag_normal >= mag_discard_threshold)) {
         // We defer to the algorithm that does not use the non-earth mag data.
         for (int i = 0; i < madgwick_iterations; i++) {
-          MadgwickAHRSupdateIMU(measurement);
+          MadgwickAHRSupdateIMU(c_frame);
         }
       }
       else if (0.0f == mag_normal) {
         // We defer to the algorithm that does not use the absent mag data.
         for (int i = 0; i < madgwick_iterations; i++) {
-          MadgwickAHRSupdateIMU(measurement);
+          MadgwickAHRSupdateIMU(c_frame);
         }
       }
       else {
-        float gx = (measurement->g_data[set_i]).x * IIU_DEG_TO_RAD_SCALAR;
-        float gy = (measurement->g_data[set_i]).y * IIU_DEG_TO_RAD_SCALAR;
-        float gz = (measurement->g_data[set_i]).z * IIU_DEG_TO_RAD_SCALAR;
+        float gx = (c_frame->g_data[set_i]).x * IIU_DEG_TO_RAD_SCALAR;
+        float gy = (c_frame->g_data[set_i]).y * IIU_DEG_TO_RAD_SCALAR;
+        float gz = (c_frame->g_data[set_i]).z * IIU_DEG_TO_RAD_SCALAR;
 
         for (int i = 0; i < madgwick_iterations; i++) {
           // Rate of change of quaternion from gyroscope
@@ -498,15 +401,15 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
           qDot3 = 0.5f * (q0 * gy - q1 * gz + q3 * gx);
           qDot4 = 0.5f * (q0 * gz + q1 * gy - q2 * gx);
 
-          // Normalise accelerometer measurement. If vector is non-zero, integrate it...
-          if (0.0f != (measurement->a_data[set_i]).normalize()) {
-            float mx = (measurement->m_data[set_i]).x;
-            float my = (measurement->m_data[set_i]).y;
-            float mz = (measurement->m_data[set_i]).z;
+          // Normalise accelerometer c_frame. If vector is non-zero, integrate it...
+          if (0.0f != (c_frame->a_data[set_i]).normalize()) {
+            float mx = (c_frame->m_data[set_i]).x;
+            float my = (c_frame->m_data[set_i]).y;
+            float mz = (c_frame->m_data[set_i]).z;
 
-            float ax = (measurement->a_data[set_i]).x;
-            float ay = (measurement->a_data[set_i]).y;
-            float az = (measurement->a_data[set_i]).z;
+            float ax = (c_frame->a_data[set_i]).x;
+            float ay = (c_frame->a_data[set_i]).y;
+            float az = (c_frame->a_data[set_i]).z;
 
             // Auxiliary variables to avoid repeated arithmetic
             _2q0mx = 2.0f * q0 * mx;
@@ -568,16 +471,15 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
         }
       }
 
-
       if (nullifyGravity()) {
         /* If we are going to cancel gravity, we should do so now. */
         _grav.x = (2 * (_ptr_quat->x * _ptr_quat->z - _ptr_quat->w * _ptr_quat->y));
         _grav.y = (2 * (_ptr_quat->w * _ptr_quat->x + _ptr_quat->y * _ptr_quat->z));
         _grav.z = (_ptr_quat->w * _ptr_quat->w - _ptr_quat->x * _ptr_quat->x - _ptr_quat->y * _ptr_quat->y + _ptr_quat->z * _ptr_quat->z);
 
-        _ptr_null_grav->x = (measurement->a_data[set_i]).x - _grav.x;
-        _ptr_null_grav->y = (measurement->a_data[set_i]).y - _grav.y;
-        _ptr_null_grav->z = (measurement->a_data[set_i]).z - _grav.z;
+        _ptr_null_grav->x = (c_frame->a_data[set_i]).x - _grav.x;
+        _ptr_null_grav->y = (c_frame->a_data[set_i]).y - _grav.y;
+        _ptr_null_grav->z = (c_frame->a_data[set_i]).z - _grav.z;
 
         if (findVelocity()) {
           // Are we finding velocity?
@@ -594,8 +496,11 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
         }
       }
     }
-
-    reclaimMeasurement(measurement); // Release the memory. Even on bailout.
+    c_frame->markComplete();
+    if (_complete.insert(c_frame)) {
+      local_log.concat("Dropped a frame in the integrator. This is probably a leak.\n");
+    }
+    _frames_completed++;
   }
 
   if (local_log.length() > 0) Kernel::log(&local_log);
@@ -605,7 +510,7 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
 //---------------------------------------------------------------------------------------------------
 // IMU algorithm update
 
-void Integrator::MadgwickAHRSupdateIMU(SensorFrame* measurement) {
+void Integrator::MadgwickAHRSupdateIMU(SensorFrame* c_frame) {
   float norm;
   float s0, s1, s2, s3;
   float qDot1, qDot2, qDot3, qDot4;
@@ -614,10 +519,10 @@ void Integrator::MadgwickAHRSupdateIMU(SensorFrame* measurement) {
   float q0 = _ptr_quat->w, q1= _ptr_quat->x, q2 = _ptr_quat->y, q3 = _ptr_quat->z;   // short name local variable for readability
 
   for (int set_i = 0; set_i < LEGEND_DATASET_IIU_COUNT; set_i++) {
-    float gx = (measurement->g_data[set_i]).x * IIU_DEG_TO_RAD_SCALAR;
-    float gy = (measurement->g_data[set_i]).y * IIU_DEG_TO_RAD_SCALAR;
-    float gz = (measurement->g_data[set_i]).z * IIU_DEG_TO_RAD_SCALAR;
-    float d_t = measurement->time();
+    float gx = (c_frame->g_data[set_i]).x * IIU_DEG_TO_RAD_SCALAR;
+    float gy = (c_frame->g_data[set_i]).y * IIU_DEG_TO_RAD_SCALAR;
+    float gz = (c_frame->g_data[set_i]).z * IIU_DEG_TO_RAD_SCALAR;
+    float d_t = c_frame->time();
 
     // Rate of change of quaternion from gyroscope
     qDot1 = 0.5f * (-q1 * gx - q2 * gy - q3 * gz);
@@ -625,11 +530,11 @@ void Integrator::MadgwickAHRSupdateIMU(SensorFrame* measurement) {
     qDot3 = 0.5f * (q0 * gy - q1 * gz + q3 * gx);
     qDot4 = 0.5f * (q0 * gz + q1 * gy - q2 * gx);
 
-    // Normalise accelerometer measurement. If vector is non-zero, integrate it...
-    if (0.0f != (measurement->a_data[set_i]).normalize()) {
-      float ax = (measurement->a_data[set_i]).x;
-      float ay = (measurement->a_data[set_i]).y;
-      float az = (measurement->a_data[set_i]).z;
+    // Normalise accelerometer c_frame. If vector is non-zero, integrate it...
+    if (0.0f != (c_frame->a_data[set_i]).normalize()) {
+      float ax = (c_frame->a_data[set_i]).x;
+      float ay = (c_frame->a_data[set_i]).y;
+      float az = (c_frame->a_data[set_i]).z;
       // Auxiliary variables to avoid repeated arithmetic
       _2q0 = 2.0f * q0;
       _2q1 = 2.0f * q1;

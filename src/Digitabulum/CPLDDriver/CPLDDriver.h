@@ -443,23 +443,23 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 //#define CPLD_FLAG_DEN_AG_STATE 0x80    // DEN_AG state.
 
 
-/* Event codes that are specific to Digitabulum's IMU apparatus. */
-#define DIGITABULUM_MSG_IMU_IRQ_RAISED       0x0602 // IRQ asserted by CPLD.
-#define DIGITABULUM_MSG_IMU_LEGEND           0x0600 // No args? Asking for this legend. One arg: Legend provided.
-#define DIGITABULUM_MSG_IMU_INIT             0x0604 //
-#define DIGITABULUM_MSG_IMU_READ             0x0605 // Signal to read a given set of IMUs.
-#define DIGITABULUM_MSG_IMU_MAP_STATE        0x0606
-#define DIGITABULUM_MSG_IMU_QUAT_CRUNCH      0x0609 // The given IMU has samples to grind into a quat.
-#define DIGITABULUM_MSG_IMU_TAP              0x060A // The given IMU experienced a tap.
-#define DIGITABULUM_MSG_IMU_DOUBLE_TAP       0x060B // The given IMU experienced a double tap.
-
 /* Event codes for Digitabulum's CPLD. */
-#define DIGITABULUM_MSG_SPI_QUEUE_READY      0x0230 // There is a new job in the SPI bus queue.
-#define DIGITABULUM_MSG_SPI_CB_QUEUE_READY   0x0231 // There is something ready in the callback queue.
-#define DIGITABULUM_MSG_SPI_TIMEOUT          0x0232 // SPI timeout message.
-#define DIGITABULUM_MSG_CPLD_RESET_COMPLETE  0x0607 // The CPLD reset is ready for disassertion.
-#define DIGITABULUM_MSG_CPLD_RESET_CALLBACK  0x0608 // The CPLD reset is ready for disassertion.
-#define DIGITABULUM_MSG_CPLD_DIGIT_DROP      0x0609 // A digit was lost.
+#define DIGITABULUM_MSG_SPI_QUEUE_READY      0x0600 // There is a new job in the SPI bus queue.
+#define DIGITABULUM_MSG_SPI_CB_QUEUE_READY   0x0601 // There is something ready in the callback queue.
+#define DIGITABULUM_MSG_SPI_TIMEOUT          0x0602 // SPI timeout message.
+#define DIGITABULUM_MSG_CPLD_RESET_COMPLETE  0x0603 // The CPLD reset is ready for disassertion.
+#define DIGITABULUM_MSG_CPLD_RESET_CALLBACK  0x0604 // The CPLD reset is ready for disassertion.
+#define DIGITABULUM_MSG_CPLD_DIGIT_DROP      0x0605 // A digit was lost.
+
+/* Event codes that are specific to Digitabulum's IMU apparatus. */
+#define DIGITABULUM_MSG_IMU_IRQ_RAISED       0x0606 // IRQ asserted by CPLD.
+#define DIGITABULUM_MSG_IMU_LEGEND           0x0607 // No args? Asking for this legend. One arg: Legend provided.
+#define DIGITABULUM_MSG_IMU_INIT             0x0608 //
+#define DIGITABULUM_MSG_IMU_READ             0x0609 // Signal to read a given set of IMUs.
+#define DIGITABULUM_MSG_IMU_MAP_STATE        0x060A
+#define DIGITABULUM_MSG_IMU_QUAT_CRUNCH      0x060B // The given IMU has samples to grind into a quat.
+#define DIGITABULUM_MSG_IMU_TAP              0x060C // The given IMU experienced a tap.
+#define DIGITABULUM_MSG_IMU_DOUBLE_TAP       0x060D // The given IMU experienced a double tap.
 
 
 /* CPLD register map ***************************************/

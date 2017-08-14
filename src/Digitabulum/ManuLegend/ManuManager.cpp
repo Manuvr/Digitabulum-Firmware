@@ -43,6 +43,8 @@ Vector3<int16_t> reflection_mag;
 Vector3<int16_t> reflection_acc;
 Vector3<int16_t> reflection_gyr;
 
+SensorFrame _frame_pool_mem[PREALLOCD_IMU_FRAMES];
+
 
 /*------------------------------------------------------------------------------
   Register memory
@@ -286,12 +288,17 @@ const char* ManuManager::chiralityString(Chirality x) {
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
-ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt") {
+ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt"), _frame_pool(PREALLOCD_IMU_FRAMES, &_frame_pool_mem[0]) {
   _bus = (CPLDDriver*) bus;  // TODO: Make this cast unnecessary.
 
   reflection_gyr(1, 1, 1);
   reflection_acc(1, 1, 1);
   reflection_mag(1, 1, 1);
+
+  /* Populate all the static preallocation slots for measurements. */
+  for (uint16_t i = 0; i < PREALLOCD_IMU_FRAMES; i++) {
+    _frame_pool_mem[i].wipe();
+  }
 
   _preformed_read_i.shouldReap(false);
   _preformed_read_i.devRegisterAdvance(true);
@@ -632,7 +639,7 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
         int16_t* offset = (int16_t*) op->buf;
 
         // Scale the data
-        SensorFrame* nu_msrmnt = Integrator::fetchMeasurement();
+        SensorFrame* nu_msrmnt = _frame_pool.take();
         for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
           scalar_a = imus[i].scaleA();
           scalar_g = imus[i].scaleG();
@@ -788,7 +795,7 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
   }
 
   if (op == &_preformed_read_i) {
-    Kernel::staticRaiseEvent(&quat_crunch_event);
+    _event_integrator.fireNow();
     // TODO: If the FIFO watermark IRQ signal is still asserted, read another batch.
     return_value = SPI_CALLBACK_RECYCLE;
   }
@@ -844,13 +851,12 @@ int8_t ManuManager::attached() {
     }
 
     /* Setup our pre-formed quat crunch event. */
-    quat_crunch_event.repurpose(DIGITABULUM_MSG_IMU_QUAT_CRUNCH, this);
-    quat_crunch_event.incRefs();
-    quat_crunch_event.specific_target = (EventReceiver*) this;
-    //quat_crunch_event.priority(4);
+    _event_integrator.repurpose(DIGITABULUM_MSG_IMU_QUAT_CRUNCH, this);
+    _event_integrator.incRefs();
+    _event_integrator.specific_target = (EventReceiver*) this;
 
     platform.kernel()->addSchedule(&event_iiu_read);
-    platform.kernel()->addSchedule(&quat_crunch_event);
+    platform.kernel()->addSchedule(&_event_integrator);
 
     return 1;
   }
@@ -978,18 +984,8 @@ int8_t ManuManager::notify(ManuvrMsg* active_event) {
       break;
 
     case DIGITABULUM_MSG_IMU_QUAT_CRUNCH:
-      if (0 == active_event->getArgAs(&temp_uint_8)) {
-        if (temp_uint_8 > 16) {
-          if (getVerbosity() > 1) local_log.concat("QUAT_CRUNCH had an IMU idx > 16.\n");
-        }
-        else {
-          integrator.MadgwickQuaternionUpdate();
-        }
-        return_value++;
-      }
-      else {
-        if (getVerbosity() > 2) local_log.concatf("QUAT_CRUNCH handler (IIU %u) got a bad return from an Arg..\n", temp_uint_8);
-      }
+      integrator.churn();
+      return_value++;
       break;
 
     default:
@@ -1142,7 +1138,7 @@ void ManuManager::printFIFOLevels(StringBuilder *output) {
 void ManuManager::dumpPreformedElements(StringBuilder* output) {
   output->concat("--- Predefined events:\n");
   event_iiu_read.printDebug(output);
-  quat_crunch_event.printDebug(output);
+  _event_integrator.printDebug(output);
   output->concat("\n");
 }
 #endif
@@ -1172,10 +1168,8 @@ void ManuManager::printDebug(StringBuilder *output) {
   }
   grav_consensus /= 17;
   output->concatf("-- Gravity consensus:  %.4fg\n", (double) grav_consensus);
-  //output->concatf("-- Sequence number     %u\n",    (unsigned long) *(_ptr_sequence));
   output->concatf("-- Max quat proc       %u\n",    max_quats_per_event);
   output->concatf("-- sample_count        %d\n",    sample_count);
-  //output->concatf("-- Delta-t             %2.5f\n--\n", (double) *(_ptr_delta_t));
 
   if (getVerbosity() > 3) {
     output->concatf("-- MAX_DATASET_SIZE    %u\n",    (unsigned long) LEGEND_MGR_MAX_DATASET_SIZE);
@@ -1203,10 +1197,6 @@ void ManuManager::printHelp(StringBuilder *output) {
   EventReceiver::printDebug(output);
   output->concat("\t-- Schedules\n");
   output->concat("\t--------------------------------\n");
-  output->concat("\td0        Disable frame broadcasts.\n");
-  output->concat("\td[1-253]  Frame broadcasts every ms*10.\n");
-  output->concat("\td254      Enable frame broadcasts.\n");
-  output->concat("\td255      Manually fire a frame broadcast.\n");
   output->concat("\tf0        Disable IMU read schedule.\n");
   output->concat("\tf[1-253]  IMU read schedule ms*10.\n");
   output->concat("\tf254      Enable IMU read schedule.\n");
@@ -1215,8 +1205,8 @@ void ManuManager::printHelp(StringBuilder *output) {
   output->concat("\t--------------------------------\n");
   output->concat("\tc [x]     Dump registers for IMU x.\n");
   output->concat("\tk[x]      Broadcast INITx to all IMUs.\n");
-  output->concat("\ts [x[,y]] Get/Set IMU x state.\n");
-  output->concat("\ts 255,[y] Set all IMUs to state y.\n");
+  output->concat("\td [x[,y]] Get/Set IMU x state.\n");
+  output->concat("\td 255,[y] Set all IMUs to state y.\n");
   output->concat("\tV [x[,y]] Get/Set IMU x to verbosity level y.\n");
   output->concat("\n\t-- Legend\n");
   output->concat("\t--------------------------------\n");
@@ -1259,11 +1249,6 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           printDebug(&local_log);
           break;
         case 1:
-          #if defined(MANUVR_DEBUG)
-            dumpPreformedElements(&local_log);
-          #else
-            local_log.concat("Not a debug build.\n");
-          #endif
           break;
         case 2:
           integrator.printDebug(&local_log);
@@ -1279,7 +1264,7 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           integrator.dumpPointers(&local_log);
           break;
         case 6:
-          local_log.concatf("sizeof(ManuLegend) \t%u\n",  sizeof(ManuLegend));
+          local_log.concatf("sizeof(ManuLegend)  \t%u\n", sizeof(ManuLegend));
           local_log.concatf("sizeof(ManuManager) \t%u\n", sizeof(ManuManager));
           local_log.concatf("sizeof(Integrator)  \t%u\n", sizeof(Integrator));
           local_log.concatf("sizeof(SensorFrame) \t%u\n", sizeof(SensorFrame));
@@ -1295,12 +1280,21 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
             queue_io_job(op);
           }
           break;
-        case 8:
-          printFIFOLevels(&local_log);
-          break;
-        case 9:
-          printTemperatures(&local_log);   // Show us the temperatures.
-          break;
+
+        #if defined(MANUVR_DEBUG)
+          case 8:
+            _frame_pool.printDebug(&local_log);
+            break;
+          case 9:
+            dumpPreformedElements(&local_log);
+            break;
+        #else
+          case 8:
+          case 9:
+            local_log.concat("Not a debug build.\n");
+            break;
+        #endif
+
         default:
           printHelp(&local_log);
           break;
@@ -1315,7 +1309,7 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           local_log.concat("Legend broadcast.\n");
           break;
         case 2:
-          _legends[0].offer(Integrator::fetchMeasurement());
+          _legends[0].offer(_frame_pool.take());
           local_log.concat("Cycled blank frame.\n");
           break;
         case 3:
@@ -1361,7 +1355,20 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
       switch (temp_byte) {
         case 1:
           local_log.concat("Pushing SensorFrame into integrator...\n");
-          integrator.pushMeasurement(Integrator::fetchMeasurement());
+          integrator.pushFrame(_frame_pool.take());
+          break;
+        case 2:
+          local_log.concat("Cycling the integrator...\n");
+          _event_integrator.fireNow();
+          break;
+        case 3:
+          if (integrator.resultsWaiting()) {
+            SensorFrame* frame = integrator.takeResult();
+            _legends[0].offer(frame);
+            frame->wipe();
+            _frame_pool.give(frame);
+          }
+          local_log.concatf("Integrator has %u frames available.\n", integrator.resultsWaiting());
           break;
         default:
           break;
@@ -1370,6 +1377,19 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
 
 
     // IMU DEBUG //////////////////////////////////////////////////////////////////
+    case 's':
+      switch (temp_byte) {
+        case 1:
+          printFIFOLevels(&local_log);
+          break;
+        case 2:
+          printTemperatures(&local_log);   // Show us the temperatures.
+          break;
+        default:
+          break;
+      }
+      break;
+
     case 'c':
       if (temp_byte < 17) {
         imus[temp_byte].dumpDevRegs(&local_log);
@@ -1377,7 +1397,7 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     // IMU STATE CONTROL //////////////////////////////////////////////////////////
-    case 's':
+    case 'd':
       temp_byte = parse_mule.position_as_int(0);
       if (parse_mule.count() > 1) {
         int temp_int = parse_mule.position_as_int(1);

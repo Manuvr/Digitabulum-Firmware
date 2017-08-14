@@ -41,6 +41,7 @@ Error should be integrated here as well to form a set of limit error values for
 
 #include <Platform/Platform.h>
 #include <DataStructures/Quaternion.h>
+#include <DataStructures/RingBuffer.h>
 #include "SensorFrame.h"
 
 
@@ -67,10 +68,6 @@ Error should be integrated here as well to form a set of limit error values for
 #define IIU_DEG_TO_RAD_SCALAR   (3.14159f / 180.0f)
 
 
-#ifndef PREALLOCD_IMU_FRAMES
-  #define PREALLOCD_IMU_FRAMES    10   // We retain this many frames.
-#endif
-
 
 enum class SampleType {
   UNSPECIFIED  = 0x00,
@@ -96,21 +93,33 @@ class Integrator {
 
     void dumpPointers(StringBuilder*);
     void printDebug(StringBuilder*);
-    void setVerbosity(int8_t);
+    inline void setVerbosity(int8_t nu) {   verbosity = nu;   };
+
 
     int8_t init();
-
-    /* Specific to this class */
-    inline float getTemperature() {      return *(_ptr_temperature);  }
-    void setTemperature(float);
-    uint32_t totalSamples();
-
     void reset();
 
-    /* These are meant to be called from the IMUs. */
+    /* DEPRECATED These are meant to be called from the IMUs. */
     int8_t pushMeasurement(SampleType, float x, float y, float z, float delta_t);
-    int8_t pushMeasurement(SensorFrame*);
-    SensorFrame* takeResult();
+
+    /**
+    * @return How many frames the integrator has processed.
+    */
+    inline uint32_t totalFrames() {  return _frames_completed;  };
+
+    /**
+    * @param SensorFrame* The frame to be integrated.
+    * @return non-zero on error.
+    */
+    inline int8_t pushFrame(SensorFrame* x) {  return _pending.insert(x);  };
+    /**
+    * @return nullptr when empty.
+    */
+    inline SensorFrame* takeResult() {         return _complete.get();    };
+    inline unsigned int resultsWaiting() {     return _complete.count();  };
+    int8_t churn();
+
+
 
     void deposit_log(StringBuilder*);
 
@@ -130,11 +139,10 @@ class Integrator {
       void* sample_count_temp
     );
 
-    uint8_t MadgwickQuaternionUpdate();
 
-    inline bool isDirty() {         return (dirty_acc||dirty_gyr||dirty_mag); }
-    inline bool isQuatDirty() {     return (dirty_acc & dirty_gyr);           }
-    inline bool has_quats_left() {  return (frame_queue.size() > 0);           }
+    inline bool isDirty() {         return (dirty_acc||dirty_gyr||dirty_mag); };
+    inline bool isQuatDirty() {     return (dirty_acc & dirty_gyr);           };
+    inline bool has_quats_left() {  return (_pending.count() > 0);            };
 
 
     /*
@@ -229,21 +237,15 @@ class Integrator {
       if (nu < 10) madgwick_iterations = nu;
     }
 
-    /**
-    * @return nullptr when empty.
-    */
-    inline SensorFrame* take() {  return _complete.get();  };
-
 
     static float    mag_discard_threshold;
     static const char* getSourceTypeString(SampleType);
 
-    static SensorFrame* fetchMeasurement();
-
 
 
   private:
-    RingBuffer<SensorFrame*> _complete(4);
+    RingBuffer<SensorFrame*> _complete;
+    RingBuffer<SensorFrame*> _pending;
 
     float delta_t      = 0.0f;
 
@@ -278,10 +280,11 @@ class Integrator {
     // A Legend might instruct us to handle our data in a certain way...
     uint32_t data_handling_flags = 0;
 
+    /* Counters and profiling members. */
+    uint32_t _frames_completed   = 0;
+
     //Vector3<float> gravity;        // If we need gravity, but the Legend doesn't want it.
     StringBuilder local_log;
-
-    PriorityQueue<SensorFrame*> frame_queue;   // This is the queue for quat operations.
 
     int8_t verbosity            = 3;
     uint8_t madgwick_iterations = 1;
@@ -301,6 +304,7 @@ class Integrator {
     //  return (now >= op_ts) ? (delta_t + ((now - op_ts) / 1000.0)) : (delta_t + (((0xFFFFFFFF - op_ts) - now) / 1000.0));
     //}
 
+    uint8_t MadgwickQuaternionUpdate();
     // This is a privately-scoped override that does not consider the magnetometer.
     void MadgwickAHRSupdateIMU(SensorFrame*);
 
@@ -309,19 +313,6 @@ class Integrator {
 
     int8_t collect_reading_m();
     int8_t collect_reading_i();
-
-
-    // Preallocated frames.
-    // TODO: These things should not be static.
-    static uint32_t prealloc_starves;
-    static uint32_t measurement_heap_instantiated;
-    static uint32_t measurement_heap_freed;
-    static uint32_t minimum_prealloc_level;
-    static PriorityQueue<SensorFrame*>  preallocd_measurements;
-    static SensorFrame __prealloc[PREALLOCD_IMU_FRAMES];
-
-
-    static void reclaimMeasurement(SensorFrame*);
 };
 
 #endif  // __INTEGRATOR_CLASS_H__

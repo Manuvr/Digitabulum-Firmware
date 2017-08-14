@@ -68,6 +68,8 @@ class SensorFrame {
     inline float   time() {         return _read_time; };
     inline void    time(float x) {  _read_time = x;    };
 
+    inline void markComplete() {  _seq = ++SensorFrame::_total_sequences;  };
+
     inline void setI(uint8_t i, float ax, float ay, float az, float gx, float gy, float gz) {
       a_data[i](ax, ay, az);
       g_data[i](gx, gy, gz);
@@ -99,7 +101,7 @@ class SensorFrame {
     float    _read_time  = 0.0f;  // Derived from the system time when the values arrived from the sensor.
 
 
-    static uint32_t _total_sequences;  // We try to
+    static uint32_t _total_sequences;  // We try to keep details hidden.
 };
 
 #endif  //__IIU_MEASUREMENT_H__
