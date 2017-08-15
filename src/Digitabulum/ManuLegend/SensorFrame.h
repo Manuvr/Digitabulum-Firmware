@@ -92,8 +92,8 @@ class SensorFrame {
     };
 
 
-
     static void resetSequenceCounter();
+
 
 
   private:

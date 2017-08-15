@@ -639,7 +639,10 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
         int16_t* offset = (int16_t*) op->buf;
 
         // Scale the data
+        uint32_t this_frame_time = millis();
         SensorFrame* nu_msrmnt = _frame_pool.take();
+        nu_msrmnt->time((this_frame_time - _frame_time_last)/1000.0f);
+        _frame_time_last = this_frame_time;
         for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
           scalar_a = imus[i].scaleA();
           scalar_g = imus[i].scaleG();
@@ -853,11 +856,14 @@ int8_t ManuManager::attached() {
     /* Setup our pre-formed quat crunch event. */
     _event_integrator.repurpose(DIGITABULUM_MSG_IMU_QUAT_CRUNCH, this);
     _event_integrator.incRefs();
+    _event_integrator.alterScheduleRecurrence(-1);
+    _event_integrator.alterSchedulePeriod(100);
+    _event_integrator.autoClear(false);
+    _event_integrator.enableSchedule(false);
     _event_integrator.specific_target = (EventReceiver*) this;
 
     platform.kernel()->addSchedule(&event_iiu_read);
     platform.kernel()->addSchedule(&_event_integrator);
-
     return 1;
   }
   return 0;
@@ -902,8 +908,17 @@ int8_t ManuManager::callback_proc(ManuvrMsg* event) {
       break;
 
     case DIGITABULUM_MSG_IMU_QUAT_CRUNCH:
-      if (integrator.has_quats_left()) {
-        return_value = EVENT_CALLBACK_RETURN_RECYCLE;
+      if (integrator.resultsWaiting()) {
+        // TODO: This does not belong here.
+        SensorFrame* frame = integrator.takeResult();
+        _legends[0].offer(frame);
+        frame->wipe();
+        _frame_pool.give(frame);
+      }
+      if (!debugFrameCycle()) {
+        if (integrator.has_quats_left()) {
+          return_value = EVENT_CALLBACK_RETURN_RECYCLE;
+        }
       }
       break;
 
@@ -984,6 +999,14 @@ int8_t ManuManager::notify(ManuvrMsg* active_event) {
       break;
 
     case DIGITABULUM_MSG_IMU_QUAT_CRUNCH:
+      if (!integrator.has_quats_left()) {
+        // Debug to allow cycling frames without hardware.
+        uint32_t this_frame_time = millis();
+        SensorFrame* nu_msrmnt = _frame_pool.take();
+        nu_msrmnt->time((this_frame_time - _frame_time_last)/1000.0f);
+        _frame_time_last = this_frame_time;
+        integrator.pushFrame(nu_msrmnt);
+      }
       integrator.churn();
       return_value++;
       break;
@@ -1370,6 +1393,17 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           }
           local_log.concatf("Integrator has %u frames available.\n", integrator.resultsWaiting());
           break;
+        case 4:
+          debugFrameCycle(true);
+          local_log.concat("Frame cycle started.\n");
+          integrator.pushFrame(_frame_pool.take());
+          _event_integrator.enableSchedule(true);
+          break;
+        case 5:
+          debugFrameCycle(false);
+          local_log.concat("Frame cycle stopped.\n");
+          _event_integrator.enableSchedule(false);
+          break;
         default:
           break;
       }
@@ -1607,6 +1641,17 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
             local_log.concat("Disabled periodic readback.\n");
           }
           break;
+      }
+      break;
+
+    case 'e':
+      if (temp_byte) {
+        _event_integrator.alterSchedulePeriod(temp_byte*10);
+        local_log.concatf("Set integrator schedule to once every %dms.\n", temp_byte*10);
+      }
+      else {
+        _event_integrator.enableSchedule(false);  // Disable the periodic read.
+        local_log.concat("Disabled integrator schedule.\n");
       }
       break;
 

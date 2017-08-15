@@ -74,11 +74,11 @@ void SensorFrame::wipe() {
 
 #if defined(MANUVR_IMU_DEBUG)
 void SensorFrame::printDebug(StringBuilder* output) {
-  output->concatf("SensorFrame (seq %u)  Delta-t = %f", _seq, (double) _read_time);
+  output->concatf("SensorFrame (seq %u)  Delta-t = %.3f sec", _seq, time());
   StringBuilder a_line;
   StringBuilder g_line;
   StringBuilder m_line;
-  output->concatf("HP(%.4f, %.4f, %.4f)\n", (double)hand_position.x, (double)hand_position.y, (double)hand_position.z);
+  output->concatf("\tL(%.4f, %.4f, %.4f)\n", (double)hand_position.x, (double)hand_position.y, (double)hand_position.z);
   for (int i = 0; i < 17; i++) {
     switch (i) {
       case 2:   // digit1 begins

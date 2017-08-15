@@ -113,12 +113,22 @@ int8_t ManuLegend::offer(SensorFrame* frame) {
             if (sequence()) {
               Argument* nu = new Argument(frame->seq());
               nu->setKey("seq");
-              ret = (nullptr == ret) ? nu : ret->link(nu);
+              if (nullptr == ret) {
+                ret = nu;
+              }
+              else {
+                ret->link(nu);
+              }
             }
             if (deltaT()) {
               Argument* nu = new Argument(frame->time());
               nu->setKey("dt");
-              ret = (nullptr == ret) ? nu : ret->link(nu);
+              if (nullptr == ret) {
+                ret = nu;
+              }
+              else {
+                ret->link(nu);
+              }
             }
             if (handPosition()) {
             }
@@ -142,7 +152,12 @@ int8_t ManuLegend::offer(SensorFrame* frame) {
               if (temperature(idx)) {
                 Argument* nu = new Argument(frame->temperature[idx]);
                 nu->setKey("temp");
-                imu_arg = (nullptr == imu_arg) ? nu : imu_arg->link(nu);
+                if (nullptr == ret) {
+                  ret = nu;
+                }
+                else {
+                  ret->link(nu);
+                }
               }
               if (samplesAcc(idx)) {
               }
@@ -155,7 +170,12 @@ int8_t ManuLegend::offer(SensorFrame* frame) {
               if (imu_arg) {
                 Argument* nu = new Argument(imu_arg);
                 nu->setKey(get_imu_label(idx));
-                ret = (nullptr == ret) ? nu : ret->link(nu);
+                if (nullptr == ret) {
+                  ret = nu;
+                }
+                else {
+                  ret->link(nu);
+                }
               }
             }
             StringBuilder temp;
@@ -171,16 +191,16 @@ int8_t ManuLegend::offer(SensorFrame* frame) {
             output.concat("\n");
             delete ret;
           }
+          Kernel::log(&output);
           break;
         case ManuEncoding::OSC:
           break;
         case ManuEncoding::LOG:
           frame->printDebug(&output);
+          Kernel::log(&output);
           break;
       }
-
       _ms_last_send = millis() + _ms_interval;
-      Kernel::log(&output);
     }
   }
   return 0;

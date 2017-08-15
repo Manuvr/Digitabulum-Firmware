@@ -149,7 +149,7 @@ class Integrator {
     * Accessors for profiling.
     * TODO: Inline these
     */
-    inline bool enableProfiling() {         return (data_handling_flags & IIU_DATA_HANDLING_PROFILING);  }
+    inline bool enableProfiling() {        return (data_handling_flags & IIU_DATA_HANDLING_PROFILING);  }
     bool enableProfiling(bool en);
 
     /*

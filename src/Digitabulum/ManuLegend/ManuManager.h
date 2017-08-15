@@ -58,6 +58,7 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #define LEGEND_MGR_FLAGS_LEGEND_SENT           0x08   // If set, the map is clear-to-send.
 #define LEGEND_MGR_FLAGS_IO_ON_HIGH_FRAME_AG   0x10   //
 #define LEGEND_MGR_FLAGS_IO_ON_HIGH_FRAME_M    0x20   //
+#define LEGEND_MGR_FLAGS_EMPTY_FRAME_CYCLE     0x40   //
 
 #define LEGEND_MGR_FLAGS_CHIRALITY_MASK        0x03   // Mask that maps to the enum class.
 
@@ -133,6 +134,8 @@ class ManuManager : public EventReceiver, public BusOpCallback {
 
     inline bool legendSent() {           return (_er_flag(LEGEND_MGR_FLAGS_LEGEND_SENT));           };
     inline void legendSent(bool nu) {    return (_er_set_flag(LEGEND_MGR_FLAGS_LEGEND_SENT, nu));   };
+    inline bool debugFrameCycle() {           return (_er_flag(LEGEND_MGR_FLAGS_EMPTY_FRAME_CYCLE));           };
+    inline void debugFrameCycle(bool nu) {    return (_er_set_flag(LEGEND_MGR_FLAGS_EMPTY_FRAME_CYCLE, nu));   };
 
     inline uint32_t totalSamples() {   return sample_count;   };
 
@@ -162,9 +165,13 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     //   in the IIU class.
     uint32_t*       _ptr_sequence = nullptr;
     float*          _ptr_delta_t  = nullptr;
-    uint32_t  sample_count   = 0;         // How many samples have we read since init?
+    uint32_t  sample_count       = 0;   // How many samples have we read since init?
+    uint32_t  _frame_time_last   = 0;   // Used to track inter-frame time differences.
 
     uint8_t  max_quats_per_event = 2;   // Cuts down on overhead if load is high.
+
+    /* The pool of SensorFrames is maintained by ManuManager. */
+    void reclaimMeasurement(SensorFrame*);
 
     int8_t send_map_event();
 
@@ -209,9 +216,6 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     static SPIBusOp _preformed_read_m;
     static SPIBusOp _preformed_read_temp;
     static SPIBusOp _preformed_fifo_read;
-
-    /* The pool of SensorFrames is maintained by ManuManager. */
-    void reclaimMeasurement(SensorFrame*);
 };
 
 #endif  // __DIGITABULUM_MANU_MGR_H_
