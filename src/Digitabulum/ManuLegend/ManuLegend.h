@@ -40,21 +40,9 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #ifndef __DIGITABULUM_MANU_LEGEND_H_
 #define __DIGITABULUM_MANU_LEGEND_H_
 
-#include <Kernel.h>
+#include <DataStructures/RingBuffer.h>
+#include <DataStructures/StringBuilder.h>
 #include "Integrator.h"
-#include "../CPLDDriver/CPLDDriver.h"
-
-/*
-* Flags for Legend state and control (not data).
-*/
-#define  LEGENDPIPE_FLAGS_LEGEND_ACTIVE       0x01   // If set, this ManuLegend will be included in the sum.
-#define  LEGENDPIPE_FLAGS_LEGEND_SATISFIED    0x02   // If set, this ManuLegend is getting everything it needs.
-#define  LEGENDPIPE_FLAGS_LEGEND_STABLE       0x04   // This ManuLegend is stable and ready for operation.
-#define  LEGENDPIPE_FLAGS_LEGEND_CHANGE_PEND  0x08   // We have a pending change to the ManuLegend from outside.
-#define  LEGENDPIPE_FLAGS_LEGEND_CHANGE_SENT  0x10   // Change notice has been sent to counterparty.
-#define  LEGENDPIPE_FLAGS_LEGEND_DECOUPLE_SEQ 0x80   // If set, frame seq will be independently-tracked here.
-
-#define  LEGENDPIPE_FLAGS_SHOULD_ACCEPT_MASK  (LEGENDPIPE_FLAGS_LEGEND_STABLE | LEGENDPIPE_FLAGS_LEGEND_ACTIVE)
 
 /*
 * Bitmask flags for frame-global data.
@@ -177,12 +165,6 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 /* Therefore, the full map size is.... */
 #define LEGEND_MGR_MAX_DATASET_SIZE (LEGEND_DATASET_GLOBAL_SIZE + (LEGEND_DATASET_PER_IMU_SIZE * LEGEND_DATASET_IIU_COUNT))
 
-enum class ManuEncoding {
-  LOG    = 0,
-  CBOR   = 1,
-  OSC    = 2,
-  MANUVR = 3
-};
 
 /*
 * Class for communicating manu data needs between components.
@@ -267,61 +249,6 @@ class ManuLegend {
 
 
     inline void _internal_setter(uint8_t idx, bool en, uint16_t x) {  per_iiu_data[idx] = (en) ? (per_iiu_data[idx] | x) : (per_iiu_data[idx]  & ~(x));   };
-};
-
-/*
-* Class for connecting Manu results to the outside world.
-*/
-class ManuLegendPipe : public ManuLegend {
-  public:
-    ManuLegendPipe(ManuEncoding);
-    ManuLegendPipe() : ManuLegendPipe(ManuEncoding::LOG) {};
-    ~ManuLegendPipe();
-
-    int8_t offer(SensorFrame*);
-
-    void printDebug(StringBuilder*);
-
-    /* Used to enable or disable the Legend's activity. */
-    inline bool active() {              return (_flags & LEGENDPIPE_FLAGS_LEGEND_ACTIVE);          };
-    inline void active(bool en) {       _flags = (en) ? (_flags | LEGENDPIPE_FLAGS_LEGEND_ACTIVE) : (_flags & ~(LEGENDPIPE_FLAGS_LEGEND_ACTIVE));  };
-
-    inline bool satisfied() {           return (_flags & LEGENDPIPE_FLAGS_LEGEND_SATISFIED);       };
-    inline bool stable() {              return (_flags & LEGENDPIPE_FLAGS_LEGEND_STABLE);          };
-    inline bool changeSent() {          return (_flags & LEGENDPIPE_FLAGS_LEGEND_CHANGE_SENT);     };
-    inline bool changePending() {       return (_flags & LEGENDPIPE_FLAGS_LEGEND_CHANGE_PEND);     };
-
-    inline bool decoupleSeq() {         return (_flags & LEGENDPIPE_FLAGS_LEGEND_DECOUPLE_SEQ);     };
-    inline void decoupleSeq(bool en) {  _flags = (en) ? (_flags | LEGENDPIPE_FLAGS_LEGEND_DECOUPLE_SEQ) : (_flags & ~(LEGENDPIPE_FLAGS_LEGEND_DECOUPLE_SEQ));  };
-
-    inline ManuEncoding encoding() {        return _encoding;   };
-    inline void encoding(ManuEncoding e) {  _encoding = e;      };
-
-    inline EventReceiver* getOwner() {      return _owner;      };
-
-
-    static const char* const encoding_label(ManuEncoding);
-
-
-
-  private:
-    // TODO: We are ultimately going to form this class into a BufferPipe once that class
-    //   has some better asynchronicity and self-reporting properties.
-    EventReceiver* _owner  = nullptr;  // The owner of this ManuLegend.
-
-    uint32_t _local_seq    = 0;
-    uint32_t _ms_last_send = 0;
-    uint32_t _ms_interval  = 100;
-    uint8_t  _flags        = 0;
-    ManuEncoding _encoding = ManuEncoding::MANUVR;
-
-    inline void satisfied(bool en) {  _flags = (en) ? (_flags | LEGENDPIPE_FLAGS_LEGEND_SATISFIED) : (_flags & ~(LEGENDPIPE_FLAGS_LEGEND_SATISFIED)); };
-    inline void stable(bool en) {     _flags = (en) ? (_flags | LEGENDPIPE_FLAGS_LEGEND_STABLE)    : (_flags & ~(LEGENDPIPE_FLAGS_LEGEND_STABLE));    };
-    inline void changeSent(bool en) {     _flags = (en) ? (_flags | LEGENDPIPE_FLAGS_LEGEND_CHANGE_SENT) : (_flags & ~(LEGENDPIPE_FLAGS_LEGEND_CHANGE_SENT));  };
-    inline void changePending(bool en) {  _flags = (en) ? (_flags | LEGENDPIPE_FLAGS_LEGEND_CHANGE_PEND) : (_flags & ~(LEGENDPIPE_FLAGS_LEGEND_CHANGE_PEND));  };
-
-    inline bool should_accept() {     return (_flags & LEGENDPIPE_FLAGS_SHOULD_ACCEPT_MASK);  };
-
 };
 
 #endif  // __DIGITABULUM_MANU_LEGEND_H_

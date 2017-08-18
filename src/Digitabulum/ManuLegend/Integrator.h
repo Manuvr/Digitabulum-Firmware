@@ -54,26 +54,19 @@ Error should be integrated here as well to form a set of limit error values for
 #include <Platform/Platform.h>
 #include <DataStructures/Quaternion.h>
 #include <DataStructures/RingBuffer.h>
-#include "SensorFrame.h"
+
+// Forward dec
+class SensorFrame;
 
 
-#define IIU_DATA_HANDLING_UNITS_METRIC     0x00010000
-
-#define IIU_DATA_HANDLING_FIND_POS         0x00100000
-#define IIU_DATA_HANDLING_FIND_VEL         0x00200000
-
-#define IIU_DATA_HANDLING_MAG_NULL_BEARING 0x00400000  //
-#define IIU_DATA_HANDLING_MAG_CORRECT_SPH  0x00800000  //
-
-#define IIU_DATA_HANDLING_PROFILING        0x01000000
-#define IIU_DATA_HANDLING_NULL_GYRO_ERROR  0x02000000
-#define IIU_DATA_HANDLING_SMART_MAG_DROP   0x04000000  // If enabled, causes a large magnetometer reading to be DQ'd from AHRS.
-#define IIU_DATA_HANDLING_CLEAN_MAG_ZERO   0x08000000  //
-
-#define IIU_DATA_HANDLING_LEGEND_WRITABLE  0x10000000
-#define IIU_DATA_HANDLING_PROC_QUAT        0x20000000
-#define IIU_DATA_HANDLING_RANGE_BIND       0x40000000
-#define IIU_DATA_HANDLING_NULLIFY_GRAVITY  0x80000000
+#define IIU_DATA_HANDLING_UNITS_METRIC     0x01000000
+#define IIU_DATA_HANDLING_RANGE_BIND       0x02000000
+#define IIU_DATA_HANDLING_MAG_NULL_BEARING 0x04000000  //
+#define IIU_DATA_HANDLING_MAG_CORRECT_SPH  0x08000000  //
+#define IIU_DATA_HANDLING_PROFILING        0x10000000
+#define IIU_DATA_HANDLING_NULL_GYRO_ERROR  0x20000000
+#define IIU_DATA_HANDLING_SMART_MAG_DROP   0x40000000  // If enabled, causes a large magnetometer reading to be DQ'd from AHRS.
+#define IIU_DATA_HANDLING_CLEAN_MAG_ZERO   0x80000000  //
 
 // This is Earth's gravity at sea-level, in m/s^2
 #define IIU_STANDARD_GRAVITY     9.80665f
@@ -133,36 +126,6 @@ class Integrator {
     */
     inline bool enableProfiling() {        return (data_handling_flags & IIU_DATA_HANDLING_PROFILING);  }
     bool enableProfiling(bool en);
-
-    /*
-    * Accessors for gravity cancelation.
-    */
-    inline bool nullifyGravity() {         return (data_handling_flags & IIU_DATA_HANDLING_NULLIFY_GRAVITY);  }
-    bool nullifyGravity(bool en);
-
-    /*
-    * Accessors for quaternion processing.
-    */
-    inline bool processQuats() {         return (data_handling_flags & IIU_DATA_HANDLING_PROC_QUAT);  }
-    inline void processQuats(bool en) {
-      data_handling_flags = (en) ? (data_handling_flags | IIU_DATA_HANDLING_PROC_QUAT) : (data_handling_flags & ~(IIU_DATA_HANDLING_PROC_QUAT));
-    }
-
-    /*
-    * Accessors for velocity processing.
-    */
-    inline bool findVelocity() {         return (data_handling_flags & IIU_DATA_HANDLING_FIND_VEL);  }
-    inline void findVelocity(bool en) {
-      data_handling_flags = (en) ? (data_handling_flags | IIU_DATA_HANDLING_FIND_VEL) : (data_handling_flags & ~(IIU_DATA_HANDLING_FIND_VEL));
-    }
-
-    /*
-    * Accessors for position processing.
-    */
-    inline bool trackPosition() {         return (data_handling_flags & IIU_DATA_HANDLING_FIND_POS);  }
-    inline void trackPosition(bool en) {
-      data_handling_flags = (en) ? (data_handling_flags | IIU_DATA_HANDLING_FIND_POS) : (data_handling_flags & ~(IIU_DATA_HANDLING_FIND_POS));
-    }
 
     /*
     * Accessors for quaternion processing.
@@ -242,14 +205,6 @@ class Integrator {
     int8_t   verbosity           = 3;    //
     uint8_t  madgwick_iterations = 1;    // Madgwick's filter is run this many times per frame.
 
-
-    /* Is the class configured? Can we write our data to a pool?
-    *  Used to trust the validity of our pointers.
-    */
-    inline bool legend_writable() {         return (data_handling_flags & IIU_DATA_HANDLING_LEGEND_WRITABLE);  }
-    inline void legend_writable(bool en) {
-      data_handling_flags = (en) ? (data_handling_flags | IIU_DATA_HANDLING_LEGEND_WRITABLE) : (data_handling_flags & ~(IIU_DATA_HANDLING_LEGEND_WRITABLE));
-    }
 
     //// We probably want this fxn to return ms, and not s.
     //inline float findDeltaT(uint32_t now) {

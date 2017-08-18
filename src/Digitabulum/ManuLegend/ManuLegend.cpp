@@ -21,7 +21,7 @@ limitations under the License.
 */
 
 #include "ManuLegend.h"
-
+#include "SensorFrame.h"
 
 /*******************************************************************************
 *   ___ _              ___      _ _              _      _

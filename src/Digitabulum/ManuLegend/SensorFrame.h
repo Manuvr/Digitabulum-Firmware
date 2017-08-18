@@ -32,6 +32,7 @@ Orientation
 #include <inttypes.h>
 #include <DataStructures/Vector3.h>
 #include <DataStructures/Quaternion.h>
+#include "ManuLegend.h"
 
 #if defined(MANUVR_IMU_DEBUG)
 #include <DataStructures/StringBuilder.h>
@@ -40,7 +41,6 @@ Orientation
 /*
 * Flags for SensorFrames
 */
-#define  MANUFRAME_FLAGS_COMPLETE          0x01   // Is the data complete?
 
 
 /*
@@ -68,7 +68,7 @@ enum class FrameStage {
 *   orientation, taking error into account.
 * Operations that span many elements are assumed to have element counts of 17.
 */
-class SensorFrame {
+class SensorFrame : public ManuLegend {
   public:
     // TODO: The dynamic memory pool code that was in ManuLegend should be moved here.
     Vector4f         quat[17];  // Orientation

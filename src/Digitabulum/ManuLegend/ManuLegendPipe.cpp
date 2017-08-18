@@ -22,9 +22,11 @@ The ManuLegendPipe is the means by which relevant manu data is filtered,
   encoded and sent towards a counterparty at a reasonable rate.
 */
 
-#include "ManuLegend.h"
+#include <Kernel.h>
+#include "ManuLegendPipe.h"
+#include "SensorFrame.h"
 #include <DataStructures/Argument.h>
-
+#include "../CPLDDriver/CPLDDriver.h"
 
 /*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
@@ -103,8 +105,20 @@ void ManuLegendPipe::printDebug(StringBuilder* output) {
     (active() ? "" : "in"), (stable() ? "" : "un")
   );
   output->concatf("-- Encoding       \t%s\n", ManuLegendPipe::encoding_label(_encoding));
+  output->concatf("-- Legend Sent    \t%c\n", changeSent() ? 'y' : 'n');
   output->concatf("-- Data demands:  \t%satisfied\n", satisfied() ? "S" : "Uns");
   output->concatf("\t Sequence num   \t%c\n", sequence() ? 'y' : 'n');
+}
+
+
+void ManuLegendPipe::broadcast_legend() {
+  StringBuilder* legend_string = new StringBuilder();
+  getLegendString(legend_string);
+  ManuvrMsg* legend_broadcast = Kernel::returnEvent(DIGITABULUM_MSG_IMU_LEGEND, _owner);
+  legend_broadcast->specific_target = _owner;
+  legend_broadcast->addArg(legend_string)->reapValue(true);
+  Kernel::staticRaiseEvent(legend_broadcast);
+  changeSent(true);
 }
 
 

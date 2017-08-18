@@ -399,25 +399,14 @@ int8_t ManuManager::setLegend(ManuLegend* nu_legend) {
   if (nullptr == nu_legend) {
     return -1;
   }
-  // Only reconfigure if stable.
-  legendSent(false);     // If we change the data, we will need to resend this.
 
   // Now we need to declare the new IMU Legend to the rest of the system. We will not re-enable
   //   the frame broadcast until the callback for this event happens. This assures that the message
   //   order to anyone listening is what we intend.
-  broadcast_legend(&_root_leg);
+  if (_root_leg.stackLegend(nu_legend)) {
+    // TODO: If our root legend changed because of this addition, do we need to take action?
+  }
   return 0;
-}
-
-
-void ManuManager::broadcast_legend(ManuLegend* nu_legend) {
-  StringBuilder* legend_string = new StringBuilder();
-  nu_legend->getLegendString(legend_string);
-  ManuvrMsg* legend_broadcast = Kernel::returnEvent(DIGITABULUM_MSG_IMU_LEGEND, this);
-  legend_broadcast->specific_target = _def_pipe.getOwner();
-  legend_broadcast->priority(EVENT_PRIORITY_LOWEST + 1);
-  legend_broadcast->addArg(legend_string)->reapValue(true);
-  raiseEvent(legend_broadcast);
 }
 
 
@@ -449,7 +438,6 @@ void ManuManager::enableAutoscale(SampleType s_type, bool enabled) {
       break;
   }
 }
-
 
 
 
@@ -869,7 +857,7 @@ int8_t ManuManager::callback_proc(ManuvrMsg* event) {
 
     case DIGITABULUM_MSG_IMU_LEGEND:
       // We take this as an indication that our notice of altered Legend was sent.
-      legendSent(true);
+      //legendSent(true);
       break;
 
     case DIGITABULUM_MSG_IMU_QUAT_CRUNCH:
@@ -1143,7 +1131,6 @@ void ManuManager::printDebug(StringBuilder *output) {
     // Print just the aggregate sample count and return.
   }
   output->concatf("-- Chirality           %s\n", chiralityString(getChirality()));
-  output->concatf("-- Legend Sent         %c\n", legendSent()?'y':'n');
 
   if (getVerbosity() > 3) {
     output->concatf("-- __dataset location  %p\n", (uintptr_t) __dataset);
@@ -1183,25 +1170,6 @@ void ManuManager::printDebug(StringBuilder *output) {
 */
 void ManuManager::printHelp(StringBuilder *output) {
   EventReceiver::printDebug(output);
-  output->concat("\t-- Schedules\n");
-  output->concat("\t--------------------------------\n");
-  output->concat("\tf0        Disable IMU read schedule.\n");
-  output->concat("\tf[1-253]  IMU read schedule ms*10.\n");
-  output->concat("\tf254      Enable IMU read schedule.\n");
-  output->concat("\tf255      Manually fire an IMU read.\n");
-  output->concat("\n\t-- IMU\n");
-  output->concat("\t--------------------------------\n");
-  output->concat("\tc [x]     Dump registers for IMU x.\n");
-  output->concat("\tk[x]      Broadcast INITx to all IMUs.\n");
-  output->concat("\td [x[,y]] Get/Set IMU x state.\n");
-  output->concat("\td 255,[y] Set all IMUs to state y.\n");
-  output->concat("\tV [x[,y]] Get/Set IMU x to verbosity level y.\n");
-  output->concat("\n\t-- Legend\n");
-  output->concat("\t--------------------------------\n");
-  output->concat("\tl         Legend summary.\n");
-  output->concat("\tl1        Broadcast ManuLegend.\n");
-  output->concat("\tl2        Copy frame.\n");
-  output->concat("\tl3        Print dataset.\n");
 }
 
 
@@ -1220,6 +1188,12 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
   }
 
   switch (*(str)) {
+    case 'h':
+    case 'H':
+    case 'm':
+    case 'M':
+      break;
+
     case 'V':
       temp_byte = parse_mule.position_as_int(0);
       if (temp_byte < 17) {
@@ -1293,12 +1267,12 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
     case 'l':
       switch (temp_byte) {
         case 1:
-          broadcast_legend(&_root_leg);
-          local_log.concat("Legend broadcast.\n");
+          //_def_pipe.broadcast_legend();
+          //local_log.concat("Legend broadcast.\n");
           break;
         case 2:
-          _def_pipe.offer(_frame_pool.take());
-          local_log.concat("Cycled blank frame.\n");
+          //_def_pipe.offer(_frame_pool.take());
+          //local_log.concat("Cycled blank frame.\n");
           break;
         case 3:
           _def_pipe.decoupleSeq(!_def_pipe.decoupleSeq());
@@ -1531,22 +1505,10 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
       integrator.rangeBind((*(str) == 'N'));
       break;
 
-    case 'h':
-    case 'H':
-      local_log.concatf("%sabling quats on all IIUs.\n", ((*(str) == 'H') ? "En":"Dis"));
-      integrator.processQuats((*(str) == 'H'));
-      break;
-
     case 'x':
     case 'X':
       local_log.concatf("%sabling gyro error compensation on all IIUs.\n", ((*(str) == 'X') ? "En":"Dis"));
       integrator.nullGyroError((*(str) == 'X'));
-      break;
-
-    case 'm':
-    case 'M':
-      local_log.concatf("%sabling gravity nullification on all IIUs.\n", ((*(str) == 'M') ? "En":"Dis"));
-      integrator.nullifyGravity((*(str) == 'M'));
       break;
 
     case 'y':

@@ -202,31 +202,18 @@ bool Integrator::nullGyroError(bool en) {
 }
 
 
-bool Integrator::nullifyGravity(bool en) {
-  if (nullifyGravity() != en) {
-    data_handling_flags = (en) ? (data_handling_flags | IIU_DATA_HANDLING_NULLIFY_GRAVITY) : (data_handling_flags & ~(IIU_DATA_HANDLING_NULLIFY_GRAVITY));
-    if (en && !processQuats()) {
-      // This feature depends on quaternions.
-      processQuats(true);
-    }
-    //imu_ag.cancel_error(en);
-  }
-  return nullifyGravity();
-}
-
-
 /**
 * Debug support method. This fxn is only present in debug builds.
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
 void Integrator::printDebug(StringBuilder* output) {
-  output->concatf("\n-------------------------------------------------------\n--- Integrator\n-------------------------------------------------------\n-- %s legend\n-- Samples:\t%u\n", (legend_writable()?"writable":"invalid"), _frames_completed);
-  output->concatf("-- Measurements\n\t_pending:   %u\n\t_complete:  %u\n", _pending.count(), _complete.count());
+  output->concat("\n-------------------------------------------------------\n--- Integrator\n-------------------------------------------------------\n");
+  output->concatf("-- Samples:\t %u\n-- Measurements\n\t_pending:   %u\n\t_complete:  %u\n", _frames_completed, _pending.count(), _complete.count());
   output->concatf("-- delta_t:\t %3fms\n", ((double) delta_t * 1000));
   if (verbosity > 2) {
     if (verbosity > 3) output->concatf("-- GyroMeasDrift:    %.4f\n",  (double) GyroMeasDrift);
-    output->concatf("-- Gravity: %s (%.4f, %.4f, %.4f)  %.4G\n", (nullifyGravity() ? "(nulled)":"        "), (double)(_grav.x), (double)(_grav.y), (double)(_grav.z), (double) (grav_scalar));
+    output->concatf("-- Gravity: %.4G (%.4f, %.4f, %.4f)\n", (double) (grav_scalar), (double)(_grav.x), (double)(_grav.y), (double)(_grav.z));
   }
 
   float grav_consensus = 0.0;
@@ -234,7 +221,7 @@ void Integrator::printDebug(StringBuilder* output) {
     //grav_consensus += imus[i].grav_scalar;
   }
   grav_consensus /= 17;
-  output->concatf("-- Gravity consensus:  %.4fg\n",  (double) grav_consensus);
+  //output->concatf("-- Gravity consensus:  %.4fg\n",  (double) grav_consensus);
   output->concat("\n");
 }
 
@@ -290,7 +277,7 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
     float mag_normal;
 
     // Now we'll start the float churn...
-    for (int set_i = 0; set_i < LEGEND_DATASET_IIU_COUNT; set_i++) {
+    for (uint8_t set_i = 0; set_i < LEGEND_DATASET_IIU_COUNT; set_i++) {
       q0 = c_frame->quat[set_i].w;
       q1 = c_frame->quat[set_i].x;
       q2 = c_frame->quat[set_i].y;
@@ -393,7 +380,7 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
         }
       }
 
-      if (nullifyGravity()) {
+      if (c_frame->accNullGravity(set_i)) {
         /* If we are going to cancel gravity, we should do so now. */
         _grav.x = (2 * (q1 * q3 - q0 * q2));
         _grav.y = (2 * (q0 * q1 + q2 * q3));
@@ -405,7 +392,7 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
           (c_frame->a_data[set_i]).z - _grav.z
         );
 
-        if (findVelocity()) {
+        if (c_frame->velocity(set_i)) {
           // Are we finding velocity?
           c_frame->setV(set_i,
             c_frame->n_data[set_i].x * d_t,
@@ -413,7 +400,7 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
             c_frame->n_data[set_i].z * d_t
           );
 
-          if (trackPosition()) {
+          if (c_frame->position(set_i)) {
             // Track position....
             c_frame->setP(set_i,
               c_frame->v_data[set_i].x * d_t,

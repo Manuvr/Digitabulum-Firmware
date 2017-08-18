@@ -45,6 +45,7 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #include "../CPLDDriver/CPLDDriver.h"
 #include "../LSM9DS1/LSM9DS1.h"
 #include "ManuLegend.h"
+#include "ManuLegendPipe.h"
 #include "Integrator.h"
 
 
@@ -54,8 +55,6 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 */
 #define LEGEND_MGR_FLAGS_CHIRALITY_KNOWN       0x01   // Has the chirality been determined?
 #define LEGEND_MGR_FLAGS_CHIRALITY_LEFT        0x02   // If so, is it a left hand?
-#define LEGEND_MGR_FLAGS_LEGEND_STABLE         0x04   // If set, the map is not changing.
-#define LEGEND_MGR_FLAGS_LEGEND_SENT           0x08   // If set, the map is clear-to-send.
 #define LEGEND_MGR_FLAGS_IO_ON_HIGH_FRAME_AG   0x10   //
 #define LEGEND_MGR_FLAGS_IO_ON_HIGH_FRAME_M    0x20   //
 #define LEGEND_MGR_FLAGS_EMPTY_FRAME_CYCLE     0x40   //
@@ -132,8 +131,6 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     inline Chirality getChirality() {  return (Chirality) _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_MASK);  };
     inline bool chiralityKnown() {     return _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_KNOWN);  };
 
-    inline bool legendSent() {           return (_er_flag(LEGEND_MGR_FLAGS_LEGEND_SENT));           };
-    inline void legendSent(bool nu) {    return (_er_set_flag(LEGEND_MGR_FLAGS_LEGEND_SENT, nu));   };
     inline bool debugFrameCycle() {           return (_er_flag(LEGEND_MGR_FLAGS_EMPTY_FRAME_CYCLE));           };
     inline void debugFrameCycle(bool nu) {    return (_er_set_flag(LEGEND_MGR_FLAGS_EMPTY_FRAME_CYCLE, nu));   };
 
@@ -189,8 +186,6 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     };
 
     LSM9DS1* fetchIMU(uint8_t idx);
-
-    void broadcast_legend(ManuLegend*);
 
     void printIMURollCall(StringBuilder*);
     void printTemperatures(StringBuilder*);

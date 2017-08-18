@@ -50,7 +50,7 @@ void SensorFrame::resetSequenceCounter() {
 /**
 * Vanilla constructor. Vector class will initiallize conponents to zero.
 */
-SensorFrame::SensorFrame() {
+SensorFrame::SensorFrame() : ManuLegend() {
   wipe();
 }
 
