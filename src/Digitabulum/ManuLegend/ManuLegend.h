@@ -50,6 +50,7 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #define  MANULEGEND_FLAGS_LEGEND_ACTIVE       0x01   // If set, this ManuLegend will be included in the sum.
 #define  MANULEGEND_FLAGS_LEGEND_SATISFIED    0x02   // If set, this ManuLegend is getting everything it needs.
 #define  MANULEGEND_FLAGS_LEGEND_STABLE       0x04   // This ManuLegend is stable and ready for operation.
+#define  MANULEGEND_FLAGS_LEGEND_DECOUPLE_SEQ 0x80   // If set, frame seq will be independently-tracked here.
 
 #define  MANULEGEND_FLAGS_SHOULD_ACCEPT_MASK  (MANULEGEND_FLAGS_LEGEND_STABLE | MANULEGEND_FLAGS_LEGEND_ACTIVE)
 
@@ -169,6 +170,7 @@ class ManuLegend {
   public:
     EventReceiver* owner = nullptr;  // The owner of this ManuLegend.
 
+    ManuLegend(const ManuLegend*);
     ManuLegend(ManuEncoding);
     ManuLegend() : ManuLegend(ManuEncoding::LOG) {};
     ~ManuLegend();
@@ -187,6 +189,8 @@ class ManuLegend {
     inline void active(bool en) {     _flags = (en) ? (_flags | MANULEGEND_FLAGS_LEGEND_ACTIVE) : (_flags & ~(MANULEGEND_FLAGS_LEGEND_ACTIVE));  };
     inline bool satisfied() {         return (_flags & MANULEGEND_FLAGS_LEGEND_SATISFIED);  };
     inline bool stable() {            return (_flags & MANULEGEND_FLAGS_LEGEND_STABLE);     };
+    inline bool decoupleSeq() {         return (_flags & MANULEGEND_FLAGS_LEGEND_DECOUPLE_SEQ);     };
+    inline void decoupleSeq(bool en) {  _flags = (en) ? (_flags | MANULEGEND_FLAGS_LEGEND_DECOUPLE_SEQ) : (_flags & ~(MANULEGEND_FLAGS_LEGEND_DECOUPLE_SEQ));  };
     inline void encoding(ManuEncoding e) {   _encoding = e;  };
 
     /* This is frame-global data. */
@@ -245,6 +249,7 @@ class ManuLegend {
 
 
   private:
+    uint32_t _local_seq    = 0;
     uint32_t _ms_last_send = 0;
     uint32_t _ms_interval  = 100;
     uint16_t ds_size       = 0;

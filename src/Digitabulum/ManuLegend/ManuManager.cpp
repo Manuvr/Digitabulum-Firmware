@@ -1336,6 +1336,8 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           local_log.concat("Cycled blank frame.\n");
           break;
         case 3:
+          _legends[0].decoupleSeq(!_legends[0].decoupleSeq());
+          local_log.concatf("decoupleSeq() %c\n", _legends[0].decoupleSeq() ? 'y' : 'n');
           break;
         case 4:
           {
@@ -1358,11 +1360,16 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           }
           break;
         case 6:
-        case 7:
-        case 8:
-        case 9:
+          _legends[0].active(!_legends[0].active());
+          local_log.concatf("active() %c\n", _legends[0].active() ? 'y' : 'n');
+          break;
+
+        case 10:
+        case 11:
+        case 12:
+        case 13:
           {
-            ManuEncoding e = (ManuEncoding) (temp_byte - 6);
+            ManuEncoding e = (ManuEncoding) (temp_byte - 10);
             _legends[0].encoding(e);
             local_log.concatf("Switched to ManuEncoding::%s\n", ManuLegend::encoding_label(e));
           }

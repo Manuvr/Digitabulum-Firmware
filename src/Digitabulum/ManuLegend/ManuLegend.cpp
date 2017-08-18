@@ -78,6 +78,16 @@ const char* const get_imu_label(int idx) {
 ****************************************************************************************************/
 
 /**
+* Copy constructor
+*/
+ManuLegend::ManuLegend(const ManuLegend* src) {
+  uint8_t* _ptr = (uint8_t*) src;
+  // Make the Legend NULL at first. Nothing requested.
+  for (uint8_t i = 0; i < sizeof(ManuLegend); i++) *(_ptr+i);
+}
+
+
+/**
 * Constructor
 */
 ManuLegend::ManuLegend(ManuEncoding e) {
@@ -107,30 +117,118 @@ int8_t ManuLegend::offer(SensorFrame* frame) {
       StringBuilder output;
       switch (_encoding) {
         case ManuEncoding::CBOR:
+          {
+            cbor::output_dynamic co;
+            cbor::encoder encoder(co);
+            if (sequence()) {
+              encoder.write_map(1);
+              encoder.write_string("seq");
+              encoder.write_int(decoupleSeq() ? ++_local_seq : frame->seq());
+            }
+            if (deltaT()) {
+              encoder.write_map(1);
+              encoder.write_string("dt");
+              encoder.write_float(frame->time());
+            }
+            if (handPosition()) {
+              encoder.write_map(1);
+              encoder.write_string("hp");
+              encoder.write_tag(MANUVR_CBOR_VENDOR_TYPE | TcodeToInt(TCode::VECT_3_FLOAT));
+              encoder.write_bytes((uint8_t*) &(frame->hand_position), 12);
+            }
+            for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) {
+              if (orientation(idx)) {
+                encoder.write_map(1);
+                encoder.write_string("ori");
+                encoder.write_tag(MANUVR_CBOR_VENDOR_TYPE | TcodeToInt(TCode::VECT_4_FLOAT));
+                encoder.write_bytes((uint8_t*) &(frame->quat[idx]), 16);
+              }
+              if (accNullGravity(idx)) {
+                encoder.write_map(1);
+                encoder.write_string("ang");
+                encoder.write_tag(MANUVR_CBOR_VENDOR_TYPE | TcodeToInt(TCode::VECT_3_FLOAT));
+                encoder.write_bytes((uint8_t*) &(frame->n_data[idx]), 12);
+              }
+              if (accRaw(idx)) {
+                encoder.write_map(1);
+                encoder.write_string("acc");
+                encoder.write_tag(MANUVR_CBOR_VENDOR_TYPE | TcodeToInt(TCode::VECT_3_FLOAT));
+                encoder.write_bytes((uint8_t*) &(frame->a_data[idx]), 12);
+              }
+              if (gyro(idx)) {
+                encoder.write_map(1);
+                encoder.write_string("gyr");
+                encoder.write_tag(MANUVR_CBOR_VENDOR_TYPE | TcodeToInt(TCode::VECT_3_FLOAT));
+                encoder.write_bytes((uint8_t*) &(frame->g_data[idx]), 12);
+              }
+              if (mag(idx)) {
+                encoder.write_map(1);
+                encoder.write_string("mag");
+                encoder.write_tag(MANUVR_CBOR_VENDOR_TYPE | TcodeToInt(TCode::VECT_3_FLOAT));
+                encoder.write_bytes((uint8_t*) &(frame->m_data[idx]), 12);
+              }
+              if (velocity(idx)) {
+              }
+              if (position(idx)) {
+              }
+              if (temperature(idx)) {
+                encoder.write_map(1);
+                encoder.write_string("tmp");
+                encoder.write_float(frame->temperature[idx]);
+              }
+              if (samplesAcc(idx)) {
+              }
+              if (samplesGyro(idx)) {
+              }
+              if (samplesMag(idx)) {
+              }
+              if (samplesTemperature(idx)) {
+              }
+            }
+            int final_size = co.size();
+            if (final_size) {
+              StringBuilder tmp_str(co.data(), final_size);
+              output.concatf("CBOR frame: %d bytes\n", final_size);
+              tmp_str.printDebug(&output);
+              Kernel::log(&output);
+            }
+          }
+          break;
+
         case ManuEncoding::MANUVR:
           {
+            // TODO: This will be converted away from the heap-heavy Argument class
+            //   once enough other pieces are talking again.
             Argument* ret = nullptr;
             if (sequence()) {
-              Argument* nu = new Argument(frame->seq());
+              Argument* nu = new Argument(decoupleSeq() ? ++_local_seq : frame->seq());
               nu->setKey("seq");
-              if (nullptr == ret) {
-                ret = nu;
+              if (ret) {
+                ret->link(nu);
               }
               else {
-                ret->link(nu);
+                ret = nu;
               }
             }
             if (deltaT()) {
               Argument* nu = new Argument(frame->time());
               nu->setKey("dt");
-              if (nullptr == ret) {
-                ret = nu;
+              if (ret) {
+                ret->link(nu);
               }
               else {
-                ret->link(nu);
+                ret = nu;
               }
             }
             if (handPosition()) {
+              Argument* nu = new Argument(&(frame->hand_position));
+              nu->setKey("hp");
+              if (ret) {
+                ret->link(nu);
+              }
+              else {
+                ret = nu;
+              }
             }
 
             for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) {
@@ -152,11 +250,11 @@ int8_t ManuLegend::offer(SensorFrame* frame) {
               if (temperature(idx)) {
                 Argument* nu = new Argument(frame->temperature[idx]);
                 nu->setKey("temp");
-                if (nullptr == ret) {
-                  ret = nu;
+                if (ret) {
+                  ret->link(nu);
                 }
                 else {
-                  ret->link(nu);
+                  ret = nu;
                 }
               }
               if (samplesAcc(idx)) {
@@ -170,30 +268,59 @@ int8_t ManuLegend::offer(SensorFrame* frame) {
               if (imu_arg) {
                 Argument* nu = new Argument(imu_arg);
                 nu->setKey(get_imu_label(idx));
-                if (nullptr == ret) {
-                  ret = nu;
+                if (ret) {
+                  ret->link(nu);
                 }
                 else {
-                  ret->link(nu);
+                  ret = nu;
                 }
               }
             }
             StringBuilder temp;
-            if (ManuEncoding::CBOR == _encoding) {
-              output.concat("CBOR output:\n");
-              Argument::encodeToCBOR(ret, &temp);
-            }
-            else {
-              output.concat("MANUVR output:\n");
-              ret->serialize(&output);
-            }
+            output.concat("MANUVR output:\n");
+            ret->serialize(&temp);
             temp.printDebug(&output);
             output.concat("\n");
             delete ret;
           }
           Kernel::log(&output);
           break;
+
         case ManuEncoding::OSC:
+          {
+            if (sequence()) {
+            }
+            if (deltaT()) {
+            }
+            if (handPosition()) {
+            }
+            for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) {
+              if (orientation(idx)) {
+              }
+              if (accNullGravity(idx)) {
+              }
+              if (accRaw(idx)) {
+              }
+              if (gyro(idx)) {
+              }
+              if (mag(idx)) {
+              }
+              if (velocity(idx)) {
+              }
+              if (position(idx)) {
+              }
+              if (temperature(idx)) {
+              }
+              if (samplesAcc(idx)) {
+              }
+              if (samplesGyro(idx)) {
+              }
+              if (samplesMag(idx)) {
+              }
+              if (samplesTemperature(idx)) {
+              }
+            }
+          }
           break;
         case ManuEncoding::LOG:
           frame->printDebug(&output);
