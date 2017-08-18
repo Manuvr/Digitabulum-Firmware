@@ -101,6 +101,7 @@ SOURCES_CPP  += src/Digitabulum/ManuLegend/SensorFrame.cpp
 SOURCES_CPP  += src/Digitabulum/ManuLegend/Integrator.cpp
 SOURCES_CPP  += src/Digitabulum/ManuLegend/ManuManager.cpp
 SOURCES_CPP  += src/Digitabulum/ManuLegend/ManuLegend.cpp
+SOURCES_CPP  += src/Digitabulum/ManuLegend/ManuLegendPipe.cpp
 SOURCES_CPP  += src/Digitabulum/SDCard/SDCard.cpp
 SOURCES_CPP  += src/Digitabulum/RovingNetworks/RNBase.cpp
 SOURCES_CPP  += src/Digitabulum/RovingNetworks/BTQueuedOperation.cpp

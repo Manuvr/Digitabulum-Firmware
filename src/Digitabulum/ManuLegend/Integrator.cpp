@@ -38,22 +38,6 @@ float    Integrator::mag_discard_threshold         = 0.8f;  // In Gauss.
 
 
 
-const char* Integrator::getSourceTypeString(SampleType t) {
-  switch (t) {
-    case SampleType::ACCEL:          return "ACCEL";
-    case SampleType::GYRO:           return "GYRO";
-    case SampleType::MAG:            return "MAG";
-    case SampleType::GRAVITY:        return "GRAVITY";
-    case SampleType::BEARING:        return "BEARING";
-    case SampleType::ALTITUDE:       return "ALTITUDE";
-    case SampleType::LOCATION:       return "LOCATION";
-    case SampleType::ALL:            return "ALL";
-    case SampleType::UNSPECIFIED:    return "UNSPECIFIED";
-    default:                         return "<UNDEFINED>";
-  }
-}
-
-
 /*******************************************************************************
 *   ___ _              ___      _ _              _      _
 *  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
@@ -79,130 +63,114 @@ Integrator::~Integrator() {
 
 void Integrator::reset() {
   delta_t   = 0;
-  dirty_mag = 0;
-  dirty_acc = 0;
-  dirty_gyr = 0;
   rangeBind(false);
 
-  *(_ptr_temperature)    = 0.0f;
-  *(_ptr_s_count_acc)     = 0;
-  *(_ptr_s_count_gyr)     = 0;
-  *(_ptr_s_count_mag)     = 0;
-  *(_ptr_s_count_temp)    = 0;
-
   _grav.set(0.0f, 0.0f, 0.0f);
-  if (_ptr_quat) _ptr_quat->set(0.0f, 0.0f, 0.0f, 1.0f);
-  if (_ptr_acc)  _ptr_acc->set(0.0f, 0.0f, 0.0f);
-  if (_ptr_gyr)  _ptr_gyr->set(0.0f, 0.0f, 0.0f);
-  if (_ptr_mag)  _ptr_mag->set(0.0f, 0.0f, 0.0f);
-  if (_ptr_vel)  _ptr_vel->set(0.0f, 0.0f, 0.0f);
 
   grav_scalar = 0.0f;
-  offset_angle_y = 0.0f;
-  offset_angle_z = 0.0f;
 }
 
 
 /*
 TODO: DEPRECATED Slow. Too complicated.
 */
-int8_t Integrator::pushMeasurement(SampleType data_type, float x, float y, float z, float d_t) {
-  uint32_t read_time = micros();
-  switch (data_type) {
-    case SampleType::GYRO:
-      if (_ptr_gyr) _ptr_gyr->set(x, y, z);
-      //if (rangeBind()) {
-      //  last_value_gyr /= LSM9DS1_M::max_range_vect_gyr;
-      //}
-      *(_ptr_s_count_gyr) = *(_ptr_s_count_gyr)+1;
-      dirty_gyr = read_time;
-      delta_t = (d_t > delta_t) ? d_t : delta_t;   // We want the smaller of the two, since it sets the quat rate.
-      break;
-
-    case SampleType::ACCEL:
-      //if (_ptr_acc) _ptr_acc->set(x, y, z);
-      if (_ptr_acc && !nullifyGravity()) _ptr_acc->set(x, y, z);  // If we are nulling gravity, can't do this.
-      //if (rangeBind()) {
-      //  last_value_acc /=  LSM9DS1_AG::max_range_vect_acc;
-      //}
-      *(_ptr_s_count_acc) = *(_ptr_s_count_acc)+1;
-      dirty_acc = read_time;
-      delta_t = (d_t > delta_t) ? d_t : delta_t;   // We want the smaller of the two, since it sets the quat rate.
-      break;
-
-    case SampleType::MAG:
-      //if (rangeBind()) {
-      //  last_value_mag /=  LSM9DS1_AG::max_range_vect_mag;
-      //}
-      if (correctSphericalAbberation()) {
-        if (_ptr_mag) _ptr_mag->set(1.0f, 0.0f, 0.0f);
-        return 0;
-      }
-
-      if (nullifyBearing()) {
-        // Now we need to apply the rotation matrix so that we don't have to care what our bearing is at calibration time.
-        // First, rotate about y.
-        float sin_theta = sin((180.0f/M_PI) - offset_angle_y);
-        float cos_theta = cos((180.0f/M_PI) - offset_angle_y);
-        x = cos_theta * x + sin_theta * z;
-        z = sin_theta * -1.0f * x + cos_theta * z;
-
-        // Then rotate about z.
-        sin_theta = sin((180.0f/M_PI) - offset_angle_z);
-        cos_theta = cos((180.0f/M_PI) - offset_angle_z);
-        x = cos_theta * x + sin_theta * -1.0f * y;
-        y = sin_theta * x + cos_theta * y;
-      }
-
-      if (_ptr_mag) _ptr_mag->set(x, y, z);
-
-      *(_ptr_s_count_mag) = *(_ptr_s_count_mag)+1;
-      dirty_mag = read_time;
-      break;
-
-    case SampleType::GRAVITY:
-      _grav.set(x, y, z);
-      grav_scalar = _grav.length();
-      _grav.normalize();
-      // Now, we should reset the quaternion to reflect our idea of gravity with
-      // whatever our last mag read was as the bearing.
-      if (_ptr_quat) _ptr_quat->setDown(x, y, z);
-      break;
-
-    case SampleType::BEARING:
-      if (grav_scalar != 0.0f) {  // We need the gravity vector to do this trick.
-        Vector3<float> mag_original_bearing(x, y, z);
-        mag_original_bearing.normalize();
-        offset_angle_y = y;
-        offset_angle_z = z;
-        // Now, we should reset the quaternion to reflect our idea of gravity with
-        // whatever our last mag read was as the bearing.
-
-      }
-      break;
-
-    default:
-      if (verbosity > 3) {
-        local_log.concat("Integrator::pushMeasurement(): \t Unhandled Measurement type.\n");
-        Kernel::log(&local_log);
-      }
-      break;
-  }
-
-  if (processQuats() && isQuatDirty()) {
-    if (0 == _pending.count()) {
-      // There was nothing in this queue, but there is about to be.
-    }
-    //SensorFrame* nu_measurement = fetchMeasurement();
-    ////nu_measurement->set(_ptr_gyr, ((!dirty_mag && cleanMagZero()) ? (Vector3<float>*)&ZERO_VECTOR : _ptr_mag), _ptr_acc, delta_t);
-    //if (dirty_mag) dirty_mag = 0;
-    //dirty_acc = 0;
-    //dirty_gyr = 0;
-    //_pending.insert(nu_measurement);
-  }
-
-  return 0;
-}
+//int8_t Integrator::pushMeasurement(SampleType data_type, float x, float y, float z, float d_t) {
+//  uint32_t read_time = micros();
+//  switch (data_type) {
+//    case SampleType::GYRO:
+//      if (_ptr_gyr) _ptr_gyr->set(x, y, z);
+//      //if (rangeBind()) {
+//      //  last_value_gyr /= LSM9DS1_M::max_range_vect_gyr;
+//      //}
+//      *(_ptr_s_count_gyr) = *(_ptr_s_count_gyr)+1;
+//      dirty_gyr = read_time;
+//      delta_t = (d_t > delta_t) ? d_t : delta_t;   // We want the smaller of the two, since it sets the quat rate.
+//      break;
+//
+//    case SampleType::ACCEL:
+//      //if (_ptr_acc) _ptr_acc->set(x, y, z);
+//      if (_ptr_acc && !nullifyGravity()) _ptr_acc->set(x, y, z);  // If we are nulling gravity, can't do this.
+//      //if (rangeBind()) {
+//      //  last_value_acc /=  LSM9DS1_AG::max_range_vect_acc;
+//      //}
+//      *(_ptr_s_count_acc) = *(_ptr_s_count_acc)+1;
+//      dirty_acc = read_time;
+//      delta_t = (d_t > delta_t) ? d_t : delta_t;   // We want the smaller of the two, since it sets the quat rate.
+//      break;
+//
+//    case SampleType::MAG:
+//      //if (rangeBind()) {
+//      //  last_value_mag /=  LSM9DS1_AG::max_range_vect_mag;
+//      //}
+//      if (correctSphericalAbberation()) {
+//        if (_ptr_mag) _ptr_mag->set(1.0f, 0.0f, 0.0f);
+//        return 0;
+//      }
+//
+//      if (nullifyBearing()) {
+//        // Now we need to apply the rotation matrix so that we don't have to care what our bearing is at calibration time.
+//        // First, rotate about y.
+//        float sin_theta = sin((180.0f/M_PI) - offset_angle_y);
+//        float cos_theta = cos((180.0f/M_PI) - offset_angle_y);
+//        x = cos_theta * x + sin_theta * z;
+//        z = sin_theta * -1.0f * x + cos_theta * z;
+//
+//        // Then rotate about z.
+//        sin_theta = sin((180.0f/M_PI) - offset_angle_z);
+//        cos_theta = cos((180.0f/M_PI) - offset_angle_z);
+//        x = cos_theta * x + sin_theta * -1.0f * y;
+//        y = sin_theta * x + cos_theta * y;
+//      }
+//
+//      if (_ptr_mag) _ptr_mag->set(x, y, z);
+//
+//      *(_ptr_s_count_mag) = *(_ptr_s_count_mag)+1;
+//      dirty_mag = read_time;
+//      break;
+//
+//    case SampleType::GRAVITY:
+//      _grav.set(x, y, z);
+//      grav_scalar = _grav.length();
+//      _grav.normalize();
+//      // Now, we should reset the quaternion to reflect our idea of gravity with
+//      // whatever our last mag read was as the bearing.
+//      if (_ptr_quat) _ptr_quat->setDown(x, y, z);
+//      break;
+//
+//    case SampleType::BEARING:
+//      if (grav_scalar != 0.0f) {  // We need the gravity vector to do this trick.
+//        Vector3<float> mag_original_bearing(x, y, z);
+//        mag_original_bearing.normalize();
+//        offset_angle_y = y;
+//        offset_angle_z = z;
+//        // Now, we should reset the quaternion to reflect our idea of gravity with
+//        // whatever our last mag read was as the bearing.
+//
+//      }
+//      break;
+//
+//    default:
+//      if (verbosity > 3) {
+//        local_log.concat("Integrator::pushMeasurement(): \t Unhandled Measurement type.\n");
+//        Kernel::log(&local_log);
+//      }
+//      break;
+//  }
+//
+//  if (processQuats() && isQuatDirty()) {
+//    if (0 == _pending.count()) {
+//      // There was nothing in this queue, but there is about to be.
+//    }
+//    //SensorFrame* nu_measurement = fetchMeasurement();
+//    ////nu_measurement->set(_ptr_gyr, ((!dirty_mag && cleanMagZero()) ? (Vector3<float>*)&ZERO_VECTOR : _ptr_mag), _ptr_acc, delta_t);
+//    //if (dirty_mag) dirty_mag = 0;
+//    //dirty_acc = 0;
+//    //dirty_gyr = 0;
+//    //_pending.insert(nu_measurement);
+//  }
+//
+//  return 0;
+//}
 
 /**
 * This is the function that the processing thread (if any) would call repeatedly.
@@ -216,37 +184,6 @@ int8_t Integrator::churn() {
   }
   return return_value;
 }
-
-
-
-void Integrator::assign_legend_pointers(void* a, void* g, void* m,
-                                 void* v, void* n_g, void* pos,
-                                 void* q, void* t, void* sc_acc,
-                                 void* sc_gyr, void* sc_mag, void* sc_temp)
-{
-  legend_writable(false);
-  _ptr_acc          = (Vector3<float>*) a;
-  _ptr_gyr          = (Vector3<float>*) g;
-  _ptr_mag          = (Vector3<float>*) m;
-  _ptr_vel          = (Vector3<float>*) v;
-  _ptr_null_grav    = (Vector3<float>*) n_g;
-  _ptr_position     = (Vector3<float>*) pos;
-  _ptr_quat         = (Quaternion*)     q;
-  _ptr_temperature  = (float*)          t;
-  _ptr_s_count_acc  = (uint32_t*)       sc_acc;
-  _ptr_s_count_gyr  = (uint32_t*)       sc_gyr;
-  _ptr_s_count_mag  = (uint32_t*)       sc_mag;
-  _ptr_s_count_temp = (uint32_t*)       sc_temp;
-
-  if (q) {
-    // If the Legend wants the quats, we turn them on.
-    processQuats(true);
-  }
-
-  _ptr_quat->w = 1.0f;
-  legend_writable(true);
-}
-
 
 
 bool Integrator::enableProfiling(bool en) {
@@ -278,12 +215,6 @@ bool Integrator::nullifyGravity(bool en) {
 }
 
 
-void Integrator::deposit_log(StringBuilder* _log) {
-  local_log.concatHandoff(_log);
-  Kernel::log(&local_log);
-};
-
-
 /**
 * Debug support method. This fxn is only present in debug builds.
 *
@@ -296,8 +227,6 @@ void Integrator::printDebug(StringBuilder* output) {
   if (verbosity > 2) {
     if (verbosity > 3) output->concatf("-- GyroMeasDrift:    %.4f\n",  (double) GyroMeasDrift);
     output->concatf("-- Gravity: %s (%.4f, %.4f, %.4f)  %.4G\n", (nullifyGravity() ? "(nulled)":"        "), (double)(_grav.x), (double)(_grav.y), (double)(_grav.z), (double) (grav_scalar));
-    output->concatf("-- offset_angle_y      %5.2f\n", (double) offset_angle_y);
-    output->concatf("-- offset_angle_z      %5.2f\n", (double) offset_angle_z);
   }
 
   float grav_consensus = 0.0;
@@ -307,22 +236,6 @@ void Integrator::printDebug(StringBuilder* output) {
   grav_consensus /= 17;
   output->concatf("-- Gravity consensus:  %.4fg\n",  (double) grav_consensus);
   output->concat("\n");
-}
-
-
-void Integrator::dumpPointers(StringBuilder* output) {
-  output->concatf("\t _ptr_quat         \t 0x%08x\n", (unsigned long) _ptr_quat        );
-  output->concatf("\t _ptr_acc          \t 0x%08x\n", (unsigned long) _ptr_acc         );
-  output->concatf("\t _ptr_gyr          \t 0x%08x\n", (unsigned long) _ptr_gyr         );
-  output->concatf("\t _ptr_mag          \t 0x%08x\n", (unsigned long) _ptr_mag         );
-  output->concatf("\t _ptr_temperature  \t 0x%08x\n", (unsigned long) _ptr_temperature );
-  output->concatf("\t _ptr_vel          \t 0x%08x\n", (unsigned long) _ptr_vel         );
-  output->concatf("\t _ptr_null_grav    \t 0x%08x\n", (unsigned long) _ptr_null_grav   );
-  output->concatf("\t _ptr_position     \t 0x%08x\n", (unsigned long) _ptr_position    );
-  output->concatf("\t _ptr_s_count_acc  \t 0x%08x\n", (unsigned long) _ptr_s_count_acc );
-  output->concatf("\t _ptr_s_count_gyr  \t 0x%08x\n", (unsigned long) _ptr_s_count_gyr );
-  output->concatf("\t _ptr_s_count_mag  \t 0x%08x\n", (unsigned long) _ptr_s_count_mag );
-  output->concatf("\t _ptr_s_count_temp \t 0x%08x\n", (unsigned long) _ptr_s_count_temp);
 }
 
 
@@ -351,18 +264,21 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
   if (c_frame) {
     float d_t = c_frame->time();
 
+    #if defined(MANUVR_DEBUG)
     if (verbosity > 3) {
       local_log.concatf("At delta-t = %f: ", (double)d_t);
-      #if defined(MANUVR_DEBUG)
         //c_frame->printDebug(&local_log);
-        local_log.concat("\t");
-        _ptr_quat->printDebug(&local_log);
-      #endif
+        //local_log.concat("\t");
+        //c_frame->quats[set_i]->printDebug(&local_log);
       local_log.concat("\n");
       Kernel::log(&local_log);
     }
+    #endif
 
-    float q0 = _ptr_quat->w, q1= _ptr_quat->x, q2 = _ptr_quat->y, q3 = _ptr_quat->z;   // short name local variable for readability
+    float q0;
+    float q1;
+    float q2;
+    float q3;
 
     float norm;
     float s0, s1, s2, s3;
@@ -375,6 +291,10 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
 
     // Now we'll start the float churn...
     for (int set_i = 0; set_i < LEGEND_DATASET_IIU_COUNT; set_i++) {
+      q0 = c_frame->quat[set_i].w;
+      q1 = c_frame->quat[set_i].x;
+      q2 = c_frame->quat[set_i].y;
+      q3 = c_frame->quat[set_i].z;
       mag_normal = (c_frame->m_data[set_i]).normalize();
 
       if (dropObviousBadMag() && (mag_normal >= mag_discard_threshold)) {
@@ -401,7 +321,7 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
           qDot3 = 0.5f * (q0 * gy - q1 * gz + q3 * gx);
           qDot4 = 0.5f * (q0 * gz + q1 * gy - q2 * gx);
 
-          // Normalise accelerometer c_frame. If vector is non-zero, integrate it...
+          // Normalise accelerometer c_frame-> If vector is non-zero, integrate it...
           if (0.0f != (c_frame->a_data[set_i]).normalize()) {
             float mx = (c_frame->m_data[set_i]).x;
             float my = (c_frame->m_data[set_i]).y;
@@ -463,35 +383,43 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
 
             // Normalise quaternion
             norm = 1.0f / (float) sqrt(q1 * q1 + q2 * q2 + q3 * q3 + q0 * q0);    // normalise quaternion
-            _ptr_quat->w = q0 * norm;
-            _ptr_quat->x = q1 * norm;
-            _ptr_quat->y = q2 * norm;
-            _ptr_quat->z = q3 * norm;
+            q0 = q0 * norm;
+            q1 = q1 * norm;
+            q2 = q2 * norm;
+            q3 = q3 * norm;
+
+            c_frame->setO(set_i, q0, q1, q2, q3);
           }
         }
       }
 
       if (nullifyGravity()) {
         /* If we are going to cancel gravity, we should do so now. */
-        _grav.x = (2 * (_ptr_quat->x * _ptr_quat->z - _ptr_quat->w * _ptr_quat->y));
-        _grav.y = (2 * (_ptr_quat->w * _ptr_quat->x + _ptr_quat->y * _ptr_quat->z));
-        _grav.z = (_ptr_quat->w * _ptr_quat->w - _ptr_quat->x * _ptr_quat->x - _ptr_quat->y * _ptr_quat->y + _ptr_quat->z * _ptr_quat->z);
+        _grav.x = (2 * (q1 * q3 - q0 * q2));
+        _grav.y = (2 * (q0 * q1 + q2 * q3));
+        _grav.z = (q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3);
 
-        _ptr_null_grav->x = (c_frame->a_data[set_i]).x - _grav.x;
-        _ptr_null_grav->y = (c_frame->a_data[set_i]).y - _grav.y;
-        _ptr_null_grav->z = (c_frame->a_data[set_i]).z - _grav.z;
+        c_frame->setN(set_i,
+          (c_frame->a_data[set_i]).x - _grav.x,
+          (c_frame->a_data[set_i]).y - _grav.y,
+          (c_frame->a_data[set_i]).z - _grav.z
+        );
 
         if (findVelocity()) {
           // Are we finding velocity?
-          _ptr_vel->x += _ptr_null_grav->x * d_t;
-          _ptr_vel->y += _ptr_null_grav->y * d_t;
-          _ptr_vel->z += _ptr_null_grav->z * d_t;
+          c_frame->setV(set_i,
+            c_frame->n_data[set_i].x * d_t,
+            c_frame->n_data[set_i].y * d_t,
+            c_frame->n_data[set_i].z * d_t
+          );
 
           if (trackPosition()) {
             // Track position....
-            _ptr_position->x += _ptr_vel->x * d_t;
-            _ptr_position->y += _ptr_vel->y * d_t;
-            _ptr_position->z += _ptr_vel->z * d_t;
+            c_frame->setP(set_i,
+              c_frame->v_data[set_i].x * d_t,
+              c_frame->v_data[set_i].y * d_t,
+              c_frame->v_data[set_i].z * d_t
+            );
           }
         }
       }
@@ -516,12 +444,24 @@ void Integrator::MadgwickAHRSupdateIMU(SensorFrame* c_frame) {
   float qDot1, qDot2, qDot3, qDot4;
   float _2q0, _2q1, _2q2, _2q3, _4q0, _4q1, _4q2 ,_8q1, _8q2, q0q0, q1q1, q2q2, q3q3;
 
-  float q0 = _ptr_quat->w, q1= _ptr_quat->x, q2 = _ptr_quat->y, q3 = _ptr_quat->z;   // short name local variable for readability
+  float q0;
+  float q1;
+  float q2;
+  float q3;
+
+  float gx;
+  float gy;
+  float gz;
 
   for (int set_i = 0; set_i < LEGEND_DATASET_IIU_COUNT; set_i++) {
-    float gx = (c_frame->g_data[set_i]).x * IIU_DEG_TO_RAD_SCALAR;
-    float gy = (c_frame->g_data[set_i]).y * IIU_DEG_TO_RAD_SCALAR;
-    float gz = (c_frame->g_data[set_i]).z * IIU_DEG_TO_RAD_SCALAR;
+    q0 = c_frame->quat[set_i].w;
+    q1 = c_frame->quat[set_i].x;
+    q2 = c_frame->quat[set_i].y,
+    q3 = c_frame->quat[set_i].z;
+
+    gx = (c_frame->g_data[set_i]).x * IIU_DEG_TO_RAD_SCALAR;
+    gy = (c_frame->g_data[set_i]).y * IIU_DEG_TO_RAD_SCALAR;
+    gz = (c_frame->g_data[set_i]).z * IIU_DEG_TO_RAD_SCALAR;
     float d_t = c_frame->time();
 
     // Rate of change of quaternion from gyroscope
@@ -530,7 +470,7 @@ void Integrator::MadgwickAHRSupdateIMU(SensorFrame* c_frame) {
     qDot3 = 0.5f * (q0 * gy - q1 * gz + q3 * gx);
     qDot4 = 0.5f * (q0 * gz + q1 * gy - q2 * gx);
 
-    // Normalise accelerometer c_frame. If vector is non-zero, integrate it...
+    // Normalise accelerometer c_frame-> If vector is non-zero, integrate it...
     if (0.0f != (c_frame->a_data[set_i]).normalize()) {
       float ax = (c_frame->a_data[set_i]).x;
       float ay = (c_frame->a_data[set_i]).y;
@@ -577,10 +517,12 @@ void Integrator::MadgwickAHRSupdateIMU(SensorFrame* c_frame) {
 
     // Normalise quaternion
     norm = 1.0f / (float) sqrt(q1 * q1 + q2 * q2 + q3 * q3 + q0 * q0);    // normalise quaternion
-    _ptr_quat->w = q0 * norm;
-    _ptr_quat->x = q1 * norm;
-    _ptr_quat->y = q2 * norm;
-    _ptr_quat->z = q3 * norm;
+    q0 = q0 * norm;
+    q1 = q1 * norm;
+    q2 = q2 * norm;
+    q3 = q3 * norm;
+
+    c_frame->setO(set_i, q0, q1, q2, q3);
   }
 }
 

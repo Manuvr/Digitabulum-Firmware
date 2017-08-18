@@ -21,61 +21,16 @@ limitations under the License.
 */
 
 #include "ManuLegend.h"
-#include <DataStructures/Argument.h>
+
 
 /*******************************************************************************
-*      _______.___________.    ___   .___________. __    ______     _______.
-*     /       |           |   /   \  |           ||  |  /      |   /       |
-*    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
-*     \   \       |  |      /  /_\  \    |  |     |  | |  |        \   \
-* .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
-* |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
-*
-* Static members and initializers should be located here.
-*******************************************************************************/
-
-const char* const ManuLegend::encoding_label(ManuEncoding e) {
-  switch (e) {
-    case ManuEncoding::LOG:    return "LOG";
-    case ManuEncoding::CBOR:   return "CBOR";
-    case ManuEncoding::OSC:    return "OSC";
-    case ManuEncoding::MANUVR: return "MANUVR";
-  }
-  return "";
-};
-
-const char* const get_imu_label(int idx) {
-  switch (idx) {
-    case 0:   return "c";
-    case 1:   return "mc";
-    case 2:   return "p1";
-    case 3:   return "i1";
-    case 4:   return "d1";
-    case 5:   return "p2";
-    case 6:   return "i2";
-    case 7:   return "d2";
-    case 8:   return "p3";
-    case 9:   return "i3";
-    case 10:  return "d3";
-    case 11:  return "p4";
-    case 12:  return "i4";
-    case 13:  return "d4";
-    case 14:  return "p5";
-    case 15:  return "i5";
-    case 16:  return "d5";
-    default:  return "mistake";
-  }
-};
-
-
-/****************************************************************************************************
 *   ___ _              ___      _ _              _      _
 *  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
 * | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
 *  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
-****************************************************************************************************/
+*******************************************************************************/
 
 /**
 * Copy constructor
@@ -90,8 +45,7 @@ ManuLegend::ManuLegend(const ManuLegend* src) {
 /**
 * Constructor
 */
-ManuLegend::ManuLegend(ManuEncoding e) {
-  _encoding = e;
+ManuLegend::ManuLegend() {
   // Make the Legend NULL at first. Nothing requested.
   for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) per_iiu_data[idx] = 0;
 }
@@ -100,237 +54,6 @@ ManuLegend::ManuLegend(ManuEncoding e) {
 * Destructor
 */
 ManuLegend::~ManuLegend() {
-}
-
-
-/**
-* Calling this will cause the class to copy the data the owner requested from the
-*   SensorFrame. We get data on a frame-by-frame basis, and we can assume that we only
-*   have a lock on the data within this fxn scope. So anything indirected must be
-*   copied here.
-*
-* @return non-zero on error.
-*/
-int8_t ManuLegend::offer(SensorFrame* frame) {
-  if (should_accept()) {
-    if (_ms_last_send <= millis()) {
-      StringBuilder output;
-      switch (_encoding) {
-        case ManuEncoding::CBOR:
-          {
-            cbor::output_dynamic co;
-            cbor::encoder encoder(co);
-            if (sequence()) {
-              encoder.write_map(1);
-              encoder.write_string("seq");
-              encoder.write_int(decoupleSeq() ? ++_local_seq : frame->seq());
-            }
-            if (deltaT()) {
-              encoder.write_map(1);
-              encoder.write_string("dt");
-              encoder.write_float(frame->time());
-            }
-            if (handPosition()) {
-              encoder.write_map(1);
-              encoder.write_string("hp");
-              encoder.write_tag(MANUVR_CBOR_VENDOR_TYPE | TcodeToInt(TCode::VECT_3_FLOAT));
-              encoder.write_bytes((uint8_t*) &(frame->hand_position), 12);
-            }
-            for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) {
-              if (orientation(idx)) {
-                encoder.write_map(1);
-                encoder.write_string("ori");
-                encoder.write_tag(MANUVR_CBOR_VENDOR_TYPE | TcodeToInt(TCode::VECT_4_FLOAT));
-                encoder.write_bytes((uint8_t*) &(frame->quat[idx]), 16);
-              }
-              if (accNullGravity(idx)) {
-                encoder.write_map(1);
-                encoder.write_string("ang");
-                encoder.write_tag(MANUVR_CBOR_VENDOR_TYPE | TcodeToInt(TCode::VECT_3_FLOAT));
-                encoder.write_bytes((uint8_t*) &(frame->n_data[idx]), 12);
-              }
-              if (accRaw(idx)) {
-                encoder.write_map(1);
-                encoder.write_string("acc");
-                encoder.write_tag(MANUVR_CBOR_VENDOR_TYPE | TcodeToInt(TCode::VECT_3_FLOAT));
-                encoder.write_bytes((uint8_t*) &(frame->a_data[idx]), 12);
-              }
-              if (gyro(idx)) {
-                encoder.write_map(1);
-                encoder.write_string("gyr");
-                encoder.write_tag(MANUVR_CBOR_VENDOR_TYPE | TcodeToInt(TCode::VECT_3_FLOAT));
-                encoder.write_bytes((uint8_t*) &(frame->g_data[idx]), 12);
-              }
-              if (mag(idx)) {
-                encoder.write_map(1);
-                encoder.write_string("mag");
-                encoder.write_tag(MANUVR_CBOR_VENDOR_TYPE | TcodeToInt(TCode::VECT_3_FLOAT));
-                encoder.write_bytes((uint8_t*) &(frame->m_data[idx]), 12);
-              }
-              if (velocity(idx)) {
-              }
-              if (position(idx)) {
-              }
-              if (temperature(idx)) {
-                encoder.write_map(1);
-                encoder.write_string("tmp");
-                encoder.write_float(frame->temperature[idx]);
-              }
-              if (samplesAcc(idx)) {
-              }
-              if (samplesGyro(idx)) {
-              }
-              if (samplesMag(idx)) {
-              }
-              if (samplesTemperature(idx)) {
-              }
-            }
-            int final_size = co.size();
-            if (final_size) {
-              StringBuilder tmp_str(co.data(), final_size);
-              output.concatf("CBOR frame: %d bytes\n", final_size);
-              tmp_str.printDebug(&output);
-              Kernel::log(&output);
-            }
-          }
-          break;
-
-        case ManuEncoding::MANUVR:
-          {
-            // TODO: This will be converted away from the heap-heavy Argument class
-            //   once enough other pieces are talking again.
-            Argument* ret = nullptr;
-            if (sequence()) {
-              Argument* nu = new Argument(decoupleSeq() ? ++_local_seq : frame->seq());
-              nu->setKey("seq");
-              if (ret) {
-                ret->link(nu);
-              }
-              else {
-                ret = nu;
-              }
-            }
-            if (deltaT()) {
-              Argument* nu = new Argument(frame->time());
-              nu->setKey("dt");
-              if (ret) {
-                ret->link(nu);
-              }
-              else {
-                ret = nu;
-              }
-            }
-            if (handPosition()) {
-              Argument* nu = new Argument(&(frame->hand_position));
-              nu->setKey("hp");
-              if (ret) {
-                ret->link(nu);
-              }
-              else {
-                ret = nu;
-              }
-            }
-
-            for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) {
-              Argument* imu_arg = nullptr;
-              if (orientation(idx)) {
-              }
-              if (accNullGravity(idx)) {
-              }
-              if (accRaw(idx)) {
-              }
-              if (gyro(idx)) {
-              }
-              if (mag(idx)) {
-              }
-              if (velocity(idx)) {
-              }
-              if (position(idx)) {
-              }
-              if (temperature(idx)) {
-                Argument* nu = new Argument(frame->temperature[idx]);
-                nu->setKey("temp");
-                if (ret) {
-                  ret->link(nu);
-                }
-                else {
-                  ret = nu;
-                }
-              }
-              if (samplesAcc(idx)) {
-              }
-              if (samplesGyro(idx)) {
-              }
-              if (samplesMag(idx)) {
-              }
-              if (samplesTemperature(idx)) {
-              }
-              if (imu_arg) {
-                Argument* nu = new Argument(imu_arg);
-                nu->setKey(get_imu_label(idx));
-                if (ret) {
-                  ret->link(nu);
-                }
-                else {
-                  ret = nu;
-                }
-              }
-            }
-            StringBuilder temp;
-            output.concat("MANUVR output:\n");
-            ret->serialize(&temp);
-            temp.printDebug(&output);
-            output.concat("\n");
-            delete ret;
-          }
-          Kernel::log(&output);
-          break;
-
-        case ManuEncoding::OSC:
-          {
-            if (sequence()) {
-            }
-            if (deltaT()) {
-            }
-            if (handPosition()) {
-            }
-            for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) {
-              if (orientation(idx)) {
-              }
-              if (accNullGravity(idx)) {
-              }
-              if (accRaw(idx)) {
-              }
-              if (gyro(idx)) {
-              }
-              if (mag(idx)) {
-              }
-              if (velocity(idx)) {
-              }
-              if (position(idx)) {
-              }
-              if (temperature(idx)) {
-              }
-              if (samplesAcc(idx)) {
-              }
-              if (samplesGyro(idx)) {
-              }
-              if (samplesMag(idx)) {
-              }
-              if (samplesTemperature(idx)) {
-              }
-            }
-          }
-          break;
-        case ManuEncoding::LOG:
-          frame->printDebug(&output);
-          Kernel::log(&output);
-          break;
-      }
-      _ms_last_send = millis() + _ms_interval;
-    }
-  }
-  return 0;
 }
 
 
@@ -447,15 +170,118 @@ int8_t ManuLegend::setLegendString(StringBuilder* input) {
 }
 
 
-void ManuLegend::printDebug(StringBuilder *output) {
+/**
+* Does this Legend satisfy the given Legend?
+*
+* @param test is the ManuLegend that sets the benchmark.
+* @return true if so.
+*/
+bool ManuLegend::satisfiedBy(ManuLegend* test) {
+  if (frame_data != (frame_data & test->frame_data)) {
+    return false;
+  }
+  for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+    if (per_iiu_data[i] = (per_iiu_data[i] & test->per_iiu_data[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+
+/**
+* Put ourselves into a state where we satisfy the given Legend.
+* Note that this function never unsets data demand.
+*
+* @param test is the ManuLegend that sets the baseline.
+* @return True if we changed our own Legend.
+*/
+bool ManuLegend::stackLegend(ManuLegend* test) {
+  bool return_value = false;
+  if (frame_data != (frame_data & test->frame_data)) {
+    frame_data   = frame_data | test->frame_data;
+    return_value = true;
+  }
+  for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+    if (per_iiu_data[i] != (per_iiu_data[i] & test->per_iiu_data[i])) {
+      per_iiu_data[i] = per_iiu_data[i] | test->per_iiu_data[i];
+      return_value = true;
+    }
+  }
+  return return_value;
+}
+
+/**
+* Reset the ManuLegend.
+*
+* @return True if we changed our own Legend.
+*/
+bool ManuLegend::zeroLegend() {
+  bool return_value = false;
+  if (frame_data) {
+    frame_data   = 0;
+    return_value = true;
+  }
+  for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+    if (per_iiu_data[i]) {
+      per_iiu_data[i] = 0;
+      return_value = true;
+    }
+  }
+  return return_value;
+}
+
+/**
+* Proceeding from the top of the data stack downward, fill in any implicit
+*   data demands. This should only be invoked for a ManuLegend that is being
+*   fed to the integrator, or some other such application. ManuLegendPipes that
+*   call this method will construe it as opening a data filter.
+*
+* @return True if we changed our own Legend.
+*/
+bool ManuLegend::fillLegendGaps() {
+  bool return_value = false;
+  for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+    if (handPosition() || position(i)) {
+      // Asking for IMU position is asking for everything from the data pipeline
+      // for that IMU. Hand position demands that position be enabled for all IMUs.
+      if (DATA_LEGEND_FLAGS_IIU_REQ_POSITION != (per_iiu_data[i] & DATA_LEGEND_FLAGS_IIU_REQ_POSITION)) {
+        per_iiu_data[i] = DATA_LEGEND_FLAGS_IIU_REQ_POSITION;
+        return_value = true;
+      }
+    }
+    else if (velocity(i)) {
+      // Asking for velocity will require that we cancel gravity.
+      if (DATA_LEGEND_FLAGS_IIU_REQ_VELOCITY != (per_iiu_data[i] & DATA_LEGEND_FLAGS_IIU_REQ_VELOCITY)) {
+        per_iiu_data[i] = DATA_LEGEND_FLAGS_IIU_REQ_VELOCITY;
+        return_value = true;
+      }
+    }
+    else if (accNullGravity(i)) {
+      // To cancel gravity, we need to know orientation.
+      if (DATA_LEGEND_FLAGS_IIU_REQ_NULL_GRAV != (per_iiu_data[i] & DATA_LEGEND_FLAGS_IIU_REQ_NULL_GRAV)) {
+        per_iiu_data[i] = DATA_LEGEND_FLAGS_IIU_REQ_NULL_GRAV;
+        return_value = true;
+      }
+    }
+    else if (orientation(i)) {
+      // To find orientation, we need all the inertial data at minimum. Probably mag too.
+      if (DATA_LEGEND_FLAGS_IIU_REQ_ORIENTATION != (per_iiu_data[i] & DATA_LEGEND_FLAGS_IIU_REQ_ORIENTATION)) {
+        per_iiu_data[i] = DATA_LEGEND_FLAGS_IIU_REQ_ORIENTATION;
+        return_value = true;
+      }
+    }
+  }
+  return return_value;
+}
+
+
+
+void ManuLegend::printManuLegend(StringBuilder* output) {
   output->concatf(
-    "-- ManuLegend  (%sactive %sstable)\n-----------------------------------\n",
-    (active() ? "" : "in"), (stable() ? "" : "un")
-  );
-  output->concatf("-- Encoding       \t%s\n", ManuLegend::encoding_label(_encoding));
+    "-- ManuLegend\n-----------------------------------\n");
   output->concatf("-- dataset_size   \t%u\n", (unsigned long) ds_size);
-  output->concatf("-- Enabled data:  (%satisfied)\n", satisfied() ? "S" : "Uns");
-  output->concatf("\t Sequence num   \t%c\n", sequence() ? 'y' : 'n');
+  output->concat("-- Enabled data:\n");
   output->concatf("\t handPosition   \t%c\n", handPosition() ? 'y' : 'n');
   output->concatf("\t Delta-T        \t%c\n", deltaT() ? 'y' : 'n');
 

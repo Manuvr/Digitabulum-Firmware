@@ -63,6 +63,7 @@ CXX_SRCS  += src/Digitabulum/ManuLegend/SensorFrame.cpp
 CXX_SRCS  += src/Digitabulum/ManuLegend/Integrator.cpp
 CXX_SRCS  += src/Digitabulum/ManuLegend/ManuManager.cpp
 CXX_SRCS  += src/Digitabulum/ManuLegend/ManuLegend.cpp
+CXX_SRCS  += src/Digitabulum/ManuLegend/ManuLegendPipe.cpp
 
 ###########################################################################
 # Option conditionals

@@ -363,16 +363,15 @@ ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt"),
 
   *(_ptr_sequence) = 0;
 
-  _legends[0].active(true);
-  _legends[0].sequence(true);
-  _legends[0].deltaT(true);
-  //_legends[0].accNullGravity(true);
-  _legends[0].accRaw(true);
-  _legends[0].gyro(true);
-  _legends[0].mag(true);
-  _legends[0].orientation(true);
-  _legends[0].temperature(true);
-  reconfigure_data_map();
+  _def_pipe.active(true);
+  _root_leg.sequence(true);
+  _root_leg.deltaT(true);
+  //_root_leg.accNullGravity(true);
+  _root_leg.accRaw(true);
+  _root_leg.gyro(true);
+  _root_leg.mag(true);
+  _root_leg.orientation(true);
+  _root_leg.temperature(true);
 }
 
 
@@ -394,40 +393,6 @@ LSM9DS1* ManuManager::fetchIMU(uint8_t idx) {
 }
 
 
-/**
-* Calling this fxn will cause the initial address assignment and dataset to be
-*   fed to the IIUs.
-*
-* @return non-zero on error.
-*/
-int8_t ManuManager::reconfigure_data_map() {
-  uint16_t accumulated_offset = LEGEND_DATASET_GLOBAL_SIZE;
-  for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
-    /* Assign the ManuLegend specification to the IIU class, thereby giving the IIU class its pointers. */
-    // TODO: This is broken. Integrator should emit the data?
-    integrator.assign_legend_pointers(
-      (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_ACC      ),
-      (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_GYR      ),
-      (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_MAG      ),
-      (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_VEL      ),
-      (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_NULL_GRAV),
-      (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_POSITION ),
-      (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_QUAT     ),
-      (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_TEMP     ),
-      (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_SC_ACC   ),
-      (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_SC_GYR   ),
-      (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_SC_MAG   ),
-      (void*) (__dataset + accumulated_offset + LEGEND_DATASET_OFFSET_SC_TMEP  )
-    );
-    accumulated_offset += LEGEND_DATASET_PER_IMU_SIZE;
-  }
-  integrator.nullGyroError(true);   // No reason to not do this...
-  integrator.nullifyGravity(false);
-  return 0;
-}
-
-
-
 // Calling causes a pointer dance that reconfigures the data we send to the host.
 // Don't do anything unless the legend is stable. This is concurrency-control.
 int8_t ManuManager::setLegend(ManuLegend* nu_legend) {
@@ -440,7 +405,7 @@ int8_t ManuManager::setLegend(ManuLegend* nu_legend) {
   // Now we need to declare the new IMU Legend to the rest of the system. We will not re-enable
   //   the frame broadcast until the callback for this event happens. This assures that the message
   //   order to anyone listening is what we intend.
-  broadcast_legend(&_legends[0]);
+  broadcast_legend(&_root_leg);
   return 0;
 }
 
@@ -449,7 +414,7 @@ void ManuManager::broadcast_legend(ManuLegend* nu_legend) {
   StringBuilder* legend_string = new StringBuilder();
   nu_legend->getLegendString(legend_string);
   ManuvrMsg* legend_broadcast = Kernel::returnEvent(DIGITABULUM_MSG_IMU_LEGEND, this);
-  legend_broadcast->specific_target = nu_legend->owner;
+  legend_broadcast->specific_target = _def_pipe.getOwner();
   legend_broadcast->priority(EVENT_PRIORITY_LOWEST + 1);
   legend_broadcast->addArg(legend_string)->reapValue(true);
   raiseEvent(legend_broadcast);
@@ -911,7 +876,7 @@ int8_t ManuManager::callback_proc(ManuvrMsg* event) {
       if (integrator.resultsWaiting()) {
         // TODO: This does not belong here.
         SensorFrame* frame = integrator.takeResult();
-        _legends[0].offer(frame);
+        _def_pipe.offer(frame);
         frame->wipe();
         _frame_pool.give(frame);
       }
@@ -1284,9 +1249,9 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           printIMURollCall(&local_log);   // Show us the results, JIC
           break;
         case 5:
-          integrator.dumpPointers(&local_log);
           break;
         case 6:
+          local_log.concatf("sizeof(ManuLegendPipe)\t%u\n", sizeof(ManuLegendPipe));
           local_log.concatf("sizeof(ManuLegend)  \t%u\n", sizeof(ManuLegend));
           local_log.concatf("sizeof(ManuManager) \t%u\n", sizeof(ManuManager));
           local_log.concatf("sizeof(Integrator)  \t%u\n", sizeof(Integrator));
@@ -1328,16 +1293,16 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
     case 'l':
       switch (temp_byte) {
         case 1:
-          broadcast_legend(&_legends[0]);
+          broadcast_legend(&_root_leg);
           local_log.concat("Legend broadcast.\n");
           break;
         case 2:
-          _legends[0].offer(_frame_pool.take());
+          _def_pipe.offer(_frame_pool.take());
           local_log.concat("Cycled blank frame.\n");
           break;
         case 3:
-          _legends[0].decoupleSeq(!_legends[0].decoupleSeq());
-          local_log.concatf("decoupleSeq() %c\n", _legends[0].decoupleSeq() ? 'y' : 'n');
+          _def_pipe.decoupleSeq(!_def_pipe.decoupleSeq());
+          local_log.concatf("decoupleSeq() %c\n", _def_pipe.decoupleSeq() ? 'y' : 'n');
           break;
         case 4:
           {
@@ -1345,7 +1310,7 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
             random_fill(&test_array[1], 36);
             test_array[0] = 17;  // IMU count.
             StringBuilder shuttle(&test_array[0], 37);
-            int ret = _legends[0].setLegendString(&shuttle);
+            int ret = _root_leg.setLegendString(&shuttle);
             local_log.concat("setLegendString(");
             shuttle.printDebug(&local_log);
             local_log.concat(")\n");
@@ -1355,13 +1320,13 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           {
             local_log.concat("LegendString:\t");
             StringBuilder shuttle;
-            _legends[0].getLegendString(&shuttle);
+            _root_leg.getLegendString(&shuttle);
             shuttle.printDebug(&local_log);
           }
           break;
         case 6:
-          _legends[0].active(!_legends[0].active());
-          local_log.concatf("active() %c\n", _legends[0].active() ? 'y' : 'n');
+          _def_pipe.active(!_def_pipe.active());
+          local_log.concatf("active() %c\n", _def_pipe.active() ? 'y' : 'n');
           break;
 
         case 10:
@@ -1370,12 +1335,12 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
         case 13:
           {
             ManuEncoding e = (ManuEncoding) (temp_byte - 10);
-            _legends[0].encoding(e);
-            local_log.concatf("Switched to ManuEncoding::%s\n", ManuLegend::encoding_label(e));
+            _def_pipe.encoding(e);
+            local_log.concatf("Switched to ManuEncoding::%s\n", ManuLegendPipe::encoding_label(e));
           }
           break;
         default:
-          _legends[0].printDebug(&local_log);
+          _root_leg.printManuLegend(&local_log);
           break;
       }
       break;
@@ -1394,7 +1359,7 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
         case 3:
           if (integrator.resultsWaiting()) {
             SensorFrame* frame = integrator.takeResult();
-            _legends[0].offer(frame);
+            _def_pipe.offer(frame);
             frame->wipe();
             _frame_pool.give(frame);
           }

@@ -29,6 +29,18 @@ Integrator expects to be fed measured values of...
   2) Acceleration (via an accelerometer)
   3) Magnetic field vector
   4) Instrumentation-induced error, expressed as a relative value.
+  5) Temperature
+
+These values need to be float and pre-filtered according to the specs of specific IMUs.
+  Fortunately, it's cheaper to do it there anyhow while the data is still integer-wide.
+  ARM DSP instructions will not be useful in this class. All those concerns should stop
+  at ManuManager,
+
+Integrator produces:
+  6) Orientation, expressed as a quaternion.
+  7) Gravity-canceled acceleration
+  8) Velocity
+  9) Position
 
 Error should be integrated here as well to form a set of limit error values for
   down-stream software. IE, datasets produced by this class ought to come with
@@ -63,10 +75,9 @@ Error should be integrated here as well to form a set of limit error values for
 #define IIU_DATA_HANDLING_RANGE_BIND       0x40000000
 #define IIU_DATA_HANDLING_NULLIFY_GRAVITY  0x80000000
 
-
-#define IIU_STANDARD_GRAVITY     9.80665f // This is Earth's gravity at sea-level, in m/s^2
+// This is Earth's gravity at sea-level, in m/s^2
+#define IIU_STANDARD_GRAVITY     9.80665f
 #define IIU_DEG_TO_RAD_SCALAR   (3.14159f / 180.0f)
-
 
 
 enum class SampleType {
@@ -78,9 +89,8 @@ enum class SampleType {
   BEARING      = 0x10,  // Bearing at calibration.
   ALTITUDE     = 0x20,  // Altitude.
   LOCATION     = 0x40,  // Location.
-  ALL          = 0xFF  // All data available.
+  ALL          = 0xFF   // All data available.
 };
-
 
 
 class Integrator {
@@ -91,16 +101,12 @@ class Integrator {
     Integrator();
     ~Integrator();
 
-    void dumpPointers(StringBuilder*);
     void printDebug(StringBuilder*);
     inline void setVerbosity(int8_t nu) {   verbosity = nu;   };
 
 
     int8_t init();
     void reset();
-
-    /* DEPRECATED These are meant to be called from the IMUs. */
-    int8_t pushMeasurement(SampleType, float x, float y, float z, float delta_t);
 
     /**
     * @return How many frames the integrator has processed.
@@ -115,34 +121,10 @@ class Integrator {
     /**
     * @return nullptr when empty.
     */
-    inline SensorFrame* takeResult() {         return _complete.get();    };
-    inline unsigned int resultsWaiting() {     return _complete.count();  };
+    inline SensorFrame* takeResult() {         return _complete.get();        };
+    inline unsigned int resultsWaiting() {     return _complete.count();      };
+    inline bool         has_quats_left() {     return (_pending.count() > 0); };
     int8_t churn();
-
-
-
-    void deposit_log(StringBuilder*);
-
-    /* These are meant to be called from a Legend. */
-    void assign_legend_pointers(
-      void* acc,
-      void* gyr,
-      void* mag,
-      void* vel,
-      void* null_g,
-      void* pos,
-      void* quat,
-      void* temperature,
-      void* sample_count_acc,
-      void* sample_count_gyr,
-      void* sample_count_mag,
-      void* sample_count_temp
-    );
-
-
-    inline bool isDirty() {         return (dirty_acc||dirty_gyr||dirty_mag); };
-    inline bool isQuatDirty() {     return (dirty_acc & dirty_gyr);           };
-    inline bool has_quats_left() {  return (_pending.count() > 0);            };
 
 
     /*
@@ -155,7 +137,7 @@ class Integrator {
     /*
     * Accessors for gravity cancelation.
     */
-    inline bool nullifyGravity() {         return ((_ptr_null_grav) && (data_handling_flags & IIU_DATA_HANDLING_NULLIFY_GRAVITY));  }
+    inline bool nullifyGravity() {         return (data_handling_flags & IIU_DATA_HANDLING_NULLIFY_GRAVITY);  }
     bool nullifyGravity(bool en);
 
     /*
@@ -228,7 +210,6 @@ class Integrator {
       data_handling_flags = (en) ? (data_handling_flags | IIU_DATA_HANDLING_CLEAN_MAG_ZERO) : (data_handling_flags & ~(IIU_DATA_HANDLING_CLEAN_MAG_ZERO));
     }
 
-
     /*
     * Accessors for setting and discovering the iteration count of the Madgwick filter.
     */
@@ -239,55 +220,28 @@ class Integrator {
 
 
     static float    mag_discard_threshold;
-    static const char* getSourceTypeString(SampleType);
 
 
 
   private:
+    // Queues for cycling frames.
     RingBuffer<SensorFrame*> _complete;
     RingBuffer<SensorFrame*> _pending;
+    StringBuilder local_log;
 
     float delta_t      = 0.0f;
 
     //float GyroMeasError;
     float GyroMeasDrift;
 
-    float offset_angle_y = 0.0f;
-    float offset_angle_z = 0.0f;
-
     Vector3<float> _grav;   // The Integrator maintains an empirical value for gravity.
-
-    uint32_t dirty_acc = 0;
-    uint32_t dirty_gyr = 0;
-    uint32_t dirty_mag = 0;
-
-    /* Pointers to our exported data. These should all point to a pool in the ManuManager
-         that instantiated us. See that header file for more information. */
-    Vector3<float>* _ptr_acc          = NULL;
-    Vector3<float>* _ptr_gyr          = NULL;
-    Vector3<float>* _ptr_mag          = NULL;
-    Vector3<float>* _ptr_vel          = NULL;
-    Vector3<float>* _ptr_null_grav    = NULL;   // Gravity-cancelled acceleration.
-    Vector3<float>* _ptr_position     = NULL;    // Position of this IMU in space.
-    Quaternion*     _ptr_quat         = NULL;
-    float*          _ptr_temperature  = NULL;
-    uint32_t*       _ptr_s_count_acc  = NULL;
-    uint32_t*       _ptr_s_count_gyr  = NULL;
-    uint32_t*       _ptr_s_count_mag  = NULL;
-    uint32_t*       _ptr_s_count_temp = NULL;
-
 
     // A Legend might instruct us to handle our data in a certain way...
     uint32_t data_handling_flags = 0;
+    uint32_t _frames_completed   = 0;    // Profiling member.
+    int8_t   verbosity           = 3;    //
+    uint8_t  madgwick_iterations = 1;    // Madgwick's filter is run this many times per frame.
 
-    /* Counters and profiling members. */
-    uint32_t _frames_completed   = 0;
-
-    //Vector3<float> gravity;        // If we need gravity, but the Legend doesn't want it.
-    StringBuilder local_log;
-
-    int8_t verbosity            = 3;
-    uint8_t madgwick_iterations = 1;
 
     /* Is the class configured? Can we write our data to a pool?
     *  Used to trust the validity of our pointers.

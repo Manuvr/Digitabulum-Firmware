@@ -123,7 +123,7 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     void dumpPreformedElements(StringBuilder*);
 
     int8_t setLegend(ManuLegend*);
-    inline ManuLegend* getActiveLegend() {    return &_legends[0];    }
+    inline ManuLegend* getActiveLegend() {    return &_root_leg;    }
 
     int8_t read_ag_frame();
     int8_t read_mag_frame();
@@ -155,8 +155,9 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     ElementPool<SensorFrame> _frame_pool;
 
     CPLDDriver* _bus         = nullptr;   // This is the gateway to the hardware.
-    ManuLegend _legends[2];               // Data demand slots. Two for now.
+    ManuLegend _root_leg;                 // Data demand slots. Two for now.
     Integrator integrator;
+    ManuLegendPipe _def_pipe;   // TODO: Cut once working.
 
     /* This is the dataset that we export. */
     uint8_t __dataset[LEGEND_MGR_MAX_DATASET_SIZE];
@@ -189,7 +190,6 @@ class ManuManager : public EventReceiver, public BusOpCallback {
 
     LSM9DS1* fetchIMU(uint8_t idx);
 
-    int8_t reconfigure_data_map();    // Calling causes a pointer dance that reconfigures the data we send to the host.
     void broadcast_legend(ManuLegend*);
 
     void printIMURollCall(StringBuilder*);

@@ -51,8 +51,7 @@ void SensorFrame::resetSequenceCounter() {
 * Vanilla constructor. Vector class will initiallize conponents to zero.
 */
 SensorFrame::SensorFrame() {
-  _read_time = 0.0f;
-  _seq = 0;
+  wipe();
 }
 
 /**
@@ -60,6 +59,8 @@ SensorFrame::SensorFrame() {
 */
 void SensorFrame::wipe() {
   _read_time = 0.0f;
+  _stage     = FrameStage::IDLE;
+  _seq = 0;
   for (int i = 0; i < 17; i++) {
     a_data[i](0.0f, 0.0f, 0.0f);
     g_data[i](0.0f, 0.0f, 0.0f);
@@ -74,11 +75,11 @@ void SensorFrame::wipe() {
 
 #if defined(MANUVR_IMU_DEBUG)
 void SensorFrame::printDebug(StringBuilder* output) {
-  output->concatf("SensorFrame (seq %u)  Delta-t = %.3f sec", _seq, time());
+  output->concatf("SensorFrame (0x%02x)\nseq# %u   Delta-t = %.3f sec", (uint8_t) _stage, _seq, time());
   StringBuilder a_line;
   StringBuilder g_line;
   StringBuilder m_line;
-  output->concatf("\tL(%.4f, %.4f, %.4f)\n", (double)hand_position.x, (double)hand_position.y, (double)hand_position.z);
+  output->concatf("\tP(%.4f, %.4f, %.4f)\n", (double)hand_position.x, (double)hand_position.y, (double)hand_position.z);
   for (int i = 0; i < 17; i++) {
     switch (i) {
       case 2:   // digit1 begins

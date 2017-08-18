@@ -19,6 +19,11 @@ limitations under the License.
 
 
 This is a container class for an IMU measurement frame.
+
+Input Data
+Orientation
+
+
 */
 
 #ifndef __IIU_MEASUREMENT_H__
@@ -36,6 +41,25 @@ This is a container class for an IMU measurement frame.
 * Flags for SensorFrames
 */
 #define  MANUFRAME_FLAGS_COMPLETE          0x01   // Is the data complete?
+
+
+/*
+* These are possible states for the frame.
+*/
+enum class FrameStage {
+  /* ManuManager concerns. */
+  IDLE     = 0x00,  // Freshly instanced (or wiped, if preallocated).
+  INTAKE   = 0x01,  // Frame is waiting on data from the sensors.
+
+  /* Integrator concerns. */
+  ORI      = 0x02,  // Integrations for orientation.
+  INTEG_0  = 0x03,  // Integrations depending on ORI (EG, gravity nullification)
+  INTEG_1  = 0x04,  // Integrations depending on 2nd-degree integrations.
+  ERR      = 0x05,  // Integrations for reporting error.
+
+  /* These are finish states. */
+  COMPLETE = 0x0F   // I/O op complete with no problems.
+};
 
 
 /*
@@ -68,7 +92,9 @@ class SensorFrame {
     inline float   time() {         return _read_time; };
     inline void    time(float x) {  _read_time = x;    };
 
-    inline void markComplete() {  _seq = ++SensorFrame::_total_sequences;  };
+    inline void setO(uint8_t i, float w, float x, float y, float z) {
+      quat[i].set(w, x, y, z);
+    };
 
     inline void setI(uint8_t i, float ax, float ay, float az, float gx, float gy, float gz) {
       a_data[i](ax, ay, az);
@@ -91,14 +117,26 @@ class SensorFrame {
       p_data[i](x, y, z);
     };
 
+    inline FrameStage stage() {
+      return _stage;
+    };
+
+    inline bool isComplete() {    return (FrameStage::COMPLETE == _stage);   };
+
+    void markComplete() {
+      _seq = ++SensorFrame::_total_sequences;
+      _stage = FrameStage::COMPLETE;
+    };
+
 
     static void resetSequenceCounter();
 
 
 
   private:
-    uint32_t _seq        = 0;     // Sequence number
-    float    _read_time  = 0.0f;  // Derived from the system time when the values arrived from the sensor.
+    uint32_t   _seq;        // Sequence number
+    float      _read_time;  // Derived from the system time when the values arrived from the sensor.
+    FrameStage _stage;      // Tracks the integration efforts across sync barriers.
 
 
     static uint32_t _total_sequences;  // We try to keep details hidden.
