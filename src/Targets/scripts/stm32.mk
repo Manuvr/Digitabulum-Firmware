@@ -132,7 +132,7 @@ INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS
 INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/include
 INCLUDES   += -Ilib/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM7/r0p1
 SOURCES_C  += src/Targets/STM32F7/freertos.c
-MANUVR_OPTIONS += -D__MANUVR_FREERTOS
+MANUVR_OPTIONS += -D__BUILD_HAS_FREERTOS
 export THREADS=1
 endif
 

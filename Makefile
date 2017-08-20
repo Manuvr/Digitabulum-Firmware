@@ -9,6 +9,7 @@
 #     make MANUVR_PLATFORM=STM32F7
 ################################################################################
 
+
 ################################################################################
 ## ESP32
 ifeq ($(PLATFORM),ESP32)
@@ -17,6 +18,23 @@ ifndef IDF_PATH
 endif
 
 BUILD_ROOT           := $(shell pwd)
+
+# Enables ATECC provisioning-related features...
+#MANUVR_OPTIONS  = -DATECC508_CAPABILITY_OTP_RW
+#MANUVR_OPTIONS += -DATECC508_CAPABILITY_CONFIG_UNLOCK
+MANUVR_OPTIONS += -DCONFIG_MANUVR_BQ24155
+MANUVR_OPTIONS += -DCONFIG_MANUVR_LTC294X
+MANUVR_OPTIONS += -D__MANUVR_ESP32
+
+# TODO: Doesn't work. Never did. Fix.
+# Debugging options...
+#ifeq ($(DEBUG),1)
+#  MANUVR_OPTIONS += -DMANUVR_DEBUG
+#  #MANUVR_OPTIONS += -DMANUVR_PIPE_DEBUG
+#  MANUVR_OPTIONS += -DMANUVR_IMU_DEBUG
+#  MANUVR_OPTIONS += -DMANUVR_EVENT_PROFILER
+#endif
+#export MANUVR_OPTIONS
 
 export MANUVR_PLATFORM = ESP32
 export OUTPUT_PATH     = $(BUILD_ROOT)/build

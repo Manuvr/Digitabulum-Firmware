@@ -243,7 +243,7 @@ void system_setup() {
   MX_TIM2_Init();
 
   /* Call init function for freertos objects (in freertos.c) */
-  #if defined (__MANUVR_FREERTOS)
+  #if defined (__BUILD_HAS_FREERTOS)
     MX_FREERTOS_Init();
   #endif
 }

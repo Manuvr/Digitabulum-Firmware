@@ -158,7 +158,7 @@ void system_setup() {
   unused_gpio();    // We don't use all the GPIO on this platform.
 
   /* Call init function for freertos objects (in freertos.c) */
-  #if defined (__MANUVR_FREERTOS)
+  #if defined (__BUILD_HAS_FREERTOS)
     MX_FREERTOS_Init();
   #endif
 }

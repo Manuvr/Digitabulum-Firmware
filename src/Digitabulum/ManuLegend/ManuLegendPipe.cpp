@@ -342,7 +342,7 @@ int8_t ManuLegendPipe::offer(SensorFrame* frame) {
           }
           break;
         case ManuEncoding::LOG:
-          frame->printDebug(&output);
+          frame->printManuLegend(&output);
           Kernel::log(&output);
           break;
       }

@@ -66,7 +66,7 @@ extern "C" {
 #include "rom/lldesc.h"
 #include "driver/gpio.h"
 #include "driver/periph_ctrl.h"
-#include "esp_heap_alloc_caps.h"
+#include "esp_heap_caps.h"
 
 // The default frequency for the external clock, if it isn't otherwise supplied.
 #define DEFAULT_CPLD_FREQ 70000

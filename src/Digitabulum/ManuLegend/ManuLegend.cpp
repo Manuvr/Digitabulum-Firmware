@@ -36,9 +36,12 @@ limitations under the License.
 * Copy constructor
 */
 ManuLegend::ManuLegend(const ManuLegend* src) {
-  uint8_t* _ptr = (uint8_t*) src;
-  // Make the Legend NULL at first. Nothing requested.
-  for (uint8_t i = 0; i < sizeof(ManuLegend); i++) *(_ptr+i);
+  ds_size = src->ds_size;
+  iiu_count = src->ds_size;
+  frame_data = src->ds_size;
+  for (uint8_t idx = 0; idx < LEGEND_DATASET_IIU_COUNT; idx++) {
+    per_iiu_data[idx] = src->per_iiu_data[idx];
+  }
 }
 
 
@@ -181,7 +184,7 @@ bool ManuLegend::satisfiedBy(ManuLegend* test) {
     return false;
   }
   for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
-    if (per_iiu_data[i] = (per_iiu_data[i] & test->per_iiu_data[i])) {
+    if (per_iiu_data[i] == (per_iiu_data[i] & test->per_iiu_data[i])) {
       return false;
     }
   }

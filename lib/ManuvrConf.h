@@ -8,8 +8,8 @@ This is one of the files that the application author is required to provide.
 This is where definition of (application or device)-specific parameters ought to go.
 */
 
-#ifndef __FIRMWARE_DEFS_H
-#define __FIRMWARE_DEFS_H
+#ifndef __MANUVR_FIRMWARE_DEFS_H
+#define __MANUVR_FIRMWARE_DEFS_H
 
 /*
 * Particulars of this Manuvrable.
@@ -41,6 +41,9 @@ This is where definition of (application or device)-specific parameters ought to
 #define PREALLOCD_IMU_FRAMES       6
 
 #define CONFIG_MANUVR_BENCHMARKS
+#define MANUVR_DEBUG
+#define MANUVR_EVENT_PROFILER
+#define MANUVR_IMU_DEBUG
 
 // This is the string that identifies this Manuvrable to other Manuvrables. In MHB's case, this
 //   will select the mEngine.
@@ -53,4 +56,4 @@ This is where definition of (application or device)-specific parameters ought to
 #define HW_VERSION_STRING "2"
 
 
-#endif
+#endif  // __MANUVR_FIRMWARE_DEFS_H

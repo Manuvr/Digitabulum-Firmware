@@ -92,8 +92,8 @@ const ADP8866Pins adp_opts(
 );
 
 const LTC294xOpts gas_gauge_opts(
-  255,    // N/A (Alert pin)
-  2600    // We will assume a common 18650 for now. 2600mAh capacity.
+  2600,   // We will assume a common 18650 for now. 2600mAh capacity.
+  255     // N/A (Alert pin)
 );
 
 const BQ24155Opts charger_opts(
