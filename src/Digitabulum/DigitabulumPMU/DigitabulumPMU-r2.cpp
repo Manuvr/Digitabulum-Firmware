@@ -77,6 +77,30 @@ const char* PMU::getChargeStateString(ChargeState code) {
 
 
 /*******************************************************************************
+* .-. .----..----.    .-.     .--.  .-. .-..----.
+* | |{ {__  | {}  }   | |    / {} \ |  `| || {}  \
+* | |.-._} }| .-. \   | `--./  /\  \| |\  ||     /
+* `-'`----' `-' `-'   `----'`-'  `-'`-' `-'`----'
+*
+* Interrupt service routine support functions. Everything in this block
+*   executes under an ISR. Keep it brief...
+*******************************************************************************/
+
+/*
+* This is an ISR.
+*/
+void bq24155_stat_isr() {
+}
+
+/*
+* This is an ISR.
+*/
+void ltc294x_alert_isr() {
+}
+
+
+
+/*******************************************************************************
 *   ___ _              ___      _ _              _      _
 *  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
 * | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
@@ -168,7 +192,7 @@ int8_t PMU::attached() {
     cpu_scale(1);
     platform.kernel()->addSchedule(&_periodic_pmu_read);
     //_bq24155->init();
-    //_ltc294x->init();
+    _ltc294x->init();
     return 1;
   }
   return 0;
@@ -184,6 +208,7 @@ void PMU::printDebug(StringBuilder* output) {
   EventReceiver::printDebug(output);
   output->concatf("-- CPU freq                  %d MHz\n",  _cpu_clock_rate);
   output->concatf("-- Charge state              %s\n",      getChargeStateString());
+  _ltc294x->printDebug(output);
 }
 
 
@@ -275,12 +300,52 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'm':   // Set the system-wide power mode.
       if (255 != temp_int) {
-        ManuvrMsg* event = Kernel::returnEvent(MANUVR_MSG_SYS_POWER_MODE);
+        ManuvrMsg* event = Kernel::returnEvent(MANUVR_MSG_SYS_POWER_MODE, this);
         event->addArg((uint8_t) temp_int);
         EventReceiver::raiseEvent(event);
         local_log.concatf("Power mode is now %d.\n", temp_int);
       }
       else {
+      }
+      break;
+
+    case 'd':
+      switch (temp_int) {
+        case 1:
+          local_log.concat("Refreshing _bq24155.\n");
+          _bq24155->refresh();
+          break;
+        case 2:
+          local_log.concat("Refreshing _ltc294x.\n");
+          _ltc294x->refresh();
+          break;
+        default:
+          local_log.concat("Refreshing all.\n");
+          _bq24155->refresh();
+          _ltc294x->refresh();
+          break;
+      }
+      break;
+
+    case 'D':
+      switch (temp_int) {
+        case 1:
+          _bq24155->printRegisters(&local_log);
+          break;
+        case 2:
+          _ltc294x->printRegisters(&local_log);
+          break;
+      }
+      break;
+
+    case 'i':
+      switch (temp_int) {
+        case 1:
+          _bq24155->printDebug(&local_log);
+          break;
+        case 2:
+          _ltc294x->printDebug(&local_log);
+          break;
       }
       break;
 
@@ -292,27 +357,3 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
   flushLocalLog();
 }
 #endif  // MANUVR_CONSOLE_SUPPORT
-
-
-
-/*******************************************************************************
-* .-. .----..----.    .-.     .--.  .-. .-..----.
-* | |{ {__  | {}  }   | |    / {} \ |  `| || {}  \
-* | |.-._} }| .-. \   | `--./  /\  \| |\  ||     /
-* `-'`----' `-' `-'   `----'`-'  `-'`-' `-'`----'
-*
-* Interrupt service routine support functions. Everything in this block
-*   executes under an ISR. Keep it brief...
-*******************************************************************************/
-
-/*
-* This is an ISR.
-*/
-void bq24155_stat_isr() {
-}
-
-/*
-* This is an ISR.
-*/
-void ltc294x_alert_isr() {
-}

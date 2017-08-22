@@ -1,5 +1,5 @@
 /*
-File:   FirmwareDefs.h
+File:   ManuvrConf.h
 Author: J. Ian Lindsay
 Date:   2015.03.01
 

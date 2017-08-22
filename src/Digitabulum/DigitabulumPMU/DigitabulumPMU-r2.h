@@ -21,33 +21,6 @@ limitations under the License.
 Our goal is to encapsulate power-supply concerns to this class. This
   class may later be used as the prototype for a generalized PMU kernel
   driver. Until then, we will hard-code i2c addresses, pin numbers, etc.
-
-Digitabulum's power-management subsystem consists of...
-  * A TI INA219 (Voltage monitor and consumption rate)
-  * A Microchip MCP73833 (LiPo charge management)
-
-
-Regarding the battery in Digitabulum
-================================================================================
-r1 uses a 1485mAh LiPo.
-
-
-Regarding the MCP73833 (charge controller)
-================================================================================
-Any other statX combinations are meaningless because it could mean many things.
-
-stat1 stat2   Condition             This table is complicated by the fact that
----------------------------------     the stat lines were intended to be hooked
-  L     H     Charge-in-progress      to LEDs for a human. So they pulse and do
-  H     L     Charge complete         other things. For this reason, we track
-  L     L     System test mode        the system time of falling edges.
-
-
-Regarding the INA219 (fuel gauge)
-================================================================================
-In Digitabulum, the shunt resistor is Yageo part number RL1210FR-070R2L. It is
-  0.2-ohm.
-
 */
 
 #ifndef __DIGITABULUM_PMU_DRIVER_H__
