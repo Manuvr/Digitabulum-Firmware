@@ -192,7 +192,7 @@ int8_t PMU::attached() {
     cpu_scale(1);
     platform.kernel()->addSchedule(&_periodic_pmu_read);
     //_bq24155->init();
-    _ltc294x->init();
+    //_ltc294x->init();
     return 1;
   }
   return 0;
@@ -347,6 +347,35 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
           _ltc294x->printDebug(&local_log);
           break;
       }
+      break;
+
+    case 'a':
+      switch (temp_int) {
+        case 0:
+          break;
+        case 1:
+          _ltc294x->setVoltageThreshold(3.3f, 4.4f);
+          break;
+        case 2:
+          _ltc294x->init();
+          break;
+        case 3:
+          _ltc294x->sleep(true);
+          break;
+        case 4:
+          _ltc294x->sleep(false);
+          break;
+        case 5:
+          break;
+      }
+      break;
+
+    case 'A':
+      _ltc294x->regRead(temp_int);
+      break;
+
+    case 'B':
+      _bq24155->regRead(temp_int);
       break;
 
     default:
