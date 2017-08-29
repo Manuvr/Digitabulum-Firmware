@@ -35,6 +35,7 @@ Intended target is an WROOM32 SoC module.
 
 #include "Digitabulum/CPLDDriver/CPLDDriver.h"
 #include "Digitabulum/ManuLegend/ManuManager.h"
+#include "Digitabulum/DigitabulumPMU/DigitabulumPMU-r2.h"
 
 #ifdef __cplusplus
   extern "C" {
@@ -150,6 +151,9 @@ void app_main() {
 
   LTC294x gas_gauge(&gas_gauge_opts);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &gas_gauge);
+
+  PMU pmu(&charger, &gas_gauge);
+  kernel->subscribe((EventReceiver*) &pmu);
 
   platform.bootstrap();
 

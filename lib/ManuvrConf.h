@@ -35,6 +35,9 @@ This is where definition of (application or device)-specific parameters ought to
 //#define MANUVR_JSON
 
 
+#define CONFIG_MANUVR_BQ24155
+#define CONFIG_MANUVR_LTC294X
+
 #define CPLD_SPI_PREALLOC_COUNT   10
 #define CPLD_SPI_MAX_QUEUE_DEPTH  40
 #define CPLD_SPI_MAX_QUEUE_PRINT   3

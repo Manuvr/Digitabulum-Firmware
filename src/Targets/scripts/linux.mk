@@ -64,6 +64,7 @@ CXX_SRCS  += src/Digitabulum/ManuLegend/Integrator.cpp
 CXX_SRCS  += src/Digitabulum/ManuLegend/ManuManager.cpp
 CXX_SRCS  += src/Digitabulum/ManuLegend/ManuLegend.cpp
 CXX_SRCS  += src/Digitabulum/ManuLegend/ManuLegendPipe.cpp
+CXX_SRCS  += src/Digitabulum/DigitabulumPMU/DigitabulumPMU-r2.cpp
 
 ###########################################################################
 # Option conditionals

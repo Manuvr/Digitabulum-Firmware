@@ -39,9 +39,10 @@ This is the firmware emulation test-bench.
 
 #include <Transports/ManuvrSocket/ManuvrTCP.h>
 #include <Transports/StandardIO/StandardIO.h>
+
 #include "Digitabulum/CPLDDriver/CPLDDriver.h"
 #include "Digitabulum/ManuLegend/ManuManager.h"
-
+#include "Digitabulum/DigitabulumPMU/DigitabulumPMU-r2.h"
 
 /* This global makes this source file read better. */
 Kernel* kernel = nullptr;
@@ -77,7 +78,7 @@ const CPLDPins cpld_pins(
 );
 
 const I2CAdapterOptions i2c_opts(
-  0,   // Device number
+  1,   // Device number
   255, // sda
   255  // scl
 );
@@ -93,7 +94,8 @@ const ADP8866Pins adp_opts(
 
 const LTC294xOpts gas_gauge_opts(
   2600,   // We will assume a common 18650 for now. 2600mAh capacity.
-  255     // N/A (Alert pin)
+  255,    // N/A (Alert pin)
+  LTC294X_OPT_ACD_AUTO | LTC294X_OPT_INTEG_SENSE
 );
 
 const BQ24155Opts charger_opts(
@@ -149,6 +151,9 @@ int main(int argc, const char *argv[]) {
 
   LTC294x gas_gauge(&gas_gauge_opts);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &gas_gauge);
+
+  PMU pmu(&charger, &gas_gauge);
+  kernel->subscribe((EventReceiver*) &pmu);
 
   // Pipe strategy planning...
   const uint8_t pipe_plan_clients[] = {2, 0};
