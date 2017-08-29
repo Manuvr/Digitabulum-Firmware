@@ -34,11 +34,12 @@ CFLAGS       = -Wall
 LIBS         = -lc -lm -lpthread -lmanuvr
 
 # Enforce a 32-bit build.
-CFLAGS      += -m32
+#CFLAGS      += -m32
 
 INCLUDES    = -iquote. -iquotesrc/
 INCLUDES   += -I$(BUILD_ROOT)/lib/ManuvrOS/ManuvrOS
 INCLUDES   += -I$(BUILD_ROOT)/lib
+INCLUDES   += -I$(BUILD_ROOT)/lib/mbedtls/include
 INCLUDES   += -I$(BUILD_ROOT)/confs
 INCLUDES   += -I$(BUILD_ROOT)/src/Digitabulum
 
@@ -85,13 +86,16 @@ ifeq ($(SECURE),1)
   export SECURE=1
 endif
 
+ifeq ($(MANUVR_BOARD),RASPI)
+  MANUVR_OPTIONS += -DRASPI
+endif
+
 # Debugging options...
 ifeq ($(DEBUG),1)
 OPTIMIZATION    = -O0 -g
-MANUVR_OPTIONS += -DMANUVR_DEBUG
+#MANUVR_OPTIONS += -DMANUVR_DEBUG
 #MANUVR_OPTIONS += -DMANUVR_PIPE_DEBUG
-MANUVR_OPTIONS += -DMANUVR_IMU_DEBUG
-MANUVR_OPTIONS += -DMANUVR_EVENT_PROFILER
+#MANUVR_OPTIONS += -DMANUVR_EVENT_PROFILER
 CFLAGS         += -fprofile-arcs -ftest-coverage
 #CFLAGS += -g -ggdb
 #CXXFLAGS += -fno-use-linker-plugin
