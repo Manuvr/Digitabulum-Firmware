@@ -245,6 +245,9 @@ int8_t PMU::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
 
   switch (active_event->eventCode()) {
+    case MANUVR_MSG_SYS_POWER_MODE:
+      return_value++;
+      break;
     case DIGITABULUM_MSG_PMU_READ:
       return_value++;
       break;
@@ -260,6 +263,9 @@ int8_t PMU::notify(ManuvrMsg* active_event) {
 
 #ifdef MANUVR_CONSOLE_SUPPORT
 void PMU::procDirectDebugInstruction(StringBuilder *input) {
+  // TODO: This function (and the open-scoping demands it makes on member classes)
+  //         is awful. It is hasty until I can learn enough from some other PMU
+  //         abstraction to do something more sensible.
   const char* str = (char *) input->position(0);
   char c    = *str;
   int temp_int = 0;
@@ -279,10 +285,6 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
       cpu_scale(*(str) == 'f' ? 0 : 1);
       break;
 
-    case 'w':
-      // Find the current wattage draw.
-      break;
-
     case 'p':
     case 'P':
       // Start or stop the periodic sensor read.
@@ -294,10 +296,6 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
       local_log.concatf("%s _periodic_pmu_read.\n", (*(str) == 'p' ? "Stopping" : "Starting"));
       break;
 
-    case 'e':
-      // Read the present battery voltage.
-      break;
-
     case 'm':   // Set the system-wide power mode.
       if (255 != temp_int) {
         ManuvrMsg* event = Kernel::returnEvent(MANUVR_MSG_SYS_POWER_MODE, this);
@@ -306,6 +304,29 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
         local_log.concatf("Power mode is now %d.\n", temp_int);
       }
       else {
+      }
+      break;
+
+
+    ///////////////////////
+    // Common
+    ///////////////////////
+    case 'i':
+      switch (temp_int) {
+        case 1:
+          _bq24155->printDebug(&local_log);
+          break;
+        case 2:
+          _ltc294x->printDebug(&local_log);
+          break;
+        case 3:
+          _bq24155->printRegisters(&local_log);
+          break;
+        case 4:
+          _ltc294x->printRegisters(&local_log);
+          break;
+        default:
+          printDebug(&local_log);
       }
       break;
 
@@ -327,25 +348,12 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
-    case 'D':
-      switch (temp_int) {
-        case 1:
-          _bq24155->printRegisters(&local_log);
-          break;
-        case 2:
-          _ltc294x->printRegisters(&local_log);
-          break;
-      }
-      break;
-
-    case 'i':
-      switch (temp_int) {
-        case 1:
-          _bq24155->printDebug(&local_log);
-          break;
-        case 2:
-          _ltc294x->printDebug(&local_log);
-          break;
+    ///////////////////////
+    // Gas guage
+    ///////////////////////
+    case 'A':
+      if (_ltc294x->regRead(temp_int)) {
+        local_log.concatf("Failed to read register 0x%02x.\n", temp_int);
       }
       break;
 
@@ -370,13 +378,63 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
-    case 'A':
-      _ltc294x->regRead(temp_int);
+    ///////////////////////
+    // Charger
+    ///////////////////////
+    case 'B':
+      if (_bq24155->regRead(temp_int)) {
+        local_log.concatf("Failed to read register 0x%02x.\n", temp_int);
+      }
       break;
 
-    case 'B':
-      _bq24155->regRead(temp_int);
+    case 'E':
+    case 'e':
+      local_log.concatf("%sabling battery charge...\n", (*(str) == 'E' ? "En" : "Dis"));
+      _bq24155->charger_enabled(*(str) == 'E');
       break;
+    case 'T':
+    case 't':
+      local_log.concatf("%sabling charge current termination...\n", (*(str) == 'T' ? "En" : "Dis"));
+      _bq24155->charger_enabled(*(str) == 'T');
+      break;
+
+    case '*':
+      local_log.concat("Punching safety timer...\n");
+      _bq24155->punch_safety_timer();
+      break;
+
+    case 'R':
+      local_log.concat("Resetting charger...\n");
+      _bq24155->put_charger_in_reset_mode();
+      break;
+
+    case 'u':   // USB host current limit.
+      if (temp_int) {
+        _bq24155->usb_current_limit((unsigned int) temp_int);
+      }
+      else {
+        local_log.concatf("USB current limit: %dmA\n", _bq24155->usb_current_limit());
+      }
+      break;
+    case 'v':   // Battery regulation voltage
+      if (temp_int) {
+        local_log.concatf("Setting battery regulation voltage to %.2fV\n", input->position_as_double(1));
+        _bq24155->batt_reg_voltage(input->position_as_double(1));
+      }
+      else {
+        local_log.concatf("Batt reg voltage:  %.2fV\n", _bq24155->batt_reg_voltage());
+      }
+      break;
+    case 'w':   // Battery weakness voltage
+      if (temp_int) {
+        local_log.concatf("Setting battery weakness voltage to %d mV\n", temp_int);
+        _bq24155->batt_weak_voltage(temp_int);
+      }
+      else {
+        local_log.concatf("Batt weakness voltage:  %d mV\n", _bq24155->batt_weak_voltage());
+      }
+      break;
+
 
     default:
       EventReceiver::procDirectDebugInstruction(input);

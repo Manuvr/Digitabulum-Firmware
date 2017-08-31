@@ -115,7 +115,7 @@ int main(int argc, const char *argv[]) {
   if (opts) {
     StringBuilder log;
     opts->printDebug(&log);
-    printf("%s\n\n\n", (char*) log.string());
+    printf("%s\n\n", (char*) log.string());
   }
 
   /*

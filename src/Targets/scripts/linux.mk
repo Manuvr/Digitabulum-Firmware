@@ -33,8 +33,13 @@ CXXFLAGS     = -fno-rtti -fno-exceptions
 CFLAGS       = -Wall
 LIBS         = -lc -lm -lpthread -lmanuvr
 
-# Enforce a 32-bit build.
-#CFLAGS      += -m32
+# Thanks, estabroo...
+# http://www.linuxquestions.org/questions/programming-9/how-can-make-makefile-detect-64-bit-os-679513/
+LBITS = $(shell getconf LONG_BIT)
+ifeq ($(LBITS),64)
+	# Enforce a 32-bit build.
+  #CFLAGS += -m32
+endif
 
 INCLUDES    = -iquote. -iquotesrc/
 INCLUDES   += -I$(BUILD_ROOT)/lib/ManuvrOS/ManuvrOS
