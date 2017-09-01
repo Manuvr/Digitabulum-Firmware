@@ -147,7 +147,6 @@ void app_main() {
 
   BQ24155 charger(&charger_opts);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &charger);
-  kernel->subscribe((EventReceiver*) &charger);
 
   LTC294x gas_gauge(&gas_gauge_opts);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &gas_gauge);

@@ -139,7 +139,7 @@ vpath %.a $(OUTPUT_PATH)
 
 .PHONY: all
 
-all: firmware driver
+all: firmware
 	$(SZ) $(OUTPUT_PATH)/$(FIRMWARE_NAME)
 
 %.o : %.c
