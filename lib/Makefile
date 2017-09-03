@@ -26,11 +26,11 @@ endif
 
 #all: $(LIBS_TO_BUILD)
 all: mbedtls.a	manuvr.a
-	@echo -e "\033[1;37m$(LIBS_TO_BUILD)\033[0m"
+	@echo "\033[1;37m$(LIBS_TO_BUILD)\033[0m"
 
 
 mbedtls.a:
-	@echo -e "\033[1;37m=== mbedtls ==========================================\033[0m"
+	@echo "\033[1;37m=== mbedtls ==========================================\033[0m"
 	$(MAKE) lib -C mbedtls/
 	cp -RP mbedtls/library/*.a $(OUTPUT_PATH)
 

@@ -88,8 +88,8 @@ const ATECC508Opts atecc_opts(
 );
 
 const ADP8866Pins adp_opts(
-  255,  // (Reset)
-  255   // (IRQ)
+  24,   // Reset
+  255   // IRQ
 );
 
 const LTC294xOpts gas_gauge_opts(
