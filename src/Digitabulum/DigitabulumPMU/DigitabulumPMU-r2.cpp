@@ -48,16 +48,6 @@ const MessageTypeDef pmu_message_defs[] = {
 };
 
 
-int PMU::pmu_cpu_clock_rate(CPUFreqSetting _setting) {
-  switch (_setting) {
-    case CPUFreqSetting::CPU_27:         return 27;
-    case CPUFreqSetting::CPU_54:         return 54;
-    case CPUFreqSetting::CPU_216:        return 216;
-    case CPUFreqSetting::CPU_CLK_UNDEF:  return 0;
-  }
-  return 0;
-}
-
 /**
 * Debug and logging support.
 *
@@ -109,17 +99,33 @@ void ltc294x_alert_isr() {
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 
-PMU::PMU(BQ24155* charger, LTC294x* fuel_gauge) : EventReceiver("PMU") {
+PMU::PMU(BQ24155* charger, LTC294x* fuel_gauge, const PowerPlantOpts* o) : EventReceiver("PMU"), _opts(o) {
+  _er_set_flag(_opts.flags);
   if (nullptr == INSTANCE) {
     INSTANCE   = this;
     ManuvrMsg::registerMessages(pmu_message_defs, sizeof(pmu_message_defs) / sizeof(MessageTypeDef));
   }
-  _cpu_clock = CPUFreqSetting::CPU_CLK_UNDEF;
-  _stat1_pin = 16;
-  _stat2_pin = 17;
 
   _bq24155 = charger;
   _ltc294x = fuel_gauge;
+
+  // For safety's sake, this pin init order is important.
+  // Flags are reliable at this point. So if the caller set flags indicating
+  //   a given initial state for the auxililary regulator, it will be honored
+  //   if possible.
+  // If no flags are given, the defaults behavior is for the aux regulator
+  //   to remain powered down, with 3.3v as the default power output when it is
+  //   enabled.
+  // If a flag is set a certain way, but no pin control is possible, the flags
+  //   related to that feature effectively become constants.
+  if (_opts.useVSPin()) {
+    gpioDefine(_opts.vs_pin, GPIOMode::OUTPUT);
+    setPin(_opts.vs_pin, !auxRegLowPower());
+  }
+  if (_opts.useREPin()) {
+    gpioDefine(_opts.re_pin, GPIOMode::OUTPUT);
+    setPin(_opts.re_pin, auxRegEnabled());
+  }
 
   _periodic_pmu_read.repurpose(DIGITABULUM_MSG_PMU_READ, (EventReceiver*) this);
   _periodic_pmu_read.incRefs();
@@ -137,34 +143,49 @@ PMU::~PMU() {
 }
 
 
-// Pass 1 for low freq, 0 for max
-int8_t PMU::cpu_scale(uint8_t _freq) {
-
-  switch (_freq) {
-    case 0:
-      _cpu_clock = CPUFreqSetting::CPU_216;
-      break;
-    case 1:
-      _cpu_clock = CPUFreqSetting::CPU_54;
-      break;
-    default:
-      Kernel::log("Invalid CPU freq.\n");
-      return -1;
-  }
-
-  local_log.concatf("CPU now at %dMHz\n", (_cpu_clock_rate/1000000));
-  flushLocalLog();
-  return 0;
-}
-
-
 
 /*
 * Updates the local state if warranted, but always returns local state.
 */
 ChargeState PMU::getChargeState() {
-  uint8_t idx = 0;
   return _charge_state;
+}
+
+
+
+/*******************************************************************************
+* Functions specific to this class....                                         *
+*******************************************************************************/
+
+/*
+* Turns the regulator on or off.
+*
+* @return non-zero on error.
+*/
+int8_t PMU::auxRegEnabled(bool nu) {
+  if (_opts.useREPin()) {
+    // Shutdown is achieved by pulling pin low.
+    setPin(_opts.re_pin, nu);
+    _er_set_flag(DIGITAB_PMU_FLAG_ENABLED, nu);
+    return 0;
+  }
+  return -1;
+}
+
+
+/*
+* Sets the regulator voltage to 2.5v or 3.3v.
+*
+* @return non-zero on error.
+*/
+int8_t PMU::auxRegLowPower(bool nu) {
+  if (_opts.useVSPin()) {
+    // 2.5v mode is selected by pulling pin low.
+    setPin(_opts.vs_pin, !nu);
+    _er_set_flag(DIGITAB_PMU_FLAG_V_25, nu);
+    return 0;
+  }
+  return -1;
 }
 
 
@@ -189,10 +210,9 @@ ChargeState PMU::getChargeState() {
 */
 int8_t PMU::attached() {
   if (EventReceiver::attached()) {
-    cpu_scale(1);
     platform.kernel()->addSchedule(&_periodic_pmu_read);
-    //_bq24155->init();
-    //_ltc294x->init();
+    _bq24155->init();
+    _ltc294x->init();
     return 1;
   }
   return 0;
@@ -206,9 +226,13 @@ int8_t PMU::attached() {
 */
 void PMU::printDebug(StringBuilder* output) {
   EventReceiver::printDebug(output);
-  output->concatf("-- CPU freq                  %d MHz\n",  _cpu_clock_rate);
-  output->concatf("-- Charge state              %s\n",      getChargeStateString());
+  const char* aux_reg_state = auxRegLowPower() ? "2.5v" : "3.3v";
+  output->concatf("-- CPU freq                  %.2f MHz\n", (double) platform.cpu_freq()/1000000.0);
+  output->concatf("-- VS/RE pins                %u/%u\n", _opts.vs_pin, _opts.re_pin);
+  output->concatf("-- Auxiliary regulator       %s\n", auxRegEnabled() ? aux_reg_state : "Disabled");
+  output->concatf("-- Charge state              %s\n", getChargeStateString());
   _ltc294x->printDebug(output);
+  _bq24155->printDebug(output);
 }
 
 
@@ -280,11 +304,6 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
   }
 
   switch (c) {
-    case 'f':
-    case 'F':
-      cpu_scale(*(str) == 'f' ? 0 : 1);
-      break;
-
     case 'p':
     case 'P':
       // Start or stop the periodic sensor read.
@@ -303,47 +322,86 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
         EventReceiver::raiseEvent(event);
         local_log.concatf("Power mode is now %d.\n", temp_int);
       }
-      else {
-      }
       break;
 
 
     ///////////////////////
     // Common
     ///////////////////////
+    case 'X':
+    case 'x':
+      local_log.concatf(
+        "%sabling auxiliary regulator... %s\n",
+        (*(str) == 'X' ? "En" : "Dis"),
+        (0 != auxRegEnabled(*(str) == 'X')) ? "failure" : "success"
+      );
+      break;
+
+    case 'L':
+    case 'l':
+      local_log.concatf(
+        "Setting auxiliary regulator to %.1fv... %s\n",
+        (*(str) == 'L' ? 2.5f : 3.3f),
+        (0 != auxRegLowPower(*(str) == 'L')) ? "failure" : "success"
+      );
+      break;
+
     case 'i':
       switch (temp_int) {
         case 1:
-          _bq24155->printDebug(&local_log);
-          break;
-        case 2:
           _ltc294x->printDebug(&local_log);
           break;
+        case 2:
+          _bq24155->printDebug(&local_log);
+          break;
         case 3:
-          _bq24155->printRegisters(&local_log);
+          _ltc294x->printRegisters(&local_log);
           break;
         case 4:
-          _ltc294x->printRegisters(&local_log);
+          _bq24155->printRegisters(&local_log);
           break;
         default:
           printDebug(&local_log);
       }
       break;
 
+    case 'a':
+      switch (temp_int) {
+        case 1:
+          _ltc294x->init();
+          break;
+        case 2:
+          _bq24155->init();
+          break;
+        case 3:
+          _ltc294x->init();
+          _bq24155->init();
+          break;
+        default:
+          local_log.concat("1: _ltc294x->init()\n");
+          local_log.concat("2: _bq24155->init()\n");
+          break;
+      }
+      break;
+
     case 'd':
       switch (temp_int) {
         case 1:
-          local_log.concat("Refreshing _bq24155.\n");
-          _bq24155->refresh();
-          break;
-        case 2:
           local_log.concat("Refreshing _ltc294x.\n");
           _ltc294x->refresh();
           break;
-        default:
+        case 2:
+          local_log.concat("Refreshing _bq24155.\n");
+          _bq24155->refresh();
+          break;
+        case 3:
           local_log.concat("Refreshing all.\n");
           _bq24155->refresh();
           _ltc294x->refresh();
+          break;
+        default:
+          local_log.concat("1: _ltc294x->refresh()\n");
+          local_log.concat("2: _bq24155->refresh()\n");
           break;
       }
       break;
@@ -357,23 +415,16 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
       }
       break;
 
-    case 'a':
+    case 's':
       switch (temp_int) {
-        case 0:
-          break;
         case 1:
           _ltc294x->setVoltageThreshold(3.3f, 4.4f);
           break;
         case 2:
-          _ltc294x->init();
-          break;
-        case 3:
           _ltc294x->sleep(true);
           break;
-        case 4:
+        case 3:
           _ltc294x->sleep(false);
-          break;
-        case 5:
           break;
       }
       break;
@@ -392,6 +443,7 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
       local_log.concatf("%sabling battery charge...\n", (*(str) == 'E' ? "En" : "Dis"));
       _bq24155->charger_enabled(*(str) == 'E');
       break;
+
     case 'T':
     case 't':
       local_log.concatf("%sabling charge current termination...\n", (*(str) == 'T' ? "En" : "Dis"));

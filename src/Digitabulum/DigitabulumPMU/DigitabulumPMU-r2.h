@@ -34,19 +34,11 @@ Our goal is to encapsulate power-supply concerns to this class. This
 * These state flags are hosted by the EventReceiver. This may change in the future.
 * Might be too much convention surrounding their assignment across inherritence.
 */
-#define DIGITAB_PMU_FLAG_STAT1      0x01    // The state of STAT1.
-#define DIGITAB_PMU_FLAG_STAT2      0x02    // The state of STAT2.
+#define DIGITAB_PMU_FLAG_ENABLED    0x01    // Aux regulator is anabled.
+#define DIGITAB_PMU_FLAG_V_25       0x02    // Aux regulator is set to 2.5v.
 
 #define DIGITABULUM_MSG_PMU_READ    0x5233  //
 
-
-// Valid CPU frequencies.
-enum class CPUFreqSetting {
-  CPU_27,
-  CPU_54,
-  CPU_216,
-  CPU_CLK_UNDEF
-};
 
 enum class ChargeState {
   FULL,      // Implies we are connected to a charging source.
@@ -57,14 +49,55 @@ enum class ChargeState {
   UNDEF
 };
 
+
+/**
+* Options for the PowerPlant.
+*/
+class PowerPlantOpts {
+  public:
+    const uint8_t vs_pin;  // Which pin is bound to aux voltage select?
+    const uint8_t re_pin;  // Which pin is bound to aux regulator enable?
+    const uint8_t flags;   // Flags that the class should start with.
+
+    PowerPlantOpts(const PowerPlantOpts* o) :
+      vs_pin(o->vs_pin),
+      re_pin(o->re_pin),
+      flags(o->flags) {};
+
+    PowerPlantOpts(uint8_t _vspin, uint8_t _repin, uint8_t _f) :
+      vs_pin(_vspin),
+      re_pin(_repin),
+      flags(_f) {};
+
+    PowerPlantOpts(uint8_t _vspin, uint8_t _repin) :
+      vs_pin(_vspin),
+      re_pin(_repin),
+      flags(0) {};
+
+    PowerPlantOpts(uint8_t _f) :
+      vs_pin(255),
+      re_pin(255),
+      flags(_f) {};
+
+    inline bool useVSPin() const {
+      return (255 != vs_pin);
+    };
+
+    inline bool useREPin() const {
+      return (255 != re_pin);
+    };
+};
+
+
+
 /* These fxns are out-of-class ISRs. */
-void bq24155_stat_isr();
-void ltc294x_alert_isr();
+//void bq24155_stat_isr();
+//void ltc294x_alert_isr();
 
 
 class PMU : public EventReceiver {
   public:
-    PMU(BQ24155*, LTC294x*);
+    PMU(BQ24155*, LTC294x*, const PowerPlantOpts*);
     virtual ~PMU();
 
     /* Overrides from EventReceiver */
@@ -75,9 +108,17 @@ class PMU : public EventReceiver {
       void procDirectDebugInstruction(StringBuilder*);
     #endif  //MANUVR_CONSOLE_SUPPORT
 
-    /* These are called by ISR to keep track of the STAT pin timings. */
 
     ChargeState getChargeState();
+
+    /* Is the aux regulator enabled? */
+    inline bool auxRegEnabled() {   return (_er_flag(DIGITAB_PMU_FLAG_ENABLED));  };
+    inline bool auxRegLowPower() {  return (_er_flag(DIGITAB_PMU_FLAG_V_25));     };
+
+    /* Control over the auxilary regulator, if the hardware supports it. */
+    int8_t auxRegEnabled(bool);
+    int8_t auxRegLowPower(bool);
+
 
     /* Inlines for object-style usage of static functions... */
     inline const char* getChargeStateString() {  return getChargeStateString(_charge_state); };
@@ -90,25 +131,13 @@ class PMU : public EventReceiver {
 
 
   private:
-    uint32_t     _cpu_clock_rate;
-    ManuvrMsg _periodic_pmu_read;
-
-    /* Values for the MCP73833 charge controller. */
-    unsigned int _stat1_delta;
-    unsigned int _stat2_delta;
-    uint8_t      _stat1_pin;
-    uint8_t      _stat2_pin;
-
-    CPUFreqSetting _cpu_clock;
-    ChargeState    _charge_state = ChargeState::UNDEF;
-
-    BQ24155*     _bq24155;
-    LTC294x*     _ltc294x;
-
-    int8_t cpu_scale(uint8_t _freq);
+    const PowerPlantOpts _opts;
+    ChargeState _charge_state = ChargeState::UNDEF;
+    BQ24155*    _bq24155;
+    LTC294x*    _ltc294x;
+    ManuvrMsg   _periodic_pmu_read;
 
     static const char* getChargeStateString(ChargeState);
-    static int pmu_cpu_clock_rate(CPUFreqSetting);
 };
 
 #endif //__DIGITABULUM_PMU_DRIVER_H__

@@ -41,8 +41,6 @@ Intended target is an WROOM32 SoC module.
   extern "C" {
 #endif
 
-
-
 /*
 * Pin defs given here assume a WROOM32 module.
 */
