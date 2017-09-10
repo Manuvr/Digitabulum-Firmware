@@ -99,15 +99,18 @@ void ltc294x_alert_isr() {
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 
-PMU::PMU(BQ24155* charger, LTC294x* fuel_gauge, const PowerPlantOpts* o) : EventReceiver("PMU"), _opts(o) {
-  _er_set_flag(_opts.flags);
+/**
+* Constructor. All params are required.
+*/
+PMU::PMU(BQ24155* charger, LTC294x* fuel_gauge, const PowerPlantOpts* o, const BatteryOpts* bo) :
+  EventReceiver("PMU"),
+  _opts(o), _battery(bo),
+  _bq24155(charger), _ltc294x(fuel_gauge) {
+  _er_set_flag(_opts.flags);    // Set the initial flag state.
   if (nullptr == INSTANCE) {
     INSTANCE   = this;
     ManuvrMsg::registerMessages(pmu_message_defs, sizeof(pmu_message_defs) / sizeof(MessageTypeDef));
   }
-
-  _bq24155 = charger;
-  _ltc294x = fuel_gauge;
 
   // For safety's sake, this pin init order is important.
   // Flags are reliable at this point. So if the caller set flags indicating
@@ -127,11 +130,15 @@ PMU::PMU(BQ24155* charger, LTC294x* fuel_gauge, const PowerPlantOpts* o) : Event
     setPin(_opts.re_pin, auxRegEnabled());
   }
 
+  // Now... we have battery details. So we derive some settings for the two
+  //   I2C chips we are dealing with.
+
+  // We'll probably want to check the PMIC periodically. Setup the schedule.
   _periodic_pmu_read.repurpose(DIGITABULUM_MSG_PMU_READ, (EventReceiver*) this);
   _periodic_pmu_read.incRefs();
   _periodic_pmu_read.specific_target = (EventReceiver*) this;
   _periodic_pmu_read.priority(1);
-  _periodic_pmu_read.alterSchedulePeriod(100);
+  _periodic_pmu_read.alterSchedulePeriod(1000);
   _periodic_pmu_read.alterScheduleRecurrence(-1);
   _periodic_pmu_read.autoClear(false);
   _periodic_pmu_read.enableSchedule(false);
@@ -139,6 +146,7 @@ PMU::PMU(BQ24155* charger, LTC294x* fuel_gauge, const PowerPlantOpts* o) : Event
 
 
 PMU::~PMU() {
+  _periodic_pmu_read.enableSchedule(false);
   platform.kernel()->removeSchedule(&_periodic_pmu_read);
 }
 
@@ -203,23 +211,6 @@ int8_t PMU::auxRegLowPower(bool nu) {
 *******************************************************************************/
 
 /**
-* This is called when the kernel attaches the module.
-* This is the first time the class can be expected to have kernel access.
-*
-* @return 0 on no action, 1 on action, -1 on failure.
-*/
-int8_t PMU::attached() {
-  if (EventReceiver::attached()) {
-    platform.kernel()->addSchedule(&_periodic_pmu_read);
-    _bq24155->init();
-    _ltc294x->init();
-    return 1;
-  }
-  return 0;
-}
-
-
-/**
 * Debug support function.
 *
 * @param A pointer to a StringBuffer object to receive the output.
@@ -234,6 +225,34 @@ void PMU::printDebug(StringBuilder* output) {
   _ltc294x->printDebug(output);
   _bq24155->printDebug(output);
 }
+
+
+/**
+* This is called when the kernel attaches the module.
+* This is the first time the class can be expected to have kernel access.
+*
+* @return 0 on no action, 1 on action, -1 on failure.
+*/
+int8_t PMU::attached() {
+  if (EventReceiver::attached()) {
+    platform.kernel()->addSchedule(&_periodic_pmu_read);
+
+    // We want the gas guage to warn us if the voltage leaves the realm of safety.
+    _ltc294x->setVoltageThreshold(_battery.voltage_weak, _battery.voltage_max);
+    _ltc294x->init();
+    _bq24155->init();
+    return 1;
+  }
+  return 0;
+}
+
+
+int8_t PMU::erConfigure(Argument* conf) {
+  local_log.concat("PMU::erConfigure(conf)\n");
+  flushLocalLog();
+  return 0;
+}
+
 
 
 /**
@@ -273,13 +292,14 @@ int8_t PMU::notify(ManuvrMsg* active_event) {
       return_value++;
       break;
     case DIGITABULUM_MSG_PMU_READ:
+      _ltc294x->refresh();
+      _bq24155->refresh();
       return_value++;
       break;
     default:
       return_value += EventReceiver::notify(active_event);
       break;
   }
-
   flushLocalLog();
   return return_value;
 }

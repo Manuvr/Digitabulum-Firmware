@@ -49,6 +49,30 @@ enum class ChargeState {
   UNDEF
 };
 
+// TODO: LiPo is the assumed chemistry.
+class BatteryOpts {
+  public:
+    const uint16_t capacity;       // The capacity of the battery in mAh.
+    const float    voltage_min;    // Voltage where battery is considered dead.
+    const float    voltage_weak;   // Voltage where battery is considered weak.
+    const float    voltage_float;  // Voltage where battery is considered charged.
+    const float    voltage_max;    // Maximum safe voltage.
+
+    BatteryOpts(const BatteryOpts* o) :
+      capacity(o->capacity),
+      voltage_min(o->voltage_min),
+      voltage_weak(o->voltage_weak),
+      voltage_float(o->voltage_float),
+      voltage_max(o->voltage_max) {};
+
+    BatteryOpts(uint16_t cap, float v_min, float v_w, float v_f, float v_max) :
+      capacity(cap),
+      voltage_min(v_min),
+      voltage_weak(v_w),
+      voltage_float(v_f),
+      voltage_max(v_max) {};
+};
+
 
 /**
 * Options for the PowerPlant.
@@ -58,6 +82,7 @@ class PowerPlantOpts {
     const uint8_t vs_pin;  // Which pin is bound to aux voltage select?
     const uint8_t re_pin;  // Which pin is bound to aux regulator enable?
     const uint8_t flags;   // Flags that the class should start with.
+
 
     PowerPlantOpts(const PowerPlantOpts* o) :
       vs_pin(o->vs_pin),
@@ -97,11 +122,12 @@ class PowerPlantOpts {
 
 class PMU : public EventReceiver {
   public:
-    PMU(BQ24155*, LTC294x*, const PowerPlantOpts*);
+    PMU(BQ24155*, LTC294x*, const PowerPlantOpts*, const BatteryOpts*);
     virtual ~PMU();
 
     /* Overrides from EventReceiver */
     int8_t notify(ManuvrMsg*);
+    int8_t erConfigure(Argument*);
     int8_t callback_proc(ManuvrMsg*);
     void printDebug(StringBuilder*);
     #if defined(MANUVR_CONSOLE_SUPPORT)
@@ -132,9 +158,12 @@ class PMU : public EventReceiver {
 
   private:
     const PowerPlantOpts _opts;
+    const BatteryOpts    _battery;
+    BQ24155*       _bq24155;
+    LTC294x*       _ltc294x;
+    //const BQ24155*       _bq24155;
+    //const LTC294x*       _ltc294x;
     ChargeState _charge_state = ChargeState::UNDEF;
-    BQ24155*    _bq24155;
-    LTC294x*    _ltc294x;
     ManuvrMsg   _periodic_pmu_read;
 
     static const char* getChargeStateString(ChargeState);
