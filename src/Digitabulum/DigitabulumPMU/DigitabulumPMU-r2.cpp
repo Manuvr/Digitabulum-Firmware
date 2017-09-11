@@ -116,11 +116,12 @@ PMU::PMU(BQ24155* charger, LTC294x* fuel_gauge, const PowerPlantOpts* o, const B
   // Flags are reliable at this point. So if the caller set flags indicating
   //   a given initial state for the auxililary regulator, it will be honored
   //   if possible.
-  // If no flags are given, the defaults behavior is for the aux regulator
+  // If no flags are given, the default behavior is for the aux regulator
   //   to remain powered down, with 3.3v as the default power output when it is
   //   enabled.
   // If a flag is set a certain way, but no pin control is possible, the flags
-  //   related to that feature effectively become constants.
+  //   related to that feature effectively become constants, and we will trust
+  //   that they reflect the state of the hardware.
   if (_opts.useVSPin()) {
     gpioDefine(_opts.vs_pin, GPIOMode::OUTPUT);
     setPin(_opts.vs_pin, !auxRegLowPower());
@@ -132,6 +133,8 @@ PMU::PMU(BQ24155* charger, LTC294x* fuel_gauge, const PowerPlantOpts* o, const B
 
   // Now... we have battery details. So we derive some settings for the two
   //   I2C chips we are dealing with.
+  _bq24155->batt_reg_voltage(_battery.voltage_max);
+  _bq24155->batt_weak_voltage(_battery.voltage_weak);
 
   // We'll probably want to check the PMIC periodically. Setup the schedule.
   _periodic_pmu_read.repurpose(DIGITABULUM_MSG_PMU_READ, (EventReceiver*) this);
@@ -196,6 +199,19 @@ int8_t PMU::auxRegLowPower(bool nu) {
   return -1;
 }
 
+/**
+* Debug support function.
+*
+* @param A pointer to a StringBuffer object to receive the output.
+*/
+void PMU::printBattery(StringBuilder* output) {
+  output->concatf("-- Battery (%.2fV)\n", _ltc294x->batteryVoltage());
+  output->concatf("\tCapacity %umAh\n", _battery.capacity);
+  output->concatf("\tDead     %.2fV\n", _battery.voltage_min);
+  output->concatf("\tWeak     %.2fV\n", _battery.voltage_weak);
+  output->concatf("\tFloat    %.2fV\n", _battery.voltage_float);
+  output->concatf("\tFull     %.2fV\n", _battery.voltage_max);
+}
 
 
 /*******************************************************************************
@@ -218,10 +234,10 @@ int8_t PMU::auxRegLowPower(bool nu) {
 void PMU::printDebug(StringBuilder* output) {
   EventReceiver::printDebug(output);
   const char* aux_reg_state = auxRegLowPower() ? "2.5v" : "3.3v";
-  output->concatf("-- CPU freq                  %.2f MHz\n", (double) platform.cpu_freq()/1000000.0);
-  output->concatf("-- VS/RE pins                %u/%u\n", _opts.vs_pin, _opts.re_pin);
-  output->concatf("-- Auxiliary regulator       %s\n", auxRegEnabled() ? aux_reg_state : "Disabled");
-  output->concatf("-- Charge state              %s\n", getChargeStateString());
+  output->concatf("-- CPU freq            %.2f MHz\n", (double) platform.cpu_freq()/1000000.0);
+  output->concatf("-- VS/RE pins          %u/%u\n", _opts.vs_pin, _opts.re_pin);
+  output->concatf("-- Auxiliary regulator %s\n", auxRegEnabled() ? aux_reg_state : "Disabled");
+  output->concatf("-- Charge state        %s\n", getChargeStateString());
   _ltc294x->printDebug(output);
   _bq24155->printDebug(output);
 }
@@ -292,8 +308,17 @@ int8_t PMU::notify(ManuvrMsg* active_event) {
       return_value++;
       break;
     case DIGITABULUM_MSG_PMU_READ:
-      _ltc294x->refresh();
-      _bq24155->refresh();
+      {
+        uint32_t ts = millis();
+        _ltc294x->refresh();
+        if (ts >= (_punch_timestamp + 29000)) {
+          // One every 32 seconds, the charger will stop.
+          _bq24155->punch_safety_timer();
+        }
+        else {
+          _bq24155->refresh();
+        }
+      }
       return_value++;
       break;
     default:
@@ -380,6 +405,10 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
         case 4:
           _bq24155->printRegisters(&local_log);
           break;
+        case 5:
+          printBattery(&local_log);
+          break;
+
         default:
           printDebug(&local_log);
       }
@@ -429,12 +458,6 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
     ///////////////////////
     // Gas guage
     ///////////////////////
-    case 'A':
-      if (_ltc294x->regRead(temp_int)) {
-        local_log.concatf("Failed to read register 0x%02x.\n", temp_int);
-      }
-      break;
-
     case 's':
       switch (temp_int) {
         case 1:
@@ -452,12 +475,6 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
     ///////////////////////
     // Charger
     ///////////////////////
-    case 'B':
-      if (_bq24155->regRead(temp_int)) {
-        local_log.concatf("Failed to read register 0x%02x.\n", temp_int);
-      }
-      break;
-
     case 'E':
     case 'e':
       local_log.concatf("%sabling battery charge...\n", (*(str) == 'E' ? "En" : "Dis"));
@@ -476,8 +493,8 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     case 'R':
-      local_log.concat("Resetting charger...\n");
-      _bq24155->put_charger_in_reset_mode();
+      local_log.concat("Resetting charger parameters...\n");
+      _bq24155->reset_charger_params();
       break;
 
     case 'u':   // USB host current limit.
@@ -499,11 +516,11 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
       break;
     case 'w':   // Battery weakness voltage
       if (temp_int) {
-        local_log.concatf("Setting battery weakness voltage to %d mV\n", temp_int);
-        _bq24155->batt_weak_voltage(temp_int);
+        local_log.concatf("Setting battery weakness voltage to %.2fV\n", input->position_as_double(1));
+        _bq24155->batt_weak_voltage(input->position_as_double(1));
       }
       else {
-        local_log.concatf("Batt weakness voltage:  %d mV\n", _bq24155->batt_weak_voltage());
+        local_log.concatf("Batt weakness voltage:  %.2fV\n", _bq24155->batt_weak_voltage());
       }
       break;
 

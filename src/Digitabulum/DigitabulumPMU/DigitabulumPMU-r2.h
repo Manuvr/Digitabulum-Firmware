@@ -134,7 +134,7 @@ class PMU : public EventReceiver {
       void procDirectDebugInstruction(StringBuilder*);
     #endif  //MANUVR_CONSOLE_SUPPORT
 
-
+    void printBattery(StringBuilder*);
     ChargeState getChargeState();
 
     /* Is the aux regulator enabled? */
@@ -164,6 +164,7 @@ class PMU : public EventReceiver {
     //const BQ24155*       _bq24155;
     //const LTC294x*       _ltc294x;
     ChargeState _charge_state = ChargeState::UNDEF;
+    uint32_t    _punch_timestamp = 0;
     ManuvrMsg   _periodic_pmu_read;
 
     static const char* getChargeStateString(ChargeState);
