@@ -168,32 +168,34 @@ ChargeState PMU::getChargeState() {
 * Functions specific to this class....                                         *
 *******************************************************************************/
 
-/*
+/**
 * Turns the regulator on or off.
 *
+* @param re True to enable the aux reg.
 * @return non-zero on error.
 */
-int8_t PMU::auxRegEnabled(bool nu) {
+int8_t PMU::auxRegEnabled(bool re) {
   if (_opts.useREPin()) {
     // Shutdown is achieved by pulling pin low.
-    setPin(_opts.re_pin, nu);
-    _er_set_flag(DIGITAB_PMU_FLAG_ENABLED, nu);
+    setPin(_opts.re_pin, re);
+    _er_set_flag(DIGITAB_PMU_FLAG_ENABLED, re);
     return 0;
   }
   return -1;
 }
 
 
-/*
+/**
 * Sets the regulator voltage to 2.5v or 3.3v.
 *
+* @param lpm True for low-power mode.
 * @return non-zero on error.
 */
-int8_t PMU::auxRegLowPower(bool nu) {
+int8_t PMU::auxRegLowPower(bool lpm) {
   if (_opts.useVSPin()) {
     // 2.5v mode is selected by pulling pin low.
-    setPin(_opts.vs_pin, !nu);
-    _er_set_flag(DIGITAB_PMU_FLAG_V_25, nu);
+    setPin(_opts.vs_pin, !lpm);
+    _er_set_flag(DIGITAB_PMU_FLAG_V_25, lpm);
     return 0;
   }
   return -1;
@@ -205,12 +207,27 @@ int8_t PMU::auxRegLowPower(bool nu) {
 * @param A pointer to a StringBuffer object to receive the output.
 */
 void PMU::printBattery(StringBuilder* output) {
-  output->concatf("-- Battery (%.2fV)\n", _ltc294x->batteryVoltage());
+  const uint8_t DBAR_WIDTH = 25;
+  float v  = _ltc294x->batteryVoltage();
+  float vp = _ltc294x->batteryPercentVoltage();
+  char* bar_buf = (char*) alloca(DBAR_WIDTH+1);
+  uint8_t mark = (vp/100.0f) * DBAR_WIDTH;
+  for (uint8_t i = 0; i < DBAR_WIDTH; i++) {
+    if (mark == i) {
+      *(bar_buf + i) = '|';
+    }
+    else {
+      *(bar_buf + i) = (i<mark) ? '=' : ' ';
+    }
+  }
+  *(bar_buf + DBAR_WIDTH) = '\0';
+
+  output->concatf("-- Battery (%.2fV)\n", v);
+  output->concatf("\t[%s] %.2f%%\n", bar_buf, vp);
+  output->concatf("\t%.2fV            %.2fV\n", _battery.voltage_min, _battery.voltage_max);
   output->concatf("\tCapacity %umAh\n", _battery.capacity);
-  output->concatf("\tDead     %.2fV\n", _battery.voltage_min);
   output->concatf("\tWeak     %.2fV\n", _battery.voltage_weak);
   output->concatf("\tFloat    %.2fV\n", _battery.voltage_float);
-  output->concatf("\tFull     %.2fV\n", _battery.voltage_max);
 }
 
 
@@ -349,6 +366,18 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
   }
 
   switch (c) {
+    ///////////////////////
+    // Common
+    ///////////////////////
+    case 'm':   // Set the system-wide power mode.
+      if (255 != temp_int) {
+        ManuvrMsg* event = Kernel::returnEvent(MANUVR_MSG_SYS_POWER_MODE, this);
+        event->addArg((uint8_t) temp_int);
+        EventReceiver::raiseEvent(event);
+        local_log.concatf("Power mode is now %d.\n", temp_int);
+      }
+      break;
+
     case 'p':
     case 'P':
       // Start or stop the periodic sensor read.
@@ -360,19 +389,6 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
       local_log.concatf("%s _periodic_pmu_read.\n", (*(str) == 'p' ? "Stopping" : "Starting"));
       break;
 
-    case 'm':   // Set the system-wide power mode.
-      if (255 != temp_int) {
-        ManuvrMsg* event = Kernel::returnEvent(MANUVR_MSG_SYS_POWER_MODE, this);
-        event->addArg((uint8_t) temp_int);
-        EventReceiver::raiseEvent(event);
-        local_log.concatf("Power mode is now %d.\n", temp_int);
-      }
-      break;
-
-
-    ///////////////////////
-    // Common
-    ///////////////////////
     case 'X':
     case 'x':
       local_log.concatf(
@@ -399,12 +415,6 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
         case 2:
           _bq24155->printDebug(&local_log);
           break;
-        case 3:
-          _ltc294x->printRegisters(&local_log);
-          break;
-        case 4:
-          _bq24155->printRegisters(&local_log);
-          break;
         case 5:
           printBattery(&local_log);
           break;
@@ -420,10 +430,6 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
           _ltc294x->init();
           break;
         case 2:
-          _bq24155->init();
-          break;
-        case 3:
-          _ltc294x->init();
           _bq24155->init();
           break;
         default:
@@ -444,9 +450,10 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
           _bq24155->refresh();
           break;
         case 3:
-          local_log.concat("Refreshing all.\n");
-          _bq24155->refresh();
-          _ltc294x->refresh();
+          _ltc294x->printRegisters(&local_log);
+          break;
+        case 4:
+          _bq24155->printRegisters(&local_log);
           break;
         default:
           local_log.concat("1: _ltc294x->refresh()\n");
@@ -505,6 +512,7 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
         local_log.concatf("USB current limit: %dmA\n", _bq24155->usb_current_limit());
       }
       break;
+
     case 'v':   // Battery regulation voltage
       if (temp_int) {
         local_log.concatf("Setting battery regulation voltage to %.2fV\n", input->position_as_double(1));
@@ -514,6 +522,7 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
         local_log.concatf("Batt reg voltage:  %.2fV\n", _bq24155->batt_reg_voltage());
       }
       break;
+
     case 'w':   // Battery weakness voltage
       if (temp_int) {
         local_log.concatf("Setting battery weakness voltage to %.2fV\n", input->position_as_double(1));
@@ -523,7 +532,6 @@ void PMU::procDirectDebugInstruction(StringBuilder *input) {
         local_log.concatf("Batt weakness voltage:  %.2fV\n", _bq24155->batt_weak_voltage());
       }
       break;
-
 
     default:
       EventReceiver::procDirectDebugInstruction(input);
