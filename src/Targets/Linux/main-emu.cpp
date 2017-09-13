@@ -92,8 +92,15 @@ const ADP8866Pins adp_opts(
   255   // IRQ
 );
 
+const BatteryOpts battery_opts (
+  1400,    // Battery capacity (in mAh)
+  3.60f,   // Battery dead (in volts)
+  3.70f,   // Battery weak (in volts)
+  4.15f,   // Battery float (in volts)
+  4.2f     // Battery max (in volts)
+);
+
 const LTC294xOpts gas_gauge_opts(
-  2600,   // We will assume a common 18650 for now. 2600mAh capacity.
   255,    // N/A (Alert pin)
   LTC294X_OPT_ACD_AUTO | LTC294X_OPT_INTEG_SENSE
 );
@@ -102,6 +109,12 @@ const BQ24155Opts charger_opts(
   68,   // Sense resistor is 68 mOhm.
   255,  // N/A (STAT)
   255   // N/A (ISEL)
+);
+
+const PowerPlantOpts powerplant_opts(
+  22,  // 2.5v select pin.
+  23,  // Aux regulator enable pin.
+  DIGITAB_PMU_FLAG_ENABLED  // Regulator enabled @3.3v
 );
 
 

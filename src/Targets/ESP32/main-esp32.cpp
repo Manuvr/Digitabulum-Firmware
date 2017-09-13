@@ -76,19 +76,35 @@ const ADP8866Pins adp_opts(
   18   // IO18 (IRQ)
 );
 
+
+const BatteryOpts battery_opts (
+  1400,    // Battery capacity (in mAh)
+  3.60f,   // Battery dead (in volts)
+  3.70f,   // Battery weak (in volts)
+  4.15f,   // Battery float (in volts)
+  4.2f     // Battery max (in volts)
+);
+
 const LTC294xOpts gas_gauge_opts(
-  2600,  // We will assume a common 18650 for now. 2600mAh capacity.
-  13     // IO13 (Alert pin)
+  13,     // IO13 (Alert pin)
+  LTC294X_OPT_ACD_AUTO | LTC294X_OPT_INTEG_SENSE
 );
 
 const BQ24155Opts charger_opts(
   68,  // Sense resistor is 68 mOhm.
   255, // N/A (STAT)
-  23   // IO23 (ISEL)
+  23,  // IO23 (ISEL)
+  BQ24155USBCurrent::LIMIT_800,  // Hardware limits (if any) on source draw..
+  BQ24155_FLAG_ISEL_HIGH  // We want to start the ISEL pin high.
+);
+
+const PowerPlantOpts powerplant_opts(
+  255, // 2.5v select pin is driven by the CPLD.
+  27,  // Aux regulator enable pin.
+  DIGITAB_PMU_FLAG_ENABLED  // Regulator enabled @3.3v
 );
 
 #define ESP32_LED_PIN             15  // This is an LED.
-#define ESP32_AUX_REGULATOR_PIN   27
 
 /*
 Pins
@@ -146,19 +162,14 @@ void app_main() {
   BQ24155 charger(&charger_opts);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &charger);
 
-  LTC294x gas_gauge(&gas_gauge_opts);
+  LTC294x gas_gauge(&gas_gauge_opts, battery_opts.capacity);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &gas_gauge);
 
-  PMU pmu(&charger, &gas_gauge);
+  PMU pmu(&charger, &gas_gauge, &powerplant_opts, &battery_opts);
   kernel->subscribe((EventReceiver*) &pmu);
 
   platform.bootstrap();
 
-
-  // This is the ~SHUTDOWN signal to the secondary regulator. Setting it high
-  //   will cause the CPLD board to be powered at 3.3v.
-  gpioDefine(ESP32_AUX_REGULATOR_PIN, GPIOMode::OUTPUT);
-  setPin(ESP32_AUX_REGULATOR_PIN, true);
 
   unsigned long ms_0 = millis();
   unsigned long ms_1 = ms_0;
