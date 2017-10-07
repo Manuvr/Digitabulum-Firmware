@@ -411,7 +411,7 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #include <Platform/Peripherals/SPI/SPIBusOp.h>
 #include <Platform/Platform.h>
 
-#define CPLD_MINIMUM_VERSION  0x0D
+#define CPLD_MINIMUM_VERSION  0x19
 #define CPLD_GUARD_BIT_VALUE  0x03
 
 
@@ -514,8 +514,8 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #define CPLD_CONF_BIT_INT_CLK    0x01  // Internal clock enable
 #define CPLD_CONF_BIT_IRQ_SCAN   0x02  // Disable IRQ scanning
 #define CPLD_CONF_BIT_IRQ_74     0x04  // Set IRQ bit-74
-#define CPLD_CONF_BIT_PWR_CONSRV 0x08  // Prevent bus driving on absent digits.
-#define CPLD_CONF_BIT_IRQ_STREAM 0x10  // Constantly stream IRQ data
+#define CPLD_CONF_BIT_IRQ_STREAM 0x08  // Constantly stream IRQ data
+#define CPLD_CONF_BIT_PWR_CONSRV 0x10  // Prevent bus driving on absent digits.
 #define CPLD_CONF_BIT_GPIO       0x20  // Set GPIO source
 #define CPLD_CONF_BIT_DEN_AG_C   0x40  // Set DEN_AG pin for the C IMU
 #define CPLD_CONF_BIT_DEN_AG_MC  0x80  // Set DEN_AG pin for the MC IMU
@@ -725,6 +725,8 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
 
     inline bool    _conf_bits_set(uint8_t x) {  return (x == (cpld_conf_value & x)); };
 
+    void _digit_irq_force(uint8_t digit, bool state);
+
     void _deinit();
     int8_t readRegister(uint8_t reg_addr);
     int8_t writeRegister(uint8_t reg_addr, uint8_t val);
@@ -755,10 +757,11 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     static SPIBusOp preallocated_bus_jobs[CPLD_SPI_PREALLOC_COUNT];// __attribute__ ((section(".ccm")));
 
     /* Register representations. */
-    static uint8_t cpld_version;        // CPLD version byte.
-    static uint8_t cpld_conf_value;     // Configuration.
-    static uint8_t forsaken_digits;     // Forsaken digits.
-    static uint8_t cpld_wakeup_source;  // WAKEUP mapping.
+    static uint8_t  cpld_version;        // CPLD version byte.
+    static uint8_t  cpld_conf_value;     // Configuration.
+    static uint8_t  forsaken_digits;     // Forsaken digits.
+    static uint8_t  cpld_wakeup_source;  // WAKEUP mapping.
+    static uint32_t _irq_frames_rxd;     // How many IRQ frames have arrived.
 };
 
 #endif

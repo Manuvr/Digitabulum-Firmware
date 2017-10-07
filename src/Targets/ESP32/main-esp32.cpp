@@ -142,22 +142,8 @@ void app_main() {
   platform.platformPreInit();
   Kernel* kernel = platform.kernel();
 
-  CPLDDriver _cpld(&cpld_pins);
-  kernel->subscribe(&_cpld);
-
-  ManuManager _legend_manager(&_cpld);
-  kernel->subscribe(&_legend_manager);
-
   I2CAdapter i2c(&i2c_opts);
   kernel->subscribe(&i2c);
-
-  ATECC508 atec(&atecc_opts);
-  i2c.addSlaveDevice((I2CDevice*) &atec);
-  kernel->subscribe((EventReceiver*) &atec);
-
-  ADP8866 leds(&adp_opts);
-  i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
-  kernel->subscribe((EventReceiver*) &leds);
 
   BQ24155 charger(&charger_opts);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &charger);
@@ -168,8 +154,21 @@ void app_main() {
   PMU pmu(&charger, &gas_gauge, &powerplant_opts, &battery_opts);
   kernel->subscribe((EventReceiver*) &pmu);
 
-  platform.bootstrap();
+  ADP8866 leds(&adp_opts);
+  i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
+  kernel->subscribe((EventReceiver*) &leds);
 
+  CPLDDriver _cpld(&cpld_pins);
+  kernel->subscribe(&_cpld);
+
+  ManuManager _legend_manager(&_cpld);
+  kernel->subscribe(&_legend_manager);
+
+  ATECC508 atec(&atecc_opts);
+  i2c.addSlaveDevice((I2CDevice*) &atec);
+  kernel->subscribe((EventReceiver*) &atec);
+
+  platform.bootstrap();
 
   unsigned long ms_0 = millis();
   unsigned long ms_1 = ms_0;

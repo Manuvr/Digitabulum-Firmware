@@ -118,10 +118,13 @@ void cpld_wakeup_isr(){
 * Static members and initializers should be located here.
 *******************************************************************************/
 /* Register representations. */
-uint8_t CPLDDriver::cpld_version       = 0;  // CPLD version byte.
-uint8_t CPLDDriver::cpld_conf_value    = 0;  // Configuration.
-uint8_t CPLDDriver::forsaken_digits    = 0;  // Forsaken digits.
-uint8_t CPLDDriver::cpld_wakeup_source = 0;  // WAKEUP mapping.
+uint8_t  CPLDDriver::cpld_version       = 0;  // CPLD version byte.
+uint8_t  CPLDDriver::cpld_conf_value    = 0;  // Configuration.
+uint8_t  CPLDDriver::forsaken_digits    = 0;  // Forsaken digits.
+uint8_t  CPLDDriver::cpld_wakeup_source = 0;  // WAKEUP mapping.
+uint32_t CPLDDriver::_irq_frames_rxd    = 0;  // How many IRQ frames have arrived.
+
+
 
 SPIBusOp  CPLDDriver::preallocated_bus_jobs[CPLD_SPI_PREALLOC_COUNT];
 
@@ -197,18 +200,56 @@ const char* CPLDDriver::digitStateToString(DigitState x) {
 
 
 // NO ERROR CHECKING! Don't call this with an argument >79.
-bool irq_is_presently_high(uint8_t bit) {
+bool irq_is_presently_high(const uint8_t bit) {
   const uint8_t bit_offset  = bit & 0x07;  // Cheaper than modulus 8.
   const uint8_t byte_offset = bit >> 3;    // Cheaper than div by 8.
-  return ((_irq_data_ptr[byte_offset] & (0x01 << bit_offset)) != 0);
+  return ((_irq_data_ptr[byte_offset] & (0x80 >> bit_offset)) != 0);
 }
 
 // NO ERROR CHECKING! Don't call this with an argument >79.
-bool irq_demands_service(uint8_t bit) {
+bool irq_demands_service(const uint8_t bit) {
   const uint8_t bit_offset  = bit & 0x07;  // Cheaper than modulus 8.
   const uint8_t byte_offset = bit >> 3;    // Cheaper than div by 8.
-  return ((_irq_accum[byte_offset] & (0x01 << bit_offset)) != 0);
+  return ((_irq_accum[byte_offset] & (0x80 >> bit_offset)) != 0);
 }
+
+/**
+* Returns at most 12-bits of IRQ data for the given digit.
+*
+* @return True if the IRQ data confirms a digit.
+*/
+uint16_t irq_digit_slice_service(DigitPort x) {
+  uint16_t ret = 0;
+  // TODO: There is a way to do this without branching.
+  switch (x) {
+    case DigitPort::MC:
+      ret = _irq_accum[0];
+      break;
+    case DigitPort::PORT_1:
+      ret = (uint16_t) (_irq_accum[1] & 0xFF) << 4;
+      ret += (_irq_accum[2] >> 4);
+      break;
+    case DigitPort::PORT_2:
+      ret = (uint16_t) (_irq_accum[2] & 0x0F) << 8;
+      ret += _irq_accum[3];
+      break;
+    case DigitPort::PORT_3:
+      ret = (uint16_t) (_irq_accum[4] & 0xFF) << 4;
+      ret += (_irq_accum[5] >> 4);
+      break;
+    case DigitPort::PORT_4:
+      ret = (uint16_t) (_irq_accum[5] & 0x0F) << 8;
+      ret += _irq_accum[6];
+      break;
+    case DigitPort::PORT_5:
+      ret = (uint16_t) (_irq_accum[7] & 0xFF) << 4;
+      ret += (_irq_accum[8] >> 4);
+      break;
+    default:
+      break;
+  }
+  return ret;
+};
 
 
 /*******************************************************************************
@@ -238,7 +279,7 @@ CPLDDriver::CPLDDriver(const CPLDPins* p) : EventReceiver("CPLDDriver"), BusAdap
 
   SPIBusOp::event_spi_queue_ready.repurpose(DIGITABULUM_MSG_SPI_QUEUE_READY, (EventReceiver*) this);
   SPIBusOp::event_spi_queue_ready.incRefs();
-  SPIBusOp::event_spi_queue_ready.specific_target    = (EventReceiver*) this;
+  SPIBusOp::event_spi_queue_ready.specific_target = (EventReceiver*) this;
   SPIBusOp::event_spi_queue_ready.priority(5);
 
   // Mark all of our preallocated SPI jobs as "No Reap" and pass them into the prealloc queue.
@@ -848,6 +889,22 @@ void CPLDDriver::setCPLDConfig(uint8_t mask, bool state) {
 }
 
 /**
+* Calling this function will enable or disable a given digit's IRQ shift register.
+*
+* @param  mask   Combination of flags to change.
+* @param  state  Should the flags be cleared or set?
+*/
+void CPLDDriver::_digit_irq_force(uint8_t d, bool state) {
+  if (state) {
+    writeRegister(CPLD_REG_DIGIT_FORSAKE, (forsaken_digits | (1 << d)));
+  }
+  else {
+    writeRegister(CPLD_REG_DIGIT_FORSAKE, (forsaken_digits & ~(1 << d)));
+  }
+}
+
+
+/**
 * Reads and returns the CPLD version. We need to use this for keeping
 *   compatability with older CPLD versions.
 *
@@ -909,72 +966,110 @@ bool CPLDDriver::digitExists(DigitPort x) {
 * @return the minimum number of signals outstanding, or -1 on error.
 */
 int8_t CPLDDriver::iiu_group_irq() {
-  int8_t return_value = -1;
-  if (CPLD_GUARD_BIT_VALUE == (_irq_accum[9] & 0x0F)) {
-    return_value = 0;
-    // This class cares about these IRQs...
-    // 68  Metacarpals present.
-    // 69  Digit 1 present.
-    // 70  Digit 2 present.
-    // 71  Digit 3 present.
-    // 72  Digit 4 present.
-    // 73  Digit 5 present.
-    // 74  CONFIG register, bit 2.
-    // 75  CPLD_OE
+  int8_t return_value = 0;
+  // This class cares about these IRQs...
+  // 68  Metacarpals present.
+  // 69  Digit 1 present.
+  // 70  Digit 2 present.
+  // 71  Digit 3 present.
+  // 72  Digit 4 present.
+  // 73  Digit 5 present.
+  // 74  CONFIG register, bit 2.
+  // 75  CPLD_OE
 
-    // TODO: Next CPLD revision should align these bits better.
-    if (_irq_accum[8] & 0xF0) {  // We only care about the upper-half here.
-      uint8_t reset_bits = 0xFF;   // These are bit we wish to preserve.
-      if (_irq_accum[8] & 0x10) {
-        reset_bits &= ~0x10;
-        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): MC PRESENT %s\n", irq_is_presently_high(68) ? "L->H":"H->L");
-      }
-      if (_irq_accum[8] & 0x20) {
-        reset_bits &= ~0x20;
-        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_1 %s\n", irq_is_presently_high(69) ? "L->H":"H->L");
-      }
-      if (_irq_accum[8] & 0x40) {
-        reset_bits &= ~0x40;
-        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_2 %s\n", irq_is_presently_high(70) ? "L->H":"H->L");
-      }
-      if (_irq_accum[8] & 0x80) {
-        reset_bits &= ~0x80;
-        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_3 %s\n", irq_is_presently_high(71) ? "L->H":"H->L");
-      }
-      _irq_accum[8] &= reset_bits;
+  if (_irq_accum[8] & 0x0F) {  // We only care about the bottom-half here.
+    if (_irq_accum[8] & 0x08) {
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): MC PRESENT %s\n", irq_is_presently_high(68) ? "L->H":"H->L");
     }
+    if (_irq_accum[8] & 0x04) {
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_1 %s\n", irq_is_presently_high(69) ? "L->H":"H->L");
+    }
+    if (_irq_accum[8] & 0x02) {
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_2 %s\n", irq_is_presently_high(70) ? "L->H":"H->L");
+    }
+    if (_irq_accum[8] & 0x01) {
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_3 %s\n", irq_is_presently_high(71) ? "L->H":"H->L");
+    }
+  }
 
-    if (_irq_accum[9] & 0xF0) {  // We only care about the upper-half here.
-      uint8_t reset_bits = 0xFF;   // These are bit we wish to preserve.
-      if (_irq_accum[9] & 0x80) {
-        reset_bits &= ~0x80;
-        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_4 %s\n", irq_is_presently_high(72) ? "L->H":"H->L");
-      }
-      if (_irq_accum[9] & 0x40) {
-        reset_bits &= ~0x40;
-        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_5 %s\n", irq_is_presently_high(73) ? "L->H":"H->L");
-      }
-      if (_irq_accum[9] & 0x20) {
-        reset_bits &= ~0x20;
-        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): CONFIG[2] %s\n", irq_is_presently_high(74) ? "L->H":"H->L");
-      }
-      if (_irq_accum[9] & 0x10) {
-        reset_bits &= ~0x10;
-        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): CPLD_OE %s.\n", irq_is_presently_high(75) ? "L->H":"H->L");
-      }
-      _irq_accum[9] &= reset_bits;  // Clear serviced bits.
+  if (_irq_accum[9] & 0xFC) {  // We only care about the top-6.
+    if (_irq_accum[9] & 0x80) {
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_4 %s\n", irq_is_presently_high(72) ? "L->H":"H->L");
     }
+    if (_irq_accum[9] & 0x40) {
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_5 %s\n", irq_is_presently_high(73) ? "L->H":"H->L");
+    }
+    if (_irq_accum[9] & 0x20) {
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): CONFIG[2] %s\n", irq_is_presently_high(74) ? "L->H":"H->L");
+    }
+    if (_irq_accum[9] & 0x10) {
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): CPLD_OE %s.\n", irq_is_presently_high(75) ? "L->H":"H->L");
+    }
+    if (_irq_accum[9] & 0x08) {
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): IRQ76 %s.\n", irq_is_presently_high(76) ? "L->H":"H->L");
+    }
+    if (_irq_accum[9] & 0x04) {
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): IRQ77 %s.\n", irq_is_presently_high(77) ? "L->H":"H->L");
+    }
+  }
 
-    // Now we will scan across the IMU signals looking for the data ready signals.
-    // If all the present digits have their signals raised, we fire the frame
-    //   read for that sensor aspect.
-    bool fire_m = true;
-    bool fire_i = true;
-    for (int i = 0; i < 9; i++) {  // We don't care about the last byte.
-      if (_irq_accum[i]) {
-        return_value++;
-      }
+  // Now we will scan across the IMU signals looking for the data ready signals.
+  // If all the present digits have their signals raised, we fire the frame
+  //   read for that sensor aspect.
+  uint16_t irq_svc_slice = irq_digit_slice_service(DigitPort::MC);
+
+  if (irq_svc_slice & 0x0F) {
+    // The first 4-bits of data are not subject to guards, since the IMU is on
+    //   the PCB with the CPLD and shift register.
+    if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): C 0x%02x\n", (_irq_accum[0] & 0x0F));
+  }
+
+  if (digitExists(DigitPort::MC)) {
+    // The top 4-bits are only observed if the MC unit is connected.
+    if (irq_svc_slice & 0xF0) {
+      // Ship IRQ to MC IMU.
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): MC 0x%02x\n", (_irq_accum[0] & 0xF0));
     }
+  }
+
+  if (digitExists(DigitPort::PORT_1)) {
+    irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_1);
+    if (irq_svc_slice) {
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): PORT_1 0x%03x\n", irq_svc_slice);
+    }
+  }
+
+  if (digitExists(DigitPort::PORT_2)) {
+    irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_2);
+    if (irq_svc_slice) {
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): PORT_2 0x%03x\n", irq_svc_slice);
+    }
+  }
+
+  if (digitExists(DigitPort::PORT_3)) {
+    irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_3);
+    if (irq_svc_slice) {
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): PORT_3 0x%03x\n", irq_svc_slice);
+    }
+  }
+
+  if (digitExists(DigitPort::PORT_4)) {
+    irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_4);
+    if (irq_svc_slice) {
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): PORT_4 0x%03x\n", irq_svc_slice);
+    }
+  }
+
+  if (digitExists(DigitPort::PORT_5)) {
+    irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_5);
+    if (irq_svc_slice) {
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): PORT_5 0x%03x\n", irq_svc_slice);
+    }
+  }
+
+  // Mark everything as serviced.
+  for (int i = 0; i < 10; i++) {
+    _irq_accum[i] = 0;
   }
   flushLocalLog();
   return return_value;
@@ -1069,8 +1164,6 @@ int8_t CPLDDriver::callback_proc(ManuvrMsg* event) {
   /* Some class-specific set of conditionals below this line. */
   switch (event->eventCode()) {
     case DIGITABULUM_MSG_IMU_IRQ_RAISED:
-      // Wipe the service array. TODO: This is not concurrency-safe.
-      for (int i = 0; i < 10; i++) { _irq_accum[i] = 0; }
       break;
     case DIGITABULUM_MSG_SPI_QUEUE_READY:
       return_value = ((work_queue.size() > 0) || (nullptr != current_job)) ? EVENT_CALLBACK_RETURN_RECYCLE : return_value;
@@ -1112,7 +1205,7 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
       // We scan the IRQ list for signals we care about and let the ManuManager
       //   do the same.
       iiu_group_irq();
-      return_value = 1;
+      return_value++;
       break;
     case DIGITABULUM_MSG_SPI_QUEUE_READY:
       advance_work_queue();
@@ -1185,10 +1278,10 @@ void CPLDDriver::printDebug(StringBuilder* output) {
   }
   output->concatf("-- DEN_AG (C/MC)       %s / %s\n", (_conf_bits_set(CPLD_CONF_BIT_DEN_AG_C) ? "on":"off"), (_conf_bits_set(CPLD_CONF_BIT_DEN_AG_MC) ? "on":"off"));
   output->concatf("-- CPLD_GPIO           %s\n", (_conf_bits_set(CPLD_CONF_BIT_GPIO) ? "hi":"lo"));
-  output->concatf("-- Bus power conserve  %s\n--\n", ((cpld_conf_value & CPLD_CONF_BIT_PWR_CONSRV) ? "on":"off"));
+  output->concatf("-- Bus power conserve  %s\n", ((cpld_conf_value & CPLD_CONF_BIT_PWR_CONSRV) ? "on":"off"));
+  output->concatf("-- Forsaken:           %02x\n--\n", forsaken_digits);
 
 
-  printHardwareState(output);
   if (getVerbosity() > 2) {
     output->concatf("-- Guarding queue      %s\n",   (_er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no"));
     output->concatf("-- spi_cb_per_event    %d\n\n", spi_cb_per_event);
@@ -1216,6 +1309,8 @@ void CPLDDriver::printIRQs(StringBuilder* output) {
     (irq_is_presently_high(74) ? '1':'0')
   );
   output->concatf("-- OE Pin              %c\n", (irq_is_presently_high(75) ? '1':'0'));
+  output->concatf("-- Frames              %08x\n", _irq_frames_rxd);
+
   output->concatf("-- Valid IRQ buffer    %d", _irq_data_ptr == _irq_data_0 ? 0 : 1);
 
   output->concat("\n--    _irq_data_0:     ");
@@ -1237,8 +1332,11 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder* input) {
   int temp_int = ((*(str) != 0) ? atoi((char*) str+1) : 0);
 
   switch (*(str)) {
-    case 'i':        // Readback test
+    case 'i':        // Info print
       switch (temp_int) {
+        case 0:
+          printIRQs(&local_log);
+          break;
         case 1:
           getCPLDVersion();
           break;
@@ -1349,6 +1447,11 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder* input) {
       local_log.concatf("WAKEUP ISR bound to IRQ signal %d.\n", temp_int);
       setWakeupSignal(temp_int);
       break;
+    case 'X':
+    case 'x':
+      local_log.concatf("_digit_irq_force(%u, %c)\n", temp_int, (*(str) == 'X' ? '1' : '0'));
+      _digit_irq_force(temp_int, (*(str) == 'X'));
+      break;
     case 'E':
     case 'e':
       local_log.concatf("%s IRQ 74.\n", (*(str) == 'E' ? "Setting" : "Clearing"));
@@ -1379,6 +1482,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder* input) {
       local_log.concatf("DEN_AG Metacarpals(%s)\n", (*(str) == '}' ? "true" : "false"));
       enableMetacarpalAG(*(str) == '}');
       break;
+
     case 'r':  /* Reset the CPLD. */
       reset();
       break;

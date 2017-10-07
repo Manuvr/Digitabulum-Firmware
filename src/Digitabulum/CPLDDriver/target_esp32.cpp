@@ -96,7 +96,8 @@ static lldesc_t _ll_tx_0;
 // This will always be the LL for the first four throw-away bytes.
 static lldesc_t _ll_rx_0;
 
-
+// TODO: Need to decide how to use this.
+//esp_sleep_enable_ext0_wakeup(_pins.irq, 0);  // Wakeup on wakeup low.
 
 static SPIBusOp* _threaded_op = nullptr;
 
@@ -214,41 +215,43 @@ static void IRAM_ATTR spi2_isr(void *arg) {
 */
 static void IRAM_ATTR spi3_isr(void *arg) {
   if (SPI3.slave.trans_done) {
-    uint8_t* hw_buf;
+    uint8_t* hw_buf = (uint8_t*) &SPI3.data_buf[0];
     uint8_t* prior_buf;
 
-    // TODO: Would be better to use the hardware's idea of buffer.
-    if (_irq_data_ptr == _irq_data_0) {  // Double-buffer "Tock"
-      prior_buf     = (uint8_t*) _irq_data_0;
-      _irq_data_ptr = (uint8_t*) _irq_data_1;
-    }
-    else {  // Double-buffer "Tick"
-      prior_buf     = (uint8_t*) _irq_data_1;
-      _irq_data_ptr = (uint8_t*) _irq_data_0;
-    }
-    hw_buf        = (uint8_t*) &SPI3.data_buf[0];
+    if (CPLD_GUARD_BIT_VALUE == (*(hw_buf + 9) & 0x0F)) {
+      // TODO: Would be better to use the hardware's idea of buffer.
+      if (_irq_data_ptr == _irq_data_0) {  // Double-buffer "Tock"
+        prior_buf     = (uint8_t*) _irq_data_0;
+        _irq_data_ptr = (uint8_t*) _irq_data_1;
+      }
+      else {  // Double-buffer "Tick"
+        prior_buf     = (uint8_t*) _irq_data_1;
+        _irq_data_ptr = (uint8_t*) _irq_data_0;
+      }
 
-    // TODO: Code below will be better.
-    //if (SPI3.user.usr_mosi_highpart) {  // Double-buffer "Tock"
-    //  hw_buf        = (uint8_t*) &SPI3.data_buf[8];
-    //  prior_buf     = (uint8_t*) _irq_data_0;
-    //  _irq_data_ptr = (uint8_t*) _irq_data_1;
-    //  SPI3.user.usr_mosi_highpart = 0;
-    //}
-    //else {  // Double-buffer "Tick"
-    //  hw_buf        = (uint8_t*) &SPI3.data_buf[0];
-    //  prior_buf     = (uint8_t*) _irq_data_1;
-    //  _irq_data_ptr = (uint8_t*) _irq_data_0;
-    //  SPI3.user.usr_mosi_highpart = 1;
-    //}
+      // TODO: Code below will be better.
+      //if (SPI3.user.usr_mosi_highpart) {  // Double-buffer "Tock"
+      //  hw_buf        = (uint8_t*) &SPI3.data_buf[8];
+      //  prior_buf     = (uint8_t*) _irq_data_0;
+      //  _irq_data_ptr = (uint8_t*) _irq_data_1;
+      //  SPI3.user.usr_mosi_highpart = 0;
+      //}
+      //else {  // Double-buffer "Tick"
+      //  hw_buf        = (uint8_t*) &SPI3.data_buf[0];
+      //  prior_buf     = (uint8_t*) _irq_data_1;
+      //  _irq_data_ptr = (uint8_t*) _irq_data_0;
+      //  SPI3.user.usr_mosi_highpart = 1;
+      //}
+      //CPLDDriver::_irq_frames_rxd++;
 
-    for (int i = 0; i < 10; i++) {
-      *(_irq_data_ptr + i) = *(hw_buf + i);
-      _irq_diff[i]   = prior_buf[i] ^ _irq_data_ptr[i];
-      _irq_accum[i] |= _irq_diff[i];
+      for (int i = 0; i < 10; i++) {
+        *(_irq_data_ptr + i) = *(hw_buf + i);
+        _irq_diff[i]   = prior_buf[i] ^ _irq_data_ptr[i];
+        _irq_accum[i] |= _irq_diff[i];
+      }
+
+      Kernel::isrRaiseEvent(&_irq_data_arrival);   // TODO: Audit for mem layout.
     }
-
-    Kernel::isrRaiseEvent(&_irq_data_arrival);   // TODO: Audit for mem layout.
     SPI3.slave.trans_done  = 0;  // Clear interrupt.
     SPI3.cmd.usr = 1;  // Start the transfer afresh.
     return;
