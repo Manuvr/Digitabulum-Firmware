@@ -72,6 +72,12 @@ volatile static uint8_t* _irq_data_1   = &(_irq_data[10]);  // Convenience
 volatile static uint8_t* _irq_diff     = &(_irq_data[20]);  // Convenience
 volatile static uint8_t* _irq_accum    = &(_irq_data[30]);  // Convenience
 volatile static uint8_t* _irq_data_ptr = _irq_data_0;  // Used for block-wise access.
+volatile static uint32_t _irq_frames_rxd    = 0;  // How many IRQ frames have arrived.
+volatile static uint32_t _irq_latency_0    = 0;  // IRQ latency discovery.
+volatile static uint32_t _irq_latency_1    = 0;  // IRQ latency discovery.
+volatile static uint32_t _irq_latency_2    = 0;  // IRQ latency discovery.
+
+
 
 /* This message is dispatched when IRQ data changes. */
 ManuvrMsg _irq_data_arrival;
@@ -122,7 +128,7 @@ uint8_t  CPLDDriver::cpld_version       = 0;  // CPLD version byte.
 uint8_t  CPLDDriver::cpld_conf_value    = 0;  // Configuration.
 uint8_t  CPLDDriver::forsaken_digits    = 0;  // Forsaken digits.
 uint8_t  CPLDDriver::cpld_wakeup_source = 0;  // WAKEUP mapping.
-uint32_t CPLDDriver::_irq_frames_rxd    = 0;  // How many IRQ frames have arrived.
+uint8_t  CPLDDriver::irq76_conf         = 0;  // Aggregated IRQ settings.
 
 
 
@@ -625,9 +631,9 @@ int8_t CPLDDriver::advance_work_queue() {
 
       /* Cases below ought to be handled by ISR flow... */
       case XferState::ADDR:
-        Kernel::log("####################### advance_operation entry\n");
+        //Kernel::log("####################### advance_operation entry\n");
         current_job->advance_operation(0, 0);
-        local_log.concat("####################### advance_operation exit\n");
+        //local_log.concat("####################### advance_operation exit\n");
         current_job->printDebug(&local_log);
         flushLocalLog();
         break;
@@ -916,6 +922,10 @@ uint8_t CPLDDriver::getCPLDVersion() {
 }
 
 
+/*******************************************************************************
+* This is where IRQ-related functions live.                                    *
+*******************************************************************************/
+
 /**
 * Used by the ManuManager to easily check for a digit's IRQ validity.
 * Pulls directly from the most-recent valid IRQ buffer, so this check is fairly
@@ -956,17 +966,17 @@ bool CPLDDriver::digitExists(DigitPort x) {
 };
 
 
-/*******************************************************************************
-* This is where IMU-related functions live.                                    *
-*******************************************************************************/
-
 /**
+* Processes the IRQ message from the CPLD. If the driver is also servicing IRQs,
+*   per-IMU signal groups will be passed to the ManuManager.
 *
-*
-* @return the minimum number of signals outstanding, or -1 on error.
+* @return non-zero on error.
 */
 int8_t CPLDDriver::iiu_group_irq() {
   int8_t return_value = 0;
+  uint32_t _irq_time = micros();
+  const char* l_2_h = "L->H";
+  const char* h_2_l = "H->L";
   // This class cares about these IRQs...
   // 68  Metacarpals present.
   // 69  Digit 1 present.
@@ -976,94 +986,146 @@ int8_t CPLDDriver::iiu_group_irq() {
   // 73  Digit 5 present.
   // 74  CONFIG register, bit 2.
   // 75  CPLD_OE
+  // 76  Aggregated IRQ
+  // 77  Aggregated IRQ
 
   if (_irq_accum[8] & 0x0F) {  // We only care about the bottom-half here.
     if (_irq_accum[8] & 0x08) {
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): MC PRESENT %s\n", irq_is_presently_high(68) ? "L->H":"H->L");
+      if (getVerbosity() > 4) local_log.concatf("MC PRESENT %s\n", irq_is_presently_high(68) ? l_2_h : h_2_l);
     }
     if (_irq_accum[8] & 0x04) {
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_1 %s\n", irq_is_presently_high(69) ? "L->H":"H->L");
+      if (getVerbosity() > 4) local_log.concatf("Digit_1 %s\n", irq_is_presently_high(69) ? l_2_h : h_2_l);
     }
     if (_irq_accum[8] & 0x02) {
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_2 %s\n", irq_is_presently_high(70) ? "L->H":"H->L");
+      if (getVerbosity() > 4) local_log.concatf("Digit_2 %s\n", irq_is_presently_high(70) ? l_2_h : h_2_l);
     }
     if (_irq_accum[8] & 0x01) {
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_3 %s\n", irq_is_presently_high(71) ? "L->H":"H->L");
+      if (getVerbosity() > 4) local_log.concatf("Digit_3 %s\n", irq_is_presently_high(71) ? l_2_h : h_2_l);
     }
   }
 
   if (_irq_accum[9] & 0xFC) {  // We only care about the top-6.
     if (_irq_accum[9] & 0x80) {
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_4 %s\n", irq_is_presently_high(72) ? "L->H":"H->L");
+      if (getVerbosity() > 4) local_log.concatf("Digit_4 %s\n", irq_is_presently_high(72) ? l_2_h : h_2_l);
     }
     if (_irq_accum[9] & 0x40) {
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): Digit_5 %s\n", irq_is_presently_high(73) ? "L->H":"H->L");
+      if (getVerbosity() > 4) local_log.concatf("Digit_5 %s\n", irq_is_presently_high(73) ? l_2_h : h_2_l);
     }
     if (_irq_accum[9] & 0x20) {
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): CONFIG[2] %s\n", irq_is_presently_high(74) ? "L->H":"H->L");
+      if (0 == _irq_latency_2) {
+        _irq_latency_2 = _irq_time;
+        if (getVerbosity() > 4) local_log.concatf("IRQ latency is %u us.\n", _irq_latency_2);
+      }
     }
     if (_irq_accum[9] & 0x10) {
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): CPLD_OE %s.\n", irq_is_presently_high(75) ? "L->H":"H->L");
+      if (getVerbosity() > 4) local_log.concatf("CPLD_OE %s.\n", irq_is_presently_high(75) ? l_2_h : h_2_l);
     }
     if (_irq_accum[9] & 0x08) {
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): IRQ76 %s.\n", irq_is_presently_high(76) ? "L->H":"H->L");
+      if (getVerbosity() > 4) local_log.concatf("IRQ76 %s.\n", irq_is_presently_high(76) ? l_2_h : h_2_l);
     }
     if (_irq_accum[9] & 0x04) {
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): IRQ77 %s.\n", irq_is_presently_high(77) ? "L->H":"H->L");
+      if (getVerbosity() > 4) local_log.concatf("IRQ77 %s.\n", irq_is_presently_high(77) ? l_2_h : h_2_l);
     }
   }
 
-  // Now we will scan across the IMU signals looking for the data ready signals.
-  // If all the present digits have their signals raised, we fire the frame
-  //   read for that sensor aspect.
-  uint16_t irq_svc_slice = irq_digit_slice_service(DigitPort::MC);
+  if (irq_service_enabled()) {
+    // Now we will scan across the IMU signals looking for the data ready signals.
+    // If all the present digits have their signals raised, we fire the frame
+    //   read for that sensor aspect.
+    uint16_t irq_svc_slice = irq_digit_slice_service(DigitPort::MC);
 
-  if (irq_svc_slice & 0x0F) {
-    // The first 4-bits of data are not subject to guards, since the IMU is on
-    //   the PCB with the CPLD and shift register.
-    if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): C 0x%02x\n", (_irq_accum[0] & 0x0F));
-  }
-
-  if (digitExists(DigitPort::MC)) {
-    // The top 4-bits are only observed if the MC unit is connected.
-    if (irq_svc_slice & 0xF0) {
-      // Ship IRQ to MC IMU.
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): MC 0x%02x\n", (_irq_accum[0] & 0xF0));
+    if (irq_svc_slice & 0x0F) {
+      // The first 4-bits of data are not subject to guards, since the IMU is on
+      //   the PCB with the CPLD and shift register.
+      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): C 0x%02x\n", (_irq_accum[0] & 0x0F));
     }
-  }
 
-  if (digitExists(DigitPort::PORT_1)) {
-    irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_1);
-    if (irq_svc_slice) {
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): PORT_1 0x%03x\n", irq_svc_slice);
+    if (digitExists(DigitPort::MC)) {
+      // The top 4-bits are only observed if the MC unit is connected.
+      if (irq_svc_slice & 0xF0) {
+        // Ship IRQ to MC IMU.
+        if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): MC 0x%02x\n", (_irq_accum[0] & 0xF0));
+      }
     }
-  }
 
-  if (digitExists(DigitPort::PORT_2)) {
-    irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_2);
-    if (irq_svc_slice) {
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): PORT_2 0x%03x\n", irq_svc_slice);
+    if (digitExists(DigitPort::PORT_1)) {
+      const char* l_tag = "iiu_group_irq(PORT_1::";
+      irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_1);
+      if (irq_svc_slice) {
+        if (irq_svc_slice & 0x0F00) {  // Distal
+          if (getVerbosity() > 4) local_log.concatf("%sDIST): 0x%x\n", l_tag, (irq_svc_slice >> 8) & 0x000F);
+        }
+        if (irq_svc_slice & 0x00F0) {  // Intermediate
+          if (getVerbosity() > 4) local_log.concatf("%sINTR): 0x%x\n", l_tag, (irq_svc_slice >> 4) & 0x000F);
+        }
+        if (irq_svc_slice & 0x000F) {  // Proximal
+          if (getVerbosity() > 4) local_log.concatf("%sPROX): 0x%x\n", l_tag, irq_svc_slice & 0x000F);
+        }
+      }
     }
-  }
 
-  if (digitExists(DigitPort::PORT_3)) {
-    irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_3);
-    if (irq_svc_slice) {
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): PORT_3 0x%03x\n", irq_svc_slice);
+    if (digitExists(DigitPort::PORT_2)) {
+      const char* l_tag = "iiu_group_irq(PORT_2::";
+      irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_2);
+      if (irq_svc_slice) {
+        if (irq_svc_slice & 0x0F00) {  // Distal
+          if (getVerbosity() > 4) local_log.concatf("%sDIST): 0x%x\n", l_tag, (irq_svc_slice >> 8) & 0x000F);
+        }
+        if (irq_svc_slice & 0x00F0) {  // Intermediate
+          if (getVerbosity() > 4) local_log.concatf("%sINTR): 0x%x\n", l_tag, (irq_svc_slice >> 4) & 0x000F);
+        }
+        if (irq_svc_slice & 0x000F) {  // Proximal
+          if (getVerbosity() > 4) local_log.concatf("%sPROX): 0x%x\n", l_tag, irq_svc_slice & 0x000F);
+        }
+      }
     }
-  }
 
-  if (digitExists(DigitPort::PORT_4)) {
-    irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_4);
-    if (irq_svc_slice) {
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): PORT_4 0x%03x\n", irq_svc_slice);
+    if (digitExists(DigitPort::PORT_3)) {
+      const char* l_tag = "iiu_group_irq(PORT_3::";
+      irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_3);
+      if (irq_svc_slice) {
+        if (irq_svc_slice & 0x0F00) {  // Distal
+          if (getVerbosity() > 4) local_log.concatf("%sDIST): 0x%x\n", l_tag, (irq_svc_slice >> 8) & 0x000F);
+        }
+        if (irq_svc_slice & 0x00F0) {  // Intermediate
+          if (getVerbosity() > 4) local_log.concatf("%sINTR): 0x%x\n", l_tag, (irq_svc_slice >> 4) & 0x000F);
+        }
+        if (irq_svc_slice & 0x000F) {  // Proximal
+          if (getVerbosity() > 4) local_log.concatf("%sPROX): 0x%x\n", l_tag, irq_svc_slice & 0x000F);
+        }
+      }
     }
-  }
 
-  if (digitExists(DigitPort::PORT_5)) {
-    irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_5);
-    if (irq_svc_slice) {
-      if (getVerbosity() > 4) local_log.concatf("iiu_group_irq(): PORT_5 0x%03x\n", irq_svc_slice);
+    if (digitExists(DigitPort::PORT_4)) {
+      const char* l_tag = "iiu_group_irq(PORT_4::";
+      irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_4);
+      if (irq_svc_slice) {
+        if (irq_svc_slice & 0x0F00) {  // Distal
+          if (getVerbosity() > 4) local_log.concatf("%sDIST): 0x%x\n", l_tag, (irq_svc_slice >> 8) & 0x000F);
+        }
+        if (irq_svc_slice & 0x00F0) {  // Intermediate
+          if (getVerbosity() > 4) local_log.concatf("%sINTR): 0x%x\n", l_tag, (irq_svc_slice >> 4) & 0x000F);
+        }
+        if (irq_svc_slice & 0x000F) {  // Proximal
+          if (getVerbosity() > 4) local_log.concatf("%sPROX): 0x%x\n", l_tag, irq_svc_slice & 0x000F);
+        }
+      }
+    }
+
+    if (digitExists(DigitPort::PORT_5)) {
+      const char* l_tag = "iiu_group_irq(PORT_5::";
+      irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_5);
+      if (irq_svc_slice) {
+        if (irq_svc_slice & 0x0F00) {  // Distal
+          if (getVerbosity() > 4) local_log.concatf("%sDIST): 0x%x\n", l_tag, (irq_svc_slice >> 8) & 0x000F);
+        }
+        if (irq_svc_slice & 0x00F0) {  // Intermediate
+          if (getVerbosity() > 4) local_log.concatf("%sINTR): 0x%x\n", l_tag, (irq_svc_slice >> 4) & 0x000F);
+        }
+        if (irq_svc_slice & 0x000F) {  // Proximal
+          if (getVerbosity() > 4) local_log.concatf("%sPROX): 0x%x\n", l_tag, irq_svc_slice & 0x000F);
+        }
+      }
     }
   }
 
@@ -1073,6 +1135,24 @@ int8_t CPLDDriver::iiu_group_irq() {
   }
   flushLocalLog();
   return return_value;
+}
+
+
+/**
+* Toggle the INT74 bit in the config register.
+* This bit is off by default, and setting it will cause (in this order):
+* 1) The IRQ aggregation machinary in the CPLD to send a frame, thus
+*    allowing us to test for its proper operation when the message
+*    arrives in the near-future.
+* 2) The return bytes in the message carry version information and
+*    initial configuration data. This allows us to check compatibility
+*    and gives us proof of proper operation.
+*/
+void CPLDDriver::measure_irq_latency() {
+  _irq_latency_0 = micros();
+  _irq_latency_1 = 0;
+  _irq_latency_2 = 0;
+  setIRQ74(!getIRQ74());
 }
 
 
@@ -1245,7 +1325,7 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
       //     initial configuration data. This allows us to check compatibility
       //     and gives us proof of proper operation.
       setPin(_pins.reset, true);
-      setIRQ74(true);
+      measure_irq_latency();
       break;
     default:
       return_value += EventReceiver::notify(active_event);
@@ -1308,8 +1388,12 @@ void CPLDDriver::printIRQs(StringBuilder* output) {
     (_conf_bits_set(CPLD_CONF_BIT_IRQ_74) ? '1':'0'),
     (irq_is_presently_high(74) ? '1':'0')
   );
+  output->concat("-- IRQ latency\n\tDispatch     0\n");
+  output->concatf("\tArrival:     %u\n", wrap_accounted_delta(_irq_latency_0, _irq_latency_1));
+  output->concatf("\tApplication  %u\n", wrap_accounted_delta(_irq_latency_0, _irq_latency_2));
+
   output->concatf("-- OE Pin              %c\n", (irq_is_presently_high(75) ? '1':'0'));
-  output->concatf("-- Frames              %08x\n", _irq_frames_rxd);
+  output->concatf("-- Frames              %u\n", _irq_frames_rxd);
 
   output->concatf("-- Valid IRQ buffer    %d", _irq_data_ptr == _irq_data_0 ? 0 : 1);
 
@@ -1360,7 +1444,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder* input) {
           local_log.concatf("\t5:   %s\n\n", digitStateToString(digitState(DigitPort::PORT_5)));
           break;
         case 4:
-          printIRQs(&local_log);
+          measure_irq_latency();
           break;
         case 5:
           printHardwareState(&local_log);
@@ -1511,13 +1595,10 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder* input) {
       Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, nullptr);   // Raise an event
       break;
 
+    case 'K':  // TODO: Cut once system is fully validated.
     case 'k':  // TODO: Cut once system is fully validated.
-      _er_flip_flag(CPLD_FLAG_SVC_IRQS);
-      local_log.concatf("CPLD servicing IRQs?  %s\n", _er_flag(CPLD_FLAG_SVC_IRQS)?"yes":"no");
-      break;
-    case '*':  // TODO: Cut once system is fully validated.
-      raiseEvent(Kernel::returnEvent(DIGITABULUM_MSG_IMU_IRQ_RAISED));   // Raise an event
-      local_log.concat("Manual IRQ raise.\n");
+      irq_service_enabled(*(str) == 'K');
+      local_log.concatf("CPLD servicing IRQs?  %s\n", irq_service_enabled()?"yes":"no");
       break;
     //case '~':  // TODO: Cut once system is fully validated.
     //  if (_threaded_op) {

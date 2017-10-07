@@ -678,12 +678,13 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     DigitState digitState(DigitPort);
 
     /* Nice API break-out to CONFIG register bits. */
-    inline void setIRQ74(bool x) {           setCPLDConfig(CPLD_CONF_BIT_IRQ_74, x);     };
     inline void setGPIO(bool x) {            setCPLDConfig(CPLD_CONF_BIT_GPIO, x);       };
-    inline void conserveDigitDrive(bool x) { setCPLDConfig(CPLD_CONF_BIT_PWR_CONSRV, x); };
-    inline void disableIRQScan(bool x) {     setCPLDConfig(CPLD_CONF_BIT_IRQ_SCAN, x);   };
     inline void enableCarpalAG(bool x) {     setCPLDConfig(CPLD_CONF_BIT_DEN_AG_C, x);   };
     inline void enableMetacarpalAG(bool x) { setCPLDConfig(CPLD_CONF_BIT_DEN_AG_MC, x);  };
+    inline void disableIRQScan(bool x) {     setCPLDConfig(CPLD_CONF_BIT_IRQ_SCAN, x);   };
+    inline void conserveDigitDrive(bool x) { setCPLDConfig(CPLD_CONF_BIT_PWR_CONSRV, x); };
+    inline void setIRQ74(bool x) {           setCPLDConfig(CPLD_CONF_BIT_IRQ_74, x);     };
+    inline bool getIRQ74() {          return (cpld_conf_value & CPLD_CONF_BIT_IRQ_74);   };
 
 
     /**
@@ -749,6 +750,11 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     void internalOscillator(bool on);    // Enable or disable the CPLD internal oscillator.
     void setCPLDConfig(uint8_t mask, bool enable);
 
+    void measure_irq_latency();
+    inline void irq_service_enabled(bool x) {  _er_set_flag(CPLD_FLAG_SVC_IRQS, x);   };
+    inline bool irq_service_enabled() {  return _er_flag(CPLD_FLAG_SVC_IRQS);   };
+
+
     int _process_cpld_base_return(uint8_t nu_ver, uint8_t nu_conf);
 
     int8_t iiu_group_irq();
@@ -761,7 +767,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     static uint8_t  cpld_conf_value;     // Configuration.
     static uint8_t  forsaken_digits;     // Forsaken digits.
     static uint8_t  cpld_wakeup_source;  // WAKEUP mapping.
-    static uint32_t _irq_frames_rxd;     // How many IRQ frames have arrived.
+    static uint8_t  irq76_conf;          // Aggregated IRQ settings.
 };
 
 #endif

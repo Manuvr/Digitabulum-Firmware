@@ -37,6 +37,8 @@ Intended target is an WROOM32 SoC module.
 #include "Digitabulum/ManuLegend/ManuManager.h"
 #include "Digitabulum/DigitabulumPMU/DigitabulumPMU-r2.h"
 
+#include "esp_task_wdt.h"
+
 #ifdef __cplusplus
   extern "C" {
 #endif
@@ -172,6 +174,7 @@ void app_main() {
 
   unsigned long ms_0 = millis();
   unsigned long ms_1 = ms_0;
+  unsigned long ms_w = ms_0;
   bool odd_even = false;
 
   gpioDefine(ESP32_LED_PIN, GPIOMode::OUTPUT);
@@ -183,6 +186,10 @@ void app_main() {
     ms_0 = ms_1;
     setPin(ESP32_LED_PIN, odd_even);
     odd_even = !odd_even;
+    if (ms_0 > (ms_w+1000)) {
+      ms_w = ms_0;
+      //esp_task_wdt_feed();
+    }
   }
 }
 #endif  // __BUILD_HAS_FREERTOS

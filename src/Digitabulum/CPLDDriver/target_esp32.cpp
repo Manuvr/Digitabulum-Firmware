@@ -219,6 +219,10 @@ static void IRAM_ATTR spi3_isr(void *arg) {
     uint8_t* prior_buf;
 
     if (CPLD_GUARD_BIT_VALUE == (*(hw_buf + 9) & 0x0F)) {
+      if (0 == _irq_latency_1) {
+        _irq_latency_1 = micros();
+      }
+      _irq_frames_rxd++;
       // TODO: Would be better to use the hardware's idea of buffer.
       if (_irq_data_ptr == _irq_data_0) {  // Double-buffer "Tock"
         prior_buf     = (uint8_t*) _irq_data_0;
@@ -249,7 +253,6 @@ static void IRAM_ATTR spi3_isr(void *arg) {
         _irq_diff[i]   = prior_buf[i] ^ _irq_data_ptr[i];
         _irq_accum[i] |= _irq_diff[i];
       }
-
       Kernel::isrRaiseEvent(&_irq_data_arrival);   // TODO: Audit for mem layout.
     }
     SPI3.slave.trans_done  = 0;  // Clear interrupt.
