@@ -117,7 +117,6 @@ class ManuManager : public EventReceiver, public BusOpCallback {
     int8_t io_op_callback(BusOp*);
     int8_t queue_io_job(BusOp*);
 
-
     void printHelp(StringBuilder*);
     void dumpPreformedElements(StringBuilder*);
 
@@ -126,6 +125,8 @@ class ManuManager : public EventReceiver, public BusOpCallback {
 
     int8_t read_ag_frame();
     int8_t read_mag_frame();
+
+    int8_t deliverIRQ(DigitPort, uint8_t imu, uint8_t data, uint8_t svc);
 
     /* Expose our idea about handedness to other modules. */
     inline Chirality getChirality() {  return (Chirality) _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_MASK);  };

@@ -440,7 +440,7 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #define CPLD_FLAG_QUEUE_GUARD  0x10    // Prevent bus queue floods?
 #define CPLD_FLAG_SPI1_READY   0x20    // Is SPI1 initialized?
 #define CPLD_FLAG_SPI2_READY   0x40    // Is SPI2 initialized?
-//#define CPLD_FLAG_DEN_AG_STATE 0x80    // DEN_AG state.
+#define CPLD_FLAG_CPLD_READY   0x80    // Is the CPLD ready to use?
 
 
 /* Event codes for Digitabulum's CPLD. */
@@ -554,6 +554,7 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 #define CPLD_IRQ_BITMASK_IMU_16_MASK   0x0F        //
 
 
+class ManuManager;   // Forward declaration.
 
 /*
 * Pin defs for this module.
@@ -683,8 +684,10 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     inline void enableMetacarpalAG(bool x) { setCPLDConfig(CPLD_CONF_BIT_DEN_AG_MC, x);  };
     inline void disableIRQScan(bool x) {     setCPLDConfig(CPLD_CONF_BIT_IRQ_SCAN, x);   };
     inline void conserveDigitDrive(bool x) { setCPLDConfig(CPLD_CONF_BIT_PWR_CONSRV, x); };
-    inline void setIRQ74(bool x) {           setCPLDConfig(CPLD_CONF_BIT_IRQ_74, x);     };
-    inline bool getIRQ74() {          return (cpld_conf_value & CPLD_CONF_BIT_IRQ_74);   };
+
+    inline bool hardwareReady() {  return _er_flag(CPLD_FLAG_CPLD_READY);   };
+
+    inline void setManuManager(ManuManager* mm) {  _manu = mm;  };
 
 
     /**
@@ -700,6 +703,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     };
 
     static const char* digitStateToString(DigitState);
+    static const char* getDigitPortString(DigitPort);
 
 
   protected:
@@ -707,6 +711,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
 
 
   private:
+    ManuManager* _manu = nullptr;
     ManuvrMsg event_spi_callback_ready;
     ManuvrMsg event_spi_timeout;
     ManuvrMsg _periodic_debug;
@@ -719,10 +724,6 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     uint32_t  bus_timeout_millis = 5;  // How long to spend in IO_WAIT?
     uint8_t   spi_cb_per_event   = 3;  // Limit the number of callbacks processed per event.
     uint16_t  _digit_flags       = 0;  // Digit sleep state tracking flags.
-
-    /* These values represent where in the IRQ buffer this IIU's bits lie. */
-    inline uint8_t _irq_offset_byte(int idx) {  return (idx >> 1);     };
-    inline uint8_t _irq_offset_bit(int idx) {   return (idx << 2);     };
 
     inline bool    _conf_bits_set(uint8_t x) {  return (x == (cpld_conf_value & x)); };
 
@@ -750,15 +751,16 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     void internalOscillator(bool on);    // Enable or disable the CPLD internal oscillator.
     void setCPLDConfig(uint8_t mask, bool enable);
 
+    /* Used to manage the IRQ aggregator. */
+    int8_t iiu_group_irq();
     void measure_irq_latency();
-    inline void irq_service_enabled(bool x) {  _er_set_flag(CPLD_FLAG_SVC_IRQS, x);   };
-    inline bool irq_service_enabled() {  return _er_flag(CPLD_FLAG_SVC_IRQS);   };
 
+    inline void setIRQ74(bool x) {  setCPLDConfig(CPLD_CONF_BIT_IRQ_74, x);       };
+    inline bool getIRQ74() {        return _conf_bits_set(CPLD_CONF_BIT_IRQ_74);  };
+    inline void irq_service_enabled(bool x) {  _er_set_flag(CPLD_FLAG_SVC_IRQS, x);  };
+    inline bool irq_service_enabled() {  return _er_flag(CPLD_FLAG_SVC_IRQS);        };
 
     int _process_cpld_base_return(uint8_t nu_ver, uint8_t nu_conf);
-
-    int8_t iiu_group_irq();
-
 
     static SPIBusOp preallocated_bus_jobs[CPLD_SPI_PREALLOC_COUNT];// __attribute__ ((section(".ccm")));
 

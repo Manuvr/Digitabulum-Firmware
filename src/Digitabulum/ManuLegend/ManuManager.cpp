@@ -290,6 +290,7 @@ const char* ManuManager::chiralityString(Chirality x) {
 *******************************************************************************/
 ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt"), _frame_pool(PREALLOCD_IMU_FRAMES, &_frame_pool_mem[0]) {
   _bus = (CPLDDriver*) bus;  // TODO: Make this cast unnecessary.
+  _bus->setManuManager(this);  // Introduce ourselves immediately.
 
   reflection_gyr(1, 1, 1);
   reflection_acc(1, 1, 1);
@@ -510,6 +511,48 @@ Anatomical ManuManager::get_digit_given_port(DigitPort port) {
 }
 
 
+int8_t ManuManager::deliverIRQ(DigitPort port, uint8_t imu_idx, uint8_t svc, uint8_t data) {
+  if (getVerbosity() > 4) {
+    char* pos_str = "UNKNOWN";
+    switch (imu_idx) {
+      case 0:
+      case 2:
+      case 5:
+      case 8:
+      case 11:
+      case 14:
+        pos_str = "PROX";
+        break;
+      case 3:
+      case 6:
+      case 9:
+      case 12:
+      case 15:
+        pos_str = "INTR";
+        break;
+      case 1:
+      case 4:
+      case 7:
+      case 10:
+      case 13:
+      case 16:
+        pos_str = "DIST";
+        break;
+      default:
+        break;
+    }
+    local_log.concatf(
+      "deliverIRQ(%s, %u, %s): 0x%x 0x%x\n",
+      CPLDDriver::getDigitPortString(port),
+      imu_idx,
+      pos_str,
+      svc,
+      data
+    );
+  }
+  flushLocalLog();
+  return 0;
+}
 
 /*******************************************************************************
 * ___     _       _                      These members are mandatory overrides
@@ -815,6 +858,15 @@ int8_t ManuManager::attached() {
     _event_integrator.enableSchedule(false);
     _event_integrator.specific_target = (EventReceiver*) this;
 
+    /* Setup our pre-formed quat crunch event. */
+    event_iiu_read.repurpose(DIGITABULUM_MSG_IMU_READ, this);
+    event_iiu_read.incRefs();
+    event_iiu_read.alterScheduleRecurrence(-1);
+    event_iiu_read.alterSchedulePeriod(1000);
+    event_iiu_read.autoClear(false);
+    event_iiu_read.enableSchedule(false);
+    event_iiu_read.specific_target = (EventReceiver*) this;
+
     platform.kernel()->addSchedule(&event_iiu_read);
     platform.kernel()->addSchedule(&_event_integrator);
     return 1;
@@ -900,28 +952,7 @@ int8_t ManuManager::notify(ManuvrMsg* active_event) {
   /* Some class-specific set of conditionals below this line. */
   switch (active_event->eventCode()) {
     case DIGITABULUM_MSG_IMU_READ:
-      return_value++;
-      break;
-
-    case MANUVR_MSG_SESS_ESTABLISHED:
-      {
-        ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
-        event->addArg((uint8_t) 4);  // Set the desired init stage.
-        event->priority(0);
-        raiseEvent(event);
-      }
-      event_iiu_read.delaySchedule(1000);  // Enable the periodic read after letting the dust settle.
-      return_value++;
-      break;
-
-    case MANUVR_MSG_SESS_HANGUP:
-      for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
-        ManuvrMsg *event = Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT);
-        event->addArg((uint8_t) 4);  // Set the desired init stage.
-        event->priority(0);
-        raiseEvent(event);
-      }
-      event_iiu_read.enableSchedule(false);    // Disable the periodic read.
+      read_identities();
       return_value++;
       break;
 
@@ -1211,9 +1242,9 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           printDebug(&local_log);
           break;
         case 1:
+          integrator.printDebug(&local_log);
           break;
         case 2:
-          integrator.printDebug(&local_log);
           break;
         case 3:
           local_log.concat("Reading sensor identities...\n");
@@ -1359,6 +1390,9 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
     // IMU DEBUG //////////////////////////////////////////////////////////////////
     case 's':
       switch (temp_byte) {
+        case 0:
+          printIMURollCall(&local_log);
+          break;
         case 1:
           printFIFOLevels(&local_log);
           break;
@@ -1666,8 +1700,6 @@ int8_t ManuManager::read_identities() {
   // Because the identity address is the same for both aspects, and their addresses
   //   are continuous, we just read 1 byte from 34 sensors.
   SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
-//  op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
-  //op->setBuffer(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
   op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
   op->setBuffer(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
   return queue_io_job(op);
