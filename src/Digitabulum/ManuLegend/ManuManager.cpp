@@ -944,7 +944,6 @@ int8_t ManuManager::callback_proc(ManuvrMsg* event) {
 
 
 
-
 int8_t ManuManager::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
   uint8_t temp_uint_8 = 0;
@@ -1002,56 +1001,6 @@ int8_t ManuManager::notify(ManuvrMsg* active_event) {
 
   flushLocalLog();
   return return_value;
-}
-
-
-
-
-/**
-* Debug support method. This fxn is only present in debug builds.
-* // TODO: This is a lie. Audit MANUVR_DEBUG usage and elaborate it by class to reduce build sizes.
-*
-* @param   StringBuilder* The buffer into which this fxn should write its output.
-*/
-void ManuManager::printIMURollCall(StringBuilder *output) {
-  EventReceiver::printDebug(output);
-  output->concat("-- Intertial integration units: id(I/M)\n--\n-- Dgt      Prx        Imt        Dst        Reports\n");
-  // TODO: Audit usage of length-specified integers as iterators. Cut where not
-  //   important and check effects on optimization, as some arch's take a
-  //   runtime hit for access in any length less than thier ALU widths.
-  for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
-    switch (i) {
-      case 1:   // Skip output for the IMU that doesn't exist at digit0.
-        output->concat("   <N/A>   ");
-        break;
-      case 0:
-        output->concat("-- 0(MC)    ");
-        break;
-      case 2:   // digit1 begins
-        output->concatf("%c\n-- 1        ", _bus->digitExists(DigitPort::MC) ? 'Y' : ' ');
-        break;
-      case 5:   // digit2 begins
-        output->concatf("%c\n-- 2        ", _bus->digitExists(DigitPort::PORT_1) ? 'Y' : ' ');
-        break;
-      case 8:   // digit3 begins
-        output->concatf("%c\n-- 3        ", _bus->digitExists(DigitPort::PORT_2) ? 'Y' : ' ');
-        break;
-      case 11:  // digit4 begins
-        output->concatf("%c\n-- 4        ", _bus->digitExists(DigitPort::PORT_3) ? 'Y' : ' ');
-        break;
-      case 14:  // digit5 begins
-        output->concatf("%c\n-- 5        ", _bus->digitExists(DigitPort::PORT_4) ? 'Y' : ' ');
-        break;
-      default:
-        break;
-    }
-    output->concatf("%02u(%02x/%02x)  ", i, _reg_block_ident[i], _reg_block_ident[i+LEGEND_DATASET_IIU_COUNT]);
-  }
-  //output->concatf("%c\n\n", _bus->digitExists(DigitPort::PORT_5) ? 'Y' : ' ');
-  output->concatf("%c\n", _bus->digitExists(DigitPort::PORT_5) ? 'Y' : ' ');
-  output->concatf("ID/Guard     (%p/%p)\n", &_reg_block_ident_guard[0], &_reg_block_ident[0]);
-  output->concatf("Guard bytes  (%02x/%02x)\n", _reg_block_ident[34], _reg_block_ident[35]);
-  output->concatf("Extend bytes (%02x/%02x)\n\n", _reg_block_ident_guard[0], _reg_block_ident_guard[1]);
 }
 
 
@@ -1640,14 +1589,10 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
     case '(':   // CPLD debug
     case ')':   // CPLD debug
       {
-        bzero(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
-        // Because the identity address is the same for both aspects, and their addresses
-        //   are continuous, we just read 1 byte from 34 sensors.
-        SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
-        //  op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
-        //op->setBuffer(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
-        op->setParams(((*(str) == '(' ? CPLD_REG_IMU_DM_P_M : CPLD_REG_IMU_DM_P_I) | 0x80), 0x01, 17, 0x8F);
-        op->setBuffer(&_reg_block_ident[(*(str) == '(' ? 0 : 17)], 17);
+        local_log.concat("Setting MAG IRQ to active-high, all axis enabled.\n");
+        SPIBusOp* op = _bus->new_op(BusOpcode::TX, this);
+        op->setParams(CPLD_REG_RANK_P_M, 1, 3, RegPtrMap::regAddr(RegID::M_INT_CFG) | 0x40);  // 1 byte per IMU.
+        op->setBuffer(&_reg_block_m_irq_cfg[0], 3);
         queue_io_job(op);
       }
       break;
@@ -1670,8 +1615,8 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
         //  op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
         //op->setBuffer(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
         uint8_t imu_num = (uint8_t) atoi(str) % 17;
-        op->setParams((imu_num | 0x80), 0x01, 17, 0x8F);
-        op->setBuffer(&_reg_block_ident[imu_num], 17);
+        op->setParams((imu_num | 0x80), 0x01, 1, 0x8F);
+        op->setBuffer(&_reg_block_ident[imu_num], 1);
         queue_io_job(op);
       }
       break;
@@ -1684,8 +1629,6 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
   flushLocalLog();
 }
 #endif  //MANUVR_CONSOLE_SUPPORT
-
-
 
 
 
@@ -1766,4 +1709,52 @@ int8_t ManuManager::init_iius() {
   }
 
   return ret;
+}
+
+
+/**
+* Debug support method. This fxn is only present in debug builds.
+* // TODO: This is a lie. Audit MANUVR_DEBUG usage and elaborate it by class to reduce build sizes.
+*
+* @param   StringBuilder* The buffer into which this fxn should write its output.
+*/
+void ManuManager::printIMURollCall(StringBuilder *output) {
+  EventReceiver::printDebug(output);
+  output->concat("-- Intertial integration units: id(I/M)\n--\n-- Dgt      Prx        Imt        Dst        Reports\n");
+  // TODO: Audit usage of length-specified integers as iterators. Cut where not
+  //   important and check effects on optimization, as some arch's take a
+  //   runtime hit for access in any length less than thier ALU widths.
+  for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+    switch (i) {
+      case 1:   // Skip output for the IMU that doesn't exist at digit0.
+        output->concat("   <N/A>   ");
+        break;
+      case 0:
+        output->concat("-- 0(MC)    ");
+        break;
+      case 2:   // digit1 begins
+        output->concatf("%c\n-- 1        ", _bus->digitExists(DigitPort::MC) ? 'Y' : ' ');
+        break;
+      case 5:   // digit2 begins
+        output->concatf("%c\n-- 2        ", _bus->digitExists(DigitPort::PORT_1) ? 'Y' : ' ');
+        break;
+      case 8:   // digit3 begins
+        output->concatf("%c\n-- 3        ", _bus->digitExists(DigitPort::PORT_2) ? 'Y' : ' ');
+        break;
+      case 11:  // digit4 begins
+        output->concatf("%c\n-- 4        ", _bus->digitExists(DigitPort::PORT_3) ? 'Y' : ' ');
+        break;
+      case 14:  // digit5 begins
+        output->concatf("%c\n-- 5        ", _bus->digitExists(DigitPort::PORT_4) ? 'Y' : ' ');
+        break;
+      default:
+        break;
+    }
+    output->concatf("%02u(%02x/%02x)  ", i, _reg_block_ident[i], _reg_block_ident[i+LEGEND_DATASET_IIU_COUNT]);
+  }
+  //output->concatf("%c\n\n", _bus->digitExists(DigitPort::PORT_5) ? 'Y' : ' ');
+  output->concatf("%c\n", _bus->digitExists(DigitPort::PORT_5) ? 'Y' : ' ');
+  output->concatf("ID/Guard     (%p/%p)\n", &_reg_block_ident_guard[0], &_reg_block_ident[0]);
+  output->concatf("Guard bytes  (%02x/%02x)\n", _reg_block_ident[34], _reg_block_ident[35]);
+  output->concatf("Extend bytes (%02x/%02x)\n\n", _reg_block_ident_guard[0], _reg_block_ident_guard[1]);
 }

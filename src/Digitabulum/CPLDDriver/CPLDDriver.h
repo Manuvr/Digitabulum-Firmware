@@ -512,9 +512,9 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 
 /* Bitmask defs for the CONFIG register. */
 #define CPLD_CONF_BIT_INT_CLK    0x01  // Internal clock enable
-#define CPLD_CONF_BIT_IRQ_SCAN   0x02  // Disable IRQ scanning
+#define CPLD_CONF_BIT_ALIGN_XFER 0x02  // Pad the end of transfers to 4-byte alignments.
 #define CPLD_CONF_BIT_IRQ_74     0x04  // Set IRQ bit-74
-#define CPLD_CONF_BIT_IRQ_STREAM 0x08  // Constantly stream IRQ data
+#define CPLD_CONF_BIT_IRQ_SCAN   0x08  // Disable IRQ scanning
 #define CPLD_CONF_BIT_PWR_CONSRV 0x10  // Prevent bus driving on absent digits.
 #define CPLD_CONF_BIT_GPIO       0x20  // Set GPIO source
 #define CPLD_CONF_BIT_DEN_AG_C   0x40  // Set DEN_AG pin for the C IMU
@@ -745,6 +745,7 @@ class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
     void init_ext_clk();
     void init_spi(uint8_t cpol, uint8_t cpha);  // Pass 0 for CPHA 0.
     void init_spi2(uint8_t cpol, uint8_t cpha);  // Pass 0 for CPHA 0.
+    void hw_flush();
 
     /* Low-level CPLD register stuff */
     void externalOscillator(bool on);    // Enable or disable the CPLD external oscillator.

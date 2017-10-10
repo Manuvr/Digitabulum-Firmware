@@ -79,6 +79,7 @@ volatile static uint32_t _irq_latency_1    = 0;  // IRQ latency discovery.
 volatile static uint32_t _irq_latency_2    = 0;  // IRQ latency discovery.
 
 
+uint8_t debug_buffer[64];
 
 /* This message is dispatched when IRQ data changes. */
 ManuvrMsg _irq_data_arrival;
@@ -326,11 +327,11 @@ uint16_t irq_digit_slice_current(DigitPort x) {
 * Constructor. Also populates the global pointer reference.
 */
 CPLDDriver::CPLDDriver(const CPLDPins* p) : EventReceiver("CPLDDriver"), BusAdapter(CPLD_SPI_MAX_QUEUE_DEPTH), _pins(p) {
-
   if (nullptr == cpld) {
     cpld = this;
     ManuvrMsg::registerMessages(cpld_message_defs, sizeof(cpld_message_defs) / sizeof(MessageTypeDef));
   }
+  gpioSetup();
 
   // Build some pre-formed Events.
   event_spi_callback_ready.repurpose(DIGITABULUM_MSG_SPI_CB_QUEUE_READY, (EventReceiver*) this);
@@ -375,10 +376,6 @@ void CPLDDriver::gpioSetup() {
     gpioDefine(_pins.req, GPIOMode::OUTPUT);
     setPin(_pins.req, false);  // Xfer is triggered on the rising-edge.
   }
-  if (255 != _pins.irq) {
-    gpioDefine(_pins.irq, GPIOMode::INPUT_PULLUP);
-    setPinFxn(_pins.irq, FALLING, cpld_wakeup_isr);
-  }
   if (255 != _pins.clk) {
     gpioDefine(_pins.clk, GPIOMode::OUTPUT);
     setPin(_pins.clk, true);
@@ -400,7 +397,11 @@ void CPLDDriver::gpioSetup() {
 *   make them seizure.
 */
 void CPLDDriver::reset() {
+  // Stop servicing IRQs and mark the CPLD as not ready.
+  _er_clear_flag(CPLD_FLAG_SVC_IRQS | CPLD_FLAG_CPLD_READY);
+
   setPin(_pins.reset, false);  // Drive the reset pin low...
+  setPin(_pins.req,   false);  // Reset the transfer pin.
   externalOscillator(true);    // Turn on the default oscillator...
   cpld_conf_value    = 0x00;   // Set our register representations to their
   cpld_version       = 0x00;   //   default values.
@@ -414,8 +415,7 @@ void CPLDDriver::reset() {
 
   purge_queued_work();          // Purge the SPI queue...
   purge_stalled_job();
-
-  setPin(_pins.req,   false);  // Reset the transfer pin.
+  hw_flush();
 
   // Fire the oneshot to bring us out of reset after several ms...
   ManuvrMsg* msg = Kernel::returnEvent(DIGITABULUM_MSG_CPLD_RESET_CALLBACK, this);
@@ -478,7 +478,7 @@ int CPLDDriver::_process_cpld_base_return(uint8_t _version, uint8_t _conf) {
       }
       if (diff & CPLD_CONF_BIT_PWR_CONSRV) {
       }
-      if (diff & CPLD_CONF_BIT_IRQ_STREAM) {
+      if (diff & CPLD_CONF_BIT_ALIGN_XFER) {
       }
       cpld_conf_value = _conf;
     }
@@ -1077,7 +1077,7 @@ int8_t CPLDDriver::iiu_group_irq() {
         _irq_latency_2 = _irq_time;
         if (getVerbosity() > 4) local_log.concatf("IRQ latency is %u us.\n", _irq_latency_2);
       }
-      if (hardwareReady()) {
+      if (!hardwareReady()) {
         // We have verified that we can talk to the hardware.
         _er_set_flag(CPLD_FLAG_CPLD_READY);
         irq_service_enabled(true);
@@ -1094,7 +1094,7 @@ int8_t CPLDDriver::iiu_group_irq() {
     }
   }
 
-  if (irq_service_enabled()) {
+  if ((nullptr != _manu) && irq_service_enabled()) {
     uint8_t imu_offset = 0;
     // Now we will scan across the IMU signals looking for the data ready signals.
     // If all the present digits have their signals raised, we fire the frame
@@ -1117,110 +1117,30 @@ int8_t CPLDDriver::iiu_group_irq() {
     }
     imu_offset++;
 
-    if (digitExists(DigitPort::PORT_1)) {
-      const DigitPort port = DigitPort::PORT_1;
-      irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_1);
-      irq_dat_slice = irq_digit_slice_current(DigitPort::PORT_1);
-      if (irq_svc_slice) {
-        const uint8_t p_svc = irq_svc_slice & 0x000F;
-        const uint8_t i_svc = (irq_svc_slice >> 4) & 0x000F;
-        const uint8_t d_svc = (irq_svc_slice >> 8) & 0x000F;
-        if (d_svc) {  // Distal
-          _manu->deliverIRQ(port, imu_offset+2, (irq_dat_slice >> 8) & 0x000F, d_svc);
-        }
-        if (i_svc) {  // Intermediate
-          _manu->deliverIRQ(port, imu_offset+1, (irq_dat_slice >> 4) & 0x000F, i_svc);
-        }
-        if (p_svc) {  // Proximal
-          _manu->deliverIRQ(port, imu_offset+0, irq_dat_slice & 0x000F, p_svc);
-        }
-      }
-    }
-    imu_offset += 3;
+    for (uint8_t i = 1; i < 6; i++) {
+      // The other digits are loopable.
+      const DigitPort port = (DigitPort) i;
+      if (digitExists(port)) {
+        irq_svc_slice = irq_digit_slice_service(port);
+        irq_dat_slice = irq_digit_slice_current(port);
 
-    if (digitExists(DigitPort::PORT_2)) {
-      const DigitPort port = DigitPort::PORT_2;
-      irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_2);
-      irq_dat_slice = irq_digit_slice_current(DigitPort::PORT_2);
-      if (irq_svc_slice) {
-        const uint8_t p_svc = irq_svc_slice & 0x000F;
-        const uint8_t i_svc = (irq_svc_slice >> 4) & 0x000F;
-        const uint8_t d_svc = (irq_svc_slice >> 8) & 0x000F;
-        if (d_svc) {  // Distal
-          _manu->deliverIRQ(port, imu_offset+2, (irq_dat_slice >> 8) & 0x000F, d_svc);
-        }
-        if (i_svc) {  // Intermediate
-          _manu->deliverIRQ(port, imu_offset+1, (irq_dat_slice >> 4) & 0x000F, i_svc);
-        }
-        if (p_svc) {  // Proximal
-          _manu->deliverIRQ(port, imu_offset+0, irq_dat_slice & 0x000F, p_svc);
+        if (irq_svc_slice) {
+          const uint8_t p_svc = irq_svc_slice & 0x000F;
+          const uint8_t i_svc = (irq_svc_slice >> 4) & 0x000F;
+          const uint8_t d_svc = (irq_svc_slice >> 8) & 0x000F;
+          if (d_svc) {  // Distal
+            _manu->deliverIRQ(port, imu_offset+2, (irq_dat_slice >> 8) & 0x000F, d_svc);
+          }
+          if (i_svc) {  // Intermediate
+            _manu->deliverIRQ(port, imu_offset+1, (irq_dat_slice >> 4) & 0x000F, i_svc);
+          }
+          if (p_svc) {  // Proximal
+            _manu->deliverIRQ(port, imu_offset+0, irq_dat_slice & 0x000F, p_svc);
+          }
         }
       }
+      imu_offset += 3;
     }
-    imu_offset += 3;
-
-    if (digitExists(DigitPort::PORT_3)) {
-      const DigitPort port = DigitPort::PORT_3;
-      irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_3);
-      irq_dat_slice = irq_digit_slice_current(DigitPort::PORT_3);
-      if (irq_svc_slice) {
-        const uint8_t p_svc = irq_svc_slice & 0x000F;
-        const uint8_t i_svc = (irq_svc_slice >> 4) & 0x000F;
-        const uint8_t d_svc = (irq_svc_slice >> 8) & 0x000F;
-        if (d_svc) {  // Distal
-          _manu->deliverIRQ(port, imu_offset+2, (irq_dat_slice >> 8) & 0x000F, d_svc);
-        }
-        if (i_svc) {  // Intermediate
-          _manu->deliverIRQ(port, imu_offset+1, (irq_dat_slice >> 4) & 0x000F, i_svc);
-        }
-        if (p_svc) {  // Proximal
-          _manu->deliverIRQ(port, imu_offset+0, irq_dat_slice & 0x000F, p_svc);
-        }
-      }
-    }
-    imu_offset += 3;
-
-    if (digitExists(DigitPort::PORT_4)) {
-      const DigitPort port = DigitPort::PORT_4;
-      irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_4);
-      irq_dat_slice = irq_digit_slice_current(DigitPort::PORT_4);
-      if (irq_svc_slice) {
-        const uint8_t p_svc = irq_svc_slice & 0x000F;
-        const uint8_t i_svc = (irq_svc_slice >> 4) & 0x000F;
-        const uint8_t d_svc = (irq_svc_slice >> 8) & 0x000F;
-        if (d_svc) {  // Distal
-          _manu->deliverIRQ(port, imu_offset+2, (irq_dat_slice >> 8) & 0x000F, d_svc);
-        }
-        if (i_svc) {  // Intermediate
-          _manu->deliverIRQ(port, imu_offset+1, (irq_dat_slice >> 4) & 0x000F, i_svc);
-        }
-        if (p_svc) {  // Proximal
-          _manu->deliverIRQ(port, imu_offset+0, irq_dat_slice & 0x000F, p_svc);
-        }
-      }
-    }
-    imu_offset += 3;
-
-    if (digitExists(DigitPort::PORT_5)) {
-      const DigitPort port = DigitPort::PORT_5;
-      irq_svc_slice = irq_digit_slice_service(DigitPort::PORT_5);
-      irq_dat_slice = irq_digit_slice_current(DigitPort::PORT_5);
-      if (irq_svc_slice) {
-        const uint8_t p_svc = irq_svc_slice & 0x000F;
-        const uint8_t i_svc = (irq_svc_slice >> 4) & 0x000F;
-        const uint8_t d_svc = (irq_svc_slice >> 8) & 0x000F;
-        if (d_svc) {  // Distal
-          _manu->deliverIRQ(port, imu_offset+2, (irq_dat_slice >> 8) & 0x000F, d_svc);
-        }
-        if (i_svc) {  // Intermediate
-          _manu->deliverIRQ(port, imu_offset+1, (irq_dat_slice >> 4) & 0x000F, i_svc);
-        }
-        if (p_svc) {  // Proximal
-          _manu->deliverIRQ(port, imu_offset+0, irq_dat_slice & 0x000F, p_svc);
-        }
-      }
-    }
-    imu_offset += 3;
   }
 
   // Mark everything as serviced.
@@ -1271,6 +1191,8 @@ void CPLDDriver::measure_irq_latency() {
 */
 int8_t CPLDDriver::attached() {
   if (EventReceiver::attached()) {
+    init_ext_clk();
+
     _irq_data_arrival.repurpose(DIGITABULUM_MSG_IMU_IRQ_RAISED, (EventReceiver*) this);
     _irq_data_arrival.incRefs();
     _irq_data_arrival.specific_target = (EventReceiver*) this;
@@ -1287,12 +1209,8 @@ int8_t CPLDDriver::attached() {
     _periodic_debug.enableSchedule(false);
     platform.kernel()->addSchedule(&_periodic_debug);
 
-    gpioSetup();
     bus_init();
-
     init_spi2(0, 0);  // CPOL=0, CPHA=0, HW-driven
-
-    init_ext_clk();
 
     // An SPI transfer might hang (very unlikely). This will un-hang it.
     event_spi_timeout.repurpose(DIGITABULUM_MSG_SPI_TIMEOUT, (EventReceiver*) this);
@@ -1308,6 +1226,8 @@ int8_t CPLDDriver::attached() {
     reset();
 
     if (255 != _pins.irq) {
+      gpioDefine(_pins.irq, GPIOMode::INPUT_PULLUP);
+      setPinFxn(_pins.irq, FALLING, cpld_wakeup_isr);
       //gpio_wakeup_enable((gpio_num_t) _pins.irq, GPIO_INTR_POSEDGE);
     }
     return 1;
@@ -1364,16 +1284,6 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
       return_value = 1;
       break;
 
-    case 0x5050:
-      //{
-      //  SPIBusOp* op = new_op(BusOpcode::RX, this);
-      //  op->setParams((active_imu_position | 0x80), 0x01, 0x02, 0x8F);
-      //  op->setBuffer(__hack_buffer, 2);
-      //  queue_io_job((BusOp*) op);
-      //}
-      return_value = 1;
-      break;
-
     /* Things that only this class is likely to care about. */
     case DIGITABULUM_MSG_IMU_IRQ_RAISED:
       // We scan the IRQ list for signals we care about and let the ManuManager
@@ -1410,14 +1320,7 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
     case DIGITABULUM_MSG_CPLD_RESET_CALLBACK:
       return_value = 1;
       if (getVerbosity() > 4) local_log.concat("CPLD reset. Testing IRQs...\n");
-      // Release the reset pin and set the INT74 bit in the config register.
-      // This bit is off by default, and setting it will cause (in this order):
-      //  1) The IRQ aggregation machinary in the CPLD to send a frame, thus
-      //     allowing us to test for its proper operation when the message
-      //     arrives in the near-future.
-      //  2) The return bytes in the message carry version information and
-      //     initial configuration data. This allows us to check compatibility
-      //     and gives us proof of proper operation.
+      // Release the reset pin and measure the IRQ latency and get CPLD version.
       setPin(_pins.reset, true);
       measure_irq_latency();
       break;
@@ -1447,14 +1350,11 @@ void CPLDDriver::printDebug(StringBuilder* output) {
   //  output->concatf("-- PWM GetState        0x%02x\n", HAL_TIM_PWM_GetState(&htim1));
   }
 
-  if (cpld_wakeup_source & 0x80) {
-    output->concatf("-- WAKEUP Signal       %d\n", (cpld_wakeup_source & 0x7F));
-  }
   output->concatf("-- DEN_AG (C/MC)       %s / %s\n", (_conf_bits_set(CPLD_CONF_BIT_DEN_AG_C) ? "on":"off"), (_conf_bits_set(CPLD_CONF_BIT_DEN_AG_MC) ? "on":"off"));
   output->concatf("-- CPLD_GPIO           %s\n", (_conf_bits_set(CPLD_CONF_BIT_GPIO) ? "hi":"lo"));
   output->concatf("-- Bus power conserve  %s\n", ((cpld_conf_value & CPLD_CONF_BIT_PWR_CONSRV) ? "on":"off"));
-  output->concatf("-- Forsaken:           %02x\n--\n", forsaken_digits);
-  output->concatf("-- IRQ76_reg:          %02x\n--\n", irq76_conf);
+  output->concatf("-- Forsaken:           0x%02x\n--\n", forsaken_digits);
+  output->concatf("-- IRQ76_reg:          0x%02x\n--\n", irq76_conf);
 
   if (getVerbosity() > 2) {
     output->concatf("-- Guarding queue      %s\n",   (_er_flag(CPLD_FLAG_QUEUE_GUARD)?"yes":"no"));
@@ -1478,6 +1378,9 @@ void CPLDDriver::printIRQs(StringBuilder* output) {
   output->concat("\n---< IRQ Aggregator >--------------------\n");
   output->concatf("-- IRQ service         %sabled\n", (_er_flag(CPLD_FLAG_SVC_IRQS)?"en":"dis"));
   output->concatf("-- Constant scan       %s\n", (_conf_bits_set(CPLD_CONF_BIT_IRQ_SCAN) ? "on":"off"));
+  if (cpld_wakeup_source & 0x80) {
+    output->concatf("-- WAKEUP Signal       %d\n", (cpld_wakeup_source & 0x7F));
+  }
   output->concatf("-- IRQ74 (conf/agg)    %c / %c\n",
     (_conf_bits_set(CPLD_CONF_BIT_IRQ_74) ? '1':'0'),
     (irq_is_presently_high(74) ? '1':'0')
@@ -1542,6 +1445,10 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder* input) {
           break;
         case 5:
           printHardwareState(&local_log);
+          break;
+        case 6:
+          local_log.concat("\n--    debug_buffer:\n");
+          for (int i = 0; i < 32; i++) { local_log.concatf("%02x ", debug_buffer[i]); }
           break;
         default:
           printDebug(&local_log);
@@ -1666,11 +1573,11 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder* input) {
       break;
 
 
-    //case 'W':  // TODO: Cut once system is fully validated.
-    //case 'w':
-    //  local_log.concatf("%sabling constant IRQ streaming.\n", (*(str) == 'W' ? "En" : "Dis"));
-    //  setCPLDConfig(CPLD_CONF_BIT_IRQ_STREAM, (*(str) == 'W'));
-    //  break;
+    case 'W':  // TODO: Cut once system is fully validated.
+    case 'w':
+      local_log.concatf("%sabling transfer alignment.\n", (*(str) == 'W' ? "En" : "Dis"));
+      setCPLDConfig(CPLD_CONF_BIT_ALIGN_XFER, (*(str) == 'W'));
+      break;
     case '_':  // TODO: Cut once system is fully validated.
     case '-':
       local_log.concatf("op_abuse_test <--- (%s)\n", (*(str) == '_' ? "true" : "false"));
@@ -1694,12 +1601,6 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder* input) {
       irq_service_enabled(*(str) == 'K');
       local_log.concatf("CPLD servicing IRQs?  %s\n", irq_service_enabled()?"yes":"no");
       break;
-    //case '~':  // TODO: Cut once system is fully validated.
-    //  if (_threaded_op) {
-    //    _threaded_op->_assert_cs(true);
-    //    local_log.concat("Asserting chip-select.\n");
-    //  }
-    //  break;
 
     //case 's':  // TODO: Cut once system is fully validated.
     //  switch (temp_int) {
@@ -1713,6 +1614,26 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder* input) {
     //      break;
     //  }
     //  break;
+    case '~':   // CPLD debug
+      {
+        bzero(&debug_buffer[0], 64);
+        SPIBusOp* op = new_op(BusOpcode::RX, this);
+        uint8_t imu_num = ((*(str) == '~') ? CPLD_REG_IMU_DM_P_M : CPLD_REG_IMU_DM_P_I) | 0x80;
+        op->setParams(imu_num, 1, 1, 0x8F);
+        op->setBuffer(&debug_buffer[0], 2);
+        queue_io_job(op);
+      }
+      break;
+    case '`':   // CPLD debug
+      {
+        bzero(&debug_buffer[0], 64);
+        SPIBusOp* op = new_op(BusOpcode::RX, this);
+        uint8_t imu_num = ((*(str) == '~') ? CPLD_REG_IMU_DM_P_M : CPLD_REG_IMU_DM_P_I) | 0x80;
+        op->setParams(imu_num, 1, 28, 0x8F);
+        op->setBuffer(&debug_buffer[0], 2);
+        queue_io_job(op);
+      }
+      break;
 
     default:
       EventReceiver::procDirectDebugInstruction(input);

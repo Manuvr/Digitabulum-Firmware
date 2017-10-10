@@ -172,7 +172,7 @@ static void IRAM_ATTR spi2_isr(void *arg) {
         // shuffle bytes around to avoid heaped buffers and DMA overhead.
         // buf+0/1 should be xfer_param[2/3].
         *(_threaded_op->buf+0) = (uint8_t) word & 0xFF;
-        *(_threaded_op->buf+1) = (uint8_t) ((word & 0xFF00) >> 8);
+        *(_threaded_op->buf+1) = (uint8_t) (word >> 8) & 0xFF;
       }
       else {
         // This was a DMA transaction.
@@ -470,17 +470,12 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
     SPI3.user.ck_i_edge         = (cpol ^ cpha) ? 1 : 0;
     SPI3.ctrl2.mosi_delay_mode  = (cpol ^ cpha) ? 1 : 2;
     SPI3.ctrl2.miso_delay_mode  = 0;  //
-
     SPI3.ctrl2.miso_delay_num   = 0;  //
     SPI3.ctrl2.mosi_delay_num   = 0;  //
-
     SPI3.ctrl.fastrd_mode   = 0;  // No need of multi-lane SPI.
-
     SPI3.user1.val          = 0;  // No address phase.
-
     SPI3.clock.clkcnt_l     = 0;  // Must be 0 in slave mode.
     SPI3.clock.clkcnt_h     = 0;  // Must be 0 in slave mode.
-
     SPI3.slave.trans_done   = 0;  // Interrupt conditions.
     SPI3.slave.trans_inten  = 1;  //
 
@@ -503,6 +498,12 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
     _er_set_flag(CPLD_FLAG_SPI2_READY, true);
   }
 }
+
+
+void CPLDDriver::hw_flush() {
+  _threaded_op = nullptr;
+}
+
 
 
 /*******************************************************************************
@@ -667,90 +668,11 @@ XferFault SPIBusOp::begin() {
   SPI2.data_buf[0] = 0;  // TODO: Safety during debug.
   SPI2.data_buf[8] = 0;  // TODO: Safety during debug.
 
-  if (2 != _param_len) {
-    set_state(XferState::ADDR);
-    // This will be a DMA transfer. Code it as two linked lists with the initial
-    //   4 bytes from the read-side of the transfer consigned to a bit-bucket.
-    //   The first two bytes will contain the version and conf as always, but
-    //   IMU traffic should not be bothered with validating this.
-
-    // Doc says this must be a multiple of 4.
-    // TODO: Over-running a buffer on purpose feels very dangerous.
-    uint32_t padded_len = buf_len + ((4 - (buf_len & 0x00000003)) & 0x00000003);
-    //uint32_t padded_len = buf_len & 0xFFFFFFFC;
-    switch (opcode) {
-      case BusOpcode::TX:
-        // For a transmission, the the buffer will contain outbound data.
-        // There is no RX component here, so we can simply load in two lists.
-        _ll_tx_0.length = 4;
-        _ll_tx_0.size   = 4;
-        _ll_tx_0.owner  = LLDESC_HW_OWNED;
-        _ll_tx_0.sosf   = 1;
-        _ll_tx_0.offset = 0;
-        _ll_tx_0.empty  = (uint32_t) &_ll_tx_1;
-        _ll_tx_0.eof    = 0;
-        _ll_tx_0.buf    = &xfer_params[0];
-
-        _ll_tx_1.length = buf_len;   // TODO: Is this a blocksize/count situation?
-        _ll_tx_1.size   = buf_len;   // TODO: Doc says this must be a multiple of 4.
-        _ll_tx_1.owner  = LLDESC_HW_OWNED;
-        _ll_tx_1.sosf   = 0;
-        _ll_tx_1.offset = 0;
-        _ll_tx_1.empty  = 0;
-        _ll_tx_1.eof    = 1;
-        _ll_tx_1.buf    = buf;
-
-        //SPI2.dma_out_link.addr  = ((uint32_t) &_ll_tx_0) & LLDESC_ADDR_MASK;  // TODO: Only 20 of these bits matter?
-        //SPI2.dma_out_link.stop    = 0;  // Signify DMA readiness.
-        //SPI2.dma_out_link.start = 1;
-
-        SPI2.slv_rdbuf_dlen.bit_len   = 0;
-        SPI2.slv_wrbuf_dlen.bit_len   = (32 + (buf_len << 3)) - 1;
-        break;
-
-      case BusOpcode::RX:
-        // For a reception, the the buffer will be filled from the bus.
-        // We need to shunt the first four bytes to come back into a bit-bucket.
-        SPI2.data_buf[0] = xfer_params[0] + (xfer_params[1] << 8) + (xfer_params[2] << 16) + (xfer_params[3] << 24);
-
-        _ll_rx_0.length = 4;
-        _ll_rx_0.size   = 4;
-        _ll_rx_0.owner  = LLDESC_HW_OWNED;
-        _ll_rx_0.sosf   = 1;
-        _ll_rx_0.offset = 0;
-        _ll_rx_0.empty  = (uint32_t) &_ll_rx_1;
-        _ll_rx_0.eof    = 0;
-        _ll_rx_0.buf    = (uint8_t*) &spi2_byte_sink;
-
-        _ll_rx_1.length = padded_len;
-        _ll_rx_1.size   = padded_len;
-        _ll_rx_1.owner  = LLDESC_HW_OWNED;
-        _ll_rx_1.sosf   = 0;
-        _ll_rx_1.offset = 0;
-        _ll_rx_1.empty  = 0;
-        _ll_rx_1.eof    = 1;
-        _ll_rx_1.buf    = buf;
-
-        SPI2.dma_in_link.addr   = ((uint32_t) &_ll_rx_0) & LLDESC_ADDR_MASK;  // TODO: Only 20 of these bits matter?
-        SPI2.dma_in_link.stop   = 0;  // Signify DMA readiness.
-        SPI2.dma_in_link.start  = 1;
-
-        SPI2.slv_rd_bit.slv_rdata_bit = (32 + (buf_len << 3)) - 1;
-        SPI2.slv_rdbuf_dlen.bit_len   = (32 + (buf_len << 3)) - 1;
-        SPI2.slv_wrbuf_dlen.bit_len   = 31;
-        break;
-
-      default:
-        break;
-    }
-    SPI2.dma_conf.val &= ~(SPI_DMA_TX_STOP | SPI_DMA_RX_STOP);  // If in continuous mode.
-    SPI2.dma_conf.val &= ~(SPI_OUT_RST | SPI_IN_RST | SPI_AHBM_RST | SPI_AHBM_FIFO_RST);
-    //SPI2.mosi_dlen.usr_mosi_dbitlen = (32 + (buf_len << 3)) - 1;
-    //SPI2.miso_dlen.usr_miso_dbitlen = (32 + (buf_len << 3)) - 1;
-  }
-  else {
-    //SPI2.user.usr_mosi      = 1;  // We turn on the RX shift-register.
-    // We know that we have two params.
+  if (2 == _param_len) {
+    // Two parameters means an internal CPLD access. We always want the
+    //   Rx SR enabled to get the version and status that comes back in
+    //   the first two bytes.
+    SPI2.user.usr_mosi      = 1;  // We turn on the RX shift-register.
     SPI2.data_buf[0] = xfer_params[0] + (xfer_params[1] << 8);
     if (0 == buf_len) {
       // We can afford to read two bytes into the same space as our xfer_params,
@@ -765,6 +687,32 @@ XferFault SPIBusOp::begin() {
     }
     SPI2.slv_rdbuf_dlen.bit_len   = 15;
     SPI2.slv_wrbuf_dlen.bit_len   = 15;
+  }
+  else {
+    set_state(XferState::ADDR);
+    SPI2.data_buf[0] = xfer_params[0] + (xfer_params[1] << 8) + (xfer_params[2] << 16) + (xfer_params[3] << 24);
+    switch (opcode) {
+      case BusOpcode::TX:
+        if (buf_len <= 28) {
+          int w_idx = 1;
+          for (int i = 0; i < buf_len; i++) {
+            *(buf + i) = *(buf + i);
+            SPI2.data_buf[w_idx] += *(buf + i) << ((i & 3)*8);
+            if (3 == (i & 3)) {
+              w_idx++;
+            }
+          }
+        }
+        break;
+
+      case BusOpcode::RX:
+        break;
+
+      default:
+        break;
+    }
+    SPI2.slv_rdbuf_dlen.bit_len   = (32 + (buf_len << 3)) - 1;
+    SPI2.slv_wrbuf_dlen.bit_len   = (32 + (buf_len << 3)) - 1;
   }
   SPI2.cmd.usr = 1;  // Start the transfer.
   _assert_cs(true);
