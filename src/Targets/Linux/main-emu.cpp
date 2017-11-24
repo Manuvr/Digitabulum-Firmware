@@ -161,10 +161,10 @@ int main(int argc, const char *argv[]) {
   BQ24155 charger(&charger_opts);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &charger);
 
-  LTC294x gas_gauge(&gas_gauge_opts);
+  LTC294x gas_gauge(&gas_gauge_opts, battery_opts.capacity);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &gas_gauge);
 
-  PMU pmu(&charger, &gas_gauge);
+  PMU pmu(&charger, &gas_gauge, &powerplant_opts, &battery_opts);
   kernel->subscribe((EventReceiver*) &pmu);
 
   // Pipe strategy planning...

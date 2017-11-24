@@ -89,6 +89,10 @@ void CPLDDriver::externalOscillator(bool on) {
 }
 
 
+void CPLDDriver::hw_flush() {
+}
+
+
 
 /*******************************************************************************
 * ___     _                                  This is a template class for
