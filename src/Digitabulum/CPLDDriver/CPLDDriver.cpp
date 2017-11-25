@@ -21,6 +21,7 @@ limitations under the License.
 */
 
 #include "CPLDDriver.h"
+#include "IRQRouter.h"
 #include "../ManuLegend/ManuManager.h"
 
 
@@ -73,7 +74,7 @@ volatile static uint8_t* _irq_data_1   = &(_irq_data[10]);  // Convenience
 volatile static uint8_t* _irq_diff     = &(_irq_data[20]);  // Convenience
 volatile static uint8_t* _irq_accum    = &(_irq_data[30]);  // Convenience
 volatile static uint8_t* _irq_data_ptr = _irq_data_0;  // Used for block-wise access.
-volatile static uint32_t _irq_frames_rxd    = 0;  // How many IRQ frames have arrived.
+volatile static uint32_t _irq_frames_rxd   = 0;  // How many IRQ frames have arrived.
 volatile static uint32_t _irq_latency_0    = 0;  // IRQ latency discovery.
 volatile static uint32_t _irq_latency_1    = 0;  // IRQ latency discovery.
 volatile static uint32_t _irq_latency_2    = 0;  // IRQ latency discovery.
@@ -82,7 +83,7 @@ volatile static uint32_t _irq_latency_2    = 0;  // IRQ latency discovery.
 uint8_t debug_buffer[64];
 
 /* This message is dispatched when IRQ data changes. */
-ManuvrMsg _irq_data_arrival;
+static ManuvrMsg _irq_data_arrival;
 
 // These are debug. Cut them.
 uint8_t active_imu_position = 0;

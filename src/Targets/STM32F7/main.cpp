@@ -33,11 +33,7 @@ Intended target is an STM32F7.
 
 #include "Digitabulum/USB/STM32F7USB.h"
 #include "Digitabulum/CPLDDriver/CPLDDriver.h"
-#include "Digitabulum/RovingNetworks/RN4677/RN4677.h"
 #include "Digitabulum/ManuLegend/ManuManager.h"
-#include "Digitabulum/IREmitter/IREmitter.h"
-#include "Digitabulum/HapticStrap/HapticStrap.h"
-#include "Digitabulum/SDCard/SDCard.h"
 #include "Digitabulum/DigitabulumPMU/DigitabulumPMU.h"
 
 #ifdef __cplusplus
@@ -437,44 +433,6 @@ int main() {
   ADP8866 leds(58, 63, 0x27);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
   kernel->subscribe((EventReceiver*) &leds);
-
-  INA219 ina219(0x4A);
-  i2c.addSlaveDevice(&ina219);
-
-
-  RN4677Pins rn_pins;  // TODO: Still not happy about this. Needless stack burn. Const.
-  rn_pins.reset = 68;
-  rn_pins.ean   = 69; // WO, SystemConf. Pull-down.
-  rn_pins.p24   = 70; // WO, SystemConf. Pull-up.
-
-  rn_pins.sbt   = 51; // WO, SW_BTN
-  rn_pins.swu   = 36; // WO, software wake-up.
-
-  rn_pins.p20   = 21; // WO, SystemConf. Pull-up.
-
-  rn_pins.p04   = 18; // RO, Status 0
-  rn_pins.p15   = 19; // RO, Status 1
-  rn_pins.led   = 35; // RO, LED State
-
-  rn_pins.p05   = 54; // Configurable.
-  rn_pins.p31   = 67; //
-  rn_pins.p32   = 66; //
-  rn_pins.p33   = 65; //
-  rn_pins.p34   = 64; //
-  rn_pins.p37   = 24; //
-
-  RN4677 bt(&rn_pins);
-  kernel->subscribe((EventReceiver*) &bt);
-
-
-  SDCard sd;
-  kernel->subscribe((EventReceiver*) &sd);
-
-  IREmitter ir;
-  kernel->subscribe((EventReceiver*) &ir);
-
-  HapticStrap strap;
-  kernel->subscribe((EventReceiver*) &strap);
 
   PMU pmu(&ina219);
   kernel->subscribe((EventReceiver*) &pmu);

@@ -18,14 +18,94 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
+IRQ definitions
+--------------------------------------------------------------------------------
+00  PORT_5
+01  PORT_5
+02  PORT_5
+03  PORT_5
+04  PORT_5
+05  PORT_5
+06  PORT_5
+07  PORT_5
+08  PORT_5
+09  PORT_5
+10  PORT_5
+11  PORT_5
+12  PORT_4
+13  PORT_4
+14  PORT_4
+15  PORT_4
+16  PORT_4
+17  PORT_4
+18  PORT_4
+19  PORT_4
+20  PORT_4
+21  PORT_4
+22  PORT_4
+23  PORT_4
+24  PORT_3
+25  PORT_3
+26  PORT_3
+27  PORT_3
+28  PORT_3
+29  PORT_3
+30  PORT_3
+31  PORT_3
+32  PORT_3
+33  PORT_3
+34  PORT_3
+35  PORT_3
+36  PORT_2
+37  PORT_2
+38  PORT_2
+39  PORT_2
+40  PORT_2
+41  PORT_2
+42  PORT_2
+43  PORT_2
+44  PORT_2
+45  PORT_2
+46  PORT_2
+47  PORT_2
+48  PORT_1
+49  PORT_1
+50  PORT_1
+51  PORT_1
+52  PORT_1
+53  PORT_1
+54  PORT_1
+55  PORT_1
+56  PORT_1
+57  PORT_1
+58  PORT_1
+59  PORT_1
+60  MC
+61  MC
+62  MC
+63  MC
+64  MC
+65  MC
+66  MC
+67  MC
+68  Metacarpals present.
+69  Digit 1 present.
+70  Digit 2 present.
+71  Digit 3 present.
+72  Digit 4 present.
+73  Digit 5 present.
+74  CONFIG register, bit 2.
+75  CPLD_OE
+76  0
+77  0
+78  CPLD_GUARD_BIT_VALUE[0]
+79  CPLD_GUARD_BIT_VALUE[1]
+
 */
 
 
 #ifndef __CPLD_IRQ_ROUTER_H__
 #define __CPLD_IRQ_ROUTER_H__
-
-#include <Platform/Peripherals/SPI/SPIBusOp.h>
-#include <Platform/Platform.h>
 
 #define CPLD_GUARD_BIT_VALUE  0x03
 
@@ -62,41 +142,11 @@ limitations under the License.
 #define CPLD_IRQ_BITMASK_IMU_16_MASK   0x0F        //
 
 
-class IRQRouterOptions {
-  public:
-};
 
+  /* These values represent where in the IRQ buffer this IIU's bits lie. */
+  inline uint8_t _irq_offset_byte(int idx) {  return (idx >> 1);     };
+  inline uint8_t _irq_offset_bit(int idx) {   return (idx << 2);     };
 
-/**
-* The CPLD driver class.
-*/
-class IRQRouter {
-  public:
-    IRQRouter(const CPLDPins*);
-    ~IRQRouter();
-
-    bool digitExists(DigitPort);
-
-    /* Nice API break-out to CONFIG register bits. */
-    inline void setIRQ74(bool x) {           setCPLDConfig(CPLD_CONF_BIT_IRQ_74, x);     };
-    inline void setGPIO(bool x) {            setCPLDConfig(CPLD_CONF_BIT_GPIO, x);       };
-    inline void conserveDigitDrive(bool x) { setCPLDConfig(CPLD_CONF_BIT_PWR_CONSRV, x); };
-    inline void disableIRQScan(bool x) {     setCPLDConfig(CPLD_CONF_BIT_IRQ_SCAN, x);   };
-
-    inline int8_t setWakeupSignal(uint8_t _val) {
-      return writeRegister(CPLD_REG_WAKEUP_IRQ, _val | 0x80);
-    };
-
-
-
-  private:
-    /* These values represent where in the IRQ buffer this IIU's bits lie. */
-    inline uint8_t _irq_offset_byte(int idx) {  return (idx >> 1);     };
-    inline uint8_t _irq_offset_bit(int idx) {   return (idx << 2);     };
-
-    void _digit_irq_force(uint8_t digit, bool state);
-
-    static uint32_t _irq_frames_rxd;     // How many IRQ frames have arrived.
-};
+  void _digit_irq_force(uint8_t digit, bool state);
 
 #endif   // __CPLD_IRQ_ROUTER_H__
