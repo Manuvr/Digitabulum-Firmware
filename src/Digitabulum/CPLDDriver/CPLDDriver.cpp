@@ -369,6 +369,8 @@ CPLDDriver::~CPLDDriver() {
 * Setup GPIO pins and their bindings to on-chip peripherals, if required.
 */
 void CPLDDriver::gpioSetup() {
+  // NOTE: The SPI pins are not handled here, since their efficient treatment
+  //   is left to the platform-specific face of this driver.
   if (255 != _pins.reset) {
     gpioDefine(_pins.reset, GPIOMode::OUTPUT);
     setPin(_pins.reset, false);  // Hold the CPLD in reset.
@@ -1408,9 +1410,24 @@ void CPLDDriver::printIRQs(StringBuilder* output) {
 
 
 #if defined(MANUVR_CONSOLE_SUPPORT)
-void CPLDDriver::procDirectDebugInstruction(StringBuilder* input) {
-  char* str = input->position(0);
+/*******************************************************************************
+* Console I/O
+*******************************************************************************/
 
+static const ConsoleCommand console_cmds[] = {
+  { "o", "Enable or disable internal oscillator." },
+  { "O", "Enable or disable external oscillator." }
+};
+
+
+uint CPLDDriver::consoleGetCmds(ConsoleCommand** ptr) {
+  *ptr = (ConsoleCommand*) &console_cmds[0];
+  return sizeof(console_cmds) / sizeof(ConsoleCommand);
+}
+
+
+void CPLDDriver::consoleCmdProc(StringBuilder* input) {
+  char* str = input->position(0);
   int temp_int = ((*(str) != 0) ? atoi((char*) str+1) : 0);
 
   switch (*(str)) {
@@ -1637,7 +1654,7 @@ void CPLDDriver::procDirectDebugInstruction(StringBuilder* input) {
       break;
 
     default:
-      EventReceiver::procDirectDebugInstruction(input);
+      //EventReceiver::procDirectDebugInstruction(input);
       break;
   }
 

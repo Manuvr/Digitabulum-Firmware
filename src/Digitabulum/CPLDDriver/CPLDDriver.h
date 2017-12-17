@@ -198,7 +198,6 @@ Bit | Function
 
 
 
-
 IMU register access procedure:
 --------------------------------------------------------------------------------
   DEV_ADDR | Digit | Position | Aspect
@@ -326,6 +325,10 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 
 #include <Platform/Peripherals/SPI/SPIBusOp.h>
 #include <Platform/Platform.h>
+#ifdef MANUVR_CONSOLE_SUPPORT
+  #include <XenoSession/Console/ManuvrConsole.h>
+  #include <XenoSession/Console/ConsoleInterface.h>
+#endif
 
 #define CPLD_MINIMUM_VERSION  0x19
 #define CPLD_GUARD_BIT_VALUE  0x03
@@ -562,10 +565,23 @@ enum class DigitPort {
 /*
 * The CPLD driver class.
 */
-class CPLDDriver : public EventReceiver, public BusAdapter<SPIBusOp> {
+class CPLDDriver : public EventReceiver,
+  #ifdef MANUVR_CONSOLE_SUPPORT
+    public ConsoleInterface,
+  #endif
+    public BusAdapter<SPIBusOp>
+  {
   public:
     CPLDDriver(const CPLDPins*);
     ~CPLDDriver();       // Should never be called. Here for the sake of completeness.
+
+    #ifdef MANUVR_CONSOLE_SUPPORT
+      /* Overrides from ConsoleInterface */
+      uint consoleGetCmds(ConsoleCommand**);
+      inline const char* consoleName() { return getReceiverName();  };
+      void consoleCmdProc(StringBuilder* input);
+    #endif
+
 
     /* Overrides from the BusAdapter interface */
     int8_t io_op_callahead(BusOp*);

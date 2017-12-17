@@ -118,6 +118,7 @@ DRIVER_OBJS   = $(DRIVER_SRCS:.cpp=.o)
 COV_FILES     = $(OBJS:.o=.gcda) $(OBJS:.o=.gcno)
 COV_FILES    += $(FIRMWARE_OBJS:.o=.gcda) $(FIRMWARE_OBJS:.o=.gcno)
 COV_FILES    += $(DRIVER_OBJS:.o=.gcda) $(DRIVER_OBJS:.o=.gcno)
+COV_FILES    += $(OBJS:.o=.gcda) $(OBJS:.o=.gcno)
 
 # Merge our choices and export them to the downstream Makefiles...
 CFLAGS += $(MANUVR_OPTIONS) $(OPTIMIZATION) $(INCLUDES)
@@ -167,6 +168,7 @@ coverage: $(OUTPUT_PATH)/$(FIRMWARE_NAME)
 clean:
 	rm -rf $(OUTPUT_PATH)
 	rm -f $(OBJS)
+	rm -f $(COV_FILES) *.gcda *.gcno
 
 
 fullclean: clean
