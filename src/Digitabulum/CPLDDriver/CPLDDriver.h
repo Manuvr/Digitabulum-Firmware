@@ -580,7 +580,10 @@ class CPLDDriver : public EventReceiver,
       uint consoleGetCmds(ConsoleCommand**);
       inline const char* consoleName() { return getReceiverName();  };
       void consoleCmdProc(StringBuilder* input);
-    #endif
+      void printDebug(StringBuilder*);
+      void printHardwareState(StringBuilder*);
+      void printIRQs(StringBuilder*);
+    #endif  //MANUVR_CONSOLE_SUPPORT
 
 
     /* Overrides from the BusAdapter interface */
@@ -596,12 +599,6 @@ class CPLDDriver : public EventReceiver,
     /* Overrides from EventReceiver */
     int8_t notify(ManuvrMsg*);
     int8_t callback_proc(ManuvrMsg*);
-    #if defined(MANUVR_CONSOLE_SUPPORT)
-      void procDirectDebugInstruction(StringBuilder*);
-      void printDebug(StringBuilder*);
-      void printHardwareState(StringBuilder*);
-      void printIRQs(StringBuilder*);
-    #endif  //MANUVR_CONSOLE_SUPPORT
 
     /* High-level hardware control and discovery. */
     void     reset();                  // Causes the CPLD to be reset.

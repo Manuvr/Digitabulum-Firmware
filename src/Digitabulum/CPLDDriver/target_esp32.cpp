@@ -298,10 +298,10 @@ bool CPLDDriver::_set_timer_base(int hz) {
 void CPLDDriver::init_ext_clk() {
   _er_set_flag(CPLD_FLAG_EXT_OSC, false);
   ledc_timer_config_t timer_conf = {
-    speed_mode : LEDC_HIGH_SPEED_MODE, // TODO: Doc says this is the only mode supported.
-    bit_num    : LEDC_TIMER_10_BIT,   // We only need a constant duty-cycle. Flip fewer bits.
-    timer_num  : LEDC_TIMER_0,       // TODO: Understand implications of this choice.
-    freq_hz    : DEFAULT_CPLD_FREQ  // PWM frequency.
+    LEDC_HIGH_SPEED_MODE,  // speed_mode // TODO: Doc says this is the only mode supported.
+    LEDC_TIMER_10_BIT,     // bit_num    // We only need a constant duty-cycle. Flip fewer bits.
+    LEDC_TIMER_0,          // timer_num  // TODO: Understand implications of this choice.
+    DEFAULT_CPLD_FREQ      // freq_hz    // PWM frequency.
   };
   ledc_channel_config_t channel_conf = {
     gpio_num   : _pins.clk,            // The CLK output pin.

@@ -4,9 +4,9 @@
 # Date:   2017.02.11
 #
 # Currently supported targets:
-#     make MANUVR_PLATFORM=LINUX
-#     make MANUVR_PLATFORM=ESP32
-#     make MANUVR_PLATFORM=STM32F7
+#     make PLATFORM=LINUX
+#     make PLATFORM=ESP32
+#     make PLATFORM=STM32F7
 ################################################################################
 
 
@@ -40,9 +40,8 @@ export MANUVR_PLATFORM = ESP32
 export OUTPUT_PATH     = $(BUILD_ROOT)/build
 
 PROJECT_NAME         := digitabulum-r2
-#COMPONENT_SRCDIRS    := ManuvrOS/
 BUILD_DIR_BASE       := $(OUTPUT_PATH)
-SRCDIRS              := src/Digitabulum src/Targets/ESP32 lib/ManuvrOS/ManuvrOS
+EXTRA_COMPONENT_DIRS := $(BUILD_ROOT)/src/Digitabulum $(BUILD_ROOT)/src/Targets/ESP32 $(BUILD_ROOT)/lib/ManuvrOS/ManuvrOS
 
 # Pull in the esp-idf...
 include $(IDF_PATH)/make/project.mk

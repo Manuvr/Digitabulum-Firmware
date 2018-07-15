@@ -29,6 +29,10 @@ Our goal is to encapsulate power-supply concerns to this class. This
 #include <Kernel.h>
 #include <Drivers/PMIC/BQ24155/BQ24155.h>
 #include <Drivers/PMIC/LTC294x/LTC294x.h>
+#ifdef MANUVR_CONSOLE_SUPPORT
+  #include <XenoSession/Console/ManuvrConsole.h>
+  #include <XenoSession/Console/ConsoleInterface.h>
+#endif
 
 /*
 * These state flags are hosted by the EventReceiver. This may change in the future.
@@ -38,6 +42,7 @@ Our goal is to encapsulate power-supply concerns to this class. This
 #define DIGITAB_PMU_FLAG_V_25       0x02    // Aux regulator is set to 2.5v.
 
 #define DIGITABULUM_MSG_PMU_READ    0x5233  //
+#define DIGITABULUM_MSG_BATT_ALERT  0x5234  //
 
 
 enum class ChargeState {
@@ -114,27 +119,29 @@ class PowerPlantOpts {
 };
 
 
-
-/* These fxns are out-of-class ISRs. */
-//void bq24155_stat_isr();
-//void ltc294x_alert_isr();
-
-
+#if defined(MANUVR_CONSOLE_SUPPORT)
+class PMU : public EventReceiver, public ConsoleInterface {
+#else
 class PMU : public EventReceiver {
+#endif   // MANUVR_CONSOLE_SUPPORT
   public:
-    PMU(BQ24155*, LTC294x*, const PowerPlantOpts*, const BatteryOpts*);
+    PMU(I2CAdapter*, const BQ24155Opts*, const LTC294xOpts*, const PowerPlantOpts*, const BatteryOpts*);
     virtual ~PMU();
 
     /* Overrides from EventReceiver */
     int8_t notify(ManuvrMsg*);
     int8_t erConfigure(Argument*);
     int8_t callback_proc(ManuvrMsg*);
-    void printDebug(StringBuilder*);
+
     #if defined(MANUVR_CONSOLE_SUPPORT)
-      void procDirectDebugInstruction(StringBuilder*);
+      /* Overrides from ConsoleInterface */
+      uint consoleGetCmds(ConsoleCommand**);
+      inline const char* consoleName() { return getReceiverName();  };
+      void consoleCmdProc(StringBuilder* input);
+      void printDebug(StringBuilder*);
+      void printBattery(StringBuilder*);
     #endif  //MANUVR_CONSOLE_SUPPORT
 
-    void printBattery(StringBuilder*);
     ChargeState getChargeState();
 
     /* Is the aux regulator enabled? */
@@ -159,13 +166,12 @@ class PMU : public EventReceiver {
   private:
     const PowerPlantOpts _opts;
     const BatteryOpts    _battery;
-    BQ24155*       _bq24155;
-    LTC294x*       _ltc294x;
-    //const BQ24155*       _bq24155;
-    //const LTC294x*       _ltc294x;
+    BQ24155     _bq24155;
+    LTC294x     _ltc294x;
     ChargeState _charge_state = ChargeState::UNDEF;
     uint32_t    _punch_timestamp = 0;
     ManuvrMsg   _periodic_pmu_read;
+    ManuvrMsg   _battery_alert_msg;
 
     static const char* getChargeStateString(ChargeState);
 };

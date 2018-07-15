@@ -1415,6 +1415,13 @@ void CPLDDriver::printIRQs(StringBuilder* output) {
 *******************************************************************************/
 
 static const ConsoleCommand console_cmds[] = {
+  { "r", "Reset" },
+  { "i", "IRQs" },
+  { "i1", "CPLD version" },
+  { "i2", "CPLD pin assignments" },
+  { "i3", "Digit states" },
+  { "i4", "Measure IRQ latency" },
+  { "i5", "Hardware state" },
   { "o", "Enable or disable internal oscillator." },
   { "O", "Enable or disable external oscillator." }
 };
