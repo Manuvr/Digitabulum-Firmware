@@ -73,7 +73,7 @@ class SensorFrame;
 #define IIU_DEG_TO_RAD_SCALAR   (3.14159f / 180.0f)
 
 
-enum class SampleType {
+enum class SampleType : uint8_t {
   UNSPECIFIED  = 0x00,
   ACCEL        = 0x01,  // Accelerometer vector.
   GYRO         = 0x02,  // Gyro vector.

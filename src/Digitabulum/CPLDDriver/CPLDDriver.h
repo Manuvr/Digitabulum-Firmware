@@ -543,7 +543,7 @@ class CPLDPins {
 };
 
 
-enum class DigitState {
+enum class DigitState : uint8_t {
   UNKNOWN  = 0,   // Interpretable as a bitmask...
   ASLEEP   = 1,   // Bit 0: Digit present.
   ABSENT   = 2,   // Bit 1: Digit awake.
@@ -551,7 +551,7 @@ enum class DigitState {
 };
 
 /* Chirality invarient identifiers for digit ports. */
-enum class DigitPort {
+enum class DigitPort : uint8_t {
   MC       = 0,  // LED channel 6
   PORT_1   = 1,  // LED channel 1
   PORT_2   = 2,  // LED channel 5
@@ -578,7 +578,7 @@ class CPLDDriver : public EventReceiver,
     #ifdef MANUVR_CONSOLE_SUPPORT
       /* Overrides from ConsoleInterface */
       uint consoleGetCmds(ConsoleCommand**);
-      inline const char* consoleName() { return getReceiverName();  };
+      inline const char* const consoleName() { return getReceiverName();  };
       void consoleCmdProc(StringBuilder* input);
       void printDebug(StringBuilder*);
       void printHardwareState(StringBuilder*);

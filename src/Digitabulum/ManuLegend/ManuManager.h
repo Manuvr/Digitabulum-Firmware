@@ -47,7 +47,10 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #include "ManuLegend.h"
 #include "ManuLegendPipe.h"
 #include "Integrator.h"
-
+#ifdef MANUVR_CONSOLE_SUPPORT
+  #include <XenoSession/Console/ManuvrConsole.h>
+  #include <XenoSession/Console/ConsoleInterface.h>
+#endif
 
 /*
 * These state flags are hosted by the EventReceiver. This may change in the future.
@@ -70,7 +73,7 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #endif
 
 
-enum class Chirality {
+enum class Chirality : uint8_t {
   UNKNOWN = 0,   // Interpretable as a bitmask...
   RIGHT   = 1,   // Bit 0: Chirality known
   LEFT    = 3    // Bit 1: Left-handed
@@ -80,7 +83,7 @@ enum class Chirality {
 * Chirality invarient identifiers for fingers. We follow anatomical convention
 * And consider the thumb to be digit 1.
 */
-enum class Anatomical {
+enum class Anatomical : uint8_t {
   METACARPALS = 0,
   DIGIT_1     = 1,
   DIGIT_2     = 2,
@@ -98,26 +101,35 @@ enum class Anatomical {
 * Like the CPLDDriver, this class implements BusOpCallback. IMU data is read directly
 *   into this class.
 */
-class ManuManager : public EventReceiver, public BusOpCallback {
+class ManuManager : public EventReceiver,
+  #ifdef MANUVR_CONSOLE_SUPPORT
+    public ConsoleInterface,
+  #endif
+  public BusOpCallback {
   public:
     ManuManager(BusAdapter<SPIBusOp>*);
     ~ManuManager();
 
+    #if defined(MANUVR_CONSOLE_SUPPORT)
+      /* Overrides from ConsoleInterface */
+      uint consoleGetCmds(ConsoleCommand**);
+      inline const char* const consoleName() { return getReceiverName();  };
+      void consoleCmdProc(StringBuilder* input);
+      void printDebug(StringBuilder*);
+      void printHardwareState(StringBuilder*);
+      void printIRQs(StringBuilder*);
+    #endif  //MANUVR_CONSOLE_SUPPORT
+
     /* Overrides from EventReceiver */
-    void printDebug(StringBuilder*);
     int8_t notify(ManuvrMsg*);
     int8_t callback_proc(ManuvrMsg*);
     int8_t writeFrameToBuffer(StringBuilder*);
-    #if defined(MANUVR_CONSOLE_SUPPORT)
-      void procDirectDebugInstruction(StringBuilder*);
-    #endif  //MANUVR_CONSOLE_SUPPORT
 
     /* Overrides from the BusOpCallback interface */
     int8_t io_op_callahead(BusOp*);
     int8_t io_op_callback(BusOp*);
     int8_t queue_io_job(BusOp*);
 
-    void printHelp(StringBuilder*);
     void dumpPreformedElements(StringBuilder*);
 
     int8_t setLegend(ManuLegend*);

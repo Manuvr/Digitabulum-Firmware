@@ -44,7 +44,7 @@ class SensorFrame;
 /*
 * Supported options for encoding Frames.
 */
-enum class ManuEncoding {
+enum class ManuEncoding : uint8_t { 
   LOG    = 0,
   CBOR   = 1,
   OSC    = 2,

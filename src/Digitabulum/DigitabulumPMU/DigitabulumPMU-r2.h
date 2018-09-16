@@ -45,7 +45,7 @@ Our goal is to encapsulate power-supply concerns to this class. This
 #define DIGITABULUM_MSG_BATT_ALERT  0x5234  //
 
 
-enum class ChargeState {
+enum class ChargeState : uint8_t {
   FULL,      // Implies we are connected to a charging source.
   CHARGING,  // The battery is not full, but it is charging.
   DRAINING,  // No charging source. We are burning fuel..
@@ -119,11 +119,11 @@ class PowerPlantOpts {
 };
 
 
-#if defined(MANUVR_CONSOLE_SUPPORT)
-class PMU : public EventReceiver, public ConsoleInterface {
-#else
-class PMU : public EventReceiver {
-#endif   // MANUVR_CONSOLE_SUPPORT
+class PMU : public EventReceiver
+  #if defined(MANUVR_CONSOLE_SUPPORT)
+    , public ConsoleInterface
+  #endif   // MANUVR_CONSOLE_SUPPORT
+  {
   public:
     PMU(I2CAdapter*, const BQ24155Opts*, const LTC294xOpts*, const PowerPlantOpts*, const BatteryOpts*);
     virtual ~PMU();
@@ -136,7 +136,7 @@ class PMU : public EventReceiver {
     #if defined(MANUVR_CONSOLE_SUPPORT)
       /* Overrides from ConsoleInterface */
       uint consoleGetCmds(ConsoleCommand**);
-      inline const char* consoleName() { return getReceiverName();  };
+      inline const char* const consoleName() { return getReceiverName();  };
       void consoleCmdProc(StringBuilder* input);
       void printDebug(StringBuilder*);
       void printBattery(StringBuilder*);

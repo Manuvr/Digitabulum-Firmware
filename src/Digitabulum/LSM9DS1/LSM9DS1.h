@@ -45,7 +45,7 @@ IMUs need to be aware of their own bus addresses so that bus access can be encap
 /*
 * These are possible error states for the IMU state-machine.
 */
-enum class IMUFault {
+enum class IMUFault : uint8_t {
   NO_ERROR               =  0,
   WRONG_IDENTITY         =  1,
   INVALID_PARAM_ID       =  2,
@@ -62,7 +62,7 @@ enum class IMUFault {
 /*
 * These are the sensor states.
 */
-enum class IMUState {
+enum class IMUState : uint8_t {
   STAGE_0 = 0,  // Undiscovered. Maybe absent.
   STAGE_1,      // Discovered, but not init'd.
   STAGE_2,      // Discovered and initiallized, but unknown register values.
@@ -122,7 +122,7 @@ typedef struct {
 *   configured to allow multiple sequential register access. The means for doing
 *   this vary between mag/ag.
 */
-enum class RegID {
+enum class RegID : uint8_t {
   M_OFFSET_X = 0x00,  // 16-bit offset registers
   M_OFFSET_Y,         // 16-bit offset registers  TODO: Condense into X?
   M_OFFSET_Z,         // 16-bit offset registers  TODO: Condense into X?

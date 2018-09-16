@@ -1143,17 +1143,51 @@ void ManuManager::printDebug(StringBuilder *output) {
 
 
 #if defined(MANUVR_CONSOLE_SUPPORT)
-/**
-* Debug support method. This fxn is only present in debug builds.
-*
-* @param   StringBuilder* The buffer into which this fxn should write its output.
-*/
-void ManuManager::printHelp(StringBuilder *output) {
-  EventReceiver::printDebug(output);
+/*******************************************************************************
+* Console I/O
+*******************************************************************************/
+
+static const ConsoleCommand console_cmds[] = {
+  { "V", "IMU verbosity" },
+  { "i", "General info" },
+  { "i1", "Integrator info" },
+  { "i2", "Ping sensors" },
+  { "i3", "Print sensor roll-call" },
+  { "i4", "Frame pool info" },
+  { "i5", "Type sizes" },
+  { "i6", "FIFO levels" },
+
+  { "E", "Set data encoding" },
+
+
+  { "j", "Per-datum reflection parameters" },
+  { "[", "Enable spherical abberation correction" },
+  { "]", "Disable spherical abberation correction" },
+  { "Z", "Enable autoscale" },
+  { "z", "Disable autoscale" },
+  { "N", "Enable range-binding" },
+  { "n", "Disable range-binding" },
+  { "X", "Enable gyro error compensation" },
+  { "x", "Disable gyro error compensation" },
+  { "Y", "Enable bearing nullification" },
+  { "y", "Disable bearing nullification" },
+
+  { "Q", "Set Madjwick iterations" },
+  { ",", "Quats per event" },
+  { "b", "Set Madjwick beta" },
+  { "L", "Set sample rate profile" },
+  { "o", "Set GYR base filter" },
+  { "O", "Set ACC base filter" }
+};
+
+
+uint ManuManager::consoleGetCmds(ConsoleCommand** ptr) {
+  *ptr = (ConsoleCommand*) &console_cmds[0];
+  return sizeof(console_cmds) / sizeof(ConsoleCommand);
 }
 
 
-void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
+void ManuManager::consoleCmdProc(StringBuilder* input) {
   char* str = input->position(0);
 
   uint8_t temp_byte = 0;
@@ -1187,24 +1221,20 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
 
     case 'i':
       switch (temp_byte) {
-        case 0:
-          printDebug(&local_log);
-          break;
         case 1:
           integrator.printDebug(&local_log);
           break;
         case 2:
-          break;
-        case 3:
           local_log.concat("Reading sensor identities...\n");
           read_identities();  // Read the sensor's identity registers.
           break;
-        case 4:
+        case 3:
           printIMURollCall(&local_log);   // Show us the results, JIC
           break;
-        case 5:
+        case 4:
+          _frame_pool.printDebug(&local_log);
           break;
-        case 6:
+        case 5:
           local_log.concatf("sizeof(ManuLegendPipe)\t%u\n", sizeof(ManuLegendPipe));
           local_log.concatf("sizeof(ManuLegend)  \t%u\n", sizeof(ManuLegend));
           local_log.concatf("sizeof(ManuManager) \t%u\n", sizeof(ManuManager));
@@ -1214,7 +1244,7 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           local_log.concatf("sizeof(RegPtrMap)   \t%u\n", sizeof(RegPtrMap));
           local_log.concatf("sizeof(_frame_buf_i)\t%u\n", sizeof(_frame_buf_i));
           break;
-        case 7:
+        case 6:
           {
             SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
             op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::AG_ACT_DUR) | 0x80);
@@ -1223,22 +1253,13 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           }
           break;
 
-        #if defined(MANUVR_DEBUG)
-          case 8:
-            _frame_pool.printDebug(&local_log);
-            break;
-          case 9:
-            dumpPreformedElements(&local_log);
-            break;
-        #else
-          case 8:
-          case 9:
-            local_log.concat("Not a debug build.\n");
-            break;
-        #endif
+        case 7:
+          dumpPreformedElements(&local_log);
+          break;
 
+        case 0:
         default:
-          printHelp(&local_log);
+          printDebug(&local_log);
           break;
       }
       break;
@@ -1334,6 +1355,23 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
           break;
       }
       break;
+
+    case 'E':
+      switch (temp_byte) {
+        case 1:
+        case 2:
+        case 3:
+        case 4:
+          {
+            ManuEncoding e = (ManuEncoding) (temp_byte - 1);
+            local_log.concatf("Switching to ManuEncoding::%s\n", ManuLegendPipe::encoding_label(e));
+            _def_pipe.encoding(e);
+          }
+        default:
+          local_log.concatf("Using ManuEncoding::%s\n", ManuLegendPipe::encoding_label(_def_pipe.encoding()));
+      }
+      break;
+
 
 
     // IMU DEBUG //////////////////////////////////////////////////////////////////
@@ -1460,8 +1498,8 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
 
     case '[':
     case ']':
-      local_log.concatf("%sabling spherical abberation correction on all IIUs.\n", ((*(str) == ']') ? "En":"Dis"));
-      integrator.correctSphericalAbberation((*(str) == ']'));
+      local_log.concatf("%sabling spherical abberation correction on all IIUs.\n", ((*(str) == '[') ? "En":"Dis"));
+      integrator.correctSphericalAbberation((*(str) == '['));
       break;
 
     case 'u':
@@ -1622,7 +1660,6 @@ void ManuManager::procDirectDebugInstruction(StringBuilder *input) {
       break;
 
     default:
-      EventReceiver::procDirectDebugInstruction(input);
       break;
   }
 
