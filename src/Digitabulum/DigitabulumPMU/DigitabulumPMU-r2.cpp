@@ -316,7 +316,7 @@ int8_t PMU::notify(ManuvrMsg* active_event) {
     case DIGITABULUM_MSG_PMU_READ:
       {
         uint32_t ts = millis();
-        _ltc294x.refresh();
+        _ltc294x.readSensor();
         if (ts >= (_punch_timestamp + 29000)) {
           // One every 32 seconds, the charger will stop.
           _bq24155.punch_safety_timer();
@@ -453,7 +453,7 @@ void PMU::consoleCmdProc(StringBuilder* input) {
       switch (temp_int) {
         case 1:
           local_log.concat("Refreshing _ltc294x.\n");
-          _ltc294x.refresh();
+          _ltc294x.readSensor();
           break;
         case 2:
           local_log.concat("Refreshing _bq24155.\n");
@@ -466,7 +466,7 @@ void PMU::consoleCmdProc(StringBuilder* input) {
           _bq24155.printRegisters(&local_log);
           break;
         default:
-          local_log.concat("1: _ltc294x.refresh()\n");
+          local_log.concat("1: _ltc294x.readSensor()\n");
           local_log.concat("2: _bq24155.refresh()\n");
           break;
       }
