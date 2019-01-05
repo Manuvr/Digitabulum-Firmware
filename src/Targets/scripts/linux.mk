@@ -83,10 +83,10 @@ MANUVR_OPTIONS += -D__MANUVR_LINUX
 # Enables ATECC provisioning-related features...
 MANUVR_OPTIONS += -DATECC508_CAPABILITY_OTP_RW
 MANUVR_OPTIONS += -DATECC508_CAPABILITY_CONFIG_UNLOCK
-MANUVR_OPTIONS += -DMBEDTLS_CONFIG_FILE='<mbedTLS_conf.h>'
 
 # Debugging options...
 ifeq ($(SECURE),1)
+	MANUVR_OPTIONS += -DMBEDTLS_CONFIG_FILE='<mbedTLS_conf.h>'
   LIBS += -lmbedtls -lmbedx509 -lmbedcrypto
   export SECURE=1
 endif

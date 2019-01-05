@@ -578,12 +578,13 @@ class CPLDDriver : public EventReceiver,
     #ifdef MANUVR_CONSOLE_SUPPORT
       /* Overrides from ConsoleInterface */
       uint consoleGetCmds(ConsoleCommand**);
-      inline const char* const consoleName() { return getReceiverName();  };
+      inline const char* consoleName() { return getReceiverName();  };
       void consoleCmdProc(StringBuilder* input);
-      void printDebug(StringBuilder*);
-      void printHardwareState(StringBuilder*);
-      void printIRQs(StringBuilder*);
     #endif  //MANUVR_CONSOLE_SUPPORT
+
+    void printDebug(StringBuilder*);
+    void printHardwareState(StringBuilder*);
+    void printIRQs(StringBuilder*);
 
 
     /* Overrides from the BusAdapter interface */

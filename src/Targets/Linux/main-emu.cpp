@@ -158,13 +158,7 @@ int main(int argc, const char *argv[]) {
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
   kernel->subscribe((EventReceiver*) &leds);
 
-  BQ24155 charger(&charger_opts);
-  i2c.addSlaveDevice((I2CDeviceWithRegisters*) &charger);
-
-  LTC294x gas_gauge(&gas_gauge_opts, battery_opts.capacity);
-  i2c.addSlaveDevice((I2CDeviceWithRegisters*) &gas_gauge);
-
-  PMU pmu(&charger, &gas_gauge, &powerplant_opts, &battery_opts);
+  PMU pmu(&i2c, &charger_opts, &gas_gauge_opts, &powerplant_opts, &battery_opts);
   kernel->subscribe((EventReceiver*) &pmu);
 
   // Pipe strategy planning...
@@ -188,8 +182,8 @@ int main(int argc, const char *argv[]) {
     *       nc -t 127.0.0.1 2319
     */
     if (opts) {
-      char* addr_str = "127.0.0.1";
-      char* port_str = "2319";
+      char* addr_str = (char*) "127.0.0.1";
+      char* port_str = (char*) "2319";
       opts->getValueAs("tcp-port", &port_str);
       int port_num = atoi(port_str);
 

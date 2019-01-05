@@ -26,7 +26,7 @@ This is where definition of (application or device)-specific parameters ought to
 #define MANUVR_CONSOLE_SUPPORT
 #define MANUVR_STDIO
 //#define MANUVR_SUPPORT_SERIAL
-//#define MANUVR_SUPPORT_TCPSOCKET
+#define MANUVR_SUPPORT_TCPSOCKET
 //#define MANUVR_SUPPORT_UDP
 #define MANUVR_SUPPORT_I2C
   #define I2CADAPTER_MAX_QUEUE_DEPTH 32
@@ -49,6 +49,10 @@ This is where definition of (application or device)-specific parameters ought to
 #define MANUVR_DEBUG
 #define MANUVR_EVENT_PROFILER
 #define MANUVR_IMU_DEBUG
+
+#define ATECC508_CAPABILITY_OTP_RW
+#define ATECC508_CAPABILITY_CONFIG_UNLOCK
+
 
 // This is the string that identifies this Manuvrable to other Manuvrables. In MHB's case, this
 //   will select the mEngine.

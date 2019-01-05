@@ -32,6 +32,7 @@ Intended target is an WROOM32 SoC module.
 #include <Drivers/PMIC/BQ24155/BQ24155.h>
 #include <Drivers/PMIC/LTC294x/LTC294x.h>
 #include <XenoSession/Console/ManuvrConsole.h>
+#include <Transports/ManuvrSocket/ManuvrTCP.h>
 
 #include "Digitabulum/CPLDDriver/CPLDDriver.h"
 #include "Digitabulum/ManuLegend/ManuManager.h"
@@ -43,42 +44,129 @@ Intended target is an WROOM32 SoC module.
   extern "C" {
 #endif
 
+// These pins are special on the ESP32. They should not be assigned as inputs
+//   since the levels can't be assured at startup.   [0, 2, 5, 12, 15]
+
+/*******************************************************************************
+* The confs below are for the current-version WROOM32U board.
+* TODO: The time has come to case-off support for board revisions.
+*******************************************************************************/
 /*
 * Pin defs given here assume a WROOM32 module.
 */
 const CPLDPins cpld_pins(
-  26,  // Reset
-  21,  // Transfer request
-  255, // IO33 (input-only) CPLD's IRQ_WAKEUP pin
-  2,   // CPLD clock input
-  25,  // CPLD OE pin
+  2,   // Reset
+  18,  // Transfer request
+  32,  // CPLD's IRQ_WAKEUP pin
+  16,  // CPLD clock input
+  4,   // CPLD OE pin
   255, // N/A (CPLD GPIO)
-  5,   // SPI1 CS
-  17,  // SPI1 CLK
-  16,  // SPI1 MOSI
-  4,   // SPI1 MISO
-  35,  // IO35 (SPI2 CS)
-  34,  // IO34 (input-only) (SPI2 CLK)
-  32   // IO32 (input-only) (SPI2 MOSI)
+  17,  // SPI1 CS
+  13,  // SPI1 CLK
+  14,  // SPI1 MOSI
+  25,  // SPI1 MISO
+  35,  // SPI2 CS
+  34,  // SPI2 CLK
+  33   // SPI2 MOSI
 );
 
 
 const I2CAdapterOptions i2c_opts(
   0,   // Device number
-  14,  // IO14 (sda)
-  12,  // IO12 (scl)
-  I2C_ADAPT_OPT_FLAG_SDA_PU
+  26,  // sda
+  27,  // scl
+  I2C_ADAPT_OPT_FLAG_SDA_PU | I2C_ADAPT_OPT_FLAG_SCL_PU,  // This is correct on the jig.
+  //0,   // No pullups
+  100000
 );
+
+const ADP8866Pins adp_opts(
+  5,   // Reset
+  19   // IRQ
+);
+
+const LTC294xOpts gas_gauge_opts(
+  21,     // IO13 (Alert pin)
+  LTC294X_OPT_ACD_AUTO | LTC294X_OPT_INTEG_SENSE
+);
+
+const BQ24155Opts charger_opts(
+  68,  // Sense resistor is 68 mOhm.
+  255, // N/A (STAT)
+  23,  // ISEL
+  BQ24155USBCurrent::LIMIT_800,  // Hardware limits (if any) on source draw..
+  BQ24155_FLAG_ISEL_HIGH  // We want to start the ISEL pin high.
+);
+
+const PowerPlantOpts powerplant_opts(
+  255, // 2.5v select pin is driven by the CPLD.
+  12,  // Aux regulator enable pin.
+  DIGITAB_PMU_FLAG_ENABLED  // Regulator enabled @3.3v
+);
+
+/*******************************************************************************
+* The commented confs below are for the original WROOM32 board. They are still
+*   valid if you are using that board.
+*******************************************************************************/
+// /*
+// * Pin defs given here assume a WROOM32 module.
+// */
+// const CPLDPins cpld_pins(
+//   26,  // Reset
+//   21,  // Transfer request
+//   255, // IO33 (input-only) CPLD's IRQ_WAKEUP pin
+//   2,   // CPLD clock input
+//   25,  // CPLD OE pin
+//   255, // N/A (CPLD GPIO)
+//   5,   // SPI1 CS
+//   17,  // SPI1 CLK
+//   16,  // SPI1 MOSI
+//   4,   // SPI1 MISO
+//   35,  // IO35 (SPI2 CS)
+//   34,  // IO34 (input-only) (SPI2 CLK)
+//   32   // IO32 (input-only) (SPI2 MOSI)
+// );
+//
+//
+// const I2CAdapterOptions i2c_opts(
+//   0,   // Device number
+//   14,  // IO14 (sda)
+//   12,  // IO12 (scl)
+//   //I2C_ADAPT_OPT_FLAG_SDA_PU,
+//   I2C_ADAPT_OPT_FLAG_SDA_PU | I2C_ADAPT_OPT_FLAG_SCL_PU,  // This is correct on the jig.
+//   //0,   // No pullups
+//   100000
+// );
+//
+// const ADP8866Pins adp_opts(
+//   19,  // IO19 (Reset)
+//   18   // IO18 (IRQ)
+// );
+//
+// const LTC294xOpts gas_gauge_opts(
+//   13,     // IO13 (Alert pin)
+//   LTC294X_OPT_ACD_AUTO | LTC294X_OPT_INTEG_SENSE
+// );
+//
+// const BQ24155Opts charger_opts(
+//   68,  // Sense resistor is 68 mOhm.
+//   255, // N/A (STAT)
+//   23,  // IO23 (ISEL)
+//   BQ24155USBCurrent::LIMIT_800,  // Hardware limits (if any) on source draw..
+//   BQ24155_FLAG_ISEL_HIGH  // We want to start the ISEL pin high.
+// );
+//
+// const PowerPlantOpts powerplant_opts(
+//   255, // 2.5v select pin is driven by the CPLD.
+//   27,  // Aux regulator enable pin.
+//   DIGITAB_PMU_FLAG_ENABLED  // Regulator enabled @3.3v
+// );
+
+#define ESP32_LED_PIN             15  // This is an LED.
 
 const ATECC508Opts atecc_opts(
   (uint8_t) 255
 );
-
-const ADP8866Pins adp_opts(
-  19,  // IO19 (Reset)
-  18   // IO18 (IRQ)
-);
-
 
 const BatteryOpts battery_opts (
   1400,    // Battery capacity (in mAh)
@@ -88,49 +176,6 @@ const BatteryOpts battery_opts (
   4.2f     // Battery max (in volts)
 );
 
-const LTC294xOpts gas_gauge_opts(
-  13,     // IO13 (Alert pin)
-  LTC294X_OPT_ACD_AUTO | LTC294X_OPT_INTEG_SENSE
-);
-
-const BQ24155Opts charger_opts(
-  68,  // Sense resistor is 68 mOhm.
-  255, // N/A (STAT)
-  23,  // IO23 (ISEL)
-  BQ24155USBCurrent::LIMIT_800,  // Hardware limits (if any) on source draw..
-  BQ24155_FLAG_ISEL_HIGH  // We want to start the ISEL pin high.
-);
-
-const PowerPlantOpts powerplant_opts(
-  255, // 2.5v select pin is driven by the CPLD.
-  27,  // Aux regulator enable pin.
-  DIGITAB_PMU_FLAG_ENABLED  // Regulator enabled @3.3v
-);
-
-#define ESP32_LED_PIN             15  // This is an LED.
-
-/*
-Pins
--------------
-IO12
-IO13
-IO14
-IO15
-IO16
-IO17
-IO18
-IO19
-IO21
-IO22
-IO23
-IO25
-IO26
-IO27
-IO32
-IO33
-IO34
-IO35
-*/
 
 #if defined (__BUILD_HAS_FREERTOS)
 
@@ -200,7 +245,6 @@ static void initialize_sntp() {
 
 
 static void initialise_wifi() {
-  tcpip_adapter_init();
   wifi_event_group = xEventGroupCreate();
   ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -247,27 +291,35 @@ static esp_err_t event_handler(void* ctx, system_event_t* event) {
 }
 
 
+BufferPipe* _pipe_factory_1(BufferPipe* _n, BufferPipe* _f) {
+  ManuvrConsole* _console = new ManuvrConsole(_n);
+  platform.kernel()->subscribe(_console);
+  return (BufferPipe*) _console;
+}
 
-/*******************************************************************************
-* Main function                                                                *
-*******************************************************************************/
-void app_main() {
-  /*
-  * The platform object is created on the stack, but takes no action upon
-  *   construction. The first thing that should be done is to call the preinit
-  *   function to setup the defaults of the platform.
-  */
-  platform.platformPreInit();
+
+void manuvr_task(void* pvParameter) {
   Kernel* kernel = platform.kernel();
+  unsigned long ms_0 = millis();
+  unsigned long ms_1 = ms_0;
+  unsigned long ms_w = ms_0;
+  bool odd_even = false;
+
+  if (0 != BufferPipe::registerPipe(1, _pipe_factory_1)) {
+    printf("Failed to add console to the pipe registry.\n");
+    exit(1);
+  }
+  const uint8_t pipe_plan_console[] = {1, 0};
+
+  #if defined(MANUVR_SUPPORT_TCPSOCKET)
+    ManuvrTCP tcp_srv((const char*) "0.0.0.0", 2319);
+    tcp_srv.setPipeStrategy(pipe_plan_console);
+    kernel->subscribe(&tcp_srv);
+    tcp_srv.listen();
+  #endif
 
   I2CAdapter i2c(&i2c_opts);
   kernel->subscribe(&i2c);
-
-  //BQ24155 charger(&charger_opts);
-  //i2c.addSlaveDevice((I2CDeviceWithRegisters*) &charger);
-
-  //LTC294x gas_gauge(&gas_gauge_opts, battery_opts.capacity);
-  //i2c.addSlaveDevice((I2CDeviceWithRegisters*) &gas_gauge);
 
   PMU pmu(&i2c, &charger_opts, &gas_gauge_opts, &powerplant_opts, &battery_opts);
   kernel->subscribe((EventReceiver*) &pmu);
@@ -284,14 +336,35 @@ void app_main() {
 
   ATECC508 atec(&atecc_opts);
   i2c.addSlaveDevice((I2CDevice*) &atec);
-  kernel->subscribe((EventReceiver*) &atec);
 
   platform.bootstrap();
 
-  unsigned long ms_0 = millis();
-  unsigned long ms_1 = ms_0;
-  unsigned long ms_w = ms_0;
-  bool odd_even = false;
+  while (1) {
+    kernel->procIdleFlags();
+    ms_1 = millis();
+    kernel->advanceScheduler(ms_1 - ms_0);
+    ms_0 = ms_1;
+    setPin(ESP32_LED_PIN, odd_even);
+    odd_even = !odd_even;
+    if (ms_0 > (ms_w+1000)) {
+      ms_w = ms_0;
+      esp_task_wdt_feed();
+    }
+  }
+}
+
+
+
+/*******************************************************************************
+* Main function                                                                *
+*******************************************************************************/
+void app_main() {
+  /*
+  * The platform object is created on the stack, but takes no action upon
+  *   construction. The first thing that should be done is to call the preinit
+  *   function to setup the defaults of the platform.
+  */
+  platform.platformPreInit();
 
   gpioDefine(ESP32_LED_PIN, GPIOMode::OUTPUT);
 
@@ -318,19 +391,7 @@ void app_main() {
   ESP_LOGI(TAG, "The current date/time in CO is: %s", strftime_buf);
   // TODO: End generalize block.
 
-
-  while (1) {
-    kernel->procIdleFlags();
-    ms_1 = millis();
-    kernel->advanceScheduler(ms_1 - ms_0);
-    ms_0 = ms_1;
-    setPin(ESP32_LED_PIN, odd_even);
-    odd_even = !odd_even;
-    if (ms_0 > (ms_w+1000)) {
-      ms_w = ms_0;
-      //esp_task_wdt_feed();
-    }
-  }
+  xTaskCreate(manuvr_task, "_manuvr", 48000, NULL, (tskIDLE_PRIORITY + 2), NULL);
 }
 #endif  // __BUILD_HAS_FREERTOS
 
