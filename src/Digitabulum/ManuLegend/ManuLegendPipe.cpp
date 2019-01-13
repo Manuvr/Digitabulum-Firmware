@@ -39,7 +39,7 @@ The ManuLegendPipe is the means by which relevant manu data is filtered,
 * Static members and initializers should be located here.
 *******************************************************************************/
 
-const char* const ManuLegendPipe::encoding_label(ManuEncoding e) {
+const char* ManuLegendPipe::encoding_label(ManuEncoding e) {
   switch (e) {
     case ManuEncoding::LOG:    return "LOG";
     case ManuEncoding::CBOR:   return "CBOR";
@@ -49,7 +49,7 @@ const char* const ManuLegendPipe::encoding_label(ManuEncoding e) {
   return "";
 };
 
-const char* const get_imu_label(int idx) {
+const char* get_imu_label(int idx) {
   switch (idx) {
     case 0:   return "c";
     case 1:   return "mc";

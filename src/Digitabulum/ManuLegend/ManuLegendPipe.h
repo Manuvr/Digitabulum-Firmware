@@ -44,7 +44,7 @@ class SensorFrame;
 /*
 * Supported options for encoding Frames.
 */
-enum class ManuEncoding : uint8_t { 
+enum class ManuEncoding : uint8_t {
   LOG    = 0,
   CBOR   = 1,
   OSC    = 2,
@@ -81,7 +81,7 @@ class ManuLegendPipe : public ManuLegend {
     inline void encoding(ManuEncoding e) {  _encoding = e;      };
 
 
-    static const char* const encoding_label(ManuEncoding);
+    static const char* encoding_label(ManuEncoding);
 
 
 

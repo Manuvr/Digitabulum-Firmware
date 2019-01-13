@@ -75,8 +75,8 @@ const I2CAdapterOptions i2c_opts(
   0,   // Device number
   26,  // sda
   27,  // scl
-  I2C_ADAPT_OPT_FLAG_SDA_PU | I2C_ADAPT_OPT_FLAG_SCL_PU,  // This is correct on the jig.
-  //0,   // No pullups
+  //I2C_ADAPT_OPT_FLAG_SDA_PU | I2C_ADAPT_OPT_FLAG_SCL_PU,  // This is correct on the jig.
+  0,
   100000
 );
 
@@ -86,7 +86,7 @@ const ADP8866Pins adp_opts(
 );
 
 const LTC294xOpts gas_gauge_opts(
-  21,     // IO13 (Alert pin)
+  21,     // Alert pin
   LTC294X_OPT_ACD_AUTO | LTC294X_OPT_INTEG_SENSE
 );
 
@@ -194,7 +194,7 @@ const BatteryOpts battery_opts (
 #include "nvs_flash.h"
 
 #include "lwip/err.h"
-#include "apps/sntp/sntp.h"
+#include "lwip/apps/sntp.h"
 
 #define EXAMPLE_WIFI_SSID "WaddleNest_Quarantine"
 #define EXAMPLE_WIFI_PASS "idistrustmydevice"
@@ -299,6 +299,7 @@ BufferPipe* _pipe_factory_1(BufferPipe* _n, BufferPipe* _f) {
 
 
 void manuvr_task(void* pvParameter) {
+  esp_task_wdt_add(nullptr);
   Kernel* kernel = platform.kernel();
   unsigned long ms_0 = millis();
   unsigned long ms_1 = ms_0;
@@ -348,7 +349,7 @@ void manuvr_task(void* pvParameter) {
     odd_even = !odd_even;
     if (ms_0 > (ms_w+1000)) {
       ms_w = ms_0;
-      esp_task_wdt_feed();
+      esp_task_wdt_reset();
     }
   }
 }
@@ -368,28 +369,28 @@ void app_main() {
 
   gpioDefine(ESP32_LED_PIN, GPIOMode::OUTPUT);
 
-  // TODO: Ultimately generalize this... Taken from ESP32 examples....
-  // https://github.com/espressif/esp-idf/blob/master/examples/protocols/sntp/main/sntp_example_main.c
-  time_t now;
-  struct tm timeinfo;
-  time(&now);
-  localtime_r(&now, &timeinfo);
-  // Is time set? If not, tm_year will be (1970 - 1900).
-  if (timeinfo.tm_year < (2016 - 1900)) {
-    ESP_LOGI(TAG, "Time is not set yet. Connecting to WiFi and getting time over NTP.");
-    obtain_time();
-    // update 'now' variable with current time
-    time(&now);
-  }
-  char strftime_buf[64];
+  //// TODO: Ultimately generalize this... Taken from ESP32 examples....
+  //// https://github.com/espressif/esp-idf/blob/master/examples/protocols/sntp/main/sntp_example_main.c
+  //time_t now;
+  //struct tm timeinfo;
+  //time(&now);
+  //localtime_r(&now, &timeinfo);
+  //// Is time set? If not, tm_year will be (1970 - 1900).
+  //if (timeinfo.tm_year < (2016 - 1900)) {
+  //  ESP_LOGI(TAG, "Time is not set yet. Connecting to WiFi and getting time over NTP.");
+  //  obtain_time();
+  //  // update 'now' variable with current time
+  //  time(&now);
+  //}
+  //char strftime_buf[64];
 
-  // Set timezone to Eastern Standard Time and print local time
-  setenv("TZ", "MST7MDT,M3.2.0/2,M11.1.0", 1);
-  tzset();
-  localtime_r(&now, &timeinfo);
-  strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-  ESP_LOGI(TAG, "The current date/time in CO is: %s", strftime_buf);
-  // TODO: End generalize block.
+  //// Set timezone to Eastern Standard Time and print local time
+  //setenv("TZ", "MST7MDT,M3.2.0/2,M11.1.0", 1);
+  //tzset();
+  //localtime_r(&now, &timeinfo);
+  //strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+  //ESP_LOGI(TAG, "The current date/time in CO is: %s", strftime_buf);
+  //// TODO: End generalize block.
 
   xTaskCreate(manuvr_task, "_manuvr", 48000, NULL, (tskIDLE_PRIORITY + 2), NULL);
 }
