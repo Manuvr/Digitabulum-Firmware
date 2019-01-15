@@ -344,7 +344,6 @@ void CPLDDriver::externalOscillator(bool on) {
 }
 
 
-
 /**
 * Init of SPI2. This is broken out because we might be bringing it
 *   up and down in a single runtime for debug reasons.
@@ -358,9 +357,10 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
   gpio_num_t p_mosi  = (gpio_num_t) _pins.s1_mosi;
   gpio_num_t p_miso  = (gpio_num_t) _pins.s1_miso;
 
-  for (int i = 0; i < 16; i++) SPI2.data_buf[i] = 0;
   _er_set_flag(CPLD_FLAG_SPI1_READY, false);
   if (GPIO_IS_VALID_GPIO(p_cs) && GPIO_IS_VALID_GPIO(p_clk) && GPIO_IS_VALID_GPIO(p_mosi) && GPIO_IS_VALID_OUTPUT_GPIO(p_miso)) {
+    periph_module_enable(PERIPH_HSPI_MODULE);
+
     SPI2.slave.slave_mode   = 1;  // CPLD drives the clock.
     SPI2.slave.wr_rd_buf_en = 1;  // We don't want any but buffer commands.
     SPI2.slave.cs_i_mode    = 2;  // Double-buffered CS signal.
@@ -398,6 +398,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
     //SPI2.dma_conf.indscr_burst_en  = 1;  // RX operations are bursted into memory.
 
     reset_spi2_dma();
+    for (int i = 0; i < 16; i++) SPI2.data_buf[i] = 0;
 
     SPI2.dma_int_ena.val  = (
       SPI_OUT_TOTAL_EOF_INT_ENA |
@@ -409,6 +410,7 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
       SPI_INLINK_DSCR_ERROR_INT_ENA |
       SPI_OUTLINK_DSCR_ERROR_INT_ENA |
       SPI_INLINK_DSCR_EMPTY_INT_ENA);
+
 
     DPORT_SET_PERI_REG_BITS(DPORT_SPI_DMA_CHAN_SEL_REG, 3, 1, 2);   // Point DMA channel to HSPI.
 
@@ -427,7 +429,6 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
     gpio_matrix_in( p_mosi,  HSPID_IN_IDX,    false);
     gpio_matrix_out( p_miso, HSPIQ_OUT_IDX,   false, false);
 
-    periph_module_enable(PERIPH_HSPI_MODULE);
     esp_intr_alloc(ETS_SPI2_INTR_SOURCE, ESP_INTR_FLAG_IRAM, spi2_isr, nullptr, nullptr);
     esp_intr_alloc(ETS_SPI2_DMA_INTR_SOURCE, ESP_INTR_FLAG_IRAM, dma_isr, nullptr, nullptr);
     _er_set_flag(CPLD_FLAG_SPI1_READY, true);
@@ -446,9 +447,9 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
   gpio_num_t p_clk   = (gpio_num_t) _pins.s2_clk;
   gpio_num_t p_mosi  = (gpio_num_t) _pins.s2_mosi;
 
-  for (int i = 0; i < 16; i++) SPI3.data_buf[i] = 0;
-
   if (GPIO_IS_VALID_GPIO(p_cs) && GPIO_IS_VALID_GPIO(p_clk) && GPIO_IS_VALID_GPIO(p_mosi)) {
+    periph_module_enable(PERIPH_VSPI_MODULE);
+
     SPI3.slave.slave_mode   = 1;
     SPI3.slave.wr_rd_buf_en = 1;
     SPI3.slave.cs_i_mode    = 2;  // Double-buffered CS signal.
@@ -481,6 +482,8 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
 
     SPI3.slv_rdbuf_dlen.bit_len   = 80;
 
+    for (int i = 0; i < 16; i++) SPI3.data_buf[i] = 0;
+
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_cs],   PIN_FUNC_GPIO);
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_clk],  PIN_FUNC_GPIO);
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_mosi], PIN_FUNC_GPIO);
@@ -493,7 +496,6 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
     gpio_matrix_in( p_clk,  VSPICLK_IN_IDX,  false);
     gpio_matrix_in( p_mosi, VSPID_IN_IDX,    false);
 
-    periph_module_enable(PERIPH_VSPI_MODULE);
     esp_intr_alloc(ETS_SPI3_INTR_SOURCE, ESP_INTR_FLAG_IRAM, spi3_isr, nullptr, nullptr);
     _er_set_flag(CPLD_FLAG_SPI2_READY, true);
   }
@@ -501,6 +503,12 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
 
 
 void CPLDDriver::hw_flush() {
+  reset_spi2_dma();
+  setPin(_pins.req, false);
+  for (int i = 0; i < 16; i++) {
+    SPI2.data_buf[i] = 0;
+    SPI3.data_buf[i] = 0;
+  }
   _threaded_op = nullptr;
 }
 
@@ -583,8 +591,8 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
     );
   }
 
-  output->concatf("--\n-- SPI3 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI2_READY)?"on":"OFF"));
-  output->concatf("--\t Ops:         0x%08x\n\n", SPI3.slave.trans_cnt);
+  //output->concatf("--\n-- SPI3 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI2_READY)?"on":"OFF"));
+  //output->concatf("--\t Ops:         0x%08x\n\n", SPI3.slave.trans_cnt);
   //output->concatf("--\t Last State:  0x%02x\n", (uint8_t) SPI3.slave.last_state);
   //output->concatf("--\t Last CMD:    0x%02x\n", (uint8_t) SPI3.slave.last_command);
   //output->concatf("--\t Ext2.State:  0x%02x\n", (uint8_t) SPI3.ext2.st);

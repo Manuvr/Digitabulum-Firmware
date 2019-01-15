@@ -1229,8 +1229,7 @@ int8_t CPLDDriver::attached() {
     reset();
 
     if (255 != _pins.irq) {
-      gpioDefine(_pins.irq, GPIOMode::INPUT_PULLUP);
-      setPinFxn(_pins.irq, FALLING, cpld_wakeup_isr);
+      setPinFxn(_pins.irq, FALLING_PULL_UP, cpld_wakeup_isr);
       //gpio_wakeup_enable((gpio_num_t) _pins.irq, GPIO_INTR_POSEDGE);
     }
     return 1;
@@ -1630,12 +1629,12 @@ void CPLDDriver::consoleCmdProc(StringBuilder* input) {
     //case 's':  // TODO: Cut once system is fully validated.
     //  switch (temp_int) {
     //    case 1:     // SPI1 initialization...
-    //      init_spi(1, 0);  // CPOL=1, CPHA=0, HW-driven
+    //      init_spi(0, 0);  // CPOL=1, CPHA=0, HW-driven
     //      local_log.concat("Re-initialized SPI1.\n");
     //      break;
     //    case 2:     // SPI2 initialization...
-    //      init_spi2(1, 0);  // CPOL=1, CPHA=0, HW-driven
-    //      local_log.concat("Re-initialized SPI2 into Mode-2.\n");
+    //      init_spi2(0, 0);  // CPOL=1, CPHA=0, HW-driven
+    //      local_log.concat("Re-initialized SPI2.\n");
     //      break;
     //  }
     //  break;
