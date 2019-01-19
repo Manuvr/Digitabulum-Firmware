@@ -1561,11 +1561,11 @@ void CPLDDriver::consoleCmdProc(StringBuilder* input) {
       local_log.concatf("_digit_irq_force(%u, %c)\n", temp_int, (*(str) == 'X' ? '1' : '0'));
       _digit_irq_force(temp_int, (*(str) == 'X'));
       break;
-    //case 'E':
-    //case 'e':
-    //  local_log.concatf("%s IRQ 74.\n", (*(str) == 'E' ? "Setting" : "Clearing"));
-    //  setIRQ74(*(str) == 'E');
-    //  break;
+    case 'E':
+    case 'e':
+      local_log.concatf("%s IRQ 74.\n", (*(str) == 'E' ? "Setting" : "Clearing"));
+      setIRQ74(*(str) == 'E');
+      break;
     case 'A':
     case 'a':
       local_log.concatf("IRQ scanning %sabled.\n", (*(str) == 'A' ? "Dis" : "En"));
@@ -1638,23 +1638,24 @@ void CPLDDriver::consoleCmdProc(StringBuilder* input) {
     //      break;
     //  }
     //  break;
-    case '~':   // CPLD debug
+    case '#':   // CPLD debug
       {
         bzero(&debug_buffer[0], 64);
         SPIBusOp* op = new_op(BusOpcode::RX, this);
-        uint8_t imu_num = ((*(str) == '~') ? CPLD_REG_IMU_DM_P_M : CPLD_REG_IMU_DM_P_I) | 0x80;
-        op->setParams(imu_num, 1, 1, 0x8F);
+        uint8_t imu_num = CPLD_REG_IMU_DM_P_M | 0x80;
+        op->setParams(imu_num, 1, 2, 0x8F);
         op->setBuffer(&debug_buffer[0], 2);
         queue_io_job(op);
       }
       break;
+    case '~':   // CPLD debug
     case '`':   // CPLD debug
       {
         bzero(&debug_buffer[0], 64);
         SPIBusOp* op = new_op(BusOpcode::RX, this);
         uint8_t imu_num = ((*(str) == '~') ? CPLD_REG_IMU_DM_P_M : CPLD_REG_IMU_DM_P_I) | 0x80;
-        op->setParams(imu_num, 1, 28, 0x8F);
-        op->setBuffer(&debug_buffer[0], 2);
+        op->setParams(imu_num, 1, 16, 0x8F);
+        op->setBuffer(&debug_buffer[0], 16);
         queue_io_job(op);
       }
       break;

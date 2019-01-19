@@ -164,34 +164,39 @@ static void IRAM_ATTR dma_isr(void *arg) {
 
 static void IRAM_ATTR spi2_isr(void *arg) {
   if (SPI2.slave.trans_done) {
-    if ((SPI2.slv_rd_bit.slv_rdata_bit == SPI2.slv_rdbuf_dlen.bit_len) && (_threaded_op)) {
+    SPIBusOp* tmp = _threaded_op;  // Concurrency "safety".
+    if ((SPI2.slv_rd_bit.slv_rdata_bit == SPI2.slv_rdbuf_dlen.bit_len) && (tmp)) {
       spi2_op_counter_0++;
       uint32_t word = SPI2.data_buf[8];
-      if (2 == _threaded_op->transferParamLength()) {
+      if (2 == tmp->transferParamLength()) {
         // Internal CPLD register access doesn't use DMA, and expects us to
         // shuffle bytes around to avoid heaped buffers and DMA overhead.
         // buf+0/1 should be xfer_param[2/3].
-        *(_threaded_op->buf+0) = (uint8_t) word & 0xFF;
-        *(_threaded_op->buf+1) = (uint8_t) (word >> 8) & 0xFF;
+        *(tmp->buf+0) = (uint8_t) word & 0xFF;
+        *(tmp->buf+1) = (uint8_t) (word >> 8) & 0xFF;
       }
       else {
         // This was a DMA transaction.
         int i = 0;
         // If we have trailing data following DMA, copy from the FIFO.
-        switch (_threaded_op->buf_len & 0xFFFFFFFC) {
-          case 3:   *(_threaded_op->buf + i++) = (uint8_t) ((word >> 16) & 0xFF);
-          case 2:   *(_threaded_op->buf + i++) = (uint8_t) ((word >> 8) & 0xFF);
-          case 1:   *(_threaded_op->buf + i++) = (uint8_t) (word & 0xFF);
+        switch (tmp->buf_len & 0xFFFFFFFC) {
+          case 3:   *(tmp->buf + i++) = (uint8_t) ((word >> 16) & 0xFF);
+          case 2:   *(tmp->buf + i++) = (uint8_t) ((word >> 8) & 0xFF);
+          case 1:   *(tmp->buf + i++) = (uint8_t) (word & 0xFF);
           case 0:
           default:
             break;
         }
         reset_spi2_dma();
       }
-      SPIBusOp* tmp = _threaded_op;  // Concurrency "safety".
-      _threaded_op = nullptr;
       tmp->markComplete();
     }
+    else if (tmp) {
+      // If the CPLD terminates the transaction before it finishes...
+      tmp->abort(XferFault::DEV_FAULT);
+    }
+
+    _threaded_op = nullptr;
     SPI2.slave.trans_done  = 0;  // Clear interrupt.
   }
 
@@ -411,7 +416,6 @@ void CPLDDriver::init_spi(uint8_t cpol, uint8_t cpha) {
       SPI_OUTLINK_DSCR_ERROR_INT_ENA |
       SPI_INLINK_DSCR_EMPTY_INT_ENA);
 
-
     DPORT_SET_PERI_REG_BITS(DPORT_SPI_DMA_CHAN_SEL_REG, 3, 1, 2);   // Point DMA channel to HSPI.
 
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[p_cs],   PIN_FUNC_GPIO);
@@ -449,6 +453,8 @@ void CPLDDriver::init_spi2(uint8_t cpol, uint8_t cpha) {
 
   if (GPIO_IS_VALID_GPIO(p_cs) && GPIO_IS_VALID_GPIO(p_clk) && GPIO_IS_VALID_GPIO(p_mosi)) {
     periph_module_enable(PERIPH_VSPI_MODULE);
+
+    spi2_op_counter_1 = 0;
 
     SPI3.slave.slave_mode   = 1;
     SPI3.slave.wr_rd_buf_en = 1;
@@ -647,6 +653,10 @@ void CPLDDriver::printHardwareState(StringBuilder *output) {
 */
 XferFault SPIBusOp::begin() {
   //time_began    = micros();
+
+  // TODO: This should be safe to cut, but need to run more abuse tests under timing
+  //   permutations. Would really prefer to avoid explicit thread-safety overhead,
+  //   since this might be called at many hundreds of hz.
   if (_threaded_op) {
     abort(XferFault::BUS_BUSY);
     return XferFault::BUS_BUSY;
@@ -661,9 +671,6 @@ XferFault SPIBusOp::begin() {
       }
       break;
 
-    case 3:
-    case 1:
-    case 0:
     default:
       abort(XferFault::BAD_PARAM);
       return XferFault::BAD_PARAM;
@@ -680,7 +687,7 @@ XferFault SPIBusOp::begin() {
     // Two parameters means an internal CPLD access. We always want the
     //   Rx SR enabled to get the version and status that comes back in
     //   the first two bytes.
-    SPI2.user.usr_mosi      = 1;  // We turn on the RX shift-register.
+    SPI2.user.usr_mosi = 1;  // We turn on the RX shift-register.
     SPI2.data_buf[0] = xfer_params[0] + (xfer_params[1] << 8);
     if (0 == buf_len) {
       // We can afford to read two bytes into the same space as our xfer_params,
@@ -693,8 +700,8 @@ XferFault SPIBusOp::begin() {
     else {
       set_state(XferState::ADDR);
     }
-    SPI2.slv_rdbuf_dlen.bit_len   = 15;
-    SPI2.slv_wrbuf_dlen.bit_len   = 15;
+    SPI2.slv_rdbuf_dlen.bit_len = 15;
+    SPI2.slv_wrbuf_dlen.bit_len = 15;
   }
   else {
     set_state(XferState::ADDR);
@@ -723,6 +730,8 @@ XferFault SPIBusOp::begin() {
     SPI2.slv_wrbuf_dlen.bit_len   = (32 + (buf_len << 3)) - 1;
   }
   SPI2.cmd.usr = 1;  // Start the transfer.
+  // NOTE: REQ is a clock signal. We can dis-assert immediately, and the transfer
+  //   will still proceed. If that should ever be convenient.
   _assert_cs(true);
 
   return XferFault::NONE;
