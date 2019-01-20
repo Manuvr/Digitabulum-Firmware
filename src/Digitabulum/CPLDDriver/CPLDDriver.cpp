@@ -441,13 +441,17 @@ void CPLDDriver::reset() {
 */
 int CPLDDriver::_process_cpld_base_return(uint8_t _version, uint8_t _conf) {
   if ((_version >= CPLD_MINIMUM_VERSION) && (0xFF != _version)) {
-    // This block means the version code that cxame back was ok.
+    // This block means the version code that came back was ok.
+    bool fresh_init = false;
     if (_version != cpld_version) {
       // If the version changed, it can only mean we are getting our first
       //   confirmation of correct operation following reset.
+      fresh_init = true;
       cpld_version = _version;
-      Kernel::raiseEvent(DIGITABULUM_MSG_CPLD_RESET_COMPLETE, nullptr);
     }
+
+    // NOTE: Specific CPLD version support can be cased-off here:
+
     // Now deal with the config/status byte.
     uint8_t diff = cpld_conf_value ^ _conf;
     if (diff) {
@@ -484,6 +488,16 @@ int CPLDDriver::_process_cpld_base_return(uint8_t _version, uint8_t _conf) {
       if (diff & CPLD_CONF_BIT_ALIGN_XFER) {
       }
       cpld_conf_value = _conf;
+    }
+
+    if (fresh_init) {
+      // This is the appropriate place for config init.
+      // TODO: This value will vary. Provide it in config.
+      uint8_t desired_conf_value = (CPLD_CONF_BIT_ALIGN_XFER | CPLD_CONF_BIT_PWR_CONSRV);
+      if (cpld_conf_value != desired_conf_value) {
+        setCPLDConfig(desired_conf_value, true);
+      }
+      Kernel::raiseEvent(DIGITABULUM_MSG_CPLD_RESET_COMPLETE, nullptr);
     }
     return 0;
   }
@@ -1078,7 +1092,10 @@ int8_t CPLDDriver::iiu_group_irq() {
     if (_irq_accum[9] & 0x20) {
       if (0 == _irq_latency_2) {
         _irq_latency_2 = _irq_time;
-        if (getVerbosity() > 4) local_log.concatf("IRQ latency is %u us.\n", _irq_latency_2);
+        if (getVerbosity() > 4) {
+          local_log.concatf("IRQ latency\n\tArrival:     %u us\n", wrap_accounted_delta(_irq_latency_0, _irq_latency_1));
+          local_log.concatf("\tApplication  %u us\n", wrap_accounted_delta(_irq_latency_0, _irq_latency_2));
+        }
       }
       if (!hardwareReady()) {
         // We have verified that we can talk to the hardware.
@@ -1343,13 +1360,10 @@ int8_t CPLDDriver::notify(ManuvrMsg* active_event) {
 */
 void CPLDDriver::printDebug(StringBuilder* output) {
   EventReceiver::printDebug(output);
-  //if (getVerbosity() > 6) output->concatf("-- volatile *cpld      0x%08x\n--\n", cpld);
-  output->concatf("-- Conf                0x%02x\n",      cpld_conf_value);
-  output->concatf("-- Osc (Int/Ext)       %s / %s\n",       (_er_flag(CPLD_FLAG_INT_OSC) ? "on":"off"), (_er_flag(CPLD_FLAG_EXT_OSC) ? "on":"off"));
+  output->concatf("-- CPLD v%d\n-- Conf                0x%02x\n", cpld_version, cpld_conf_value);
+  output->concatf("-- Osc (Int/Ext)       %s / %s\n",     (_er_flag(CPLD_FLAG_INT_OSC) ? "on":"off"), (_er_flag(CPLD_FLAG_EXT_OSC) ? "on":"off"));
   if (_er_flag(CPLD_FLAG_EXT_OSC)) {
-  //  output->concatf("-- Base GetState       0x%02x\n", HAL_TIM_Base_GetState(&htim1));
     output->concatf("-- Ext freq:           %u\n", _ext_clk_freq);
-  //  output->concatf("-- PWM GetState        0x%02x\n", HAL_TIM_PWM_GetState(&htim1));
   }
 
   output->concatf("-- DEN_AG (C/MC)       %s / %s\n", (_conf_bits_set(CPLD_CONF_BIT_DEN_AG_C) ? "on":"off"), (_conf_bits_set(CPLD_CONF_BIT_DEN_AG_MC) ? "on":"off"));
@@ -1388,8 +1402,8 @@ void CPLDDriver::printIRQs(StringBuilder* output) {
     (irq_is_presently_high(74) ? '1':'0')
   );
   output->concat("-- IRQ latency\n\tDispatch     0\n");
-  output->concatf("\tArrival:     %u\n", wrap_accounted_delta(_irq_latency_0, _irq_latency_1));
-  output->concatf("\tApplication  %u\n", wrap_accounted_delta(_irq_latency_0, _irq_latency_2));
+  output->concatf("\tArrival:     %u us\n", wrap_accounted_delta(_irq_latency_0, _irq_latency_1));
+  output->concatf("\tApplication  %u us\n", wrap_accounted_delta(_irq_latency_0, _irq_latency_2));
 
   output->concatf("-- OE Pin              %c\n", (irq_is_presently_high(75) ? '1':'0'));
   output->concatf("-- Frames              %u\n", _irq_frames_rxd);
@@ -1638,24 +1652,42 @@ void CPLDDriver::consoleCmdProc(StringBuilder* input) {
     //      break;
     //  }
     //  break;
-    case '#':   // CPLD debug
-      {
-        bzero(&debug_buffer[0], 64);
-        SPIBusOp* op = new_op(BusOpcode::RX, this);
-        uint8_t imu_num = CPLD_REG_IMU_DM_P_M | 0x80;
-        op->setParams(imu_num, 1, 2, 0x8F);
-        op->setBuffer(&debug_buffer[0], 2);
-        queue_io_job(op);
-      }
-      break;
     case '~':   // CPLD debug
     case '`':   // CPLD debug
       {
         bzero(&debug_buffer[0], 64);
         SPIBusOp* op = new_op(BusOpcode::RX, this);
         uint8_t imu_num = ((*(str) == '~') ? CPLD_REG_IMU_DM_P_M : CPLD_REG_IMU_DM_P_I) | 0x80;
-        op->setParams(imu_num, 1, 16, 0x8F);
-        op->setBuffer(&debug_buffer[0], 16);
+        uint8_t param2 = 1;
+        uint8_t param3 = 2;
+
+        switch (temp_int) {
+          default:
+          case 0:    // Read one byte from two IMUs.
+            break;
+          case 1:    // Read one byte from 12 IMUs.
+            param2 = 1;
+            param3 = 12;
+            break;
+          case 2:    // Read 6 bytes from 1 IMUs.
+            param2 = 6;
+            param3 = 1;
+            break;
+          case 3:   // Read 6 bytes from 2 IMUs.
+            param2 = 6;
+            param3 = 2;
+            break;
+          case 4:   // Read 4 bytes from 1 IMUs.
+            param2 = 4;
+            param3 = 1;
+            break;
+          case 5:  // Read 4 bytes from 2 IMUs.
+            param2 = 4;
+            param3 = 2;
+            break;
+        }
+        op->setParams(imu_num, param2, param3, 0x8F);
+        op->setBuffer(&debug_buffer[0], param2 * param3);
         queue_io_job(op);
       }
       break;

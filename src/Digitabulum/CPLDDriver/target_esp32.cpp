@@ -85,7 +85,6 @@ extern "C" {
 static uint32_t spi2_byte_sink    = 0;
 static uint16_t spi2_op_counter_0 = 0;
 static uint32_t spi2_op_counter_1 = 0;
-static uint16_t spi2_op_counter_2 = 0;
 
 static lldesc_t _ll_tx_1;
 static lldesc_t _ll_rx_1;
@@ -165,7 +164,7 @@ static void IRAM_ATTR dma_isr(void *arg) {
 static void IRAM_ATTR spi2_isr(void *arg) {
   if (SPI2.slave.trans_done) {
     SPIBusOp* tmp = _threaded_op;  // Concurrency "safety".
-    if ((SPI2.slv_rd_bit.slv_rdata_bit == SPI2.slv_rdbuf_dlen.bit_len) && (tmp)) {
+    if ((SPI2.slv_rd_bit.slv_rdata_bit >= SPI2.slv_rdbuf_dlen.bit_len) && (tmp)) {
       spi2_op_counter_0++;
       uint32_t word = SPI2.data_buf[8];
       if (2 == tmp->transferParamLength()) {
@@ -545,24 +544,23 @@ int8_t CPLDDriver::bus_deinit() {
 void CPLDDriver::printHardwareState(StringBuilder *output) {
   output->concatf("\n-- SPI2 (%sline) --------------------\n", (_er_flag(CPLD_FLAG_SPI1_READY)?"on":"OFF"));
   output->concatf("--\t Ops(HW/ISR): 0x%08x / 0x%04x\n", SPI2.slave.trans_cnt, spi2_op_counter_0);
-  output->concatf("--\t op_count_1:  0x%08x\n", spi2_op_counter_1);
+  //output->concatf("--\t op_count_1:  0x%08x\n", spi2_op_counter_1);
   //output->concatf("--\t Last State:  0x%02x\n", (uint8_t) SPI2.slave.last_state);
   //output->concatf("--\t Last CMD:    0x%02x\n", (uint8_t) SPI2.slave.last_command);
-  output->concatf("--\t Ext2.State:  0x%02x\n", (uint8_t) SPI2.ext2.st);
-  output->concatf("--\t mosi_dlen:   0x%08x\n", SPI2.mosi_dlen.val);
-  output->concatf("--\t miso_dlen:   0x%08x\n", SPI2.miso_dlen.val);
-  output->concatf("--\t cmd:         0x%08x\n", SPI2.cmd.val);
-  output->concatf("--\t ctrl:        0x%08x\n", SPI2.ctrl.val);
-  output->concatf("--\t ctrl1:       0x%08x\n", SPI2.ctrl1.val);
-  output->concatf("--\t ctrl2:       0x%08x\n", SPI2.ctrl2.val);
+  //output->concatf("--\t Ext2.State:  0x%02x\n", (uint8_t) SPI2.ext2.st);
+  //output->concatf("--\t mosi_dlen:   0x%08x\n", SPI2.mosi_dlen.val);
+  //output->concatf("--\t miso_dlen:   0x%08x\n", SPI2.miso_dlen.val);
+  //output->concatf("--\t cmd:         0x%08x\n", SPI2.cmd.val);
+  //output->concatf("--\t ctrl:        0x%08x\n", SPI2.ctrl.val);
+  //output->concatf("--\t ctrl1:       0x%08x\n", SPI2.ctrl1.val);
+  //output->concatf("--\t ctrl2:       0x%08x\n", SPI2.ctrl2.val);
   output->concatf("--\t rd_status:   0x%08x\n", SPI2.rd_status.val);
   output->concatf("--\t user:        0x%08x\n", SPI2.user.val);
   //output->concatf("--\t user1:       0x%08x\n", SPI2.user1.val);
   //output->concatf("--\t user2:       0x%08x\n", SPI2.user2.val);
-
   //output->concatf("--\t pin:         0x%08x\n", SPI2.pin.val);
   //output->concatf("--\t clock:       0x%08x\n", SPI2.clock.val);
-  output->concatf("--\t slave:       0x%08x\n", SPI2.slave.val);
+  //output->concatf("--\t slave:       0x%08x\n", SPI2.slave.val);
   //output->concatf("--\t slave1:      0x%08x\n", SPI2.slave1.val);
   //output->concatf("--\t slave2:      0x%08x\n", SPI2.slave2.val);
   //output->concatf("--\t slave3:      0x%08x\n", SPI2.slave3.val);
@@ -726,8 +724,9 @@ XferFault SPIBusOp::begin() {
       default:
         break;
     }
-    SPI2.slv_rdbuf_dlen.bit_len   = (32 + (buf_len << 3)) - 1;
-    SPI2.slv_wrbuf_dlen.bit_len   = (32 + (buf_len << 3)) - 1;
+    unsigned int bits_to_xfer = (32 + (buf_len << 3)) - 1;
+    SPI2.slv_rdbuf_dlen.bit_len   = bits_to_xfer;
+    SPI2.slv_wrbuf_dlen.bit_len   = bits_to_xfer;
   }
   SPI2.cmd.usr = 1;  // Start the transfer.
   // NOTE: REQ is a clock signal. We can dis-assert immediately, and the transfer
@@ -745,9 +744,6 @@ XferFault SPIBusOp::begin() {
 * @return 0 on success. Non-zero on failure.
 */
 int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
-  //debug_log.concatf("advance_op(0x%08x, 0x%02x)\n\t %s\n\t status: 0x%08x\n", status_reg, data_reg, getStateString(), (unsigned long) hspi1.State);
-  //Kernel::log(&debug_log);
-
   /* These are our transfer-size-invariant cases. */
   switch (xfer_state) {
     case XferState::COMPLETE:
