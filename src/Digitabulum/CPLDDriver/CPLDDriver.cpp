@@ -1541,22 +1541,6 @@ void CPLDDriver::consoleCmdProc(StringBuilder* input) {
       local_log.concat("SPI1 queue purged.\n");
       break;
 
-    case 'd':
-      switch (temp_int) {
-        case 0:
-          local_log.concat("Disabling SPI interrupts...\n");
-          //SPI_I2S_ITConfig(SPI1, SPI_I2S_IT_RXNE | SPI_I2S_IT_TXE, DISABLE);
-        case 1:
-          local_log.concat("Disabling Stream3 interrupts...\n");
-          //DMA_ITConfig(DMA2_Stream3, DMA_IT_TC | DMA_IT_TE | DMA_IT_FE | DMA_IT_DME, DISABLE);
-        case 2:
-          local_log.concat("Disabling Stream0 interrupts...\n");
-          //DMA_ITConfig(DMA2_Stream0, DMA_IT_TC | DMA_IT_TE | DMA_IT_FE | DMA_IT_DME, DISABLE);
-        default:
-          break;
-      }
-      break;
-
     case '%':   // Ext clock rate.
       if (setCPLDClkFreq(strict_max(temp_int, 1)*1000)) {
         local_log.concatf("Set ext clock period to %d kHz.\n", strict_max(temp_int, 1));
@@ -1610,12 +1594,11 @@ void CPLDDriver::consoleCmdProc(StringBuilder* input) {
       reset();
       break;
 
-
-    case 'W':  // TODO: Cut once system is fully validated.
-    case 'w':
-      local_log.concatf("%sabling transfer alignment.\n", (*(str) == 'W' ? "En" : "Dis"));
-      setCPLDConfig(CPLD_CONF_BIT_ALIGN_XFER, (*(str) == 'W'));
-      break;
+    //case 'W':  // TODO: Cut once system is fully validated.
+    //case 'w':
+    //  local_log.concatf("%sabling transfer alignment.\n", (*(str) == 'W' ? "En" : "Dis"));
+    //  setCPLDConfig(CPLD_CONF_BIT_ALIGN_XFER, (*(str) == 'W'));
+    //  break;
     case '_':  // TODO: Cut once system is fully validated.
     case '-':
       local_log.concatf("op_abuse_test <--- (%s)\n", (*(str) == '_' ? "true" : "false"));
@@ -1629,10 +1612,10 @@ void CPLDDriver::consoleCmdProc(StringBuilder* input) {
       _periodic_debug.enableSchedule(*(str) == 'Z');
       local_log.concatf("%s periodic reader.\n", (*(str) == 'z' ? "Stopping" : "Starting"));
       break;
-    case '&':  // TODO: Cut once system is fully validated.
-      local_log.concatf("Advanced CPLD SPI work queue.\n");
-      Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, nullptr);   // Raise an event
-      break;
+    //case '&':  // TODO: Cut once system is fully validated.
+    //  local_log.concatf("Advanced CPLD SPI work queue.\n");
+    //  Kernel::raiseEvent(DIGITABULUM_MSG_SPI_QUEUE_READY, nullptr);   // Raise an event
+    //  break;
 
     case 'K':  // TODO: Cut once system is fully validated.
     case 'k':  // TODO: Cut once system is fully validated.
