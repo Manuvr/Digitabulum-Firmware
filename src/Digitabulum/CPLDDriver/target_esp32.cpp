@@ -117,7 +117,6 @@ void IRAM_ATTR reset_spi2_dma() {
   SPI2.dma_out_link.val  = 0x00000000;
   SPI2.dma_in_link.val   = 0x00000000;
   SPI2.dma_conf.val &= ~(SPI_OUT_RST | SPI_IN_RST | SPI_AHBM_RST | SPI_AHBM_FIFO_RST);
-  spi2_op_counter_1 = 0;
 }
 
 
@@ -126,9 +125,9 @@ static void IRAM_ATTR dma_isr(void *arg) {
   spi2_op_counter_1++;
   if (SPI2.dma_int_st.inlink_dscr_empty) {   /* lack of enough inlink descriptors.*/
     spi2_op_counter_1+=0x00000010;
-    // TODO: We need to disengage DMA so that excess bytes end up in the FIFO for later recovery.
-    SPI2.dma_in_link.val   = 0x10000000;  // Clear everything but the stop bit.
-    SPI2.dma_conf.val |= (SPI_IN_RST | SPI_DMA_RX_STOP);
+    // We need to disengage DMA so that excess bytes end up in the FIFO for later recovery.
+    reset_spi2_dma();
+    SPI2.dma_in_link.val  = 0x10000000;  // Clear everything but the stop bit.
   }
   if (SPI2.dma_int_st.outlink_dscr_error) {  /* outlink descriptor error.*/
     spi2_op_counter_1+=0x00000040;
@@ -144,9 +143,8 @@ static void IRAM_ATTR dma_isr(void *arg) {
   }
   if (SPI2.dma_int_st.in_suc_eof) {          /* completing receiving all the packets from host.*/
     spi2_op_counter_1+=0x00004000;
-    //SPI2.dma_conf.dma_rx_stop   = 1;  //
+    reset_spi2_dma();
     SPI2.dma_in_link.val   = 0x10000000;  // Clear everything but the stop bit.
-    SPI2.dma_conf.val |= (SPI_IN_RST | SPI_DMA_RX_STOP);
   }
   if (SPI2.dma_int_st.out_done) {            /* completing usage of a outlink descriptor .*/
     spi2_op_counter_1+=0x00010000;
@@ -168,6 +166,9 @@ static void IRAM_ATTR spi2_isr(void *arg) {
     SPIBusOp* tmp = _threaded_op;  // Concurrency "safety".
     if ((SPI2.slv_rd_bit.slv_rdata_bit >= SPI2.slv_rdbuf_dlen.bit_len) && (tmp)) {
       spi2_op_counter_0++;
+      uint32_t bytes_total = ((SPI2.slv_rdbuf_dlen.bit_len + 1) >> 3);
+      uint8_t  extra_bytes = (bytes_total - tmp->buf_len) - 4;
+      spi2_op_counter_0 += extra_bytes << 16;
       uint32_t word = SPI2.data_buf[8];
       if (2 == tmp->transferParamLength()) {
         // Internal CPLD register access doesn't use DMA, and expects us to
@@ -180,7 +181,7 @@ static void IRAM_ATTR spi2_isr(void *arg) {
         // This was a DMA transaction.
         // If we have trailing data following DMA, copy from the FIFO.
         // int i = 0;
-        // switch (tmp->buf_len & 0xFFFFFFFC) {
+        // switch (extra_bytes) {
         //   case 3:   *(tmp->buf + i++) = (uint8_t) ((word >> 16) & 0xFF);
         //   case 2:   *(tmp->buf + i++) = (uint8_t) ((word >> 8) & 0xFF);
         //   case 1:   *(tmp->buf + i++) = (uint8_t) (word & 0xFF);
@@ -190,6 +191,7 @@ static void IRAM_ATTR spi2_isr(void *arg) {
         // }
         reset_spi2_dma();
       }
+      SPI2.cmd.usr = 0;
       tmp->markComplete();
     }
     else if (tmp) {
@@ -681,6 +683,7 @@ XferFault SPIBusOp::begin() {
   set_state(XferState::INITIATE);  // Indicate that we now have bus control.
   _threaded_op = this;
   reset_spi2_dma();
+  spi2_op_counter_1 = 0;
 
   if (2 == _param_len) {
     SPI2.user.usr_mosi_highpart = 1;  // The RX buffer should use W8-15.
@@ -755,7 +758,8 @@ XferFault SPIBusOp::begin() {
         _ll_rx_0.eof    = 0;
         _ll_rx_0.buf    = (uint8_t*) &spi2_byte_sink;
 
-        _ll_rx_1.length = (3 + buf_len) & (~3); // Doc says this must be a multiple of 4.
+        // Doc says this must be a multiple of 4.
+        _ll_rx_1.length = (3 + buf_len) & (~3);
         _ll_rx_1.size   = (3 + buf_len) & (~3);
         _ll_rx_1.owner  = LLDESC_HW_OWNED;
         _ll_rx_1.sosf   = 0;
@@ -764,9 +768,10 @@ XferFault SPIBusOp::begin() {
         _ll_rx_1.eof    = 1;
         _ll_rx_1.buf    = buf;
 
-        bits_to_xfer = (32 + (_ll_rx_1.length << 3)) - 1;
+        bits_to_xfer = (32 + (((3 + buf_len) & (~3)) << 3)) - 1;
+        printf("SPIBusOp::begin(): %u  %u  %u\n", bits_to_xfer, (3 + buf_len) & (~3), buf_len);
 
-        SPI2.dma_conf.out_eof_mode  = 0;
+        SPI2.dma_conf.out_eof_mode  = 1;
         SPI2.dma_in_link.addr   = ((uint32_t) &_ll_rx_0) & LLDESC_ADDR_MASK;
         SPI2.dma_in_link.start  = 1;  // Signify DMA readiness.
         break;

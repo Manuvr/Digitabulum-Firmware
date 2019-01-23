@@ -1648,12 +1648,12 @@ void CPLDDriver::consoleCmdProc(StringBuilder* input) {
           default:
           case 0:    // Read one byte from two IMUs.
             break;
-          case 1:    // Read one byte from 12 IMUs.
+          case 1:    // Read one byte from 17 IMUs.
             param2 = 1;
-            param3 = 12;
+            param3 = 17;
             break;
-          case 2:    // Read 6 bytes from 1 IMUs.
-            param2 = 6;
+          case 2:    // Read 7 bytes from 1 IMUs.
+            param2 = 7;
             param3 = 1;
             break;
           case 3:   // Read 6 bytes from 2 IMUs.
@@ -1664,8 +1664,8 @@ void CPLDDriver::consoleCmdProc(StringBuilder* input) {
             param2 = 4;
             param3 = 1;
             break;
-          case 5:  // Read 4 bytes from 2 IMUs.
-            param2 = 4;
+          case 5:  // Read 3 bytes from 2 IMUs.
+            param2 = 3;
             param3 = 2;
             break;
         }
