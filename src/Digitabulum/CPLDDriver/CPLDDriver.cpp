@@ -80,14 +80,14 @@ volatile static uint32_t _irq_latency_1    = 0;  // IRQ latency discovery.
 volatile static uint32_t _irq_latency_2    = 0;  // IRQ latency discovery.
 
 
-uint8_t debug_buffer[64];
-
 /* This message is dispatched when IRQ data changes. */
 static ManuvrMsg _irq_data_arrival;
 
 // These are debug. Cut them.
 uint8_t active_imu_position = 0;
 bool op_abuse_test = false;
+uint8_t debug_buffer[64];
+
 
 /**
 * ISR for CPLD GPIO.
@@ -104,7 +104,10 @@ void cpld_wakeup_isr(){
 }
 
 
-// TODO: Textual inclusion of source files is super ugly...
+// NOTE: Textual inclusion of source files is super ugly, but we're sticking
+//   with it because the platform-specific functions will demand access to
+//   static/unscoped variables defined above. Exposing these in a header file
+//   just makes things messy and brittle.
 #if defined(STM32F746xx)
   #include "target_stm32f746.cpp"
 #elif defined(__MANUVR_LINUX)
@@ -220,7 +223,6 @@ const char* CPLDDriver::getDigitPortString(DigitPort x) {
   }
   return "UNKNOWN";
 }
-
 
 
 // NO ERROR CHECKING! Don't call this with an argument >79.
@@ -509,7 +511,6 @@ int CPLDDriver::_process_cpld_base_return(uint8_t _version, uint8_t _conf) {
 
 
 
-
 /*******************************************************************************
 *  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄   Members related to the work queue
 * ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌  and SPI bus I/O
@@ -584,6 +585,22 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
         forsaken_digits = op->getTransferParam(1);
       }
       break;
+
+    case 0x91:
+      if (op_abuse_test) {
+        for (int i = 0; i < 32; i++) { local_log.concatf("%02x ", debug_buffer[i]); }
+        local_log.concatf("\n");
+        bzero(&debug_buffer[0], 64);
+        SPIBusOp* op = new_op(BusOpcode::RX, this);
+        uint8_t imu_num = 0x91;
+        uint8_t param2 = 1;
+        uint8_t param3 = 17;
+        op->setParams(imu_num, param2, param3, 0x8F);
+        op->setBuffer(&debug_buffer[0], param2 * param3);
+        queue_io_job(op);
+      }
+      break;
+
     default:
       if (getVerbosity() > 2) local_log.concatf("An SPIBusOp called back with an unknown register: 0x%02x\n", op->getTransferParam(0));
       break;
@@ -1394,6 +1411,7 @@ void CPLDDriver::printIRQs(StringBuilder* output) {
   output->concat("\n---< IRQ Aggregator >--------------------\n");
   output->concatf("-- IRQ service         %sabled\n", (_er_flag(CPLD_FLAG_SVC_IRQS)?"en":"dis"));
   output->concatf("-- Constant scan       %s\n", (_conf_bits_set(CPLD_CONF_BIT_IRQ_SCAN) ? "on":"off"));
+  output->concatf("-- Transfer alignment  %s\n", (_conf_bits_set(CPLD_CONF_BIT_ALIGN_XFER) ? "on":"off"));
   if (cpld_wakeup_source & 0x80) {
     output->concatf("-- WAKEUP Signal       %d\n", (cpld_wakeup_source & 0x7F));
   }
@@ -1594,11 +1612,11 @@ void CPLDDriver::consoleCmdProc(StringBuilder* input) {
       reset();
       break;
 
-    //case 'W':  // TODO: Cut once system is fully validated.
-    //case 'w':
-    //  local_log.concatf("%sabling transfer alignment.\n", (*(str) == 'W' ? "En" : "Dis"));
-    //  setCPLDConfig(CPLD_CONF_BIT_ALIGN_XFER, (*(str) == 'W'));
-    //  break;
+    case 'W':  // TODO: Cut once system is fully validated.
+    case 'w':
+      local_log.concatf("%sabling transfer alignment.\n", (*(str) == 'W' ? "En" : "Dis"));
+      setCPLDConfig(CPLD_CONF_BIT_ALIGN_XFER, (*(str) == 'W'));
+      break;
     case '_':  // TODO: Cut once system is fully validated.
     case '-':
       local_log.concatf("op_abuse_test <--- (%s)\n", (*(str) == '_' ? "true" : "false"));
