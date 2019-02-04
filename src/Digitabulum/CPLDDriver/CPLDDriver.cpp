@@ -1612,11 +1612,11 @@ void CPLDDriver::consoleCmdProc(StringBuilder* input) {
       reset();
       break;
 
-    case 'W':  // TODO: Cut once system is fully validated.
-    case 'w':
-      local_log.concatf("%sabling transfer alignment.\n", (*(str) == 'W' ? "En" : "Dis"));
-      setCPLDConfig(CPLD_CONF_BIT_ALIGN_XFER, (*(str) == 'W'));
-      break;
+    //case 'W':  // TODO: Cut once system is fully validated.
+    //case 'w':
+    //  local_log.concatf("%sabling transfer alignment.\n", (*(str) == 'W' ? "En" : "Dis"));
+    //  setCPLDConfig(CPLD_CONF_BIT_ALIGN_XFER, (*(str) == 'W'));
+    //  break;
     case '_':  // TODO: Cut once system is fully validated.
     case '-':
       local_log.concatf("op_abuse_test <--- (%s)\n", (*(str) == '_' ? "true" : "false"));
@@ -1641,60 +1641,47 @@ void CPLDDriver::consoleCmdProc(StringBuilder* input) {
       local_log.concatf("CPLD servicing IRQs?  %s\n", irq_service_enabled()?"yes":"no");
       break;
 
-    //case 's':  // TODO: Cut once system is fully validated.
-    //  switch (temp_int) {
-    //    case 1:     // SPI1 initialization...
-    //      init_spi(0, 0);  // CPOL=1, CPHA=0, HW-driven
-    //      local_log.concat("Re-initialized SPI1.\n");
-    //      break;
-    //    case 2:     // SPI2 initialization...
-    //      init_spi2(0, 0);  // CPOL=1, CPHA=0, HW-driven
-    //      local_log.concat("Re-initialized SPI2.\n");
-    //      break;
-    //  }
-    //  break;
-    case '~':   // CPLD debug
-    case '`':   // CPLD debug
-      {
-        bzero(&debug_buffer[0], 64);
-        SPIBusOp* op = new_op(BusOpcode::RX, this);
-        uint8_t imu_num = ((*(str) == '~') ? CPLD_REG_IMU_DM_P_M : CPLD_REG_IMU_DM_P_I) | 0x80;
-        uint8_t param2 = 1;
-        uint8_t param3 = 2;
-
-        switch (temp_int) {
-          default:
-          case 0:    // Read one byte from two IMUs.
-            break;
-          case 1:    // Read one byte from 17 IMUs.
-            param2 = 1;
-            param3 = 17;
-            break;
-          case 2:    // Read 7 bytes from 1 IMUs.
-            param2 = 7;
-            param3 = 1;
-            break;
-          case 3:   // Read 6 bytes from 2 IMUs.
-            param2 = 6;
-            param3 = 2;
-            break;
-          case 4:   // Read 4 bytes from 1 IMUs.
-            param2 = 4;
-            param3 = 1;
-            break;
-          case 5:  // Read 3 bytes from 2 IMUs.
-            param2 = 3;
-            param3 = 2;
-            break;
-        }
-        op->setParams(imu_num, param2, param3, 0x8F);
-        op->setBuffer(&debug_buffer[0], param2 * param3);
-        queue_io_job(op);
-      }
-      break;
+    // case '~':   // CPLD debug
+    // case '`':   // CPLD debug
+    //   {
+    //     bzero(&debug_buffer[0], 64);
+    //     SPIBusOp* op = new_op(BusOpcode::RX, this);
+    //     uint8_t imu_num = ((*(str) == '~') ? CPLD_REG_IMU_DM_P_M : CPLD_REG_IMU_DM_P_I) | 0x80;
+    //     uint8_t param2 = 1;
+    //     uint8_t param3 = 2;
+    //
+    //     switch (temp_int) {
+    //       default:
+    //       case 0:    // Read one byte from two IMUs.
+    //         break;
+    //       case 1:    // Read one byte from 17 IMUs.
+    //         param2 = 1;
+    //         param3 = 17;
+    //         break;
+    //       case 2:    // Read 7 bytes from 1 IMUs.
+    //         param2 = 7;
+    //         param3 = 1;
+    //         break;
+    //       case 3:   // Read 6 bytes from 2 IMUs.
+    //         param2 = 6;
+    //         param3 = 2;
+    //         break;
+    //       case 4:   // Read 4 bytes from 1 IMUs.
+    //         param2 = 4;
+    //         param3 = 1;
+    //         break;
+    //       case 5:  // Read 3 bytes from 2 IMUs.
+    //         param2 = 3;
+    //         param3 = 2;
+    //         break;
+    //     }
+    //     op->setParams(imu_num, param2, param3, 0x8F);
+    //     op->setBuffer(&debug_buffer[0], param2 * param3);
+    //     queue_io_job(op);
+    //   }
+    //   break;
 
     default:
-      //EventReceiver::procDirectDebugInstruction(input);
       break;
   }
 

@@ -84,12 +84,12 @@ enum class Chirality : uint8_t {
 * And consider the thumb to be digit 1.
 */
 enum class Anatomical : uint8_t {
-  METACARPALS = 0,
-  DIGIT_1     = 1,
-  DIGIT_2     = 2,
-  DIGIT_3     = 3,
-  DIGIT_4     = 4,
-  DIGIT_5     = 5,
+  METACARPALS = 0, // Wrist and palm
+  DIGIT_1     = 1, // Thumb
+  DIGIT_2     = 2, // Index
+  DIGIT_3     = 3, // Middle
+  DIGIT_4     = 4, // Ring
+  DIGIT_5     = 5, // Pinky
   UNKNOWN     = 6
 };
 

@@ -61,18 +61,18 @@ SensorFrame _frame_pool_mem[PREALLOCD_IMU_FRAMES];
     = 204 int16's
     = 408 bytes
 */
-int16_t _frame_buf_i[2 * 2 * 3 * LEGEND_DATASET_IIU_COUNT];
+int16_t __attribute__ ((aligned (4))) _frame_buf_i[2 * 2 * 3 * LEGEND_DATASET_IIU_COUNT];
 
 /* Temperature data. Single buffered. */
 // TODO: Might consolidate temp into inertial. Sensor and CPLD allow for it.
-int16_t __temperatures[LEGEND_DATASET_IIU_COUNT];
+int16_t __attribute__ ((aligned (4))) __temperatures[LEGEND_DATASET_IIU_COUNT];
 
 /* Magnetometer data registers. Single buffered. */
-int16_t _reg_block_m_data[3 * LEGEND_DATASET_IIU_COUNT];
+int16_t __attribute__ ((aligned (4))) _reg_block_m_data[3 * LEGEND_DATASET_IIU_COUNT];
 
 /* Identity registers for both sensor aspects. */
-uint8_t _reg_block_ident[2 * LEGEND_DATASET_IIU_COUNT];
-uint8_t _reg_block_ident_guard[2];   // TODO: This is only here long enough to fix ESP32 DMA issues.
+uint8_t __attribute__ ((aligned (4))) _reg_block_ident[2 * LEGEND_DATASET_IIU_COUNT];
+uint8_t __attribute__ ((aligned (4))) _reg_block_ident_guard[2];   // TODO: This is only here long enough to fix ESP32 DMA issues.
 
 /****** Ranked-access registers below this line. ******************************/
 /*
@@ -90,14 +90,14 @@ uint8_t _reg_block_ident_guard[2];   // TODO: This is only here long enough to f
   INT1 will service re-scaling, and INT2 will service the FIFO.
   TODO: Might merge this into a single register 16-bits wide?
 */
-uint8_t _reg_block_ag_interrupt_conf[6] = {0xC0, 0x08, 0xC0, 0x08, 0xC0, 0x08};
+uint8_t __attribute__ ((aligned (4))) _reg_block_ag_interrupt_conf[6] = {0xC0, 0x08, 0xC0, 0x08, 0xC0, 0x08};
 
 /*
   G_ORIENT_CFG(Rank-access)
   3 ranks times 1 byte-wide register.
   Great pains were taken to enforce a common orientation in hardware.
 */
-uint8_t _reg_block_orient_cfg[3] = {0x00, 0x00, 0x00};
+uint8_t __attribute__ ((aligned (4))) _reg_block_orient_cfg[3] = {0x00, 0x00, 0x00};
 
 /*
   Deals with IRQ latching, axis enablement, and 4D. (Rank-access)
@@ -106,7 +106,7 @@ uint8_t _reg_block_orient_cfg[3] = {0x00, 0x00, 0x00};
   ctrl5: No acc decimation, all axis enabled.
   TODO: Might merge this into a single register 16-bits wide?
 */
-uint8_t _reg_block_ag_ctrl4_5[6] = {0x38, 0x38, 0x38, 0x38, 0x38, 0x38};
+uint8_t __attribute__ ((aligned (4))) _reg_block_ag_ctrl4_5[6] = {0x38, 0x38, 0x38, 0x38, 0x38, 0x38};
 
 /*
   IRQ pin control, FIFO and bus config, self-test. (Rank-access)
@@ -115,7 +115,7 @@ uint8_t _reg_block_ag_ctrl4_5[6] = {0x38, 0x38, 0x38, 0x38, 0x38, 0x38};
   ctrl9:  No temp in FIFO, i2c, or DRDY. FIFO on and unrestricted.
   ctrl10: Self-tests disabled.
 */
-uint8_t _reg_block_ag_ctrl8_9_10[9] = {
+uint8_t __attribute__ ((aligned (4))) _reg_block_ag_ctrl8_9_10[9] = {
   0x44, 0x06, 0x00,
   0x44, 0x06, 0x00,
   0x44, 0x06, 0x00
@@ -126,21 +126,21 @@ uint8_t _reg_block_ag_ctrl8_9_10[9] = {
   3 ranks times 1 byte-wide register.
   FIFO in continuous mode, with a threshold of 4.
 */
-uint8_t _reg_block_fifo_ctrl[3] = {0xC4, 0xC4, 0xC4};
+uint8_t __attribute__ ((aligned (4))) _reg_block_fifo_ctrl[3] = {0xC4, 0xC4, 0xC4};
 
 /*
   Magnetometer interrupt config registers. (Rank-access)
   3 ranks times 1 byte-wide register.
   Non-latched, active-high IRQ enabled for all axes.
 */
-uint8_t _reg_block_m_irq_cfg[3] = {0xE5, 0xE5, 0xE5};
+uint8_t __attribute__ ((aligned (4))) _reg_block_m_irq_cfg[3] = {0xE5, 0xE5, 0xE5};
 
 /*
   Magnetometer ctrl1 registers. (Rank-access)
   3 ranks times 1 byte-wide register.
   ctrl1: Temp-compensated, med performance, 5hz, no self-test
 */
-uint8_t _reg_block_m_ctrl1[3] = {0xAC, 0xAC, 0xAC};
+uint8_t __attribute__ ((aligned (4))) _reg_block_m_ctrl1[3] = {0xAC, 0xAC, 0xAC};
 
 /*
   Magnetometer ctrl3-5 registers. (Rank-access)
@@ -149,7 +149,7 @@ uint8_t _reg_block_m_ctrl1[3] = {0xAC, 0xAC, 0xAC};
   ctrl4:  Little-endian, med performance
   ctrl5:  Block-update.
 */
-uint8_t _reg_block_m_ctrl3_5[9] = {
+uint8_t __attribute__ ((aligned (4))) _reg_block_m_ctrl3_5[9] = {
   0x84, 0x04, 0x40,
   0x84, 0x04, 0x40,
   0x84, 0x04, 0x40
@@ -159,55 +159,55 @@ uint8_t _reg_block_m_ctrl3_5[9] = {
   Accelerometer IRQ status registers. (Discrete-access)
   Handled by: ManuManager
 */
-uint8_t _reg_block_a_irq_src[LEGEND_DATASET_IIU_COUNT];
+uint8_t __attribute__ ((aligned (4))) _reg_block_a_irq_src[LEGEND_DATASET_IIU_COUNT];
 
 /*
   Gyroscope interrupt config, source, and threshold registers. (Discrete-access)
   Handled by: ManuManager
 */
-uint8_t _reg_block_g_irq_src[LEGEND_DATASET_IIU_COUNT];
-uint8_t _reg_block_g_irq_cfg[LEGEND_DATASET_IIU_COUNT];
+uint8_t __attribute__ ((aligned (4))) _reg_block_g_irq_src[LEGEND_DATASET_IIU_COUNT];
+uint8_t __attribute__ ((aligned (4))) _reg_block_g_irq_cfg[LEGEND_DATASET_IIU_COUNT];
 
 
 
 /****** Individually-packed registers below this line. ************************/
 
 /* Activity thresholds and durations. */
-uint8_t _reg_block_ag_activity[2 * LEGEND_DATASET_IIU_COUNT];
+uint8_t __attribute__ ((aligned (4))) _reg_block_ag_activity[2 * LEGEND_DATASET_IIU_COUNT];
 
 /* Accelerometer interrupt settings, thresholds, G_REFERENCE */
-uint8_t _reg_block_ag_0[6 * LEGEND_DATASET_IIU_COUNT];
+uint8_t __attribute__ ((aligned (4))) _reg_block_ag_0[6 * LEGEND_DATASET_IIU_COUNT];
 
 /* Inertial aspect control registers. */
-uint8_t _reg_block_ag_ctrl1_3[3 * LEGEND_DATASET_IIU_COUNT];
-uint8_t _reg_block_ag_ctrl6_7[2 * LEGEND_DATASET_IIU_COUNT];
+uint8_t __attribute__ ((aligned (4))) _reg_block_ag_ctrl1_3[3 * LEGEND_DATASET_IIU_COUNT];
+uint8_t __attribute__ ((aligned (4))) _reg_block_ag_ctrl6_7[2 * LEGEND_DATASET_IIU_COUNT];
 
 
 /* Inertial aspect status registers. */
-uint8_t _reg_block_ag_status[LEGEND_DATASET_IIU_COUNT];
+uint8_t __attribute__ ((aligned (4))) _reg_block_ag_status[LEGEND_DATASET_IIU_COUNT];
 
 /* Inertial aspect FIFO status registers. */
-uint8_t __fifo_levels[LEGEND_DATASET_IIU_COUNT];
+uint8_t __attribute__ ((aligned (4))) __fifo_levels[LEGEND_DATASET_IIU_COUNT];
 
 
-int16_t _reg_block_g_thresholds[3 * LEGEND_DATASET_IIU_COUNT];
-uint8_t _reg_block_g_irq_dur[LEGEND_DATASET_IIU_COUNT];
+int16_t __attribute__ ((aligned (4))) _reg_block_g_thresholds[3 * LEGEND_DATASET_IIU_COUNT];
+uint8_t __attribute__ ((aligned (4))) _reg_block_g_irq_dur[LEGEND_DATASET_IIU_COUNT];
 
 
 /* Magnetometer offset registers. */
-int16_t _reg_block_m_offsets[3 * LEGEND_DATASET_IIU_COUNT];
+int16_t __attribute__ ((aligned (4))) _reg_block_m_offsets[3 * LEGEND_DATASET_IIU_COUNT];
 
 /* Magnetometer control registers. */
-uint8_t _reg_block_m_ctrl2[LEGEND_DATASET_IIU_COUNT];
+uint8_t __attribute__ ((aligned (4))) _reg_block_m_ctrl2[LEGEND_DATASET_IIU_COUNT];
 
 /* Magnetometer status registers. */
-uint8_t  _reg_block_m_status[LEGEND_DATASET_IIU_COUNT];
+uint8_t  __attribute__ ((aligned (4))) _reg_block_m_status[LEGEND_DATASET_IIU_COUNT];
 
 /* Magnetometer interrupt source registers. */
-uint8_t _reg_block_m_irq_src[LEGEND_DATASET_IIU_COUNT];
+uint8_t __attribute__ ((aligned (4))) _reg_block_m_irq_src[LEGEND_DATASET_IIU_COUNT];
 
 /* Magnetometer threshold registers. Will be interpreted as 15-bit unsigned. */
-uint16_t _reg_block_m_thresholds[LEGEND_DATASET_IIU_COUNT];
+uint16_t __attribute__ ((aligned (4))) _reg_block_m_thresholds[LEGEND_DATASET_IIU_COUNT];
 
 /* End of register memory
 ------------------------------------------------------------------------------*/

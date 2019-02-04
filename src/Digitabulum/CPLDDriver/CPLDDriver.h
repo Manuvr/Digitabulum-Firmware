@@ -552,12 +552,12 @@ enum class DigitState : uint8_t {
 
 /* Chirality invarient identifiers for digit ports. */
 enum class DigitPort : uint8_t {
-  MC       = 0,  // LED channel 6
-  PORT_1   = 1,  // LED channel 1
-  PORT_2   = 2,  // LED channel 5
-  PORT_3   = 3,  // LED channel 4
-  PORT_4   = 4,  // LED channel 3
-  PORT_5   = 5,  // LED channel 2
+  MC       = 0,
+  PORT_1   = 1,
+  PORT_2   = 2,
+  PORT_3   = 3,
+  PORT_4   = 4,
+  PORT_5   = 5,
   UNKNOWN  = 6
 };
 

@@ -23,12 +23,13 @@ Our goal is to encapsulate power-supply concerns to this class. This
   driver. Until then, we will hard-code i2c addresses, pin numbers, etc.
 */
 
-#ifndef __DIGITABULUM_PMU_DRIVER_H__
-#define __DIGITABULUM_PMU_DRIVER_H__
-
 #include <Kernel.h>
 #include <Drivers/PMIC/BQ24155/BQ24155.h>
 #include <Drivers/PMIC/LTC294x/LTC294x.h>
+
+#ifndef __DIGITABULUM_PMU_DRIVER_H__
+#define __DIGITABULUM_PMU_DRIVER_H__
+
 #ifdef MANUVR_CONSOLE_SUPPORT
   #include <XenoSession/Console/ManuvrConsole.h>
   #include <XenoSession/Console/ConsoleInterface.h>
