@@ -61,6 +61,7 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #define LEGEND_MGR_FLAGS_IO_ON_HIGH_FRAME_AG   0x10   //
 #define LEGEND_MGR_FLAGS_IO_ON_HIGH_FRAME_M    0x20   //
 #define LEGEND_MGR_FLAGS_EMPTY_FRAME_CYCLE     0x40   //
+#define LEGEND_MGR_FLAGS_IMU_IDENT_WAS_READ    0x80   //
 
 #define LEGEND_MGR_FLAGS_CHIRALITY_MASK        0x03   // Mask that maps to the enum class.
 
@@ -73,6 +74,26 @@ In Digitabulum r0, this class held 17 instances of the IIU class, each of which
 #endif
 
 
+/*
+* This class is the authoritative maintainer of the state of the sensor package
+*   as a whole. These are the definitions for the state-machine.
+*/
+enum class ManuState : uint8_t {
+  UNKNOWN = 0,    // Uninitialized
+  PREINIT,        // The class itself is initializing.
+  IMU_INIT,       // The IMUs are initializing.
+  CHIRALITY_TEST, // The class is busy determiinng chirality.
+  READY_IDLE,     // Sensors stand initialized and waiting.
+  READY_READING,  // Sensors are presently reading.
+  READY_PAUSED,   // Sensors ready, but reading has halted for a non-fault reason.
+  READY_FLUSHING, // Recovering from a data incongruity. Flushing IMU FIFOs...
+  ASLEEP,         // The front-end has been put into sleep mode.
+  FAULT           // The class experienced a fault.
+};
+
+/*
+* Wetware is chiral. Hardware is not.
+*/
 enum class Chirality : uint8_t {
   UNKNOWN = 0,   // Interpretable as a bitmask...
   RIGHT   = 1,   // Bit 0: Chirality known
@@ -120,6 +141,7 @@ class ManuManager : public EventReceiver,
     void printDebug(StringBuilder*);
     void printHardwareState(StringBuilder*);
     void printIRQs(StringBuilder*);
+    void printStateMachine(StringBuilder*);
 
     /* Overrides from EventReceiver */
     int8_t notify(ManuvrMsg*);
@@ -148,10 +170,16 @@ class ManuManager : public EventReceiver,
     inline bool debugFrameCycle() {           return (_er_flag(LEGEND_MGR_FLAGS_EMPTY_FRAME_CYCLE));           };
     inline void debugFrameCycle(bool nu) {    return (_er_set_flag(LEGEND_MGR_FLAGS_EMPTY_FRAME_CYCLE, nu));   };
 
+    inline bool imuIdentitiesRead() {         return (_er_flag(LEGEND_MGR_FLAGS_IMU_IDENT_WAS_READ));          };
+    inline void imuIdentitiesRead(bool nu) {  return (_er_set_flag(LEGEND_MGR_FLAGS_IMU_IDENT_WAS_READ, nu));  };
+
+
+
     inline uint32_t totalSamples() {   return sample_count;   };
 
 
     static const char* chiralityString(Chirality);
+    static const char* getManuStateString(ManuState);
 
 
 
@@ -181,6 +209,9 @@ class ManuManager : public EventReceiver,
     uint32_t  _frame_time_last   = 0;   // Used to track inter-frame time differences.
 
     uint8_t  max_quats_per_event = 2;   // Cuts down on overhead if load is high.
+    ManuState _last_state    = ManuState::UNKNOWN;
+    ManuState _current_state = ManuState::UNKNOWN;
+    ManuState _target_state  = ManuState::UNKNOWN;
 
     /* The pool of SensorFrames is maintained by ManuManager. */
     void reclaimMeasurement(SensorFrame*);
@@ -191,9 +222,11 @@ class ManuManager : public EventReceiver,
     int8_t read_identities();
     int8_t read_fifo_depth();
 
-    /*
-    * Accessors for autoscaling.
-    */
+    /* State-machine manipulation. */
+    int8_t _set_target_state(ManuState);
+    int8_t _advance_state_machine();
+
+    /* Accessors for autoscaling. */
     void enableAutoscale(SampleType, bool enabled);
     inline void enableAutoscale(bool enabled) {
       enableAutoscale(SampleType::ALL, enabled);

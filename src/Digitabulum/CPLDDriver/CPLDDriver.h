@@ -373,7 +373,6 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 /* Event codes that are specific to Digitabulum's IMU apparatus. */
 #define DIGITABULUM_MSG_IMU_IRQ_RAISED       0x0606 // IRQ asserted by CPLD.
 #define DIGITABULUM_MSG_IMU_LEGEND           0x0607 // No args? Asking for this legend. One arg: Legend provided.
-#define DIGITABULUM_MSG_IMU_INIT             0x0608 //
 #define DIGITABULUM_MSG_IMU_READ             0x0609 // Signal to read a given set of IMUs.
 #define DIGITABULUM_MSG_IMU_MAP_STATE        0x060A
 #define DIGITABULUM_MSG_IMU_QUAT_CRUNCH      0x060B // The given IMU has samples to grind into a quat.

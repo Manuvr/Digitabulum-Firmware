@@ -72,16 +72,13 @@ int16_t __attribute__ ((aligned (4))) _reg_block_m_data[3 * LEGEND_DATASET_IIU_C
 
 /* Identity registers for both sensor aspects. */
 uint8_t __attribute__ ((aligned (4))) _reg_block_ident[2 * LEGEND_DATASET_IIU_COUNT];
-uint8_t __attribute__ ((aligned (4))) _reg_block_ident_guard[2];   // TODO: This is only here long enough to fix ESP32 DMA issues.
 
 /****** Ranked-access registers below this line. ******************************/
 /*
   The following sensor registers are managed entirely within ManuManager. For
     those registers that we treat as write-only, and homogenous, we will use the
     ranked-access mode in the CPLD.
-  TODO: Until the DMA apparatus is smart enough to know what we're doing,
-    we actually need to define all 6 bytes. We should be able to loop the
-    memory-side of the transaction if we want all bytes to be the same.
+  NOTE: There are three ranked access addresses (prox, int, distl).
 */
 
 /*
@@ -192,6 +189,7 @@ uint8_t __attribute__ ((aligned (4))) __fifo_levels[LEGEND_DATASET_IIU_COUNT];
 
 int16_t __attribute__ ((aligned (4))) _reg_block_g_thresholds[3 * LEGEND_DATASET_IIU_COUNT];
 uint8_t __attribute__ ((aligned (4))) _reg_block_g_irq_dur[LEGEND_DATASET_IIU_COUNT];
+uint8_t __attribute__ ((aligned (4))) _reg_fifo_src[LEGEND_DATASET_IIU_COUNT];
 
 
 /* Magnetometer offset registers. */
@@ -227,23 +225,23 @@ Vector3<int16_t> noise_floor_gyr[LEGEND_DATASET_IIU_COUNT];
 
 // TODO: ThereMustBeABetterWay.jpg
 const RegPtrMap _reg_ptrs[] = {
-  RegPtrMap(0 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
-  RegPtrMap(1 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
-  RegPtrMap(2 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
-  RegPtrMap(3 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
-  RegPtrMap(4 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
-  RegPtrMap(5 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
-  RegPtrMap(6 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
-  RegPtrMap(7 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
-  RegPtrMap(8 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
-  RegPtrMap(9 , &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
-  RegPtrMap(10, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
-  RegPtrMap(11, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
-  RegPtrMap(12, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
-  RegPtrMap(13, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
-  RegPtrMap(14, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
-  RegPtrMap(15, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0]),
-  RegPtrMap(16, &_reg_block_ag_activity[0], &_reg_block_ag_0[0], &_reg_block_ag_ctrl1_3[0], &_reg_block_ag_ctrl6_7[0], &_reg_block_ag_status[0], &_reg_block_g_thresholds[0], &_reg_block_g_irq_dur[0], &_reg_block_m_offsets[0], &_reg_block_m_ctrl2[0], &_reg_block_m_status[0], &_reg_block_m_irq_src[0], &_reg_block_m_thresholds[0])
+  RegPtrMap(0 , _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds),
+  RegPtrMap(1 , _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds),
+  RegPtrMap(2 , _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds),
+  RegPtrMap(3 , _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds),
+  RegPtrMap(4 , _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds),
+  RegPtrMap(5 , _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds),
+  RegPtrMap(6 , _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds),
+  RegPtrMap(7 , _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds),
+  RegPtrMap(8 , _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds),
+  RegPtrMap(9 , _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds),
+  RegPtrMap(10, _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds),
+  RegPtrMap(11, _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds),
+  RegPtrMap(12, _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds),
+  RegPtrMap(13, _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds),
+  RegPtrMap(14, _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds),
+  RegPtrMap(15, _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds),
+  RegPtrMap(16, _reg_block_ag_activity, _reg_block_ident, _reg_block_ag_0, _reg_block_ag_ctrl1_3, _reg_block_ag_ctrl6_7, _reg_block_ag_status, _reg_fifo_src, _reg_block_g_thresholds, _reg_block_g_irq_dur, _reg_block_m_offsets, _reg_block_m_ctrl2, _reg_block_m_status, _reg_block_m_irq_src, _reg_block_m_thresholds)
 };
 
 
@@ -278,6 +276,25 @@ const char* ManuManager::chiralityString(Chirality x) {
   }
   return "UNKNOWN";
 }
+
+const char* ManuManager::getManuStateString(ManuState x) {
+  switch (x) {
+    case ManuState::UNKNOWN:         return "UNKNOWN";
+    case ManuState::PREINIT:         return "PREINIT";
+    case ManuState::IMU_INIT:        return "IMU_INIT";
+    case ManuState::CHIRALITY_TEST:  return "CHIRALITY_TEST";
+    case ManuState::READY_IDLE:      return "READY_IDLE";
+    case ManuState::READY_READING:   return "READY_READING";
+    case ManuState::READY_PAUSED:    return "READY_PAUSED";
+    case ManuState::READY_FLUSHING:  return "READY_FLUSHING";
+    case ManuState::ASLEEP:          return "ASLEEP";
+    case ManuState::FAULT:           return "FAULT";
+    default:
+      break;
+  }
+  return "UNKNOWN";
+}
+
 
 
 /*******************************************************************************
@@ -554,6 +571,261 @@ int8_t ManuManager::deliverIRQ(DigitPort port, uint8_t imu_idx, uint8_t svc, uin
   return 0;
 }
 
+
+
+int8_t ManuManager::_set_target_state(ManuState nu_state) {
+  if (_target_state != nu_state) {
+    // If there is a change to be made.
+    switch (nu_state) {
+      case ManuState::IMU_INIT:
+      case ManuState::CHIRALITY_TEST:
+      case ManuState::READY_IDLE:
+      case ManuState::READY_READING:
+      case ManuState::READY_PAUSED:
+      case ManuState::ASLEEP:
+        _target_state = nu_state;
+        return _advance_state_machine();
+      // States below cannot be requested.
+      case ManuState::UNKNOWN:
+      case ManuState::PREINIT:
+      case ManuState::READY_FLUSHING:
+      case ManuState::FAULT:
+      default:
+        return -1;
+    }
+  }
+  return 1;
+}
+
+
+int8_t ManuManager::_advance_state_machine() {
+  bool reloop = true;
+  while (reloop && (_target_state != _current_state)) {
+    reloop = false;
+    local_log.concatf("_advance_state_machine(): %s --> %s\n", getManuStateString(_current_state), getManuStateString(_target_state));
+    // If we are not yet in the target state...
+    switch (_current_state) {
+      case ManuState::UNKNOWN:
+        _last_state = _current_state;
+        _current_state = ManuState::PREINIT;
+        // NOTE: No break;
+      case ManuState::PREINIT:
+        switch (_target_state) {
+          case ManuState::IMU_INIT:
+          case ManuState::CHIRALITY_TEST:
+          case ManuState::READY_IDLE:
+          case ManuState::READY_READING:
+          case ManuState::READY_PAUSED:
+          case ManuState::READY_FLUSHING:
+          case ManuState::ASLEEP:
+            if (!imuIdentitiesRead()) {
+              if (_bus->hardwareReady()) {
+                // If the hardware is ready, we can read the IMU identities.
+                read_identities();
+              }
+            }
+            else {
+              _last_state = _current_state;
+              _current_state = ManuState::IMU_INIT;
+              reloop = true;
+            }
+            break;
+          case ManuState::FAULT:
+            break;
+          case ManuState::UNKNOWN:
+          case ManuState::PREINIT:
+          default:
+            break;
+        }
+        break;
+
+      case ManuState::IMU_INIT:
+        switch (_target_state) {
+          case ManuState::CHIRALITY_TEST:
+          case ManuState::READY_IDLE:
+          case ManuState::READY_READING:
+          case ManuState::READY_PAUSED:
+          case ManuState::READY_FLUSHING:
+          case ManuState::ASLEEP:
+            {
+              uint8_t imus_found         = 0;
+              uint8_t imus_init_complete = 0;
+              for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+                if (imus[i].present()) {
+                  imus_found++;
+                  if (imus[i].initComplete()) {
+                    imus_init_complete++;
+                  }
+                  else if (!imus[i].initPending()) {
+                    imus[i].init();
+                  }
+                }
+              }
+              if ((imus_found > 0) && (imus_found == imus_init_complete)) {
+                _last_state = _current_state;
+                _current_state = ManuState::READY_IDLE;
+                reloop = true;
+              }
+            }
+            break;
+
+          case ManuState::FAULT:
+            break;
+          case ManuState::UNKNOWN:
+          case ManuState::PREINIT:
+          case ManuState::IMU_INIT:
+          default:
+            break;
+        }
+        break;
+      case ManuState::CHIRALITY_TEST:
+        // TODO
+        _last_state = _current_state;
+        _current_state = ManuState::READY_IDLE;
+        break;
+
+      case ManuState::READY_IDLE:
+        switch (_target_state) {
+          case ManuState::IMU_INIT:
+            break;
+          case ManuState::CHIRALITY_TEST:
+          case ManuState::READY_READING:
+          case ManuState::READY_PAUSED:
+          case ManuState::READY_FLUSHING:
+            {
+              uint8_t imus_found   = 0;
+              uint8_t imus_reading = 0;
+              for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
+                if (imus[i].present()) {
+                  imus_found++;
+                  if (imus[i].reading()) {
+                    imus_reading++;
+                  }
+                  else if (imus[i].desired_state_attained()) {
+                    imus[i].setDesiredState(IMUState::STAGE_5);
+                  }
+                }
+              }
+              if ((imus_found > 0) && (imus_found == imus_reading)) {
+                _last_state = _current_state;
+                _current_state = ManuState::READY_READING;
+                reloop = true;
+              }
+            }
+            break;
+          case ManuState::ASLEEP:
+            break;
+          case ManuState::FAULT:
+            break;
+          case ManuState::UNKNOWN:
+          case ManuState::PREINIT:
+          case ManuState::READY_IDLE:
+          default:
+            break;
+        }
+        break;
+
+      case ManuState::READY_READING:
+        switch (_target_state) {
+          case ManuState::IMU_INIT:
+            break;
+          case ManuState::CHIRALITY_TEST:
+            break;
+          case ManuState::READY_IDLE:
+            break;
+          case ManuState::READY_PAUSED:
+            break;
+          case ManuState::READY_FLUSHING:
+            break;
+          case ManuState::ASLEEP:
+            break;
+          case ManuState::FAULT:
+            break;
+          case ManuState::UNKNOWN:
+          case ManuState::PREINIT:
+          case ManuState::READY_READING:
+          default:
+            break;
+        }
+        break;
+
+      case ManuState::READY_PAUSED:
+        switch (_target_state) {
+          case ManuState::IMU_INIT:
+            break;
+          case ManuState::CHIRALITY_TEST:
+            break;
+          case ManuState::READY_IDLE:
+            break;
+          case ManuState::READY_READING:
+            break;
+          case ManuState::READY_FLUSHING:
+            break;
+          case ManuState::ASLEEP:
+            break;
+          case ManuState::FAULT:
+            break;
+          case ManuState::UNKNOWN:
+          case ManuState::PREINIT:
+          case ManuState::READY_PAUSED:
+          default:
+            break;
+        }
+        break;
+      case ManuState::READY_FLUSHING:
+        switch (_target_state) {
+          case ManuState::IMU_INIT:
+            break;
+          case ManuState::CHIRALITY_TEST:
+            break;
+          case ManuState::READY_IDLE:
+            break;
+          case ManuState::READY_READING:
+            break;
+          case ManuState::READY_PAUSED:
+            break;
+          case ManuState::ASLEEP:
+            break;
+          case ManuState::FAULT:
+            break;
+          case ManuState::UNKNOWN:
+          case ManuState::PREINIT:
+          case ManuState::READY_FLUSHING:
+          default:
+            break;
+        }
+        break;
+      case ManuState::ASLEEP:
+        switch (_target_state) {
+          case ManuState::IMU_INIT:
+          case ManuState::CHIRALITY_TEST:
+          case ManuState::READY_IDLE:
+          case ManuState::READY_READING:
+          case ManuState::READY_PAUSED:
+          case ManuState::READY_FLUSHING:
+            break;
+          case ManuState::FAULT:
+            break;
+          case ManuState::UNKNOWN:
+          case ManuState::PREINIT:
+          case ManuState::ASLEEP:
+          default:
+            break;
+        }
+        break;
+      case ManuState::FAULT:
+        local_log.concatf("_advance_state_machine(): Faulted while on state %s\n", getManuStateString(_current_state));
+        break;
+      default:
+        break;
+    }
+  }
+  flushLocalLog();
+  return 0;
+}
+
+
+
 /*******************************************************************************
 * ___     _       _                      These members are mandatory overrides
 *  |   / / \ o   | \  _     o  _  _      for implementing I/O callbacks. They
@@ -607,6 +879,7 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
   switch (idx) {
     case RegID::M_WHO_AM_I:
     case RegID::AG_WHO_AM_I:  // This is a bulk identity check.
+      imuIdentitiesRead(true);
       for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
         if ((0x68 == _reg_block_ident[i]) && (0x3d == _reg_block_ident[i+LEGEND_DATASET_IIU_COUNT])) {
           // If the identity bytes match, set the IMU state appropriately...
@@ -614,6 +887,7 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
         }
       }
       //printIMURollCall(&local_log);
+      _advance_state_machine();
       break;
 
     case RegID::A_DATA_X:  // Data must be copied out of the register buffer,
@@ -869,6 +1143,11 @@ int8_t ManuManager::attached() {
 
     platform.kernel()->addSchedule(&event_iiu_read);
     platform.kernel()->addSchedule(&_event_integrator);
+
+    // When the hardware reports readiness, converge on this state.
+    _set_target_state(ManuState::READY_IDLE);
+
+    integrator.rangeBind(true);   // Range-bind everything....
     return 1;
   }
   return 0;
@@ -900,11 +1179,6 @@ int8_t ManuManager::callback_proc(ManuvrMsg* event) {
       if (false) {  // TODO: Check the minimum FIFO level.
         return EVENT_CALLBACK_RETURN_RECYCLE;
       }
-      break;
-
-    case DIGITABULUM_MSG_IMU_INIT:
-      // At this point we should have all IMUs initialized. We probably had interrupts
-      //   happen that are hanging. Clear them, as they will be meaningless.
       break;
 
     case DIGITABULUM_MSG_IMU_LEGEND:
@@ -951,24 +1225,13 @@ int8_t ManuManager::notify(ManuvrMsg* active_event) {
   /* Some class-specific set of conditionals below this line. */
   switch (active_event->eventCode()) {
     case DIGITABULUM_MSG_IMU_READ:
-      read_identities();
-      return_value++;
-      break;
-
-    case DIGITABULUM_MSG_IMU_INIT:
-      for (uint8_t i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
-        imus[i].init();
-      }
       return_value++;
       break;
 
     case DIGITABULUM_MSG_CPLD_RESET_COMPLETE:
+      // Instruct the state machine to put the IMUs into INIT-1.
       if (getVerbosity() > 3) local_log.concatf("Initializing IMUs...\n");
-      // Range-bind everything....
-      integrator.rangeBind(true);
-
-      // Fire the event to put the IMUs into INIT-1.
-      //raiseEvent(Kernel::returnEvent(DIGITABULUM_MSG_IMU_INIT));
+      _advance_state_machine();
       return_value++;
       break;
 
@@ -1110,9 +1373,10 @@ void ManuManager::printDebug(StringBuilder *output) {
   if (getVerbosity() > 0) {
     // Print just the aggregate sample count and return.
   }
+  printStateMachine(output);
   output->concatf("-- Chirality           %s\n", chiralityString(getChirality()));
 
-  if (getVerbosity() > 3) {
+  if (getVerbosity() > 5) {
     output->concatf("-- __dataset location  %p\n", (uintptr_t) __dataset);
     output->concatf("-- __IIU location      %p\n--\n", (uintptr_t) imus);
   }
@@ -1124,6 +1388,7 @@ void ManuManager::printDebug(StringBuilder *output) {
   grav_consensus /= 17;
   output->concatf("-- Gravity consensus:  %.4fg\n", (double) grav_consensus);
   output->concatf("-- Max quat proc       %u\n",    max_quats_per_event);
+  output->concatf("-- Identities read     %c\n",    imuIdentitiesRead() ? 'y':'n');
   output->concatf("-- sample_count        %d\n",    sample_count);
 
   if (getVerbosity() > 3) {
@@ -1138,6 +1403,20 @@ void ManuManager::printDebug(StringBuilder *output) {
     //output->concatf("--- noise_floor_gyr     (%d, %d, %d)\n", noise_floor_gyr[i].x, noise_floor_gyr[i].y, noise_floor_gyr[i].z);
   //}
   output->concat("\n");
+}
+
+
+
+/**
+* Debug support method. This fxn is only present in debug builds.
+*
+* @param   StringBuilder* The buffer into which this fxn should write its output.
+*/
+void ManuManager::printStateMachine(StringBuilder* output) {
+  output->concat("-- ManuState:\n");
+  output->concatf("     Last      %s\n", getManuStateString(_last_state));
+  output->concatf("     Current   %s\n", getManuStateString(_current_state));
+  output->concatf("     Target    %s\n", getManuStateString(_target_state));
 }
 
 
@@ -1158,7 +1437,6 @@ static const ConsoleCommand console_cmds[] = {
   { "i6", "FIFO levels" },
 
   { "E", "Set data encoding" },
-
 
   { "j", "Per-datum reflection parameters" },
   { "[", "Enable spherical abberation correction" },
@@ -1205,7 +1483,45 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
     case 'h':
     case 'H':
     case 'm':
+
+    case 'g':    // Sync registers
+      switch (temp_byte) {
+        case 1:
+          {
+            SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
+            op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 1, LEGEND_DATASET_IIU_COUNT, 0x27 | 0x80 | 0x40);
+            op->setBuffer(_reg_block_m_status, 17);
+            queue_io_job(op);
+          }
+          break;
+        default:
+          _advance_state_machine();
+          break;
+      }
+      break;
+
     case 'M':
+      switch (temp_byte) {
+        case 1:
+          _set_target_state(ManuState::IMU_INIT);
+          break;
+        case 2:
+          _set_target_state(ManuState::READY_IDLE);
+          break;
+        case 3:
+          _set_target_state(ManuState::READY_READING);
+          break;
+        case 4:
+          _set_target_state(ManuState::READY_PAUSED);
+          break;
+        case 5:
+          _set_target_state(ManuState::ASLEEP);
+          break;
+        default:
+          _advance_state_machine();
+          break;
+      }
+      printStateMachine(&local_log);
       break;
 
     case 'V':
@@ -1245,15 +1561,6 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
           local_log.concatf("sizeof(_frame_buf_i)\t%u\n", sizeof(_frame_buf_i));
           break;
         case 6:
-          {
-            SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
-            op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::AG_ACT_DUR) | 0x80);
-            op->setBuffer(&__fifo_levels[0], LEGEND_DATASET_IIU_COUNT);
-            queue_io_job(op);
-          }
-          break;
-
-        case 7:
           dumpPreformedElements(&local_log);
           break;
 
@@ -1378,7 +1685,6 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
     case 's':
       switch (temp_byte) {
         case 0:
-          printIMURollCall(&local_log);
           break;
         case 1:
           printFIFOLevels(&local_log);
@@ -1635,30 +1941,6 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
       }
       break;
 
-    case '0':   // CPLD debug
-    case '1':   // CPLD debug
-    case '2':   // CPLD debug
-    case '3':   // CPLD debug
-    case '4':   // CPLD debug
-    case '5':   // CPLD debug
-    case '6':   // CPLD debug
-    case '7':   // CPLD debug
-    case '8':   // CPLD debug
-    case '9':   // CPLD debug
-      {
-        bzero(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
-        // Because the identity address is the same for both aspects, and their addresses
-        //   are continuous, we just read 1 byte from 34 sensors.
-        SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
-        //  op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
-        //op->setBuffer(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
-        uint8_t imu_num = (uint8_t) atoi(str) % 17;
-        op->setParams((imu_num | 0x80), 0x01, 1, 0x8F);
-        op->setBuffer(&_reg_block_ident[imu_num], 1);
-        queue_io_job(op);
-      }
-      break;
-
     default:
       break;
   }
@@ -1675,13 +1957,14 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
 
 int8_t ManuManager::read_identities() {
   // Zero the space so we ensure no false positives.
-  bzero(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
+  bzero(_reg_block_ident, (2 * LEGEND_DATASET_IIU_COUNT));
+  imuIdentitiesRead(false);
 
   // Because the identity address is the same for both aspects, and their addresses
   //   are continuous, we just read 1 byte from 34 sensors.
   SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
   op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
-  op->setBuffer(&_reg_block_ident[0], (2 * LEGEND_DATASET_IIU_COUNT));
+  op->setBuffer(_reg_block_ident, (2 * LEGEND_DATASET_IIU_COUNT));
   return queue_io_job(op);
 }
 
@@ -1716,15 +1999,15 @@ int8_t ManuManager::init_iius() {
   int8_t ret = -1;
   // Step 1: Enable SPI write, multiple-access and disable i2c.
   SPIBusOp* op = _bus->new_op(BusOpcode::TX, this);
-  op->setParams((CPLD_REG_RANK_P_M | 0x40), 3, 9, RegPtrMap::regAddr(RegID::M_CTRL_REG3) | 0x40);  // 3 bytes per IMU.
+  op->setParams((CPLD_REG_RANK_P_M | 0x40), 3, 3, RegPtrMap::regAddr(RegID::M_CTRL_REG3) | 0x40);  // 3 bytes per IMU.
   op->setBuffer(&_reg_block_m_ctrl3_5[0], 9);
   if (0 == queue_io_job(op)) {
     op = _bus->new_op(BusOpcode::TX, this);
-    op->setParams((CPLD_REG_RANK_P_I | 0x00), 3, 9, RegPtrMap::regAddr(RegID::AG_CTRL_REG8));  // 3 bytes per IMU.
+    op->setParams((CPLD_REG_RANK_P_I | 0x00), 3, 3, RegPtrMap::regAddr(RegID::AG_CTRL_REG8));  // 3 bytes per IMU.
     op->setBuffer(&_reg_block_ag_ctrl8_9_10[0], 9);
     if (0 == queue_io_job(op)) {
       op = _bus->new_op(BusOpcode::TX, this);
-      op->setParams((CPLD_REG_RANK_P_I | 0x00), 2, 6, RegPtrMap::regAddr(RegID::AG_INT1_CTRL));  // 2 bytes per IMU.
+      op->setParams((CPLD_REG_RANK_P_I | 0x00), 2, 3, RegPtrMap::regAddr(RegID::AG_INT1_CTRL));  // 2 bytes per IMU.
       op->setBuffer(&_reg_block_ag_interrupt_conf[0], 6);
       if (0 == queue_io_job(op)) {
         op = _bus->new_op(BusOpcode::TX, this);
@@ -1791,7 +2074,4 @@ void ManuManager::printIMURollCall(StringBuilder *output) {
   }
   //output->concatf("%c\n\n", _bus->digitExists(DigitPort::PORT_5) ? 'Y' : ' ');
   output->concatf("%c\n", _bus->digitExists(DigitPort::PORT_5) ? 'Y' : ' ');
-  output->concatf("ID/Guard     (%p/%p)\n", &_reg_block_ident_guard[0], &_reg_block_ident[0]);
-  output->concatf("Guard bytes  (%02x/%02x)\n", _reg_block_ident[34], _reg_block_ident[35]);
-  output->concatf("Extend bytes (%02x/%02x)\n\n", _reg_block_ident_guard[0], _reg_block_ident_guard[1]);
 }

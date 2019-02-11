@@ -127,8 +127,6 @@ static void IRAM_ATTR dma_isr(void *arg) {
   spi2_op_counter_1++;
   if (SPI2.dma_int_st.inlink_dscr_empty) {   /* lack of enough inlink descriptors.*/
     spi2_op_counter_1+=0x00000010;
-    // We need to disengage DMA so that excess bytes end up in the FIFO for later recovery.
-    reset_spi2_dma();
     SPI2.dma_in_link.val  = 0x10000000;  // Clear everything but the stop bit.
   }
   if (SPI2.dma_int_st.outlink_dscr_error) {  /* outlink descriptor error.*/
@@ -146,7 +144,6 @@ static void IRAM_ATTR dma_isr(void *arg) {
   if (SPI2.dma_int_st.in_suc_eof) {          /* completing receiving all the packets from host.*/
     spi2_op_counter_1+=0x01000000;
     SPI2.dma_in_link.val   = 0x10000000;  // Clear everything but the stop bit.
-    //reset_spi2_dma();
   }
   if (SPI2.dma_int_st.out_done) {            /* completing usage of a outlink descriptor .*/
     spi2_op_counter_1+=0x00010000;
@@ -166,27 +163,43 @@ static void IRAM_ATTR dma_isr(void *arg) {
 static void IRAM_ATTR spi2_isr(void *arg) {
   if (SPI2.slave.trans_done) {
     SPIBusOp* tmp = _threaded_op;  // Concurrency "safety".
-    if ((SPI2.slv_rd_bit.slv_rdata_bit >= SPI2.slv_rdbuf_dlen.bit_len) && (tmp)) {
+    if (tmp) {
       spi2_op_counter_0++;
-      uint32_t bytes_total = ((SPI2.slv_rdbuf_dlen.bit_len + 1) >> 3);
-      uint32_t word = SPI2.data_buf[0];
+
       if (2 == tmp->transferParamLength()) {
-        // Internal CPLD register access doesn't use DMA, and expects us to
-        // shuffle bytes around to avoid heaped buffers and DMA overhead.
-        // buf+0/1 should be xfer_param[2/3].
-        *(tmp->buf+0) = (uint8_t) word & 0xFF;
-        *(tmp->buf+1) = (uint8_t) (word >> 8) & 0xFF;
+        if (SPI2.slv_rd_bit.slv_rdata_bit >= SPI2.slv_rdbuf_dlen.bit_len) {
+          // Internal CPLD register access doesn't use DMA, and expects us to
+          // shuffle bytes around to avoid heaped buffers and DMA overhead.
+          // buf+0/1 should be xfer_param[2/3].
+          uint32_t word = SPI2.data_buf[0];
+          *(tmp->buf+0) = (uint8_t) word & 0xFF;
+          *(tmp->buf+1) = (uint8_t) (word >> 8) & 0xFF;
+          tmp->markComplete();
+        }
+        else {
+          // If the CPLD terminates the transaction before it finishes...
+          tmp->abort(XferFault::DEV_FAULT);
+        }
       }
       else {
         // This was a DMA transaction.
+        bool enough_bits = false;
+        if (BusOpcode::RX == tmp->get_opcode()) {
+          enough_bits = (0x01000000 == (spi2_op_counter_1 & 0x01000000));
+        }
+        else {
+          enough_bits = (0x10000000 == (spi2_op_counter_1 & 0x10000000));
+        }
+
+        if (enough_bits) {
+          tmp->markComplete();
+        }
+        else {
+          tmp->abort(XferFault::DEV_FAULT);
+        }
       }
-      tmp->markComplete();
+      _threaded_op = nullptr;
     }
-    else if (tmp) {
-      // If the CPLD terminates the transaction before it finishes...
-      tmp->abort(XferFault::DEV_FAULT);
-    }
-    _threaded_op = nullptr;
     SPI2.slave.trans_done  = 0;  // Clear interrupt.
   }
 
@@ -718,8 +731,10 @@ XferFault SPIBusOp::begin() {
     //   The first two bytes will contain the version and conf as always, but
     //   IMU traffic should not be bothered with validating this.
 
-    // TODO: Over-running a buffer on purpose feels very dangerous.
+    // NOTE: Over-running a buffer on purpose is very dangerous. We rely on
+    //   input buffers being both 4-byte aligned, and padded to 4-bytes.
     unsigned int bits_to_xfer = (32 + (((3 + buf_len) & (~3)) << 3))-1;
+    SPI2.dma_conf.out_eof_mode  = 0;
 
     _ll_tx_0.length = 4;
     _ll_tx_0.size   = 4;
@@ -737,16 +752,14 @@ XferFault SPIBusOp::begin() {
         _ll_tx_0.empty  = (uint32_t) &_ll_tx_1;
         _ll_tx_0.eof    = 0;
 
-        _ll_tx_1.length = buf_len;
-        _ll_tx_1.size   = buf_len;
+        _ll_tx_1.length = (3 + buf_len) & (~3);
+        _ll_tx_1.size   = (3 + buf_len) & (~3);
         _ll_tx_1.owner  = LLDESC_HW_OWNED;
         _ll_tx_1.sosf   = 0;
         _ll_tx_1.offset = 0;
         _ll_tx_1.empty  = 0;
         _ll_tx_1.eof    = 1;
         _ll_tx_1.buf    = buf;
-
-        SPI2.dma_conf.out_eof_mode  = 1;   // TODO: This doesn't seem to matter.
         break;
 
       case BusOpcode::RX:
@@ -771,7 +784,6 @@ XferFault SPIBusOp::begin() {
         _ll_rx_1.eof    = 1;
         _ll_rx_1.buf    = buf;
 
-        SPI2.dma_conf.out_eof_mode  = 0;   // TODO: This doesn't seem to matter.
         SPI2.dma_in_link.addr   = ((uint32_t) &_ll_rx_0) & LLDESC_ADDR_MASK;
         SPI2.dma_in_link.start  = 1;  // Signify DMA readiness.
         //printf("SPIBusOp::begin(): %u  %u  %u\n", bits_to_xfer, (3 + buf_len) & (~3), buf_len);
@@ -811,7 +823,7 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
 
     case XferState::TX_WAIT:
     case XferState::RX_WAIT:
-      markComplete();
+      //markComplete();
       return 0;
 
     case XferState::FAULT:

@@ -499,8 +499,8 @@ unsigned int LSM9DS1::regValue(RegID idx) {
   if (ptr) {
     switch (RegPtrMap::regWidth(idx)) {
       // These are the only two widths in the sensor.
-      case 2: return *((uint16_t*)ptr);
-      case 1: return *((uint8_t*) ptr);
+      case 2: return (((uint16_t) *(ptr)) << 8) + *(ptr+1);
+      case 1: return *(ptr);
     }
   }
   return 0;
@@ -512,26 +512,38 @@ unsigned int LSM9DS1::regValue(RegID idx) {
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
-void LSM9DS1::dumpDevRegs(StringBuilder *output) {
+void LSM9DS1::dumpDevRegs(StringBuilder* output) {
   output->concatf("\n-------------------------------------------------------\n--- IMU  %s ==> %s \n-------------------------------------------------------\n", getStateString(imu_state), (desired_state_attained() ? "STABLE" : getStateString(desired_state)));
   output->concatf("--- pending_samples     %d\n\n", regValue(RegID::AG_FIFO_SRC) & 0x1F);
   if (getVerbosity() > 1) {
     output->concatf("--- calibration smpls   %d\n", sb_next_write);
     output->concatf("--- Base filter param   %d\n", base_filter_param);
   }
-  output->concatf("--- Error condition     %s\n---\n", getErrorString(error_condition));
+  output->concatf("--- Error condition     %s\n", getErrorString(error_condition));
 
   if (getVerbosity() > 1) {
-    output->concatf("--- update_rate_m       %3.0f Hz\n", (double) rate_settings_m[update_rate_m].hertz);
+    output->concatf("---\n--- update_rate_m       %3.0f Hz\n", (double) rate_settings_m[update_rate_m].hertz);
     output->concatf("--- update_rate_i       %3.0f Hz\n", (double) rate_settings_i[update_rate_i].hertz);
+    if (getVerbosity() > 2) {
+      output->concatf("--- scale_mag           +/-%d gauss\n", error_map_mag[scale_mag].scale);
+      output->concatf("--- scale_acc           +/-%d m/s\n", error_map_acc[scale_acc].scale);
+      output->concatf("--- scale_gyr           +/-%d deg/s\n", error_map_gyr[scale_gyr].scale);
+      output->concatf("--- autoscale_mag       %s\n", (autoscale_mag() ? "yes" : "no"));
+      output->concatf("--- autoscale_acc       %s\n", (autoscale_acc() ? "yes" : "no"));
+      output->concatf("--- autoscale_gyr       %s\n", (autoscale_gyr() ? "yes" : "no"));
+    }
   }
-  if (getVerbosity() > 2) {
-    output->concatf("--- scale_mag           +/-%d gauss\n", error_map_mag[scale_mag].scale);
-    output->concatf("--- scale_acc           +/-%d m/s\n", error_map_acc[scale_acc].scale);
-    output->concatf("--- scale_gyr           +/-%d deg/s\n", error_map_gyr[scale_gyr].scale);
-    output->concatf("--- autoscale_mag       %s\n", (autoscale_mag() ? "yes" : "no"));
-    output->concatf("--- autoscale_acc       %s\n", (autoscale_acc() ? "yes" : "no"));
-    output->concatf("--- autoscale_gyr       %s\n", (autoscale_gyr() ? "yes" : "no"));
+
+  output->concat("--\n-- Register           Addr  Value\n   -------------------------------\n");
+  for (int i = 0; i < 56; i++) {
+    const RegID id = (const RegID) i;
+    switch (RegPtrMap::regWidth(id)) {
+      // These are the only two widths in the sensor.
+      case 2: output->concatf("   %18s 0x%02x  0x%04x  0x%08x\n", RegPtrMap::regNameString(id), RegPtrMap::regAddr(id), regValue(id), _ptr_map->regPtr(id));
+        break;
+      case 1: output->concatf("   %18s 0x%02x  0x%02x    0x%08x\n", RegPtrMap::regNameString(id), RegPtrMap::regAddr(id), regValue(id), _ptr_map->regPtr(id));
+        break;
+    }
   }
 }
 

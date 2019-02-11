@@ -193,6 +193,8 @@ class RegPtrMap {
     RegPtrMap(
       const uint8_t   idx,
       const uint8_t*  ag_activity,
+      const uint8_t*  agm_ident_regs,
+      const uint8_t*  ag_block_0,
       const uint8_t*  ag_ctrl1_3,
       const uint8_t*  ag_ctrl6_7,
       const uint8_t*  ag_status,
@@ -206,6 +208,8 @@ class RegPtrMap {
       const uint16_t* m_thresholds
     ) :
       AG_ACT((idx * 2) + ag_activity),
+      AGM_IDENT((idx * 2) + agm_ident_regs),
+      AG_BLOCK_0((idx * 6) + ag_block_0),
       AG_CTRL1_3((idx * 3) + ag_ctrl1_3),
       AG_CTRL6_7((idx * 2) + ag_ctrl6_7),
       AG_STATUS(idx + ag_status),
@@ -232,6 +236,8 @@ class RegPtrMap {
     // Some registers are not included in this list if their function can be
     //   handled entirely within ManuManager.
     const uint8_t* AG_ACT;      // AG_ACT_THS, AG_ACT_DUR
+    const uint8_t* AGM_IDENT;   // M_WHO_AM_I, AG_WHO_AM_I
+
     const uint8_t* AG_BLOCK_0;  // A_INT_GEN_CFG, A_INT_GEN_THS_X, A_INT_GEN_THS_Y, A_INT_GEN_THS_Z, A_INT_GEN_DURATION, G_REFERENCE,
     const uint8_t* AG_CTRL1_3;  // G_CTRL_REG1, G_CTRL_REG2, G_CTRL_REG3
     const uint8_t* AG_CTRL6_7;  // A_CTRL_REG6, A_CTRL_REG7
@@ -275,7 +281,6 @@ class LSM9DS1 {
 
     /* Debug stuff... */
     void dumpDevRegs(StringBuilder*);
-    //void dumpDevRegs(StringBuilder*);
 
     /* State-check functions. Inlined where practical. */
     inline IMUState getState() {            return imu_state;                             }

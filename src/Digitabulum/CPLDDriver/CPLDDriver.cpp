@@ -184,7 +184,6 @@ const MessageTypeDef cpld_message_defs[] = {
   {  DIGITABULUM_MSG_IMU_READ             , 0x0000,               "IMU_READ"       , MSG_ARGS_IMU_READ },  // IMU read request. Argument is the ID.
   {  DIGITABULUM_MSG_IMU_QUAT_CRUNCH      , 0x0000,               "IMU_QUAT_CRUNCH", ManuvrMsg::MSG_ARGS_NONE }, //
   {  DIGITABULUM_MSG_IMU_MAP_STATE        , MSG_FLAG_EXPORTABLE,  "IMU_MAP_STATE"  , MSG_ARGS_IMU_MAP_STATE }, //
-  {  DIGITABULUM_MSG_IMU_INIT             , MSG_FLAG_EXPORTABLE,  "IMU_INIT"       , ManuvrMsg::MSG_ARGS_NONE }, // Signal to build the IMUs.
   {  DIGITABULUM_MSG_IMU_LEGEND           , MSG_FLAG_EXPORTABLE,  "IMU_LEGEND"     , MSG_ARGS_IMU_LEGEND }, // No args? Asking for this legend. Many args: Legend provided.
   {  DIGITABULUM_MSG_IMU_TAP              , MSG_FLAG_EXPORTABLE,  "IMU_TAP"        , ManuvrMsg::MSG_ARGS_NONE }, // IMU id and optional threshold.
   {  DIGITABULUM_MSG_IMU_DOUBLE_TAP       , MSG_FLAG_EXPORTABLE,  "IMU_DBL_TAP"    , ManuvrMsg::MSG_ARGS_NONE }, // IMU id and optional threshold.
@@ -727,10 +726,10 @@ int8_t CPLDDriver::advance_work_queue() {
       /* Cases below ought to be handled by ISR flow... */
       case XferState::ADDR:
         //Kernel::log("####################### advance_operation entry\n");
-        current_job->advance_operation(0, 0);
+        //current_job->advance_operation(0, 0);
         //local_log.concat("####################### advance_operation exit\n");
-        current_job->printDebug(&local_log);
-        flushLocalLog();
+        //current_job->printDebug(&local_log);
+        //flushLocalLog();
         break;
       case XferState::STOP:
         if (getVerbosity() > 5) local_log.concatf("State might be corrupted if we tried to advance_queue(). \n");
@@ -890,7 +889,6 @@ int8_t CPLDDriver::service_callback_queue() {
   SPIBusOp* temp_op = callback_queue.dequeue();
 
   while ((nullptr != temp_op) && (return_value < spi_cb_per_event)) {
-  //if (nullptr != temp_op) {
     if (getVerbosity() > 6) temp_op->printDebug(&local_log);
     if (nullptr != temp_op->callback) {
       int8_t cb_code = temp_op->callback->io_op_callback(temp_op);
@@ -1296,7 +1294,7 @@ int8_t CPLDDriver::callback_proc(ManuvrMsg* event) {
     case DIGITABULUM_MSG_IMU_IRQ_RAISED:
       break;
     case DIGITABULUM_MSG_SPI_QUEUE_READY:
-      return_value = ((work_queue.size() > 0) || (nullptr != current_job)) ? EVENT_CALLBACK_RETURN_RECYCLE : return_value;
+      //return_value = ((work_queue.size() > 0) || (nullptr != current_job)) ? EVENT_CALLBACK_RETURN_RECYCLE : return_value;
       break;
     case DIGITABULUM_MSG_SPI_CB_QUEUE_READY:
       return_value = (callback_queue.size() > 0) ? EVENT_CALLBACK_RETURN_RECYCLE : return_value;
