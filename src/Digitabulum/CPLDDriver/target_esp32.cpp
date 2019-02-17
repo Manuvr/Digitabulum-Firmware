@@ -281,7 +281,8 @@ static void IRAM_ATTR spi3_isr(void *arg) {
 * Should undo all the effects of the init functions.
 */
 void CPLDDriver::_deinit() {
-  ledc_stop(LEDC_HIGH_SPEED_MODE, (ledc_channel_t) LEDC_TIMER_0, 1);
+  //ledc_stop(LEDC_HIGH_SPEED_MODE, (ledc_channel_t) LEDC_TIMER_0, 1);
+  setPin(_pins.clk, false);
 }
 
 /**
@@ -290,11 +291,12 @@ void CPLDDriver::_deinit() {
 * TODO: Might not use the LED driver for this. Can't drive this clock to 40MHz.
 */
 bool CPLDDriver::_set_timer_base(int hz) {
-  if (ESP_OK == ledc_set_freq(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0, hz)) {
-    _ext_clk_freq = hz;
-    return true;
-  }
-  return false;
+  //if (ESP_OK == ledc_set_freq(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0, hz)) {
+  //  _ext_clk_freq = hz;
+  //  return true;
+  //}
+  //return false;
+  return true;
 }
 
 
@@ -304,34 +306,36 @@ bool CPLDDriver::_set_timer_base(int hz) {
 */
 void CPLDDriver::init_ext_clk() {
   _er_set_flag(CPLD_FLAG_EXT_OSC, false);
-  ledc_timer_config_t timer_conf = {
-    LEDC_HIGH_SPEED_MODE,  // speed_mode // TODO: Doc says this is the only mode supported.
-    LEDC_TIMER_10_BIT,     // bit_num    // We only need a constant duty-cycle. Flip fewer bits.
-    LEDC_TIMER_0,          // timer_num  // TODO: Understand implications of this choice.
-    DEFAULT_CPLD_FREQ      // freq_hz    // PWM frequency.
-  };
-  ledc_channel_config_t channel_conf = {
-    gpio_num   : _pins.clk,            // The CLK output pin.
-    speed_mode : LEDC_HIGH_SPEED_MODE, // TODO: Doc says this is the only mode supported.
-    channel    : LEDC_CHANNEL_0,       // We use channel0 for this.
-    intr_type  : LEDC_INTR_DISABLE,    // No IRQ required.
-    timer_sel  : LEDC_TIMER_0,
-    duty       : 511          // range is 0 ~ ((2**bit_num)-1)
-  };
+  gpioDefine(_pins.clk, GPIOMode::OUTPUT);
+  setPin(_pins.clk, false);
+  //ledc_timer_config_t timer_conf = {
+  //  LEDC_HIGH_SPEED_MODE,  // speed_mode // TODO: Doc says this is the only mode supported.
+  //  LEDC_TIMER_10_BIT,     // bit_num    // We only need a constant duty-cycle. Flip fewer bits.
+  //  LEDC_TIMER_0,          // timer_num  // TODO: Understand implications of this choice.
+  //  DEFAULT_CPLD_FREQ      // freq_hz    // PWM frequency.
+  //};
+  //ledc_channel_config_t channel_conf = {
+  //  gpio_num   : _pins.clk,            // The CLK output pin.
+  //  speed_mode : LEDC_HIGH_SPEED_MODE, // TODO: Doc says this is the only mode supported.
+  //  channel    : LEDC_CHANNEL_0,       // We use channel0 for this.
+  //  intr_type  : LEDC_INTR_DISABLE,    // No IRQ required.
+  //  timer_sel  : LEDC_TIMER_0,
+  //  duty       : 511          // range is 0 ~ ((2**bit_num)-1)
+  //};
 
-  if (ESP_OK == ledc_timer_config(&timer_conf)) {
-    if (ESP_OK == ledc_channel_config(&channel_conf)) {
-      // Success. Clock should be running.
-      _ext_clk_freq = DEFAULT_CPLD_FREQ;
-      _er_set_flag(CPLD_FLAG_EXT_OSC, true);
-    }
-    else {
-      Kernel::log("CPLDDriver::init_ext_clk(): Failed to configure channel.\n");
-    }
-  }
-  else {
-    Kernel::log("CPLDDriver::init_ext_clk(): Failed to configure timer.\n");
-  }
+  //if (ESP_OK == ledc_timer_config(&timer_conf)) {
+  //  if (ESP_OK == ledc_channel_config(&channel_conf)) {
+  //    // Success. Clock should be running.
+  //    _ext_clk_freq = DEFAULT_CPLD_FREQ;
+  //    _er_set_flag(CPLD_FLAG_EXT_OSC, true);
+  //  }
+  //  else {
+  //    Kernel::log("CPLDDriver::init_ext_clk(): Failed to configure channel.\n");
+  //  }
+  //}
+  //else {
+  //  Kernel::log("CPLDDriver::init_ext_clk(): Failed to configure timer.\n");
+  //}
 }
 
 
@@ -343,11 +347,13 @@ void CPLDDriver::init_ext_clk() {
 * @param  on  Should the osciallator be enabled?
 */
 void CPLDDriver::externalOscillator(bool on) {
-  esp_err_t ret = (on) ?
-    ledc_timer_resume(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0) :
-    ledc_timer_pause(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0);
+  setPin(_pins.clk, on);
+  _er_set_flag(CPLD_FLAG_EXT_OSC, on);
+  //esp_err_t ret = (on) ?
+  //  ledc_timer_resume(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0) :
+  //  ledc_timer_pause(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0);
 
-  if (ESP_OK == ret) _er_set_flag(CPLD_FLAG_EXT_OSC, on);
+  //if (ESP_OK == ret) _er_set_flag(CPLD_FLAG_EXT_OSC, on);
 }
 
 

@@ -173,8 +173,6 @@ class ManuManager : public EventReceiver,
     inline bool imuIdentitiesRead() {         return (_er_flag(LEGEND_MGR_FLAGS_IMU_IDENT_WAS_READ));          };
     inline void imuIdentitiesRead(bool nu) {  return (_er_set_flag(LEGEND_MGR_FLAGS_IMU_IDENT_WAS_READ, nu));  };
 
-
-
     inline uint32_t totalSamples() {   return sample_count;   };
 
 

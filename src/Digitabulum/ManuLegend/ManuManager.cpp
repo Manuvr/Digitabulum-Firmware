@@ -1535,6 +1535,11 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
       }
       break;
 
+    case 'v':
+      temp_byte = parse_mule.position_as_int(0);
+      integrator.setVerbosity(temp_byte);
+      break;
+
     case 'i':
       switch (temp_byte) {
         case 1:

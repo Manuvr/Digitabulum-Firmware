@@ -252,7 +252,7 @@ uint8_t Integrator::MadgwickQuaternionUpdate() {
     float d_t = c_frame->time();
 
     #if defined(MANUVR_DEBUG)
-    if (verbosity > 3) {
+    if (verbosity > 6) {
       local_log.concatf("At delta-t = %f: ", (double)d_t);
         //c_frame->printDebug(&local_log);
         //local_log.concat("\t");

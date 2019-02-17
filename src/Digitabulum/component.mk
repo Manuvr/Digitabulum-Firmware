@@ -12,7 +12,7 @@ COMPONENT_ADD_INCLUDEDIRS := $(PROJECT_PATH)/lib/ManuvrOS/ManuvrOS $(PROJECT_PAT
 CFLAGS += -D__MANUVR_ESP32
 CPPFLAGS += -D__MANUVR_ESP32
 
-COMPONENT_SRCDIRS := CPLDDriver LSM9DS1 ManuLegend DigitabulumPMU
+COMPONENT_SRCDIRS := CPLDDriver LSM9DS1 ManuLegend DigitabulumPMU .
 #COMPONENT_ADD_LDFLAGS := -L$(OUTPUT_PATH)/Digitabulum
 
-COMPONENT_OBJS := CPLDDriver/CPLDDriver.o LSM9DS1/LSM9DS1.o LSM9DS1/RegPtrMap.o ManuLegend/SensorFrame.o ManuLegend/Integrator.o ManuLegend/ManuManager.o ManuLegend/ManuLegend.o ManuLegend/ManuLegendPipe.o DigitabulumPMU/DigitabulumPMU-r2.o
+COMPONENT_OBJS := Digitabulum.o CPLDDriver/CPLDDriver.o LSM9DS1/LSM9DS1.o LSM9DS1/RegPtrMap.o ManuLegend/SensorFrame.o ManuLegend/Integrator.o ManuLegend/ManuManager.o ManuLegend/ManuLegend.o ManuLegend/ManuLegendPipe.o DigitabulumPMU/DigitabulumPMU-r2.o

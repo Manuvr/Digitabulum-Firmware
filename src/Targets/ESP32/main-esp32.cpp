@@ -27,13 +27,12 @@ Intended target is an WROOM32 SoC module.
 
 #include <Platform/Platform.h>
 #include <Platform/Peripherals/I2C/I2CAdapter.h>
-#include <Drivers/ADP8866/ADP8866.h>
-#include <Drivers/ATECC508/ATECC508.h>
 #include <Drivers/PMIC/BQ24155/BQ24155.h>
 #include <Drivers/PMIC/LTC294x/LTC294x.h>
 #include <XenoSession/Console/ManuvrConsole.h>
 #include <Transports/ManuvrSocket/ManuvrTCP.h>
 
+#include "Digitabulum/Digitabulum.h"
 #include "Digitabulum/CPLDDriver/CPLDDriver.h"
 #include "Digitabulum/ManuLegend/ManuManager.h"
 #include "Digitabulum/DigitabulumPMU/DigitabulumPMU-r2.h"
@@ -75,14 +74,14 @@ const I2CAdapterOptions i2c_opts(
   0,   // Device number
   26,  // sda
   27,  // scl
-  //I2C_ADAPT_OPT_FLAG_SDA_PU | I2C_ADAPT_OPT_FLAG_SCL_PU,  // This is correct on the jig.
-  0,
+  0,   // We don't need the internal pullups.
   100000
 );
 
 const ADP8866Pins adp_opts(
   5,   // Reset
-  19   // IRQ
+  19,  // IRQ
+  ADP8866_OPT_IRQ_PU
 );
 
 const LTC294xOpts gas_gauge_opts(
@@ -102,6 +101,14 @@ const PowerPlantOpts powerplant_opts(
   255, // 2.5v select pin is driven by the CPLD.
   12,  // Aux regulator enable pin.
   DIGITAB_PMU_FLAG_ENABLED  // Regulator enabled @3.3v
+);
+
+const ATECC508Opts atecc_opts(
+  (uint8_t) 255
+);
+
+const DigitabulumOpts digitabulum_opts(
+  1
 );
 
 /*******************************************************************************
@@ -164,9 +171,6 @@ const PowerPlantOpts powerplant_opts(
 
 #define ESP32_LED_PIN             15  // This is an LED.
 
-const ATECC508Opts atecc_opts(
-  (uint8_t) 255
-);
 
 const BatteryOpts battery_opts (
   1400,    // Battery capacity (in mAh)
@@ -325,6 +329,9 @@ void manuvr_task(void* pvParameter) {
   PMU pmu(&i2c, &charger_opts, &gas_gauge_opts, &powerplant_opts, &battery_opts);
   kernel->subscribe((EventReceiver*) &pmu);
 
+  ATECC508 atec(&atecc_opts);
+  i2c.addSlaveDevice((I2CDevice*) &atec);
+
   ADP8866 leds(&adp_opts);
   i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
   kernel->subscribe((EventReceiver*) &leds);
@@ -335,8 +342,8 @@ void manuvr_task(void* pvParameter) {
   ManuManager _legend_manager(&_cpld);
   kernel->subscribe(&_legend_manager);
 
-  ATECC508 atec(&atecc_opts);
-  i2c.addSlaveDevice((I2CDevice*) &atec);
+  Digitabulum digitabulum(&i2c, &digitabulum_opts);
+  kernel->subscribe(&digitabulum);
 
   platform.bootstrap();
 
