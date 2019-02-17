@@ -62,21 +62,21 @@ const ATECC508Opts atecc_opts(
 */
 Digitabulum::Digitabulum(I2CAdapter* i2c_adapter, const DigitabulumOpts* _o) :
     EventReceiver("Digitabulum"),
-    atec(&atecc_opts),
-    cpld(_o->cpld_pins),
     leds(_o->adp_pins),
+    cpld(_o->cpld_pins),
     manu(&cpld),
+    atec(&atecc_opts),
     _opts(_o) {
   if (nullptr == Digitabulum::INSTANCE) {
     Digitabulum::INSTANCE = this;
   }
   Kernel* kernel = platform.kernel();
 
-  i2c_adapter->addSlaveDevice((I2CDevice*) &atec);
-  i2c_adapter->addSlaveDevice((I2CDeviceWithRegisters*) &leds);
   kernel->subscribe(&leds);
   kernel->subscribe(&cpld);
   kernel->subscribe(&manu);
+  i2c_adapter->addSlaveDevice((I2CDeviceWithRegisters*) &leds);
+  i2c_adapter->addSlaveDevice((I2CDevice*) &atec);
 }
 
 
@@ -121,6 +121,7 @@ void Digitabulum::printDebug(StringBuilder* output) {
 */
 int8_t Digitabulum::attached() {
   if (EventReceiver::attached()) {
+    //led_wrist_color(0x00000010);
     return 1;
   }
   return 0;
@@ -156,11 +157,13 @@ int8_t Digitabulum::callback_proc(ManuvrMsg* event) {
 }
 
 
-
 int8_t Digitabulum::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
 
   switch (active_event->eventCode()) {
+    case DIGITABULUM_MSG_CPLD_RESET_COMPLETE:
+      //led_wrist_color(0x00050005);
+      break;
     default:
       return_value += EventReceiver::notify(active_event);
       break;
@@ -239,4 +242,27 @@ void Digitabulum::consoleCmdProc(StringBuilder* input) {
 * Perform a software reset.
 */
 void Digitabulum::reset() {
+  cpld.reset();
+  //leds.reset();
+}
+
+
+int8_t Digitabulum::led_set_digit_brightness(DigitPort p, uint8_t brightness) {
+  leds.set_brightness((uint8_t) p, brightness);
+  return 0;
+}
+
+int8_t Digitabulum::led_wrist_color(uint8_t r, uint8_t g, uint8_t b) {
+  leds.set_brightness(7, b);
+  leds.set_brightness(8, r);
+  leds.set_brightness(9, g);
+  return 0;
+}
+
+int8_t Digitabulum::led_wrist_color(uint32_t color) {
+  return led_wrist_color(
+    (uint8_t) ((color >> 16) & 0xFF),
+    (uint8_t) ((color >> 8) & 0xFF),
+    (uint8_t) (color & 0xFF)
+  );
 }

@@ -26,17 +26,6 @@ limitations under the License.
 
 
 /*******************************************************************************
-* The cryptic debug commands and static formats are becoming a serious pain.
-* This is an experiment to be migrated upstream into Manuvr if it works well
-* enough.
-*******************************************************************************/
-
-typedef struct cli_cmd_def_t {
-  // TODO: Might-should use lambdas for function pointer?
-  const char* help_text;
-} CLICmdDef;
-
-/*******************************************************************************
 * .-. .----..----.    .-.     .--.  .-. .-..----.
 * | |{ {__  | {}  }   | |    / {} \ |  `| || {}  \
 * | |.-._} }| .-. \   | `--./  /\  \| |\  ||     /
@@ -83,11 +72,6 @@ volatile static uint32_t _irq_latency_2    = 0;  // IRQ latency discovery.
 /* This message is dispatched when IRQ data changes. */
 static ManuvrMsg _irq_data_arrival;
 
-// These are debug. Cut them.
-uint8_t active_imu_position = 0;
-bool op_abuse_test = false;
-uint8_t debug_buffer[64];
-
 
 /**
 * ISR for CPLD GPIO.
@@ -115,7 +99,6 @@ void cpld_wakeup_isr(){
 #elif defined(__MANUVR_ESP32)
   #include "target_esp32.cpp"
 #endif
-
 
 
 
@@ -468,10 +451,6 @@ int CPLDDriver::_process_cpld_base_return(uint8_t _version, uint8_t _conf) {
         }
       }
       if (diff & CPLD_CONF_BIT_GPIO) {
-        if (op_abuse_test) {
-          // Causes endless bus traffic to toggle the GPIO pin.
-          setCPLDConfig(CPLD_CONF_BIT_GPIO, !(_conf & CPLD_CONF_BIT_GPIO));
-        }
       }
       if (diff & CPLD_CONF_BIT_DEN_AG_C) {
         _er_set_flag(CPLD_CONF_BIT_DEN_AG_C, (_conf & CPLD_CONF_BIT_DEN_AG_C));
@@ -582,21 +561,6 @@ int8_t CPLDDriver::io_op_callback(BusOp* _op) {
     case CPLD_REG_DIGIT_FORSAKE:
       if (0 == _process_cpld_base_return(op->getTransferParam(2), op->getTransferParam(3))) {
         forsaken_digits = op->getTransferParam(1);
-      }
-      break;
-
-    case 0x91:
-      if (op_abuse_test) {
-        for (int i = 0; i < 32; i++) { local_log.concatf("%02x ", debug_buffer[i]); }
-        local_log.concatf("\n");
-        bzero(&debug_buffer[0], 64);
-        SPIBusOp* op = new_op(BusOpcode::RX, this);
-        uint8_t imu_num = 0x91;
-        uint8_t param2 = 1;
-        uint8_t param3 = 17;
-        op->setParams(imu_num, param2, param3, 0x8F);
-        op->setBuffer(&debug_buffer[0], param2 * param3);
-        queue_io_job(op);
       }
       break;
 
@@ -1500,10 +1464,10 @@ void CPLDDriver::consoleCmdProc(StringBuilder* input) {
         case 5:
           printHardwareState(&local_log);
           break;
-        case 6:
-          local_log.concat("\n--    debug_buffer:\n");
-          for (int i = 0; i < 32; i++) { local_log.concatf("%02x ", debug_buffer[i]); }
-          break;
+        //case 6:
+        //  local_log.concat("\n--    debug_buffer:\n");
+        //  for (int i = 0; i < 32; i++) { local_log.concatf("%02x ", debug_buffer[i]); }
+        //  break;
         default:
           printDebug(&local_log);
           break;
@@ -1615,11 +1579,6 @@ void CPLDDriver::consoleCmdProc(StringBuilder* input) {
     //  local_log.concatf("%sabling transfer alignment.\n", (*(str) == 'W' ? "En" : "Dis"));
     //  setCPLDConfig(CPLD_CONF_BIT_ALIGN_XFER, (*(str) == 'W'));
     //  break;
-    case '_':  // TODO: Cut once system is fully validated.
-    case '-':
-      local_log.concatf("op_abuse_test <--- (%s)\n", (*(str) == '_' ? "true" : "false"));
-      op_abuse_test = (*(str) == '_');
-      break;
     case 'Z':  // TODO: Cut once system is fully validated.
     case 'z':
       if (temp_int) {

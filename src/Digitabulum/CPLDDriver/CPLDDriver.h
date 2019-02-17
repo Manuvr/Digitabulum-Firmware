@@ -330,7 +330,7 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
   #include <XenoSession/Console/ConsoleInterface.h>
 #endif
 
-#define CPLD_MINIMUM_VERSION    29
+#define CPLD_MINIMUM_VERSION    30
 #define CPLD_GUARD_BIT_VALUE  0x03
 
 

@@ -42,7 +42,7 @@ limitations under the License.
 */
 class DigitabulumOpts {
   public:
-    const uint16_t     flags;  // Flags
+    const uint32_t     flags;  // Flags
     const CPLDPins*    cpld_pins;
     const ADP8866Pins* adp_pins;
 
@@ -84,7 +84,13 @@ class Digitabulum : public EventReceiver {
     int8_t callback_proc(ManuvrMsg*);
     void printDebug(StringBuilder*);
 
-    /* Application level control fxns */
+    /* Application level control fxns regarding cryptography */
+    int8_t authenticateHardware(StringBuilder*);
+
+    /* Application level control fxns regarding data reporting */
+
+    /* Application level control fxns regarding hardware management */
+    void reset();
 
 
     static Digitabulum* INSTANCE;
@@ -95,15 +101,15 @@ class Digitabulum : public EventReceiver {
 
 
   private:
-    ATECC508    atec;
-    CPLDDriver  cpld;
     ADP8866     leds;
+    CPLDDriver  cpld;
     ManuManager manu;
-
-
+    ATECC508    atec;
     const DigitabulumOpts _opts;
 
-    void reset();
+    int8_t led_set_digit_brightness(DigitPort, uint8_t);
+    int8_t led_wrist_color(uint8_t r, uint8_t g, uint8_t b);
+    int8_t led_wrist_color(uint32_t);
 };
 
 #endif  // __DIGITABULUM_INC_H_

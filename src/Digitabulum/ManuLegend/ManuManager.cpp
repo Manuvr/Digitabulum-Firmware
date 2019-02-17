@@ -1973,7 +1973,6 @@ int8_t ManuManager::read_identities() {
 }
 
 
-
 int8_t ManuManager::read_fifo_depth() {
   return queue_io_job(&_preformed_fifo_read);
 }

@@ -164,6 +164,9 @@ class ManuManager : public EventReceiver,
     int8_t deliverIRQ(DigitPort, uint8_t imu, uint8_t data, uint8_t svc);
 
     /* Expose our idea about handedness to other modules. */
+    int set_chirality(Chirality);
+    DigitPort  get_port_given_digit(Anatomical);
+    Anatomical get_digit_given_port(DigitPort);
     inline Chirality getChirality() {  return (Chirality) _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_MASK);  };
     inline bool chiralityKnown() {     return _er_flag(LEGEND_MGR_FLAGS_CHIRALITY_KNOWN);  };
 
@@ -235,10 +238,6 @@ class ManuManager : public EventReceiver,
     void printIMURollCall(StringBuilder*);
     void printTemperatures(StringBuilder*);
     void printFIFOLevels(StringBuilder*);
-
-    int set_chirality(Chirality);
-    DigitPort  get_port_given_digit(Anatomical);
-    Anatomical get_digit_given_port(DigitPort);
 
     int8_t calibrate_from_data_mag();
     int8_t calibrate_from_data_ag();
