@@ -28,6 +28,8 @@ limitations under the License.
 #include <Kernel.h>
 #include <Drivers/ADP8866/ADP8866.h>
 #include <Drivers/ATECC508/ATECC508.h>
+#include "Digitabulum/CPLDDriver/CPLDDriver.h"
+#include "Digitabulum/ManuLegend/ManuManager.h"
 
 #ifdef MANUVR_CONSOLE_SUPPORT
   #include <XenoSession/Console/ManuvrConsole.h>
@@ -40,14 +42,19 @@ limitations under the License.
 */
 class DigitabulumOpts {
   public:
-    const uint16_t flags;  // Flags
+    const uint16_t     flags;  // Flags
+    const CPLDPins*    cpld_pins;
+    const ADP8866Pins* adp_pins;
 
     DigitabulumOpts(const DigitabulumOpts* p) :
-      flags(p->flags) {};
+      flags(p->flags),
+      cpld_pins(p->cpld_pins),
+      adp_pins(p->adp_pins) {};
 
-    DigitabulumOpts(uint16_t _f) :
-      flags(_f) {};
-
+    DigitabulumOpts(const CPLDPins* _cp, const ADP8866Pins* _ap, uint16_t _f) :
+      flags(_f),
+      cpld_pins(_cp),
+      adp_pins(_ap) {};
 
   private:
 };
@@ -77,6 +84,9 @@ class Digitabulum : public EventReceiver {
     int8_t callback_proc(ManuvrMsg*);
     void printDebug(StringBuilder*);
 
+    /* Application level control fxns */
+
+
     static Digitabulum* INSTANCE;
 
 
@@ -85,6 +95,12 @@ class Digitabulum : public EventReceiver {
 
 
   private:
+    ATECC508    atec;
+    CPLDDriver  cpld;
+    ADP8866     leds;
+    ManuManager manu;
+
+
     const DigitabulumOpts _opts;
 
     void reset();

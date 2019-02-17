@@ -25,41 +25,53 @@ limitations under the License.
 Intended target is an WROOM32 SoC module.
 */
 
+/* Manuvr includes */
 #include <Platform/Platform.h>
 #include <Platform/Peripherals/I2C/I2CAdapter.h>
-#include <Drivers/PMIC/BQ24155/BQ24155.h>
-#include <Drivers/PMIC/LTC294x/LTC294x.h>
 #include <XenoSession/Console/ManuvrConsole.h>
 #include <Transports/ManuvrSocket/ManuvrTCP.h>
-
 #include "Digitabulum/Digitabulum.h"
-#include "Digitabulum/CPLDDriver/CPLDDriver.h"
-#include "Digitabulum/ManuLegend/ManuManager.h"
 #include "Digitabulum/DigitabulumPMU/DigitabulumPMU-r2.h"
-
-#include "esp_task_wdt.h"
 
 #ifdef __cplusplus
   extern "C" {
 #endif
 
+/* ESP32 includes */
+#include <string.h>
+#include <time.h>
+#include <sys/time.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/event_groups.h"
+#include "esp_system.h"
+#include "esp_wifi.h"
+#include "esp_task_wdt.h"
+#include "esp_event_loop.h"
+#include "esp_log.h"
+#include "esp_attr.h"
+#include "esp_sleep.h"
+#include "nvs_flash.h"
+#include "lwip/err.h"
+#include "lwip/apps/sntp.h"
+
+
 // These pins are special on the ESP32. They should not be assigned as inputs
-//   since the levels can't be assured at startup.   [0, 2, 5, 12, 15]
+//   since the levels can't be assured at startup:   [0, 2, 5, 12, 15]
+#define ESP32_LED_PIN             15  // This is an LED.
 
 /*******************************************************************************
 * The confs below are for the current-version WROOM32U board.
-* TODO: The time has come to case-off support for board revisions.
-*******************************************************************************/
-/*
 * Pin defs given here assume a WROOM32 module.
-*/
+*******************************************************************************/
+/* Pins assigned to CPLD */
 const CPLDPins cpld_pins(
   2,   // Reset
   18,  // Transfer request
   32,  // CPLD's IRQ_WAKEUP pin
   16,  // CPLD clock input
   4,   // CPLD OE pin
-  255, // N/A (CPLD GPIO)
+  255, // CPLD GPIO is not assigned to an MCU pin. It ties to PMU's voltage select line.
   17,  // SPI1 CS
   13,  // SPI1 CLK
   14,  // SPI1 MOSI
@@ -69,24 +81,30 @@ const CPLDPins cpld_pins(
   33   // SPI2 MOSI
 );
 
-
-const I2CAdapterOptions i2c_opts(
-  0,   // Device number
-  26,  // sda
-  27,  // scl
-  0,   // We don't need the internal pullups.
-  100000
-);
-
+/* Pins assigned to LED driver */
 const ADP8866Pins adp_opts(
   5,   // Reset
   19,  // IRQ
-  ADP8866_OPT_IRQ_PU
+  ADP8866_OPT_IRQ_PU  // We use the internal pullup.
+);
+
+const I2CAdapterOptions i2c_opts(
+  0,      // Device number
+  26,     // sda
+  27,     // scl
+  0,      // We don't need the internal pullups.
+  100000  // 100kHz
 );
 
 const LTC294xOpts gas_gauge_opts(
   21,     // Alert pin
   LTC294X_OPT_ACD_AUTO | LTC294X_OPT_INTEG_SENSE
+);
+
+const PowerPlantOpts powerplant_opts(
+  255, // 2.5v select pin is driven by the CPLD.
+  12,  // Aux regulator enable pin.
+  DIGITAB_PMU_FLAG_ENABLED  // Regulator enabled @3.3v
 );
 
 const BQ24155Opts charger_opts(
@@ -97,81 +115,6 @@ const BQ24155Opts charger_opts(
   BQ24155_FLAG_ISEL_HIGH  // We want to start the ISEL pin high.
 );
 
-const PowerPlantOpts powerplant_opts(
-  255, // 2.5v select pin is driven by the CPLD.
-  12,  // Aux regulator enable pin.
-  DIGITAB_PMU_FLAG_ENABLED  // Regulator enabled @3.3v
-);
-
-const ATECC508Opts atecc_opts(
-  (uint8_t) 255
-);
-
-const DigitabulumOpts digitabulum_opts(
-  1
-);
-
-/*******************************************************************************
-* The commented confs below are for the original WROOM32 board. They are still
-*   valid if you are using that board.
-*******************************************************************************/
-// /*
-// * Pin defs given here assume a WROOM32 module.
-// */
-// const CPLDPins cpld_pins(
-//   26,  // Reset
-//   21,  // Transfer request
-//   255, // IO33 (input-only) CPLD's IRQ_WAKEUP pin
-//   2,   // CPLD clock input
-//   25,  // CPLD OE pin
-//   255, // N/A (CPLD GPIO)
-//   5,   // SPI1 CS
-//   17,  // SPI1 CLK
-//   16,  // SPI1 MOSI
-//   4,   // SPI1 MISO
-//   35,  // IO35 (SPI2 CS)
-//   34,  // IO34 (input-only) (SPI2 CLK)
-//   32   // IO32 (input-only) (SPI2 MOSI)
-// );
-//
-//
-// const I2CAdapterOptions i2c_opts(
-//   0,   // Device number
-//   14,  // IO14 (sda)
-//   12,  // IO12 (scl)
-//   //I2C_ADAPT_OPT_FLAG_SDA_PU,
-//   I2C_ADAPT_OPT_FLAG_SDA_PU | I2C_ADAPT_OPT_FLAG_SCL_PU,  // This is correct on the jig.
-//   //0,   // No pullups
-//   100000
-// );
-//
-// const ADP8866Pins adp_opts(
-//   19,  // IO19 (Reset)
-//   18   // IO18 (IRQ)
-// );
-//
-// const LTC294xOpts gas_gauge_opts(
-//   13,     // IO13 (Alert pin)
-//   LTC294X_OPT_ACD_AUTO | LTC294X_OPT_INTEG_SENSE
-// );
-//
-// const BQ24155Opts charger_opts(
-//   68,  // Sense resistor is 68 mOhm.
-//   255, // N/A (STAT)
-//   23,  // IO23 (ISEL)
-//   BQ24155USBCurrent::LIMIT_800,  // Hardware limits (if any) on source draw..
-//   BQ24155_FLAG_ISEL_HIGH  // We want to start the ISEL pin high.
-// );
-//
-// const PowerPlantOpts powerplant_opts(
-//   255, // 2.5v select pin is driven by the CPLD.
-//   27,  // Aux regulator enable pin.
-//   DIGITAB_PMU_FLAG_ENABLED  // Regulator enabled @3.3v
-// );
-
-#define ESP32_LED_PIN             15  // This is an LED.
-
-
 const BatteryOpts battery_opts (
   1400,    // Battery capacity (in mAh)
   3.60f,   // Battery dead (in volts)
@@ -180,25 +123,13 @@ const BatteryOpts battery_opts (
   4.2f     // Battery max (in volts)
 );
 
+/* Wrapped config for the sensor front-end */
+const DigitabulumOpts digitabulum_opts(
+  &cpld_pins,
+  &adp_opts,
+  1
+);
 
-#if defined (__BUILD_HAS_FREERTOS)
-
-#include <string.h>
-#include <time.h>
-#include <sys/time.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/event_groups.h"
-#include "esp_system.h"
-#include "esp_wifi.h"
-#include "esp_event_loop.h"
-#include "esp_log.h"
-#include "esp_attr.h"
-#include "esp_sleep.h"
-#include "nvs_flash.h"
-
-#include "lwip/err.h"
-#include "lwip/apps/sntp.h"
 
 #define EXAMPLE_WIFI_SSID "WaddleNest_Quarantine"
 #define EXAMPLE_WIFI_PASS "idistrustmydevice"
@@ -329,19 +260,6 @@ void manuvr_task(void* pvParameter) {
   PMU pmu(&i2c, &charger_opts, &gas_gauge_opts, &powerplant_opts, &battery_opts);
   kernel->subscribe((EventReceiver*) &pmu);
 
-  ATECC508 atec(&atecc_opts);
-  i2c.addSlaveDevice((I2CDevice*) &atec);
-
-  ADP8866 leds(&adp_opts);
-  i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
-  kernel->subscribe((EventReceiver*) &leds);
-
-  CPLDDriver _cpld(&cpld_pins);
-  kernel->subscribe(&_cpld);
-
-  ManuManager _legend_manager(&_cpld);
-  kernel->subscribe(&_legend_manager);
-
   Digitabulum digitabulum(&i2c, &digitabulum_opts);
   kernel->subscribe(&digitabulum);
 
@@ -399,12 +317,11 @@ void app_main() {
   //ESP_LOGI(TAG, "The current date/time in CO is: %s", strftime_buf);
   //// TODO: End generalize block.
 
+  // The entire front-end driver apparatus lives on the stack.
   xTaskCreate(manuvr_task, "_manuvr", 48000, NULL, (tskIDLE_PRIORITY + 2), NULL);
 }
-#endif  // __BUILD_HAS_FREERTOS
-
 
 
 #ifdef __cplusplus
-  }
+}
 #endif

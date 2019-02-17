@@ -27,9 +27,6 @@ This way, we don't have to write application logic for every supported platform.
 #include "Digitabulum.h"
 #include <Kernel.h>
 #include <Platform/Platform.h>
-#include <Drivers/ADP8866/ADP8866.h>
-#include "Digitabulum/CPLDDriver/CPLDDriver.h"
-#include "Digitabulum/ManuLegend/ManuManager.h"
 
 
 /*******************************************************************************
@@ -45,6 +42,10 @@ This way, we don't have to write application logic for every supported platform.
 
 Digitabulum* Digitabulum::INSTANCE = nullptr;
 
+/* These options are fixed with respect to the application layer. */
+const ATECC508Opts atecc_opts(
+  (uint8_t) 255
+);
 
 
 
@@ -57,12 +58,25 @@ Digitabulum* Digitabulum::INSTANCE = nullptr;
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 /*
-* Constructor. Takes pin numbers as arguments.
+* Constructor.
 */
-Digitabulum::Digitabulum(I2CAdapter* i2c_adapter, const DigitabulumOpts* _o) : EventReceiver("Digitabulum"), _opts(_o) {
+Digitabulum::Digitabulum(I2CAdapter* i2c_adapter, const DigitabulumOpts* _o) :
+    EventReceiver("Digitabulum"),
+    atec(&atecc_opts),
+    cpld(_o->cpld_pins),
+    leds(_o->adp_pins),
+    manu(&cpld),
+    _opts(_o) {
   if (nullptr == Digitabulum::INSTANCE) {
     Digitabulum::INSTANCE = this;
   }
+  Kernel* kernel = platform.kernel();
+
+  i2c_adapter->addSlaveDevice((I2CDevice*) &atec);
+  i2c_adapter->addSlaveDevice((I2CDeviceWithRegisters*) &leds);
+  kernel->subscribe(&leds);
+  kernel->subscribe(&cpld);
+  kernel->subscribe(&manu);
 }
 
 
@@ -81,8 +95,8 @@ int8_t Digitabulum::init() {
 /*
 * Dump this item to the dev log.
 */
-void Digitabulum::printDebug(StringBuilder* temp) {
-  EventReceiver::printDebug(temp);
+void Digitabulum::printDebug(StringBuilder* output) {
+  EventReceiver::printDebug(output);
 }
 
 
@@ -185,6 +199,13 @@ void Digitabulum::consoleCmdProc(StringBuilder* input) {
   switch (c) {
     case 'i':   // Debug prints.
       switch (temp_int) {
+        case 5:
+          local_log.concatf("\nsizeof(Digitabulum):   %u\n", sizeof(Digitabulum));
+          local_log.concatf("  sizeof(ATECC508):    %u\n", sizeof(ATECC508));
+          local_log.concatf("  sizeof(CPLDDriver):  %u\n", sizeof(CPLDDriver));
+          local_log.concatf("  sizeof(ManuManager): %u\n", sizeof(ManuManager));
+          local_log.concatf("  sizeof(ADP8866):     %u\n", sizeof(ADP8866));
+          break;
         default:
           printDebug(&local_log);
           break;
@@ -193,6 +214,11 @@ void Digitabulum::consoleCmdProc(StringBuilder* input) {
 
     case 'r':
       reset();
+      break;
+
+    case 'v':
+      // The verbosity level given here will be propagated downward to all
+      //   components involved with the sensor front-end board.
       break;
 
     default:

@@ -1558,7 +1558,6 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
         case 5:
           local_log.concatf("sizeof(ManuLegendPipe)\t%u\n", sizeof(ManuLegendPipe));
           local_log.concatf("sizeof(ManuLegend)  \t%u\n", sizeof(ManuLegend));
-          local_log.concatf("sizeof(ManuManager) \t%u\n", sizeof(ManuManager));
           local_log.concatf("sizeof(Integrator)  \t%u\n", sizeof(Integrator));
           local_log.concatf("sizeof(SensorFrame) \t%u\n", sizeof(SensorFrame));
           local_log.concatf("sizeof(LSM9DS1)     \t%u\n", sizeof(LSM9DS1));
