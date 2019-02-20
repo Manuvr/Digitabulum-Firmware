@@ -123,12 +123,12 @@ uint8_t  CPLDDriver::irq76_conf         = 0;  // Aggregated IRQ settings.
 
 SPIBusOp  CPLDDriver::preallocated_bus_jobs[CPLD_SPI_PREALLOC_COUNT];
 
-const unsigned char MSG_ARGS_IMU_READ[] = {
+static const unsigned char MSG_ARGS_IMU_READ[] = {
   (uint8_t)TCode::UINT8, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT, 0  // IMU id and a collection of readings.
 };
 
 
-const unsigned char MSG_ARGS_IMU_LEGEND[] = {
+static const unsigned char MSG_ARGS_IMU_LEGEND[] = {
   (uint8_t)TCode::UINT8,  (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16,
   (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16,
   (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16, (uint8_t)TCode::UINT16,
@@ -138,7 +138,7 @@ const unsigned char MSG_ARGS_IMU_LEGEND[] = {
 };
 
 /* There are only two grammatical forms represented here. A zero-length, and a giant block of Vectors. */
-const unsigned char MSG_ARGS_IMU_MAP_STATE[] = {
+static const unsigned char MSG_ARGS_IMU_MAP_STATE[] = {
   (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
     (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
     (uint8_t)TCode::VECT_4_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::VECT_3_FLOAT, (uint8_t)TCode::FLOAT,
@@ -161,7 +161,7 @@ const unsigned char MSG_ARGS_IMU_MAP_STATE[] = {
 
 
 
-const MessageTypeDef cpld_message_defs[] = {
+static const MessageTypeDef cpld_message_defs[] = {
   /* These are messages specific to Digitabulum. */
   {  DIGITABULUM_MSG_IMU_IRQ_RAISED       , 0x0000,               "IMU_IRQ_RAISED" , ManuvrMsg::MSG_ARGS_NONE }, // IRQ asserted by CPLD.
   {  DIGITABULUM_MSG_IMU_READ             , 0x0000,               "IMU_READ"       , MSG_ARGS_IMU_READ },  // IMU read request. Argument is the ID.

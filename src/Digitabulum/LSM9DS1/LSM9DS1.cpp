@@ -37,7 +37,7 @@ extern unsigned long micros();
 * Static members and initializers should be located here.
 *******************************************************************************/
 
-const IMUState _state_indicies[] = {
+static const IMUState _state_indicies[] = {
   IMUState::STAGE_0,   // Undiscovered. Maybe absent.
   IMUState::STAGE_1,   // Discovered, but not init'd.
   IMUState::STAGE_2,   // Discovered and initiallized, but unknown register values.
@@ -499,8 +499,8 @@ unsigned int LSM9DS1::regValue(RegID idx) {
   if (ptr) {
     switch (RegPtrMap::regWidth(idx)) {
       // These are the only two widths in the sensor.
-      case 2: return (((uint16_t) *(ptr)) << 8) + *(ptr+1);
       case 1: return *(ptr);
+      case 2: return (((uint16_t) *(ptr)) << 8) + *(ptr+1);
     }
   }
   return 0;

@@ -110,6 +110,7 @@ class Digitabulum : public EventReceiver {
     int8_t led_set_digit_brightness(DigitPort, uint8_t);
     int8_t led_wrist_color(uint8_t r, uint8_t g, uint8_t b);
     int8_t led_wrist_color(uint32_t);
+    int8_t indicate_error(uint8_t, uint16_t);
 };
 
 #endif  // __DIGITABULUM_INC_H_

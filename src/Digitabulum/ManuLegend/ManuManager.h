@@ -82,6 +82,7 @@ enum class ManuState : uint8_t {
   UNKNOWN = 0,    // Uninitialized
   PREINIT,        // The class itself is initializing.
   IMU_INIT,       // The IMUs are initializing.
+  IMU_INIT_WAIT,  // The IMUs are initializing.
   CHIRALITY_TEST, // The class is busy determiinng chirality.
   READY_IDLE,     // Sensors stand initialized and waiting.
   READY_READING,  // Sensors are presently reading.

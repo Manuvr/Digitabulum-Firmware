@@ -244,8 +244,6 @@ void PMU::printDebug(StringBuilder* output) {
   output->concatf("-- VS/RE pins          %u/%u\n", _opts.vs_pin, _opts.re_pin);
   output->concatf("-- Auxiliary regulator %s\n", auxRegEnabled() ? aux_reg_state : "Disabled");
   output->concatf("-- Charge state        %s\n", getChargeStateString());
-  _ltc294x.printDebug(output);
-  _bq24155.printDebug(output);
 }
 
 

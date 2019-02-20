@@ -121,7 +121,7 @@ void Digitabulum::printDebug(StringBuilder* output) {
 */
 int8_t Digitabulum::attached() {
   if (EventReceiver::attached()) {
-    //led_wrist_color(0x00000010);
+    led_wrist_color(0x00000010);
     return 1;
   }
   return 0;
@@ -162,7 +162,7 @@ int8_t Digitabulum::notify(ManuvrMsg* active_event) {
 
   switch (active_event->eventCode()) {
     case DIGITABULUM_MSG_CPLD_RESET_COMPLETE:
-      //led_wrist_color(0x00050005);
+      led_wrist_color(0x00050005);
       break;
     default:
       return_value += EventReceiver::notify(active_event);
@@ -193,7 +193,7 @@ uint Digitabulum::consoleGetCmds(ConsoleCommand** ptr) {
 void Digitabulum::consoleCmdProc(StringBuilder* input) {
   const char* str = (char *) input->position(0);
   char c    = *str;
-  int temp_int = 0;
+  int temp_int = ((*(str) != 0) ? atoi((char*) str+1) : 0);
 
   if (input->count() > 1) {
     temp_int = input->position_as_int(1);
@@ -202,6 +202,12 @@ void Digitabulum::consoleCmdProc(StringBuilder* input) {
   switch (c) {
     case 'i':   // Debug prints.
       switch (temp_int) {
+        case 1:
+          led_wrist_color(0x00000505);
+          break;
+        case 2:
+          led_wrist_color(0x00000500);
+          break;
         case 5:
           local_log.concatf("\nsizeof(Digitabulum):   %u\n", sizeof(Digitabulum));
           local_log.concatf("  sizeof(ATECC508):    %u\n", sizeof(ATECC508));
@@ -219,9 +225,16 @@ void Digitabulum::consoleCmdProc(StringBuilder* input) {
       reset();
       break;
 
+    case 'e':
+      indicate_error(5, 200);
+      break;
+
     case 'v':
       // The verbosity level given here will be propagated downward to all
       //   components involved with the sensor front-end board.
+      cpld.setVerbosity(temp_int);
+      leds.setVerbosity(temp_int);
+      manu.setVerbosity(temp_int);
       break;
 
     default:
@@ -243,7 +256,7 @@ void Digitabulum::consoleCmdProc(StringBuilder* input) {
 */
 void Digitabulum::reset() {
   cpld.reset();
-  //leds.reset();
+  leds.reset();
 }
 
 
@@ -253,9 +266,9 @@ int8_t Digitabulum::led_set_digit_brightness(DigitPort p, uint8_t brightness) {
 }
 
 int8_t Digitabulum::led_wrist_color(uint8_t r, uint8_t g, uint8_t b) {
+  leds.set_brightness(6, g);
   leds.set_brightness(7, b);
   leds.set_brightness(8, r);
-  leds.set_brightness(9, g);
   return 0;
 }
 
@@ -265,4 +278,11 @@ int8_t Digitabulum::led_wrist_color(uint32_t color) {
     (uint8_t) ((color >> 8) & 0xFF),
     (uint8_t) (color & 0xFF)
   );
+}
+
+
+int8_t Digitabulum::indicate_error(uint8_t p_count, uint16_t ms_period) {
+  led_wrist_color(0x00100000);
+  //leds.pulse_channel(8, 0x05);
+  return 0;
 }
