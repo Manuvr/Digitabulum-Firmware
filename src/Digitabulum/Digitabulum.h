@@ -35,6 +35,9 @@ limitations under the License.
   #include <XenoSession/Console/ManuvrConsole.h>
 #endif
 
+/* Callback for frame completion. */
+typedef int8_t (*DigitabulumFrameFxnPtr)(ManuLegendPipe*);
+
 
 /*
 * Pin defs for this module.
@@ -94,6 +97,7 @@ class Digitabulum : public EventReceiver {
 
 
     static Digitabulum* INSTANCE;
+    static DigitabulumFrameFxnPtr frame_cb;
 
 
   protected:
@@ -111,6 +115,8 @@ class Digitabulum : public EventReceiver {
     int8_t led_wrist_color(uint8_t r, uint8_t g, uint8_t b);
     int8_t led_wrist_color(uint32_t);
     int8_t indicate_error(uint8_t, uint16_t);
+    int8_t indicate_sleep();
+    int8_t indicate_reading();
 };
 
 #endif  // __DIGITABULUM_INC_H_

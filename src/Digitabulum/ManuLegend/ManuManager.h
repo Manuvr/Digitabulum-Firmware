@@ -178,6 +178,9 @@ class ManuManager : public EventReceiver,
     inline void imuIdentitiesRead(bool nu) {  return (_er_set_flag(LEGEND_MGR_FLAGS_IMU_IDENT_WAS_READ, nu));  };
 
     inline uint32_t totalSamples() {   return sample_count;   };
+    inline ManuState getState() {      return _current_state; };
+
+    inline ManuLegendPipe* getPipe() { return &_def_pipe;     };
 
 
     static const char* chiralityString(Chirality);

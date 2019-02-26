@@ -27,7 +27,8 @@ This way, we don't have to write application logic for every supported platform.
 #include "Digitabulum.h"
 #include <Kernel.h>
 #include <Platform/Platform.h>
-
+#include <Transports/ManuvrSocket/ManuvrTCP.h>
+#include "Digitabulum/ManuLegend/ManuLegendPipe.h"
 
 /*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
@@ -41,6 +42,8 @@ This way, we don't have to write application logic for every supported platform.
 *******************************************************************************/
 
 Digitabulum* Digitabulum::INSTANCE = nullptr;
+DigitabulumFrameFxnPtr Digitabulum::frame_cb = nullptr;
+
 
 /* These options are fixed with respect to the application layer. */
 const ATECC508Opts atecc_opts(
@@ -77,6 +80,11 @@ Digitabulum::Digitabulum(I2CAdapter* i2c_adapter, const DigitabulumOpts* _o) :
   kernel->subscribe(&manu);
   i2c_adapter->addSlaveDevice((I2CDeviceWithRegisters*) &leds);
   i2c_adapter->addSlaveDevice((I2CDevice*) &atec);
+
+  // Digit and metacarpals LEDs have a maximum current of 30mA.
+  // The wrist unit RGB LED has a max current of 50/25/25.
+  // We back off a bit from those values.
+  leds.setMaxCurrents(30, 30, 30, 30, 30, 30, 25, 25, 25);
 }
 
 
@@ -121,7 +129,6 @@ void Digitabulum::printDebug(StringBuilder* output) {
 */
 int8_t Digitabulum::attached() {
   if (EventReceiver::attached()) {
-    led_wrist_color(0x00000010);
     return 1;
   }
   return 0;
@@ -162,7 +169,35 @@ int8_t Digitabulum::notify(ManuvrMsg* active_event) {
 
   switch (active_event->eventCode()) {
     case DIGITABULUM_MSG_CPLD_RESET_COMPLETE:
-      led_wrist_color(0x00050005);
+      led_wrist_color(0x00000010);
+      break;
+    //case MANUVR_MSG_SYS_POWER_MODE:
+    //  return_value++;
+    //  break;
+    case DIGITABULUM_MSG_IMU_MAP_STATE:
+      frame_cb(manu.getPipe());
+      break;
+
+    case DIGITABULUM_MSG_MANU_STATE_STABLE:  // ManuManager state machine is stable.
+      local_log.concatf("ManuManager reached stable state:  %s\n", ManuManager::getManuStateString(manu.getState()));
+      switch (manu.getState()) {
+        case ManuState::READY_READING:
+          indicate_reading();
+          break;
+        //case ManuState::READY_IDLE:
+        case ManuState::READY_PAUSED:
+          led_wrist_color(0x00050005);
+          break;
+        case ManuState::ASLEEP:
+          indicate_sleep();
+          break;
+        case ManuState::FAULT:
+          indicate_error(5, 200);
+          break;
+        default:
+          break;
+      }
+      return_value++;
       break;
     default:
       return_value += EventReceiver::notify(active_event);
@@ -203,11 +238,16 @@ void Digitabulum::consoleCmdProc(StringBuilder* input) {
     case 'i':   // Debug prints.
       switch (temp_int) {
         case 1:
-          led_wrist_color(0x00000505);
+          indicate_sleep();
           break;
         case 2:
+          indicate_reading();
+          break;
+
+        case 3:
           led_wrist_color(0x00000500);
           break;
+
         case 5:
           local_log.concatf("\nsizeof(Digitabulum):   %u\n", sizeof(Digitabulum));
           local_log.concatf("  sizeof(ATECC508):    %u\n", sizeof(ATECC508));
@@ -215,6 +255,10 @@ void Digitabulum::consoleCmdProc(StringBuilder* input) {
           local_log.concatf("  sizeof(ManuManager): %u\n", sizeof(ManuManager));
           local_log.concatf("  sizeof(ADP8866):     %u\n", sizeof(ADP8866));
           break;
+        case 6:
+          Kernel::raiseEvent(DIGITABULUM_MSG_IMU_MAP_STATE, nullptr);
+          break;
+
         default:
           printDebug(&local_log);
           break;
@@ -226,7 +270,7 @@ void Digitabulum::consoleCmdProc(StringBuilder* input) {
       break;
 
     case 'e':
-      indicate_error(5, 200);
+      indicate_error(5, 1200);
       break;
 
     case 'v':
@@ -266,6 +310,7 @@ int8_t Digitabulum::led_set_digit_brightness(DigitPort p, uint8_t brightness) {
 }
 
 int8_t Digitabulum::led_wrist_color(uint8_t r, uint8_t g, uint8_t b) {
+  leds.quell_all_timers();
   leds.set_brightness(6, g);
   leds.set_brightness(7, b);
   leds.set_brightness(8, r);
@@ -281,8 +326,26 @@ int8_t Digitabulum::led_wrist_color(uint32_t color) {
 }
 
 
+int8_t Digitabulum::indicate_sleep() {
+  led_wrist_color(0x00000000);
+  leds.set_fade(1750, 1750);
+  leds.pulse_channel(6, 0x05, 250, 12500);
+  return 0;
+}
+
+
+int8_t Digitabulum::indicate_reading() {
+  led_wrist_color(0x00050005);
+  leds.set_fade(1750, 1750);
+  leds.pulse_channel(7, 0x10, 250, 750);
+  leds.pulse_channel(8, 0x10, 250, 750);
+  return 0;
+}
+
+
 int8_t Digitabulum::indicate_error(uint8_t p_count, uint16_t ms_period) {
-  led_wrist_color(0x00100000);
-  //leds.pulse_channel(8, 0x05);
+  led_wrist_color(0x00050000);
+  leds.set_fade(ms_period, ms_period);
+  leds.pulse_channel(8, 0x15, ms_period, ms_period);
   return 0;
 }

@@ -606,7 +606,9 @@ int8_t ManuManager::_set_target_state(ManuState nu_state) {
 *   2) The _target_state is attained
 */
 int8_t ManuManager::_advance_state_machine() {
+  ManuState stacked_state = _current_state;
   bool reloop = true;
+
   while (reloop && (_target_state != _current_state)) {
     reloop = false;
     local_log.concatf("_advance_state_machine(): %s --> %s\n", getManuStateString(_current_state), getManuStateString(_target_state));
@@ -825,6 +827,12 @@ int8_t ManuManager::_advance_state_machine() {
       default:
         break;
     }
+  }
+
+  bool state_changed = (stacked_state != _current_state);
+  if (state_changed && ((_target_state != _current_state) || (ManuState::FAULT == _current_state))) {
+    // If the state machine reached stability on this execution, send an event.
+    Kernel::raiseEvent(DIGITABULUM_MSG_MANU_STATE_STABLE, nullptr);
   }
   flushLocalLog();
   return 0;
@@ -1145,7 +1153,7 @@ int8_t ManuManager::attached() {
     event_iiu_read.alterSchedulePeriod(1000);
     event_iiu_read.autoClear(false);
     event_iiu_read.enableSchedule(false);
-    event_iiu_read.specific_target = (EventReceiver*) this;
+    //event_iiu_read.specific_target = (EventReceiver*) this;
 
     platform.kernel()->addSchedule(&event_iiu_read);
     platform.kernel()->addSchedule(&_event_integrator);

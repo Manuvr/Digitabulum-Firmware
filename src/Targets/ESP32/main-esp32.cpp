@@ -225,11 +225,19 @@ static esp_err_t event_handler(void* ctx, system_event_t* event) {
   return ESP_OK;
 }
 
+BufferPipe* client = nullptr;
+
 
 BufferPipe* _pipe_factory_1(BufferPipe* _n, BufferPipe* _f) {
   ManuvrConsole* _console = new ManuvrConsole(_n);
   platform.kernel()->subscribe(_console);
   return (BufferPipe*) _console;
+}
+
+
+int8_t send_serialized_frame(ManuLegendPipe* pipe) {
+  ESP_LOGI(TAG, "send_serialized_frame()");
+  return 0;
 }
 
 
@@ -263,6 +271,8 @@ void manuvr_task(void* pvParameter) {
   Digitabulum digitabulum(&i2c, &digitabulum_opts);
   kernel->subscribe(&digitabulum);
 
+  Digitabulum::frame_cb = send_serialized_frame;
+
   platform.bootstrap();
 
   while (1) {
@@ -294,31 +304,31 @@ void app_main() {
 
   gpioDefine(ESP32_LED_PIN, GPIOMode::OUTPUT);
 
-  //// TODO: Ultimately generalize this... Taken from ESP32 examples....
-  //// https://github.com/espressif/esp-idf/blob/master/examples/protocols/sntp/main/sntp_example_main.c
-  //time_t now;
-  //struct tm timeinfo;
-  //time(&now);
-  //localtime_r(&now, &timeinfo);
-  //// Is time set? If not, tm_year will be (1970 - 1900).
-  //if (timeinfo.tm_year < (2016 - 1900)) {
-  //  ESP_LOGI(TAG, "Time is not set yet. Connecting to WiFi and getting time over NTP.");
-  //  obtain_time();
-  //  // update 'now' variable with current time
-  //  time(&now);
-  //}
-  //char strftime_buf[64];
-
-  //// Set timezone to Eastern Standard Time and print local time
-  //setenv("TZ", "MST7MDT,M3.2.0/2,M11.1.0", 1);
-  //tzset();
-  //localtime_r(&now, &timeinfo);
-  //strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-  //ESP_LOGI(TAG, "The current date/time in CO is: %s", strftime_buf);
-  //// TODO: End generalize block.
-
   // The entire front-end driver apparatus lives on the stack.
   xTaskCreate(manuvr_task, "_manuvr", 48000, NULL, (tskIDLE_PRIORITY + 2), NULL);
+
+  // TODO: Ultimately generalize this... Taken from ESP32 examples....
+  // https://github.com/espressif/esp-idf/blob/master/examples/protocols/sntp/main/sntp_example_main.c
+  time_t now;
+  struct tm timeinfo;
+  time(&now);
+  localtime_r(&now, &timeinfo);
+  // Is time set? If not, tm_year will be (1970 - 1900).
+  if (timeinfo.tm_year < (2016 - 1900)) {
+    ESP_LOGI(TAG, "Time is not set yet. Connecting to WiFi and getting time over NTP.");
+    obtain_time();
+    // update 'now' variable with current time
+    time(&now);
+  }
+  char strftime_buf[64];
+
+  // Set timezone to Eastern Standard Time and print local time
+  setenv("TZ", "MST7MDT,M3.2.0/2,M11.1.0", 1);
+  tzset();
+  localtime_r(&now, &timeinfo);
+  strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+  ESP_LOGI(TAG, "The current date/time in CO is: %s", strftime_buf);
+  // TODO: End generalize block.
 }
 
 

@@ -168,6 +168,7 @@ static const MessageTypeDef cpld_message_defs[] = {
   {  DIGITABULUM_MSG_IMU_QUAT_CRUNCH      , 0x0000,               "IMU_QUAT_CRUNCH", ManuvrMsg::MSG_ARGS_NONE }, //
   {  DIGITABULUM_MSG_IMU_MAP_STATE        , MSG_FLAG_EXPORTABLE,  "IMU_MAP_STATE"  , MSG_ARGS_IMU_MAP_STATE }, //
   {  DIGITABULUM_MSG_IMU_LEGEND           , MSG_FLAG_EXPORTABLE,  "IMU_LEGEND"     , MSG_ARGS_IMU_LEGEND }, // No args? Asking for this legend. Many args: Legend provided.
+  {  DIGITABULUM_MSG_MANU_STATE_STABLE    , MSG_FLAG_EXPORTABLE,  "MANU_SM_STABLE" , ManuvrMsg::MSG_ARGS_NONE }, // 
   {  DIGITABULUM_MSG_IMU_TAP              , MSG_FLAG_EXPORTABLE,  "IMU_TAP"        , ManuvrMsg::MSG_ARGS_NONE }, // IMU id and optional threshold.
   {  DIGITABULUM_MSG_IMU_DOUBLE_TAP       , MSG_FLAG_EXPORTABLE,  "IMU_DBL_TAP"    , ManuvrMsg::MSG_ARGS_NONE }, // IMU id and optional threshold.
 
