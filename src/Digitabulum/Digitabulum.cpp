@@ -52,14 +52,11 @@ const ATECC508Opts atecc_opts(
 
 
 ManuLegendPipe* PIPE = nullptr;
+const uint8_t pipe_plan[] = {1, 0};
 
 BufferPipe* _pipe_factory_1(BufferPipe* _n, BufferPipe* _f) {
   if (nullptr != PIPE) {
     PIPE->setNear(_n);
-    Kernel::log("Assigned pipe to ManuLegendPipe\n");
-  }
-  else {
-    Kernel::log("PIPE was NULL\n");
   }
   return (BufferPipe*) PIPE;
 }
@@ -94,7 +91,6 @@ Digitabulum::Digitabulum(I2CAdapter* i2c_adapter, const DigitabulumOpts* _o) :
     Kernel::log("Failed to add ManuLegendPipe to the pipe registry.\n");
     exit(1);
   }
-  const uint8_t pipe_plan[] = {1, 0};
 
   #if defined(MANUVR_SUPPORT_TCPSOCKET)
     ManuvrTCP* tcp_srv = new ManuvrTCP((const char*) "0.0.0.0", 2319);

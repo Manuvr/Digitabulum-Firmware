@@ -101,6 +101,7 @@ class ManuLegendPipe : public ManuLegend, public BufferPipe {
     uint32_t _ms_interval  = 100;
     uint8_t  _flags        = 0;
     ManuEncoding _encoding = ManuEncoding::MANUVR;
+    uint16_t  _padding     = 0;
 
     inline void satisfied(bool en) {  _flags = (en) ? (_flags | LEGENDPIPE_FLAGS_LEGEND_SATISFIED) : (_flags & ~(LEGENDPIPE_FLAGS_LEGEND_SATISFIED)); };
     inline void stable(bool en) {     _flags = (en) ? (_flags | LEGENDPIPE_FLAGS_LEGEND_STABLE)    : (_flags & ~(LEGENDPIPE_FLAGS_LEGEND_STABLE));    };

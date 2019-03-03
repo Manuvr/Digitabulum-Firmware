@@ -113,12 +113,11 @@ void ManuLegendPipe::printDebug(StringBuilder* output) {
     "-- ManuLegendPipe  (%sactive %sstable)\n-----------------------------------\n",
     (active() ? "" : "in"), (stable() ? "" : "un")
   );
-  output->concatf("-- haveNear/Far   \t%c / %c\n", (haveFar() ? 'y':'n'), (haveNear() ? 'y':'n'));
+  BufferPipe::printDebug(output);
   output->concatf("-- Encoding       \t%s\n", ManuLegendPipe::encoding_label(_encoding));
   output->concatf("-- Legend Sent    \t%c\n", changeSent() ? 'y' : 'n');
   output->concatf("-- Data demands:  \t%satisfied\n", satisfied() ? "S" : "Uns");
   output->concatf("\t Sequence num   \t%c\n", sequence() ? 'y' : 'n');
-  ManuLegendPipe::printDebug(output);
 }
 
 
@@ -359,7 +358,7 @@ int8_t ManuLegendPipe::offer(SensorFrame* frame) {
       }
       _ms_last_send = millis() + _ms_interval;
       if (output.length()) {
-        if (MEM_MGMT_RESPONSIBLE_ERROR == toCounterparty(&output, MEM_MGMT_RESPONSIBLE_BEARER)) {
+        if (MEM_MGMT_RESPONSIBLE_ERROR != toCounterparty(&output, MEM_MGMT_RESPONSIBLE_BEARER)) {
           return_value = 0;
         }
         else {
