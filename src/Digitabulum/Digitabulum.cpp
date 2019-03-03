@@ -51,6 +51,20 @@ const ATECC508Opts atecc_opts(
 );
 
 
+ManuLegendPipe* PIPE = nullptr;
+
+BufferPipe* _pipe_factory_1(BufferPipe* _n, BufferPipe* _f) {
+  if (nullptr != PIPE) {
+    PIPE->setNear(_n);
+    Kernel::log("Assigned pipe to ManuLegendPipe\n");
+  }
+  else {
+    Kernel::log("PIPE was NULL\n");
+  }
+  return (BufferPipe*) PIPE;
+}
+
+
 
 /*******************************************************************************
 *   ___ _              ___      _ _              _      _
@@ -74,6 +88,20 @@ Digitabulum::Digitabulum(I2CAdapter* i2c_adapter, const DigitabulumOpts* _o) :
     Digitabulum::INSTANCE = this;
   }
   Kernel* kernel = platform.kernel();
+  PIPE = manu.getPipe();
+
+  if (0 != BufferPipe::registerPipe(1, _pipe_factory_1)) {
+    Kernel::log("Failed to add ManuLegendPipe to the pipe registry.\n");
+    exit(1);
+  }
+  const uint8_t pipe_plan[] = {1, 0};
+
+  #if defined(MANUVR_SUPPORT_TCPSOCKET)
+    ManuvrTCP* tcp_srv = new ManuvrTCP((const char*) "0.0.0.0", 2319);
+    tcp_srv->setPipeStrategy(pipe_plan);
+    kernel->subscribe(tcp_srv);
+    tcp_srv->listen();
+  #endif
 
   kernel->subscribe(&leds);
   kernel->subscribe(&cpld);
@@ -344,8 +372,8 @@ int8_t Digitabulum::indicate_reading() {
 
 
 int8_t Digitabulum::indicate_error(uint8_t p_count, uint16_t ms_period) {
-  led_wrist_color(0x00050000);
-  leds.set_fade(ms_period, ms_period);
-  leds.pulse_channel(8, 0x15, ms_period, ms_period);
+  led_wrist_color(0x00000000);
+  leds.set_fade(1750, 1750);
+  leds.pulse_channel(8, 0x15, 250, ms_period);
   return 0;
 }

@@ -86,11 +86,10 @@ const char* get_imu_label(int idx) {
 /**
 * Constructor
 */
-ManuLegendPipe::ManuLegendPipe(ManuEncoding e) : ManuLegend() {
+ManuLegendPipe::ManuLegendPipe(ManuEncoding e) : ManuLegend(), BufferPipe() {
+  stable(true);
   _encoding = e;
 }
-
-
 
 /**
 * Destructor
@@ -99,15 +98,27 @@ ManuLegendPipe::~ManuLegendPipe() {
 }
 
 
+/*******************************************************************************
+*  _       _   _        _
+* |_)    _|_ _|_ _  ._ |_) o ._   _
+* |_) |_| |   | (/_ |  |   | |_) (/_
+*                            |
+* Overrides and addendums to BufferPipe.
+*******************************************************************************/
+const char* ManuLegendPipe::pipeName() { return "ManuLegendPipe"; }
+
+
 void ManuLegendPipe::printDebug(StringBuilder* output) {
   output->concatf(
     "-- ManuLegendPipe  (%sactive %sstable)\n-----------------------------------\n",
     (active() ? "" : "in"), (stable() ? "" : "un")
   );
+  output->concatf("-- haveNear/Far   \t%c / %c\n", (haveFar() ? 'y':'n'), (haveNear() ? 'y':'n'));
   output->concatf("-- Encoding       \t%s\n", ManuLegendPipe::encoding_label(_encoding));
   output->concatf("-- Legend Sent    \t%c\n", changeSent() ? 'y' : 'n');
   output->concatf("-- Data demands:  \t%satisfied\n", satisfied() ? "S" : "Uns");
   output->concatf("\t Sequence num   \t%c\n", sequence() ? 'y' : 'n');
+  ManuLegendPipe::printDebug(output);
 }
 
 
@@ -131,6 +142,8 @@ void ManuLegendPipe::broadcast_legend() {
 * @return non-zero on error.
 */
 int8_t ManuLegendPipe::offer(SensorFrame* frame) {
+  StringBuilder log;
+  int8_t return_value = -1;
   if (should_accept()) {
     if (_ms_last_send <= millis()) {
       StringBuilder output;
@@ -206,10 +219,9 @@ int8_t ManuLegendPipe::offer(SensorFrame* frame) {
             }
             int final_size = co.size();
             if (final_size) {
-              StringBuilder tmp_str(co.data(), final_size);
-              output.concatf("CBOR frame: %d bytes\n", final_size);
-              tmp_str.printDebug(&output);
-              Kernel::log(&output);
+              output.concat(co.data(), final_size);
+              log.concatf("CBOR frame: %d bytes\n", final_size);
+              //log.printDebug(&output);
             }
           }
           break;
@@ -295,14 +307,12 @@ int8_t ManuLegendPipe::offer(SensorFrame* frame) {
                 }
               }
             }
-            StringBuilder temp;
-            output.concat("MANUVR output:\n");
-            ret->serialize(&temp);
-            temp.printDebug(&output);
-            output.concat("\n");
+            log.concat("MANUVR output:\n");
+            ret->serialize(&output);
+            output.printDebug(&log);
+            log.concat("\n");
             delete ret;
           }
-          Kernel::log(&output);
           break;
 
         case ManuEncoding::OSC:
@@ -341,13 +351,34 @@ int8_t ManuLegendPipe::offer(SensorFrame* frame) {
             }
           }
           break;
+
         case ManuEncoding::LOG:
-          frame->printManuLegend(&output);
-          Kernel::log(&output);
+          frame->printManuLegend(&log);
+          return_value = 0;
           break;
       }
       _ms_last_send = millis() + _ms_interval;
+      if (output.length()) {
+        if (MEM_MGMT_RESPONSIBLE_ERROR == toCounterparty(&output, MEM_MGMT_RESPONSIBLE_BEARER)) {
+          return_value = 0;
+        }
+        else {
+          log.concat("ManuLegendPipe: Pipe failure.\n");
+        }
+      }
+      else {
+        log.concat("ManuLegendPipe: No output.\n");
+      }
+    }
+    else {
+      log.concatf("ManuLegendPipe: _ms_last_send = %u\n", _ms_last_send);
     }
   }
-  return 0;
+  else {
+    log.concat("ManuLegendPipe: Not accepting frame.\n");
+  }
+  if (log.length()) {
+    Kernel::log(&log);
+  }
+  return return_value;
 }

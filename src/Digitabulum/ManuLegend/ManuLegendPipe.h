@@ -55,15 +55,18 @@ enum class ManuEncoding : uint8_t {
 /*
 * Class for connecting Manu results to the outside world.
 */
-class ManuLegendPipe : public ManuLegend {
+class ManuLegendPipe : public ManuLegend, public BufferPipe {
   public:
     ManuLegendPipe(ManuEncoding);
     ManuLegendPipe() : ManuLegendPipe(ManuEncoding::LOG) {};
     ~ManuLegendPipe();
 
-    int8_t offer(SensorFrame*);
+    /* Override from BufferPipe. */
 
     void printDebug(StringBuilder*);
+
+    int8_t offer(SensorFrame*);
+    void broadcast_legend();
 
     /* Used to enable or disable the Legend's activity. */
     inline bool active() {              return (_flags & LEGENDPIPE_FLAGS_LEGEND_ACTIVE);          };
@@ -84,6 +87,9 @@ class ManuLegendPipe : public ManuLegend {
     static const char* encoding_label(ManuEncoding);
 
 
+  protected:
+    const char* pipeName();
+
 
   private:
     // TODO: We are ultimately going to form this class into a BufferPipe once that class
@@ -102,8 +108,6 @@ class ManuLegendPipe : public ManuLegend {
     inline void changePending(bool en) {  _flags = (en) ? (_flags | LEGENDPIPE_FLAGS_LEGEND_CHANGE_PEND) : (_flags & ~(LEGENDPIPE_FLAGS_LEGEND_CHANGE_PEND));  };
 
     inline bool should_accept() {     return (_flags & LEGENDPIPE_FLAGS_SHOULD_ACCEPT_MASK);  };
-
-    void broadcast_legend();
 };
 
 #endif  // __DIGITABULUM_MANU_LEGEND_PIPE_H_

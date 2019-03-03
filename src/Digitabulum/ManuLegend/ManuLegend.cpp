@@ -214,6 +214,7 @@ bool ManuLegend::stackLegend(ManuLegend* test) {
   return return_value;
 }
 
+
 /**
 * Reset the ManuLegend.
 *
@@ -233,6 +234,7 @@ bool ManuLegend::zeroLegend() {
   }
   return return_value;
 }
+
 
 /**
 * Proceeding from the top of the data stack downward, fill in any implicit
@@ -279,10 +281,8 @@ bool ManuLegend::fillLegendGaps() {
 }
 
 
-
 void ManuLegend::printManuLegend(StringBuilder* output) {
-  output->concatf(
-    "-- ManuLegend\n-----------------------------------\n");
+  output->concat("-- ManuLegend\n-----------------------------------\n");
   output->concatf("-- dataset_size   \t%u\n", (unsigned long) ds_size);
   output->concat("-- Enabled data:\n");
   output->concatf("\t handPosition   \t%c\n", handPosition() ? 'y' : 'n');

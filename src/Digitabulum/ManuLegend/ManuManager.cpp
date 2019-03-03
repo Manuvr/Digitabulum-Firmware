@@ -382,6 +382,9 @@ ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt"),
   *(_ptr_sequence) = 0;
 
   _def_pipe.active(true);
+  _def_pipe.sequence(true);
+  _def_pipe.deltaT(true);
+
   _root_leg.sequence(true);
   _root_leg.deltaT(true);
   //_root_leg.accNullGravity(true);
@@ -1256,6 +1259,7 @@ int8_t ManuManager::notify(ManuvrMsg* active_event) {
       else {
         // Otherwise, it means we've emitted the event. No need to respond.
       }
+      return_value++;
       break;
 
     case DIGITABULUM_MSG_IMU_QUAT_CRUNCH:
@@ -1428,9 +1432,9 @@ void ManuManager::printDebug(StringBuilder *output) {
 */
 void ManuManager::printStateMachine(StringBuilder* output) {
   output->concat("-- ManuState:\n");
-  output->concatf("     Last      %s\n", getManuStateString(_last_state));
-  output->concatf("     Current   %s\n", getManuStateString(_current_state));
-  output->concatf("     Target    %s\n", getManuStateString(_target_state));
+  output->concatf("\tLast      %s\n", getManuStateString(_last_state));
+  output->concatf("\tCurrent   %s\n", getManuStateString(_current_state));
+  output->concatf("\tTarget    %s\n", getManuStateString(_target_state));
 }
 
 
@@ -1496,45 +1500,16 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
   switch (*(str)) {
     case 'h':
     case 'H':
-    case 'm':
-
-    case 'g':    // Sync registers
-      switch (temp_byte) {
-        case 1:
-          {
-            SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
-            op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 1, LEGEND_DATASET_IIU_COUNT, 0x27 | 0x80 | 0x40);
-            op->setBuffer(_reg_block_m_status, LEGEND_DATASET_IIU_COUNT);
-            queue_io_job(op);
-          }
-          break;
-
-        default:
-          _advance_state_machine();
-          break;
-      }
       break;
 
     case 'M':
       switch (temp_byte) {
-        case 1:
-          _set_target_state(ManuState::IMU_INIT);
-          break;
-        case 2:
-          _set_target_state(ManuState::READY_IDLE);
-          break;
-        case 3:
-          _set_target_state(ManuState::READY_READING);
-          break;
-        case 4:
-          _set_target_state(ManuState::READY_PAUSED);
-          break;
-        case 5:
-          _set_target_state(ManuState::ASLEEP);
-          break;
-        default:
-          _advance_state_machine();
-          break;
+        case 1:  _set_target_state(ManuState::IMU_INIT);       break;
+        case 2:  _set_target_state(ManuState::READY_IDLE);     break;
+        case 3:  _set_target_state(ManuState::READY_READING);  break;
+        case 4:  _set_target_state(ManuState::READY_PAUSED);   break;
+        case 5:  _set_target_state(ManuState::ASLEEP);         break;
+        default: _advance_state_machine();                     break;
       }
       printStateMachine(&local_log);
       break;
@@ -1552,6 +1527,7 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
 
     case 'v':
       integrator.setVerbosity(temp_byte);
+      setVerbosity(temp_byte);
       break;
 
     case 'i':
@@ -1560,8 +1536,7 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
           integrator.printDebug(&local_log);
           break;
         case 2:
-          local_log.concat("Reading sensor identities...\n");
-          read_identities();  // Read the sensor's identity registers.
+          printTemperatures(&local_log);   // Show us the temperatures.
           break;
         case 3:
           printIMURollCall(&local_log);   // Show us the results, JIC
@@ -1570,7 +1545,7 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
           _frame_pool.printDebug(&local_log);
           break;
         case 5:
-          local_log.concatf("sizeof(ManuLegendPipe)\t%u\n", sizeof(ManuLegendPipe));
+          local_log.concatf("\nsizeof(ManuLegendPipe)\t%u\n", sizeof(ManuLegendPipe));
           local_log.concatf("sizeof(ManuLegend)  \t%u\n", sizeof(ManuLegend));
           local_log.concatf("sizeof(Integrator)  \t%u\n", sizeof(Integrator));
           local_log.concatf("sizeof(SensorFrame) \t%u\n", sizeof(SensorFrame));
@@ -1585,7 +1560,10 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
           printFIFOLevels(&local_log);
           break;
         case 8:
-          printTemperatures(&local_log);   // Show us the temperatures.
+          _def_pipe.printManuLegend(&local_log);
+          break;
+        case 9:
+          _def_pipe.printDebug(&local_log);
           break;
 
         case 0:
@@ -1599,8 +1577,8 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
     case 'l':
       switch (temp_byte) {
         case 1:
-          //_def_pipe.broadcast_legend();
-          //local_log.concat("Legend broadcast.\n");
+          _def_pipe.broadcast_legend();
+          local_log.concat("Legend broadcast.\n");
           break;
         case 2:
           _def_pipe.offer(_frame_pool.take());
@@ -1634,17 +1612,15 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
           _def_pipe.active(!_def_pipe.active());
           local_log.concatf("active() %c\n", _def_pipe.active() ? 'y' : 'n');
           break;
-
-        case 10:
-        case 11:
-        case 12:
-        case 13:
-          {
-            ManuEncoding e = (ManuEncoding) (temp_byte - 10);
-            _def_pipe.encoding(e);
-            local_log.concatf("Switched to ManuEncoding::%s\n", ManuLegendPipe::encoding_label(e));
-          }
+        case 7:
+          _def_pipe.stackLegend(&_root_leg);
+          local_log.concat("Moving _root_leg to _def_pipe.\n");
           break;
+        case 8:
+          _root_leg.stackLegend(&_def_pipe);
+          local_log.concat("Moving _def_pipe to _root_leg.\n");
+          break;
+
         default:
           _root_leg.printManuLegend(&local_log);
           break;
@@ -1705,7 +1681,21 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
 
 
     // IMU DEBUG //////////////////////////////////////////////////////////////////
-    case 'c':
+    case 'g':    // Sync registers
+      {
+        SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
+        op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 1, LEGEND_DATASET_IIU_COUNT, 0x27 | 0x80 | 0x40);
+        op->setBuffer(_reg_block_m_status, LEGEND_DATASET_IIU_COUNT);
+        queue_io_job(op);
+      }
+      break;
+
+    case 'm':  // Read the sensor's identity registers.
+      local_log.concat("Reading sensor identities...\n");
+      read_identities();
+      break;
+
+    case 'c':  // Dump registers for a given IMU.
       if (temp_byte < 17) {
         imus[temp_byte].dumpDevRegs(&local_log);
       }
@@ -1733,7 +1723,6 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
       if (temp_byte < 6) {
         init_iius();
         local_log.concatf("Broadcasting IMU_INIT for stage %u...\n", temp_byte);
-
       }
       else {
         local_log.concatf("Illegal INIT stage: %u\n", temp_byte);
@@ -2195,6 +2184,5 @@ void ManuManager::printIMURollCall(StringBuilder *output) {
     }
     output->concatf("%02u(%02x/%02x)  ", i, _reg_block_ident[i], _reg_block_ident[i+LEGEND_DATASET_IIU_COUNT]);
   }
-  //output->concatf("%c\n\n", _bus->digitExists(DigitPort::PORT_5) ? 'Y' : ' ');
   output->concatf("%c\n", _bus->digitExists(DigitPort::PORT_5) ? 'Y' : ' ');
 }

@@ -228,13 +228,6 @@ static esp_err_t event_handler(void* ctx, system_event_t* event) {
 BufferPipe* client = nullptr;
 
 
-BufferPipe* _pipe_factory_1(BufferPipe* _n, BufferPipe* _f) {
-  ManuvrConsole* _console = new ManuvrConsole(_n);
-  platform.kernel()->subscribe(_console);
-  return (BufferPipe*) _console;
-}
-
-
 int8_t send_serialized_frame(ManuLegendPipe* pipe) {
   ESP_LOGI(TAG, "send_serialized_frame()");
   return 0;
@@ -248,19 +241,6 @@ void manuvr_task(void* pvParameter) {
   unsigned long ms_1 = ms_0;
   unsigned long ms_w = ms_0;
   bool odd_even = false;
-
-  if (0 != BufferPipe::registerPipe(1, _pipe_factory_1)) {
-    printf("Failed to add console to the pipe registry.\n");
-    exit(1);
-  }
-  const uint8_t pipe_plan_console[] = {1, 0};
-
-  #if defined(MANUVR_SUPPORT_TCPSOCKET)
-    ManuvrTCP tcp_srv((const char*) "0.0.0.0", 2319);
-    tcp_srv.setPipeStrategy(pipe_plan_console);
-    kernel->subscribe(&tcp_srv);
-    tcp_srv.listen();
-  #endif
 
   I2CAdapter i2c(&i2c_opts);
   kernel->subscribe(&i2c);
@@ -284,7 +264,7 @@ void manuvr_task(void* pvParameter) {
     odd_even = !odd_even;
     if (ms_0 > (ms_w+1000)) {
       ms_w = ms_0;
-      esp_task_wdt_reset();
+      //esp_task_wdt_reset();
     }
   }
 }
