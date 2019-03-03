@@ -225,8 +225,6 @@ static esp_err_t event_handler(void* ctx, system_event_t* event) {
   return ESP_OK;
 }
 
-BufferPipe* client = nullptr;
-
 
 int8_t send_serialized_frame(ManuLegendPipe* pipe) {
   ESP_LOGI(TAG, "send_serialized_frame()");
@@ -239,7 +237,6 @@ void manuvr_task(void* pvParameter) {
   Kernel* kernel = platform.kernel();
   unsigned long ms_0 = millis();
   unsigned long ms_1 = ms_0;
-  unsigned long ms_w = ms_0;
   bool odd_even = false;
 
   I2CAdapter i2c(&i2c_opts);
@@ -262,10 +259,6 @@ void manuvr_task(void* pvParameter) {
     ms_0 = ms_1;
     setPin(ESP32_LED_PIN, odd_even);
     odd_even = !odd_even;
-    if (ms_0 > (ms_w+1000)) {
-      ms_w = ms_0;
-      //esp_task_wdt_reset();
-    }
   }
 }
 
@@ -281,7 +274,6 @@ void app_main() {
   *   function to setup the defaults of the platform.
   */
   platform.platformPreInit();
-
   gpioDefine(ESP32_LED_PIN, GPIOMode::OUTPUT);
 
   // The entire front-end driver apparatus lives on the stack.
