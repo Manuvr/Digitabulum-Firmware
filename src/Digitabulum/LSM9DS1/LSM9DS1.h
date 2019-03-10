@@ -17,21 +17,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-
-
-================================================================================
-
-
-Digitabulum refactor log: (Notes from r0, preserved until not-needed)
-=============================================================================================
-The register mechanism found new life in the i2c code, but we need to bring some of those
-  advancements back into the hw driver classes. I don't think that direct re-use will be
-  feasible, due to the weird nature of the "register protocol" in the ST parts. Probably not
-  worth the extra complexity. Maybe later...
-IMUs need to be aware of their own bus addresses so that bus access can be encapsulated more
-  elegantly (versus now where we pass upstream to the CPLD). Maybe try to use EventManager
-  for passing bus operations? Might be too much overhead.
-  ---J. Ian Lindsay   Fri Nov 07 03:46:52 MST 2014
 */
 
 
@@ -83,6 +68,12 @@ enum class IMUState : uint8_t {
 #define IMU_COMMON_FLAG_MAG_POWERED    0x2000
 #define IMU_COMMON_FLAG_GYR_POWERED    0x4000
 #define IMU_COMMON_FLAG_ACC_POWERED    0x8000
+
+#define MAXIMUM_GAIN_INDEX_MAG  4
+#define MAXIMUM_GAIN_INDEX_ACC  5
+#define MAXIMUM_GAIN_INDEX_GYR  3
+#define MAXIMUM_RATE_INDEX_MAG  8
+#define MAXIMUM_RATE_INDEX_AG   7
 
 
 /*
@@ -352,23 +343,17 @@ class LSM9DS1 {
     static const char* getErrorString(IMUFault);
 
 
-    static const GainErrorMap error_map_mag[];
-    static const GainErrorMap error_map_acc[];
-    static const GainErrorMap error_map_gyr[];
-
     static const float max_range_vect_mag;
     static const float max_range_vect_acc;
     static const float max_range_vect_gyr;
 
-    static const uint8_t MAXIMUM_GAIN_INDEX_MAG = 4;
-    static const uint8_t MAXIMUM_GAIN_INDEX_ACC = 5;
-    static const uint8_t MAXIMUM_GAIN_INDEX_GYR = 3;
+    static const GainErrorMap error_map_mag[];
+    static const GainErrorMap error_map_acc[];
+    static const GainErrorMap error_map_gyr[];
 
-    static const uint8_t MAXIMUM_RATE_INDEX_MAG = 8;
-    static const uint8_t MAXIMUM_RATE_INDEX_AG  = 7;
+    static const UpdateRate2Hertz rate_settings_m[];
+    static const UpdateRate2Hertz rate_settings_i[];
 
-    static const UpdateRate2Hertz rate_settings_m[MAXIMUM_RATE_INDEX_MAG];
-    static const UpdateRate2Hertz rate_settings_i[MAXIMUM_RATE_INDEX_AG];
 
 
   private:
@@ -410,7 +395,7 @@ class LSM9DS1 {
     bool is_setup_completed();
 
     /**
-    * Sets the current IMU state without blowing away the high bits in the state member.
+    * Sets the current IMU state.
     */
     inline void set_state(IMUState nu) {     imu_state = nu;   }
 

@@ -74,18 +74,19 @@ BufferPipe* _pipe_factory_1(BufferPipe* _n, BufferPipe* _f) {
 /*
 * Constructor.
 */
-Digitabulum::Digitabulum(I2CAdapter* i2c_adapter, const DigitabulumOpts* _o) :
+Digitabulum::Digitabulum(I2CAdapter* i2c_adapter, PMU* _pmu, const DigitabulumOpts* _o) :
     EventReceiver("Digitabulum"),
     leds(_o->adp_pins),
     cpld(_o->cpld_pins),
     manu(&cpld),
     atec(&atecc_opts),
+    pmu(_pmu),
     _opts(_o) {
   if (nullptr == Digitabulum::INSTANCE) {
     Digitabulum::INSTANCE = this;
   }
   Kernel* kernel = platform.kernel();
-  PIPE = manu.getPipe();
+  PIPE = &_def_pipe;
 
   if (0 != BufferPipe::registerPipe(1, _pipe_factory_1)) {
     Kernel::log("Failed to add ManuLegendPipe to the pipe registry.\n");
@@ -104,6 +105,8 @@ Digitabulum::Digitabulum(I2CAdapter* i2c_adapter, const DigitabulumOpts* _o) :
   kernel->subscribe(&manu);
   i2c_adapter->addSlaveDevice((I2CDeviceWithRegisters*) &leds);
   i2c_adapter->addSlaveDevice((I2CDevice*) &atec);
+
+  _def_pipe.active(true);  // TODO: Should be in pipe override for connection.
 
   // Digit and metacarpals LEDs have a maximum current of 30mA.
   // The wrist unit RGB LED has a max current of 50/25/25.
@@ -193,13 +196,19 @@ int8_t Digitabulum::notify(ManuvrMsg* active_event) {
 
   switch (active_event->eventCode()) {
     case DIGITABULUM_MSG_CPLD_RESET_COMPLETE:
-      led_wrist_color(0x00000010);
+      led_wrist_color(0x0000000A);
       break;
     //case MANUVR_MSG_SYS_POWER_MODE:
     //  return_value++;
     //  break;
     case DIGITABULUM_MSG_IMU_MAP_STATE:
-      frame_cb(manu.getPipe());
+      // TODO: This idea might get brought back.
+      //frame_cb(manu.getPipe());
+      if (manu.hasFrame()) {
+        SensorFrame* frame = manu.takeFrame();
+        _def_pipe.offer(frame);
+        manu.returnFrame(frame);
+      }
       break;
 
     case DIGITABULUM_MSG_MANU_STATE_STABLE:  // ManuManager state machine is stable.
@@ -239,6 +248,7 @@ int8_t Digitabulum::notify(ManuvrMsg* active_event) {
 *******************************************************************************/
 
 static const ConsoleCommand console_cmds[] = {
+  { "L", "Host-facing ManuLegend" },
   { "r", "Reset" }
 };
 
@@ -262,25 +272,14 @@ void Digitabulum::consoleCmdProc(StringBuilder* input) {
     case 'i':   // Debug prints.
       switch (temp_int) {
         case 1:
-          indicate_sleep();
-          break;
-        case 2:
-          indicate_reading();
-          break;
-
-        case 3:
-          led_wrist_color(0x00000500);
-          break;
-
-        case 5:
           local_log.concatf("\nsizeof(Digitabulum):   %u\n", sizeof(Digitabulum));
           local_log.concatf("  sizeof(ATECC508):    %u\n", sizeof(ATECC508));
           local_log.concatf("  sizeof(CPLDDriver):  %u\n", sizeof(CPLDDriver));
           local_log.concatf("  sizeof(ManuManager): %u\n", sizeof(ManuManager));
           local_log.concatf("  sizeof(ADP8866):     %u\n", sizeof(ADP8866));
           break;
-        case 6:
-          Kernel::raiseEvent(DIGITABULUM_MSG_IMU_MAP_STATE, nullptr);
+        case 9:
+          _def_pipe.printDebug(&local_log);
           break;
 
         default:
@@ -289,12 +288,89 @@ void Digitabulum::consoleCmdProc(StringBuilder* input) {
       }
       break;
 
+    case 'm':
+      Kernel::raiseEvent(DIGITABULUM_MSG_IMU_MAP_STATE, nullptr);
+      break;
+
     case 'r':
       reset();
       break;
 
-    case 'e':
-      indicate_error(5, 1200);
+    case 'l':   // LED tests
+      switch (temp_int) {
+        case 1:
+          indicate_sleep();
+          break;
+        case 2:
+          indicate_reading();
+          break;
+        case 3:
+          led_wrist_color(0x00000500);
+          break;
+      }
+      break;
+
+    case 'L':   // Host-facing ManuLegend
+      switch (temp_int) {
+        case 1:
+          {
+            local_log.concat("_def_pipe LegendString:\t");
+            StringBuilder shuttle;
+            _def_pipe.getLegendString(&shuttle);
+            shuttle.printDebug(&local_log);
+          }
+          break;
+        case 2:
+          _def_pipe.active(!_def_pipe.active());
+          local_log.concatf("active() %c\n", _def_pipe.active() ? 'y' : 'n');
+          break;
+        case 3:
+          _def_pipe.broadcast_legend();
+          local_log.concat("Legend broadcast.\n");
+          break;
+        case 4:
+          {
+            SensorFrame frame;
+            frame.stackLegend(&_def_pipe);
+            _def_pipe.offer(&frame);
+            local_log.concat("Cycled blank frame to host.\n");
+          }
+          break;
+        case 5:
+          _def_pipe.decoupleSeq(!_def_pipe.decoupleSeq());
+          local_log.concatf("decoupleSeq() %c\n", _def_pipe.decoupleSeq() ? 'y' : 'n');
+          break;
+        case 7:
+          _def_pipe.stackLegend(manu.getActiveLegend());
+          local_log.concat("Moving _root_leg to _def_pipe.\n");
+          break;
+        case 8:
+          manu.getActiveLegend()->stackLegend(&_def_pipe);
+          local_log.concat("Moving _def_pipe to _root_leg.\n");
+          break;
+        case 9:   // Will cause a frame broadcast cycle.
+          Kernel::raiseEvent(DIGITABULUM_MSG_IMU_MAP_STATE, nullptr);
+          break;
+        default:
+          _def_pipe.printManuLegend(&local_log);
+          break;
+      }
+      break;
+
+    case 'E':
+      switch (temp_int) {
+        case 1:
+        case 2:
+        case 3:
+        case 4:
+          {
+            ManuEncoding e = (ManuEncoding) (temp_int - 1);
+            local_log.concatf("Switching to ManuEncoding::%s\n", ManuLegendPipe::encoding_label(e));
+            _def_pipe.encoding(e);
+          }
+        default:
+          local_log.concatf("Using ManuEncoding::%s\n", ManuLegendPipe::encoding_label(_def_pipe.encoding()));
+      }
       break;
 
     case 'v':
@@ -328,10 +404,16 @@ void Digitabulum::reset() {
 }
 
 
+
+/*******************************************************************************
+* LED indicator functions...                                                   *
+*******************************************************************************/
+
 int8_t Digitabulum::led_set_digit_brightness(DigitPort p, uint8_t brightness) {
   leds.set_brightness((uint8_t) p, brightness);
   return 0;
 }
+
 
 int8_t Digitabulum::led_wrist_color(uint8_t r, uint8_t g, uint8_t b) {
   leds.quell_all_timers();
@@ -340,6 +422,7 @@ int8_t Digitabulum::led_wrist_color(uint8_t r, uint8_t g, uint8_t b) {
   leds.set_brightness(8, r);
   return 0;
 }
+
 
 int8_t Digitabulum::led_wrist_color(uint32_t color) {
   return led_wrist_color(
@@ -359,17 +442,17 @@ int8_t Digitabulum::indicate_sleep() {
 
 
 int8_t Digitabulum::indicate_reading() {
-  led_wrist_color(0x00050005);
-  leds.set_fade(1750, 1750);
-  leds.pulse_channel(7, 0x10, 250, 750);
-  leds.pulse_channel(8, 0x10, 250, 750);
+  led_wrist_color(0x00000000);
+  leds.set_fade(250, 250);
+  leds.pulse_channel(7, 0x10, 150, 500);
+  leds.pulse_channel(8, 0x10, 150, 500);
   return 0;
 }
 
 
 int8_t Digitabulum::indicate_error(uint8_t p_count, uint16_t ms_period) {
   led_wrist_color(0x00000000);
-  leds.set_fade(1750, 1750);
+  leds.set_fade(500, 1750);
   leds.pulse_channel(8, 0x15, 250, ms_period);
   return 0;
 }

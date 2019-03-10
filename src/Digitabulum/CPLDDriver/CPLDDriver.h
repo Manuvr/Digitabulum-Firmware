@@ -382,47 +382,47 @@ IRQ agg and addressing system is complete. At least: it passes simulation.
 
 
 /* CPLD register map ***************************************/
-#define CPLD_REG_IMU_DM_P_M    0x00  // |
-#define CPLD_REG_IMU_DM_D_M    0x01  // | These are pseudo registers.
-#define CPLD_REG_IMU_D1_P_M    0x02  // | If the first byte in an SPI
-#define CPLD_REG_IMU_D1_I_M    0x03  // |   transaction is equal to one of these
-#define CPLD_REG_IMU_D1_D_M    0x04  // |   values, the corresponding IMU will
-#define CPLD_REG_IMU_D2_P_M    0x05  // |   be selected, and its bus connected
-#define CPLD_REG_IMU_D2_I_M    0x06  // |   to the CPU's SPI. Each bus operation
-#define CPLD_REG_IMU_D2_D_M    0x07  // |   that targets an individual IMU must
-#define CPLD_REG_IMU_D3_P_M    0x08  // |   be immediately preceeded by one of
-#define CPLD_REG_IMU_D3_I_M    0x09  // |   these bytes.
-#define CPLD_REG_IMU_D3_D_M    0x0A  // |
-#define CPLD_REG_IMU_D4_P_M    0x0B  // | The resulting bus connection will be
-#define CPLD_REG_IMU_D4_I_M    0x0C  // |   retained until the CPU-facing ~CS
-#define CPLD_REG_IMU_D4_D_M    0x0D  // |   line goes high.
-#define CPLD_REG_IMU_D5_P_M    0x0E  // |
-#define CPLD_REG_IMU_D5_I_M    0x0F  // |
-#define CPLD_REG_IMU_D5_D_M    0x10  // |
-#define CPLD_REG_IMU_DM_P_I    0x11  // |
-#define CPLD_REG_IMU_DM_D_I    0x12  // |
-#define CPLD_REG_IMU_D1_P_I    0x13  // |
-#define CPLD_REG_IMU_D1_I_I    0x14  // |
-#define CPLD_REG_IMU_D1_D_I    0x15  // |
-#define CPLD_REG_IMU_D2_P_I    0x16  // |
-#define CPLD_REG_IMU_D2_I_I    0x17  // |
-#define CPLD_REG_IMU_D2_D_I    0x18  // |
-#define CPLD_REG_IMU_D3_P_I    0x19  // |
-#define CPLD_REG_IMU_D3_I_I    0x1A  // |
-#define CPLD_REG_IMU_D3_D_I    0x1B  // |
-#define CPLD_REG_IMU_D4_P_I    0x1C  // |
-#define CPLD_REG_IMU_D4_I_I    0x1D  // |
-#define CPLD_REG_IMU_D4_D_I    0x1E  // |
-#define CPLD_REG_IMU_D5_P_I    0x1F  // |
-#define CPLD_REG_IMU_D5_I_I    0x20  // |
-#define CPLD_REG_IMU_D5_D_I    0x21  // |
+#define CPLD_REG_IMU_DM_P_I    0x00  // |
+#define CPLD_REG_IMU_DM_D_I    0x01  // | These are pseudo registers.
+#define CPLD_REG_IMU_D1_P_I    0x02  // | If the first byte in an SPI
+#define CPLD_REG_IMU_D1_I_I    0x03  // |   transaction is equal to one of these
+#define CPLD_REG_IMU_D1_D_I    0x04  // |   values, the corresponding IMU will
+#define CPLD_REG_IMU_D2_P_I    0x05  // |   be selected, and its bus connected
+#define CPLD_REG_IMU_D2_I_I    0x06  // |   to the CPU's SPI. Each bus operation
+#define CPLD_REG_IMU_D2_D_I    0x07  // |   that targets an individual IMU must
+#define CPLD_REG_IMU_D3_P_I    0x08  // |   be immediately preceeded by one of
+#define CPLD_REG_IMU_D3_I_I    0x09  // |   these bytes.
+#define CPLD_REG_IMU_D3_D_I    0x0A  // |
+#define CPLD_REG_IMU_D4_P_I    0x0B  // | The resulting bus connection will be
+#define CPLD_REG_IMU_D4_I_I    0x0C  // |   retained until the CPU-facing ~CS
+#define CPLD_REG_IMU_D4_D_I    0x0D  // |   line goes high.
+#define CPLD_REG_IMU_D5_P_I    0x0E  // |
+#define CPLD_REG_IMU_D5_I_I    0x0F  // |
+#define CPLD_REG_IMU_D5_D_I    0x10  // |
+#define CPLD_REG_IMU_DM_P_M    0x11  // |
+#define CPLD_REG_IMU_DM_D_M    0x12  // |
+#define CPLD_REG_IMU_D1_P_M    0x13  // |
+#define CPLD_REG_IMU_D1_I_M    0x14  // |
+#define CPLD_REG_IMU_D1_D_M    0x15  // |
+#define CPLD_REG_IMU_D2_P_M    0x16  // |
+#define CPLD_REG_IMU_D2_I_M    0x17  // |
+#define CPLD_REG_IMU_D2_D_M    0x18  // |
+#define CPLD_REG_IMU_D3_P_M    0x19  // |
+#define CPLD_REG_IMU_D3_I_M    0x1A  // |
+#define CPLD_REG_IMU_D3_D_M    0x1B  // |
+#define CPLD_REG_IMU_D4_P_M    0x1C  // |
+#define CPLD_REG_IMU_D4_I_M    0x1D  // |
+#define CPLD_REG_IMU_D4_D_M    0x1E  // |
+#define CPLD_REG_IMU_D5_P_M    0x1F  // |
+#define CPLD_REG_IMU_D5_I_M    0x20  // |
+#define CPLD_REG_IMU_D5_D_M    0x21  // |
 
-#define CPLD_REG_RANK_P_I      0x22  // | These registers are for ranked access.
-#define CPLD_REG_RANK_I_I      0x23  // | This is only useful for write operations.
-#define CPLD_REG_RANK_D_I      0x24  // | Buffers for these transfers must be distinct
-#define CPLD_REG_RANK_P_M      0x25  // |   from those for individual access.
-#define CPLD_REG_RANK_I_M      0x26  // |
-#define CPLD_REG_RANK_D_M      0x27  // |
+#define CPLD_REG_RANK_P_M      0x22  // | These registers are for ranked access.
+#define CPLD_REG_RANK_I_M      0x23  // | This is only useful for write operations.
+#define CPLD_REG_RANK_D_M      0x24  // | Buffers for these transfers must be distinct
+#define CPLD_REG_RANK_P_I      0x25  // |   from those for individual access.
+#define CPLD_REG_RANK_I_I      0x26  // |
+#define CPLD_REG_RANK_D_I      0x27  // |
 
 #define CPLD_REG_CONFIG        0x28  // | CPLD operating parameters
 #define CPLD_REG_WAKEUP_IRQ    0x29  // | WAKEUP mapping

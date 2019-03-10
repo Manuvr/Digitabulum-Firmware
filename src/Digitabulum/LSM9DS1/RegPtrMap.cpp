@@ -236,7 +236,7 @@ const uint8_t* RegPtrMap::regPtr(RegID idx) const {
     case RegID::M_OFFSET_X:          return ((uint8_t*) M_OFFSETS)+0;
     case RegID::M_OFFSET_Y:          return ((uint8_t*) M_OFFSETS)+2;
     case RegID::M_OFFSET_Z:          return ((uint8_t*) M_OFFSETS)+4;
-    case RegID::M_WHO_AM_I:          return ((uint8_t*) AGM_IDENT);
+    case RegID::M_WHO_AM_I:          return ((uint8_t*) AGM_IDENT)+LEGEND_DATASET_IIU_COUNT;
     case RegID::M_CTRL_REG1:         return nullptr;
     case RegID::M_CTRL_REG2:         return M_CTRL+0;
     case RegID::M_CTRL_REG3:         return nullptr;
@@ -259,7 +259,7 @@ const uint8_t* RegPtrMap::regPtr(RegID idx) const {
     case RegID::G_REFERENCE:         return AG_BLOCK_0+5;
     case RegID::AG_INT1_CTRL:        return nullptr;
     case RegID::AG_INT2_CTRL:        return nullptr;
-    case RegID::AG_WHO_AM_I:         return ((uint8_t*) AGM_IDENT)+LEGEND_DATASET_IIU_COUNT;
+    case RegID::AG_WHO_AM_I:         return ((uint8_t*) AGM_IDENT);
     case RegID::G_CTRL_REG1:         return AG_CTRL1_3+0;
     case RegID::G_CTRL_REG2:         return AG_CTRL1_3+1;
     case RegID::G_CTRL_REG3:         return AG_CTRL1_3+2;

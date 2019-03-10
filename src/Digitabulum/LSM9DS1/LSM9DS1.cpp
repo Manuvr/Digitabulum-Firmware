@@ -357,9 +357,7 @@ bool LSM9DS1::integrity_check() {
 IMUFault LSM9DS1::setDesiredState(IMUState nu) {
   if (present() && (nu < IMUState::STAGE_1)) {
     // If we already know the sensor is there, why go back further than this?
-    StringBuilder local_log;
-    local_log.concat("Trying to move to a state lower than allowed.\n");
-    Kernel::log(&local_log);
+    Kernel::log("LSM9DS1::setDesiredState(): Trying to move to a state lower than allowed.\n");
     return IMUFault::INVALID_PARAM_ID;
   }
 
@@ -404,8 +402,16 @@ bool LSM9DS1::step_state() {
 
     switch (getState()) {
       case IMUState::STAGE_0:  // We think the IMU might be physicaly absent.
-        break;
-
+        if ((0x3D == regValue(RegID::M_WHO_AM_I)) && (0x68 == regValue(RegID::AG_WHO_AM_I))) {
+          set_state(IMUState::STAGE_1);
+        }
+        else {
+          // We lost the IMU, perhaps...
+          set_state(IMUState::STAGE_0);
+          error_condition = IMUFault::WRONG_IDENTITY;
+          return true;
+        }
+        // NOTE: no break.
       case IMUState::STAGE_1:  // We are sure the IMU is present, but we haven't done anything with it.
         //configure_sensor();
         break;
@@ -569,33 +575,7 @@ IMUFault LSM9DS1::proc_register_read(RegID idx) {
 
   switch (idx) {
     case RegID::M_WHO_AM_I:
-      if (0x3D == value) {
-        if (!present()) {
-          set_state(IMUState::STAGE_1);
-          step_state();
-        }
-      }
-      else {
-        // We lost the IMU, perhaps...
-        set_state(IMUState::STAGE_0);
-        error_condition = IMUFault::WRONG_IDENTITY;
-      }
-      break;
     case RegID::AG_WHO_AM_I:
-      if (0x68 == value) {
-        if (!present()) {
-          set_state(IMUState::STAGE_1);
-          step_state();
-        }
-        else {
-          // Nominal condition. Maybe we bulk-read? Nice to have verification....
-        }
-      }
-      else {
-        // We lost the IMU, perhaps...
-        set_state(IMUState::STAGE_0);
-        error_condition = IMUFault::WRONG_IDENTITY;
-      }
       break;
 
     case RegID::M_CTRL_REG1:

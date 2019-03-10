@@ -245,7 +245,7 @@ void manuvr_task(void* pvParameter) {
   PMU pmu(&i2c, &charger_opts, &gas_gauge_opts, &powerplant_opts, &battery_opts);
   kernel->subscribe((EventReceiver*) &pmu);
 
-  Digitabulum digitabulum(&i2c, &digitabulum_opts);
+  Digitabulum digitabulum(&i2c, &pmu, &digitabulum_opts);
   kernel->subscribe(&digitabulum);
 
   Digitabulum::frame_cb = send_serialized_frame;

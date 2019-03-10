@@ -45,7 +45,21 @@ Our goal is to encapsulate power-supply concerns to this class. This
 #define DIGITABULUM_MSG_PMU_READ    0x5233  //
 #define DIGITABULUM_MSG_BATT_ALERT  0x5234  //
 
+/*
+* Power modes for Digitabulum. These are draw-side modes.
+* TODO: Portability might later cause this to move to a new header.
+*/
+enum class PowerDrawMode : uint8_t {
+  FULL,         // Everything on, with open throttles.
+  PERFORMANT,   // Adaptive with focus on throughput and latency.
+  LIGHT_SLEEP,  // Adaptive with focus on low draw.
+  DEEP_SLEEP,   // Only enough is enabled to allow us to come back.
+  UNDEF
+};
 
+/*
+* These are supply-side modes.
+*/
 enum class ChargeState : uint8_t {
   FULL,      // Implies we are connected to a charging source.
   CHARGING,  // The battery is not full, but it is charging.

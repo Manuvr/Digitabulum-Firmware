@@ -129,7 +129,7 @@ class ManuManager : public EventReceiver,
   #endif
   public BusOpCallback {
   public:
-    ManuManager(BusAdapter<SPIBusOp>*);
+    ManuManager(CPLDDriver*);
     ~ManuManager();
 
     #if defined(MANUVR_CONSOLE_SUPPORT)
@@ -177,10 +177,15 @@ class ManuManager : public EventReceiver,
     inline bool imuIdentitiesRead() {         return (_er_flag(LEGEND_MGR_FLAGS_IMU_IDENT_WAS_READ));          };
     inline void imuIdentitiesRead(bool nu) {  return (_er_set_flag(LEGEND_MGR_FLAGS_IMU_IDENT_WAS_READ, nu));  };
 
+    inline bool hasFrame() {           return integrator.resultsWaiting();   };
+    inline SensorFrame* takeFrame() {  return integrator.takeResult();       };
+    inline void returnFrame(SensorFrame* frame) {
+      frame->wipe();
+      _frame_pool.give(frame);
+    };
+
     inline uint32_t totalSamples() {   return sample_count;   };
     inline ManuState getState() {      return _current_state; };
-
-    inline ManuLegendPipe* getPipe() { return &_def_pipe;     };
 
 
     static const char* chiralityString(Chirality);
@@ -194,14 +199,13 @@ class ManuManager : public EventReceiver,
 
 
   private:
+    CPLDDriver* _bus;      // This is the gateway to the hardware.
+    ElementPool<SensorFrame> _frame_pool;
     ManuvrMsg event_iiu_read;
     ManuvrMsg _event_integrator;
-    ElementPool<SensorFrame> _frame_pool;
 
-    CPLDDriver* _bus         = nullptr;   // This is the gateway to the hardware.
-    ManuLegend _root_leg;                 // Data demand slots. Two for now.
+    ManuLegend _root_leg;        // Data demand as understood by the integrator.
     Integrator integrator;
-    ManuLegendPipe _def_pipe;   // TODO: Cut once working.
 
     /* This is the dataset that we export. */
     uint8_t __dataset[LEGEND_MGR_MAX_DATASET_SIZE];

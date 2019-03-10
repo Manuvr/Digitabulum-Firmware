@@ -30,6 +30,7 @@ limitations under the License.
 #include <Drivers/ATECC508/ATECC508.h>
 #include "Digitabulum/CPLDDriver/CPLDDriver.h"
 #include "Digitabulum/ManuLegend/ManuManager.h"
+#include "Digitabulum/DigitabulumPMU/DigitabulumPMU-r2.h"
 
 #ifdef MANUVR_CONSOLE_SUPPORT
   #include <XenoSession/Console/ManuvrConsole.h>
@@ -70,7 +71,7 @@ class Digitabulum : public EventReceiver, public ConsoleInterface {
 class Digitabulum : public EventReceiver {
 #endif
   public:
-    Digitabulum(I2CAdapter*, const DigitabulumOpts*);
+    Digitabulum(I2CAdapter*, PMU*, const DigitabulumOpts*);
     virtual ~Digitabulum();
 
     int8_t init();
@@ -109,7 +110,9 @@ class Digitabulum : public EventReceiver {
     CPLDDriver  cpld;
     ManuManager manu;
     ATECC508    atec;
+    const PMU*  pmu;
     const DigitabulumOpts _opts;
+    ManuLegendPipe _def_pipe;     // Data demand from the host.
 
     int8_t led_set_digit_brightness(DigitPort, uint8_t);
     int8_t led_wrist_color(uint8_t r, uint8_t g, uint8_t b);

@@ -201,12 +201,12 @@ bool ManuLegend::satisfiedBy(ManuLegend* test) {
 */
 bool ManuLegend::stackLegend(ManuLegend* test) {
   bool return_value = false;
-  if (frame_data != (frame_data & test->frame_data)) {
+  if (frame_data != test->frame_data) {
     frame_data   = frame_data | test->frame_data;
     return_value = true;
   }
   for (int i = 0; i < LEGEND_DATASET_IIU_COUNT; i++) {
-    if (per_iiu_data[i] != (per_iiu_data[i] & test->per_iiu_data[i])) {
+    if (per_iiu_data[i] != test->per_iiu_data[i]) {
       per_iiu_data[i] = per_iiu_data[i] | test->per_iiu_data[i];
       return_value = true;
     }

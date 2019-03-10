@@ -305,8 +305,7 @@ const char* ManuManager::getManuStateString(ManuState x) {
 *                                          |_|
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
-ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt"), _frame_pool(PREALLOCD_IMU_FRAMES, &_frame_pool_mem[0]) {
-  _bus = (CPLDDriver*) bus;  // TODO: Make this cast unnecessary.
+ManuManager::ManuManager(CPLDDriver* bus) : EventReceiver("ManuMgmt"), _bus(bus), _frame_pool(PREALLOCD_IMU_FRAMES, &_frame_pool_mem[0]) {
   _bus->setManuManager(this);  // Introduce ourselves immediately.
 
   reflection_gyr(1, 1, 1);
@@ -380,10 +379,6 @@ ManuManager::ManuManager(BusAdapter<SPIBusOp>* bus) : EventReceiver("ManuMgmt"),
   _ptr_delta_t  = (float*)    (__dataset + LEGEND_DATASET_OFFSET_DELTA_T/4);
 
   *(_ptr_sequence) = 0;
-
-  _def_pipe.active(true);
-  _def_pipe.sequence(true);
-  _def_pipe.deltaT(true);
 
   _root_leg.sequence(true);
   _root_leg.deltaT(true);
@@ -533,7 +528,7 @@ Anatomical ManuManager::get_digit_given_port(DigitPort port) {
 
 int8_t ManuManager::deliverIRQ(DigitPort port, uint8_t imu_idx, uint8_t svc, uint8_t data) {
   if (getVerbosity() > 4) {
-    char* pos_str = "UNKNOWN";
+    const char* pos_str;
     switch (imu_idx) {
       case 0:
       case 2:
@@ -559,6 +554,7 @@ int8_t ManuManager::deliverIRQ(DigitPort port, uint8_t imu_idx, uint8_t svc, uin
         pos_str = "DIST";
         break;
       default:
+        pos_str = "UNKNOWN";
         break;
     }
     local_log.concatf(
@@ -666,6 +662,8 @@ int8_t ManuManager::_advance_state_machine() {
                 break;
               case 1:
                 reloop = true;
+                _last_state = _current_state;
+                _current_state = ManuState::READY_IDLE;
                 break;
               default:
                 _last_state = _current_state;
@@ -676,6 +674,7 @@ int8_t ManuManager::_advance_state_machine() {
 
           case ManuState::FAULT:
             break;
+
           case ManuState::UNKNOWN:
           case ManuState::PREINIT:
           case ManuState::IMU_INIT:
@@ -973,7 +972,6 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
 
 
     case RegID::M_CTRL_REG1:
-      break;
     case RegID::M_CTRL_REG3:
       break;
     case RegID::M_CTRL_REG4:
@@ -1010,6 +1008,9 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
     case RegID::M_OFFSET_Z:
       break;
     case RegID::M_CTRL_REG2:
+      if (BusOpcode::TX == op->get_opcode()) {
+        _advance_state_machine();
+      }
       break;
     case RegID::M_STATUS_REG:
       break;
@@ -1204,13 +1205,6 @@ int8_t ManuManager::callback_proc(ManuvrMsg* event) {
       break;
 
     case DIGITABULUM_MSG_IMU_QUAT_CRUNCH:
-      if (integrator.resultsWaiting()) {
-        // TODO: This does not belong here.
-        SensorFrame* frame = integrator.takeResult();
-        _def_pipe.offer(frame);
-        frame->wipe();
-        _frame_pool.give(frame);
-      }
       if (!debugFrameCycle()) {
         if (integrator.has_quats_left()) {
           return_value = EVENT_CALLBACK_RETURN_RECYCLE;
@@ -1237,7 +1231,6 @@ int8_t ManuManager::callback_proc(ManuvrMsg* event) {
 
 int8_t ManuManager::notify(ManuvrMsg* active_event) {
   int8_t return_value = 0;
-  uint8_t temp_uint_8 = 0;
 
   /* Some class-specific set of conditionals below this line. */
   switch (active_event->eventCode()) {
@@ -1498,10 +1491,6 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
   }
 
   switch (*(str)) {
-    case 'h':
-    case 'H':
-      break;
-
     case 'M':
       switch (temp_byte) {
         case 1:  _set_target_state(ManuState::IMU_INIT);       break;
@@ -1559,12 +1548,6 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
         case 7:
           printFIFOLevels(&local_log);
           break;
-        case 8:
-          _def_pipe.printManuLegend(&local_log);
-          break;
-        case 9:
-          _def_pipe.printDebug(&local_log);
-          break;
 
         case 0:
         default:
@@ -1577,48 +1560,12 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
     case 'l':
       switch (temp_byte) {
         case 1:
-          _def_pipe.broadcast_legend();
-          local_log.concat("Legend broadcast.\n");
-          break;
-        case 2:
-          _def_pipe.offer(_frame_pool.take());
-          local_log.concat("Cycled blank frame.\n");
-          break;
-        case 3:
-          _def_pipe.decoupleSeq(!_def_pipe.decoupleSeq());
-          local_log.concatf("decoupleSeq() %c\n", _def_pipe.decoupleSeq() ? 'y' : 'n');
-          break;
-        case 4:
           {
-            uint8_t test_array[37];
-            random_fill(&test_array[1], 36);
-            test_array[0] = 17;  // IMU count.
-            StringBuilder shuttle(&test_array[0], 37);
-            int ret = _root_leg.setLegendString(&shuttle);
-            local_log.concat("setLegendString(");
-            shuttle.printDebug(&local_log);
-            local_log.concat(")\n");
-            local_log.concatf("setLegendString(buf, %u) returns %d\n", shuttle.length(), ret);
-          }
-        case 5:
-          {
-            local_log.concat("LegendString:\t");
+            local_log.concat("_root_leg LegendString:\t");
             StringBuilder shuttle;
             _root_leg.getLegendString(&shuttle);
             shuttle.printDebug(&local_log);
           }
-          break;
-        case 6:
-          _def_pipe.active(!_def_pipe.active());
-          local_log.concatf("active() %c\n", _def_pipe.active() ? 'y' : 'n');
-          break;
-        case 7:
-          _def_pipe.stackLegend(&_root_leg);
-          local_log.concat("Moving _root_leg to _def_pipe.\n");
-          break;
-        case 8:
-          _root_leg.stackLegend(&_def_pipe);
-          local_log.concat("Moving _def_pipe to _root_leg.\n");
           break;
 
         default:
@@ -1639,12 +1586,6 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
           _event_integrator.fireNow();
           break;
         case 3:
-          if (integrator.resultsWaiting()) {
-            SensorFrame* frame = integrator.takeResult();
-            _def_pipe.offer(frame);
-            frame->wipe();
-            _frame_pool.give(frame);
-          }
           local_log.concatf("Integrator has %u frames available.\n", integrator.resultsWaiting());
           break;
         case 4:
@@ -1663,27 +1604,15 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
       }
       break;
 
-    case 'E':
-      switch (temp_byte) {
-        case 1:
-        case 2:
-        case 3:
-        case 4:
-          {
-            ManuEncoding e = (ManuEncoding) (temp_byte - 1);
-            local_log.concatf("Switching to ManuEncoding::%s\n", ManuLegendPipe::encoding_label(e));
-            _def_pipe.encoding(e);
-          }
-        default:
-          local_log.concatf("Using ManuEncoding::%s\n", ManuLegendPipe::encoding_label(_def_pipe.encoding()));
-      }
-      break;
-
 
     // IMU DEBUG //////////////////////////////////////////////////////////////////
     case 'g':    // Sync registers
       {
         SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
+        op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 1, LEGEND_DATASET_IIU_COUNT, 0x27 | 0x80);
+        op->setBuffer(_reg_block_ag_status, LEGEND_DATASET_IIU_COUNT);
+        queue_io_job(op);
+        op = _bus->new_op(BusOpcode::RX, this);
         op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 1, LEGEND_DATASET_IIU_COUNT, 0x27 | 0x80 | 0x40);
         op->setBuffer(_reg_block_m_status, LEGEND_DATASET_IIU_COUNT);
         queue_io_job(op);
@@ -1763,7 +1692,6 @@ void ManuManager::consoleCmdProc(StringBuilder* input) {
         local_log.concatf("Running quat on IIU %d.\n", temp_byte);
       }
       break;
-
 
 
     // IMU DATA ///////////////////////////////////////////////////////////////////
@@ -1949,7 +1877,7 @@ int8_t ManuManager::read_identities() {
   // Because the identity address is the same for both aspects, and their addresses
   //   are continuous, we just read 1 byte from 34 sensors.
   SPIBusOp* op = _bus->new_op(BusOpcode::RX, this);
-  op->setParams((CPLD_REG_IMU_DM_P_M | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
+  op->setParams((CPLD_REG_IMU_DM_P_I | 0x80), 0x01, (2 * LEGEND_DATASET_IIU_COUNT), 0x8F);
   op->setBuffer(_reg_block_ident, (2 * LEGEND_DATASET_IIU_COUNT));
   return queue_io_job(op);
 }
@@ -1981,7 +1909,7 @@ int8_t ManuManager::read_mag_frame() {
 *
 */
 int8_t ManuManager::init_iius() {
-  int8_t ret = -1;
+  int8_t ret = 0;
 
   // NOTE: Register blocks not yet handled.
   // _reg_block_orient_cfg   // G_ORIENT_CFG                Reason:  Default is fine
@@ -2015,132 +1943,159 @@ int8_t ManuManager::init_iius() {
       }
     }
   }
-  if ((imus_found > 0) && (imus_found == imus_init_complete)) {
-    _last_state = _current_state;
-    _current_state = ManuState::READY_IDLE;
-    return 1;
-  }
-  else if (ManuState::IMU_INIT == _current_state) {
-    _last_state = _current_state;
-    _current_state = ManuState::IMU_INIT_WAIT;
-
-    // Step 1: Enable SPI write, multiple-access and disable i2c.
-    SPIBusOp* op = _bus->new_op(BusOpcode::TX, this);
-    op->setParams(CPLD_REG_RANK_P_M, 3, 3, RegPtrMap::regAddr(RegID::M_CTRL_REG3) | 0x40);  // 3 bytes per IMU.
-    op->setBuffer(&_reg_block_m_ctrl3_5[0], 9);
-    if (0 != queue_io_job(op)) {
-      return -10;
+  if (imus_found > 0) {
+    if (imus_found == imus_init_complete) {
+      _last_state = _current_state;
+      _current_state = ManuState::READY_IDLE;
+      ret = 1;
     }
+    else if (ManuState::IMU_INIT == _current_state) {
+      _last_state = _current_state;
+      _current_state = ManuState::IMU_INIT_WAIT;
 
-    op = _bus->new_op(BusOpcode::TX, this);
-    op->setParams(CPLD_REG_RANK_P_I, 3, 3, RegPtrMap::regAddr(RegID::AG_CTRL_REG8));  // 3 bytes per IMU.
-    op->setBuffer(&_reg_block_ag_ctrl8_9_10[0], 9);
-    if (0 != queue_io_job(op)) {
-      return -11;
-    }
+      // Step 1: Enable SPI write, multiple-access and disable i2c.
+      SPIBusOp* op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams(CPLD_REG_RANK_P_M, 3, 3, RegPtrMap::regAddr(RegID::M_CTRL_REG3) | 0x40);  // 3 bytes per IMU.
+      op->setBuffer(&_reg_block_m_ctrl3_5[0], 9);
+      if (0 != queue_io_job(op)) {
+        ret = -10;
+        goto exit_init_block;
+      }
 
-    if (0 != queue_io_job(op)) {
+      op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams(CPLD_REG_RANK_P_I, 3, 3, RegPtrMap::regAddr(RegID::AG_CTRL_REG8));  // 3 bytes per IMU.
+      op->setBuffer(&_reg_block_ag_ctrl8_9_10[0], 9);
+      if (0 != queue_io_job(op)) {
+        ret = -11;
+        goto exit_init_block;
+      }
+
       op = _bus->new_op(BusOpcode::TX, this);
       op->setParams(CPLD_REG_RANK_P_I, 2, 3, RegPtrMap::regAddr(RegID::AG_INT1_CTRL));  // 2 bytes per IMU.
       op->setBuffer(&_reg_block_ag_interrupt_conf[0], 6);
-      return -12;
-    }
+      if (0 != queue_io_job(op)) {
+        ret = -12;
+        goto exit_init_block;
+      }
 
-    op = _bus->new_op(BusOpcode::TX, this);
-    op->setParams(CPLD_REG_RANK_P_M, 1, 3, RegPtrMap::regAddr(RegID::M_INT_CFG));  // 1 byte per IMU.
-    op->setBuffer(&_reg_block_m_irq_cfg[0], 3);
-    if (0 != queue_io_job(op)) {
-      return -13;
-    }
+      op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams(CPLD_REG_RANK_P_M, 1, 3, RegPtrMap::regAddr(RegID::M_INT_CFG));  // 1 byte per IMU.
+      op->setBuffer(&_reg_block_m_irq_cfg[0], 3);
+      if (0 != queue_io_job(op)) {
+        ret = -13;
+        goto exit_init_block;
+      }
 
-    op = _bus->new_op(BusOpcode::TX, this);
-    op->setParams(CPLD_REG_RANK_P_M, 1, 3, RegPtrMap::regAddr(RegID::M_CTRL_REG1));  // 1 byte per IMU.
-    op->setBuffer(&_reg_block_m_ctrl1[0], 3);
-    if (0 != queue_io_job(op)) {
-      return -14;
-    }
+      op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams(CPLD_REG_RANK_P_M, 1, 3, RegPtrMap::regAddr(RegID::M_CTRL_REG1));  // 1 byte per IMU.
+      op->setBuffer(&_reg_block_m_ctrl1[0], 3);
+      if (0 != queue_io_job(op)) {
+        ret = -14;
+        goto exit_init_block;
+      }
 
-    op = _bus->new_op(BusOpcode::TX, this);
-    op->setParams(CPLD_REG_RANK_P_I, 1, 3, RegPtrMap::regAddr(RegID::AG_FIFO_CTRL));  // 1 byte per IMU.
-    op->setBuffer(&_reg_block_fifo_ctrl[0], 3);
-    if (0 != queue_io_job(op)) {
-      return -15;
-    }
+      op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams(CPLD_REG_RANK_P_I, 1, 3, RegPtrMap::regAddr(RegID::AG_FIFO_CTRL));  // 1 byte per IMU.
+      op->setBuffer(&_reg_block_fifo_ctrl[0], 3);
+      if (0 != queue_io_job(op)) {
+        ret = -15;
+        goto exit_init_block;
+      }
 
+      // Now all the individualized registers...
+      op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams(CPLD_REG_IMU_DM_P_I, 6, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::G_INT_GEN_THS_X));  // 6 bytes per IMU.
+      op->setBuffer((uint8_t*) _reg_block_g_thresholds, 6*LEGEND_DATASET_IIU_COUNT);
+      if (0 != queue_io_job(op)) {
+        ret = -16;
+        goto exit_init_block;
+      }
 
-    // Now all the individualized registers...
-    op = _bus->new_op(BusOpcode::TX, this);
-    op->setParams(CPLD_REG_IMU_DM_P_I, 6, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::G_INT_GEN_THS_X));  // 6 bytes per IMU.
-    op->setBuffer((uint8_t*) _reg_block_g_thresholds, 6*LEGEND_DATASET_IIU_COUNT);
-    if (0 != queue_io_job(op)) {
-      return -16;
-    }
+      op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams(CPLD_REG_IMU_DM_P_I, 3, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::G_CTRL_REG1));  // 3 bytes per IMU.
+      op->setBuffer(_reg_block_ag_ctrl1_3, 3*LEGEND_DATASET_IIU_COUNT);
+      if (0 != queue_io_job(op)) {
+        ret = -21;
+        goto exit_init_block;
+      }
 
-    op = _bus->new_op(BusOpcode::TX, this);
-    op->setParams(CPLD_REG_IMU_DM_P_I, 3, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::G_CTRL_REG1));  // 3 bytes per IMU.
-    op->setBuffer(_reg_block_ag_ctrl1_3, 3*LEGEND_DATASET_IIU_COUNT);
-    if (0 != queue_io_job(op)) {
-      return -21;
-    }
+      op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams(CPLD_REG_IMU_DM_P_I, 2, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::A_CTRL_REG6));  // 2 bytes per IMU.
+      op->setBuffer(_reg_block_ag_ctrl6_7, 2*LEGEND_DATASET_IIU_COUNT);
+      if (0 != queue_io_job(op)) {
+        ret = -22;
+        goto exit_init_block;
+      }
 
-    op = _bus->new_op(BusOpcode::TX, this);
-    op->setParams(CPLD_REG_IMU_DM_P_I, 2, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::A_CTRL_REG6));  // 2 bytes per IMU.
-    op->setBuffer(_reg_block_ag_ctrl6_7, 2*LEGEND_DATASET_IIU_COUNT);
-    if (0 != queue_io_job(op)) {
-      return -22;
-    }
+      op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams(CPLD_REG_IMU_DM_P_I, 6, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::A_INT_GEN_CFG));  // 6 bytes per IMU.
+      op->setBuffer(_reg_block_ag_0, 6*LEGEND_DATASET_IIU_COUNT);
+      if (0 != queue_io_job(op)) {
+        ret = -23;
+        goto exit_init_block;
+      }
 
-    op = _bus->new_op(BusOpcode::TX, this);
-    op->setParams(CPLD_REG_IMU_DM_P_I, 6, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::A_INT_GEN_CFG));  // 6 bytes per IMU.
-    op->setBuffer(_reg_block_ag_0, 6*LEGEND_DATASET_IIU_COUNT);
-    if (0 != queue_io_job(op)) {
-      return -23;
-    }
+      op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams(CPLD_REG_IMU_DM_P_I, 2, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::AG_ACT_THS));  // 2 bytes per IMU.
+      op->setBuffer(_reg_block_ag_activity, 2*LEGEND_DATASET_IIU_COUNT);
+      if (0 != queue_io_job(op)) {
+        ret = -24;
+        goto exit_init_block;
+      }
 
-    op = _bus->new_op(BusOpcode::TX, this);
-    op->setParams(CPLD_REG_IMU_DM_P_I, 2, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::AG_ACT_THS));  // 2 bytes per IMU.
-    op->setBuffer(_reg_block_ag_activity, 2*LEGEND_DATASET_IIU_COUNT);
-    if (0 != queue_io_job(op)) {
-      return -24;
-    }
+      op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams(CPLD_REG_IMU_DM_P_I, 1, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::G_INT_GEN_CFG));  // 1 bytes per IMU.
+      op->setBuffer(_reg_block_g_irq_cfg, LEGEND_DATASET_IIU_COUNT);
+      if (0 != queue_io_job(op)) {
+        ret = -25;
+        goto exit_init_block;
+      }
 
-    op = _bus->new_op(BusOpcode::TX, this);
-    op->setParams(CPLD_REG_IMU_DM_P_I, 1, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::G_INT_GEN_CFG));  // 1 bytes per IMU.
-    op->setBuffer(_reg_block_g_irq_cfg, LEGEND_DATASET_IIU_COUNT);
-    if (0 != queue_io_job(op)) {
-      return -25;
-    }
+      op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams(CPLD_REG_IMU_DM_P_I, 1, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::G_INT_GEN_DURATION));  // 1 bytes per IMU.
+      op->setBuffer(_reg_block_g_irq_dur, LEGEND_DATASET_IIU_COUNT);
+      if (0 != queue_io_job(op)) {
+        ret = -17;
+        goto exit_init_block;
+      }
 
-    op = _bus->new_op(BusOpcode::TX, this);
-    op->setParams(CPLD_REG_IMU_DM_P_I, 1, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::G_INT_GEN_DURATION));  // 1 bytes per IMU.
-    op->setBuffer(_reg_block_g_irq_dur, LEGEND_DATASET_IIU_COUNT);
-    if (0 != queue_io_job(op)) {
-      return -17;
-    }
+      op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams(CPLD_REG_IMU_DM_P_M, 6, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::M_OFFSET_X) | 0x40);  // 6 bytes per IMU.
+      op->setBuffer((uint8_t*) _reg_block_m_offsets, 6*LEGEND_DATASET_IIU_COUNT);
+      if (0 != queue_io_job(op)) {
+        ret = -18;
+        goto exit_init_block;
+      }
 
-    op = _bus->new_op(BusOpcode::TX, this);
-    op->setParams(CPLD_REG_IMU_DM_P_M, 6, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::M_OFFSET_X) | 0x40);  // 6 bytes per IMU.
-    op->setBuffer((uint8_t*) _reg_block_m_offsets, 6*LEGEND_DATASET_IIU_COUNT);
-    if (0 != queue_io_job(op)) {
-      return -18;
-    }
+      op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams(CPLD_REG_IMU_DM_P_M, 1, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::M_CTRL_REG2));  // 1 bytes per IMU.
+      op->setBuffer(_reg_block_m_ctrl2, LEGEND_DATASET_IIU_COUNT);
+      if (0 != queue_io_job(op)) {
+        ret = -19;
+        goto exit_init_block;
+      }
 
-    op = _bus->new_op(BusOpcode::TX, this);
-    op->setParams(CPLD_REG_IMU_DM_P_M, 1, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::M_CTRL_REG2));  // 1 bytes per IMU.
-    op->setBuffer(_reg_block_m_ctrl2, LEGEND_DATASET_IIU_COUNT);
-    if (0 != queue_io_job(op)) {
-      return -19;
-    }
-
-    op = _bus->new_op(BusOpcode::TX, this);
-    op->setParams(CPLD_REG_IMU_DM_P_M, 2, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::M_INT_TSH) | 0x40);  // 2 bytes per IMU.
-    op->setBuffer((uint8_t*) _reg_block_m_thresholds, 2*LEGEND_DATASET_IIU_COUNT);
-    if (0 != queue_io_job(op)) {
-      return -20;
+      op = _bus->new_op(BusOpcode::TX, this);
+      op->setParams(CPLD_REG_IMU_DM_P_M, 2, LEGEND_DATASET_IIU_COUNT, RegPtrMap::regAddr(RegID::M_INT_TSH) | 0x40);  // 2 bytes per IMU.
+      op->setBuffer((uint8_t*) _reg_block_m_thresholds, 2*LEGEND_DATASET_IIU_COUNT);
+      if (0 != queue_io_job(op)) {
+        ret = -20;
+        goto exit_init_block;
+      }
     }
   }
+  else {
+    // This shouldn't be possible, since the front-end PCB has one IMU.
+    // This is a fatal error.
+    _last_state = _current_state;
+    _current_state = ManuState::FAULT;
+    ret = -1;
+  }
 
-  return 0;
+  exit_init_block:
+  local_log.concatf("init_iius returns %d. IMUs found/init'd:  %u / %u\n", ret, imus_found, imus_init_complete);
+  flushLocalLog();
+  return ret;
 }
 
 

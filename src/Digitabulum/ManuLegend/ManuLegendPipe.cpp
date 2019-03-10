@@ -308,8 +308,9 @@ int8_t ManuLegendPipe::offer(SensorFrame* frame) {
             }
             log.concat("MANUVR output:\n");
             ret->serialize(&output);
-            output.printDebug(&log);
-            log.concat("\n");
+            log.concatf("MANUVR frame: %d bytes\n", output.length());
+            //output.printDebug(&log);
+            //log.concat("\n");
             delete ret;
           }
           break;
