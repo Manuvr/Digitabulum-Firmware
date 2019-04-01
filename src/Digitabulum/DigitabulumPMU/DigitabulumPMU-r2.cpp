@@ -314,9 +314,10 @@ int8_t PMU::notify(ManuvrMsg* active_event) {
     case DIGITABULUM_MSG_PMU_READ:
       {
         uint32_t ts = millis();
-        _ltc294x.readSensor();
-        if (ts >= (_punch_timestamp + 29000)) {
-          // One every 32 seconds, the charger will stop.
+        //_ltc294x.readSensor();
+        if (ts >= (_punch_timestamp + 1740000)) {
+          // One every 32 minutes, the charger will stop.
+          // We punch the safety timer every 29 minutes.
           _bq24155.punch_safety_timer();
         }
         else {

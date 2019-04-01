@@ -114,6 +114,7 @@ class Digitabulum : public EventReceiver {
     const DigitabulumOpts _opts;
     ManuLegendPipe _def_pipe;     // Data demand from the host.
 
+    /* LED indicator functions */
     int8_t led_set_digit_brightness(DigitPort, uint8_t);
     int8_t led_wrist_color(uint8_t r, uint8_t g, uint8_t b);
     int8_t led_wrist_color(uint32_t);

@@ -98,7 +98,7 @@ const I2CAdapterOptions i2c_opts(
 
 const LTC294xOpts gas_gauge_opts(
   21,     // Alert pin
-  LTC294X_OPT_ACD_AUTO | LTC294X_OPT_INTEG_SENSE
+  LTC294X_OPT_ADC_AUTO | LTC294X_OPT_INTEG_SENSE
 );
 
 const PowerPlantOpts powerplant_opts(

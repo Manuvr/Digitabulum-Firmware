@@ -210,12 +210,6 @@ uint16_t __attribute__ ((aligned (4))) _reg_block_m_thresholds[LEGEND_DATASET_II
 ------------------------------------------------------------------------------*/
 
 
-/* These are the beginnings of a ring-buffer for whole inertial frames. */
-const int16_t* _frames_i[] = {
-  &_frame_buf_i[0],
-  &_frame_buf_i[102]
-};
-
 /* This is used to define the noise floors for the data. */
 Vector3<int16_t> noise_floor_mag[LEGEND_DATASET_IIU_COUNT];
 Vector3<int16_t> noise_floor_acc[LEGEND_DATASET_IIU_COUNT];
@@ -1049,7 +1043,6 @@ int8_t ManuManager::io_op_callback(BusOp* _op) {
     case RegID::G_INT_GEN_SRC:
       break;
     case RegID::AG_DATA_TEMP:
-      // TODO: Is this data being captured elsewhere?
       break;
     case RegID::AG_STATUS_REG:
       break;
@@ -1315,7 +1308,7 @@ void ManuManager::printTemperatures(StringBuilder *output) {
       default:
         break;
     }
-    output->concatf("%02u(%03d)  ", i, *((int16_t*) &__temperatures[i << 2]));
+    output->concatf("%02u(%03d)  ", i, *((int16_t*) &__temperatures[i << 1]));
   }
   output->concat("\n\n");
 }
@@ -1461,7 +1454,7 @@ static const ConsoleCommand console_cmds[] = {
   { "Y", "Enable bearing nullification" },
   { "y", "Disable bearing nullification" },
 
-  { "Q", "Set Madjwick iterations" },
+  { "Q", "Set Madgwick iterations" },
   { ",", "Quats per event" },
   { "b", "Set Madjwick beta" },
   { "L", "Set sample rate profile" },
@@ -2087,8 +2080,6 @@ int8_t ManuManager::init_iius() {
   else {
     // This shouldn't be possible, since the front-end PCB has one IMU.
     // This is a fatal error.
-    _last_state = _current_state;
-    _current_state = ManuState::FAULT;
     ret = -1;
   }
 

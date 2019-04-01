@@ -22,6 +22,8 @@ BUILD_ROOT           := $(shell pwd)
 export MANUVR_PLATFORM = ESP32
 export OUTPUT_PATH     = $(BUILD_ROOT)/build
 
+export SZ      = $(IDF_PATH)/xtensa-esp32-elf/bin/xtensa-esp32-elf-size
+
 PROJECT_NAME         := digitabulum-r2
 BUILD_DIR_BASE       := $(OUTPUT_PATH)
 EXTRA_COMPONENT_DIRS := $(BUILD_ROOT)/src/Digitabulum $(BUILD_ROOT)/src/Targets/ESP32 $(BUILD_ROOT)/lib/ManuvrOS/ManuvrOS

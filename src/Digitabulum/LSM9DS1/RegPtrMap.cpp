@@ -184,21 +184,21 @@ RegID RegPtrMap::regIdFromAddr(const uint8_t dev_addr, const uint8_t reg_addr) {
     case 0x33: return RegID::G_INT_GEN_THS_Y;
     case 0x35: return RegID::G_INT_GEN_THS_Z;
     case 0x37: return RegID::G_INT_GEN_DURATION;
-    case 0x05: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_OFFSET_X   : RegID::AG_ACT_DUR);
-    case 0x07: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_OFFSET_Y   : RegID::A_INT_GEN_THS_X);
-    case 0x09: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_OFFSET_Z   : RegID::A_INT_GEN_THS_Z);
-    case 0x0f: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_WHO_AM_I   : RegID::AG_WHO_AM_I);
-    case 0x20: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_CTRL_REG1  : RegID::A_CTRL_REG6);
-    case 0x21: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_CTRL_REG2  : RegID::A_CTRL_REG7);
-    case 0x22: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_CTRL_REG3  : RegID::AG_CTRL_REG8);
-    case 0x23: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_CTRL_REG4  : RegID::AG_CTRL_REG9);
-    case 0x24: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_CTRL_REG5  : RegID::AG_CTRL_REG10);
-    case 0x27: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_STATUS_REG : RegID::AG_STATUS_REG_ALT);
-    case 0x28: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_DATA_X     : RegID::A_DATA_X);
-    case 0x2a: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_DATA_Y     : RegID::A_DATA_Y);
-    case 0x2c: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_DATA_Z     : RegID::A_DATA_Z);
-    case 0x30: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_INT_CFG    : RegID::G_INT_GEN_CFG);
-    case 0x31: return ((dev_addr < CPLD_REG_IMU_DM_P_I) ? RegID::M_INT_SRC    : RegID::G_INT_GEN_THS_X);
+    case 0x05: return ((dev_addr >= CPLD_REG_IMU_DM_P_M) ? RegID::M_OFFSET_X   : RegID::AG_ACT_DUR);
+    case 0x07: return ((dev_addr >= CPLD_REG_IMU_DM_P_M) ? RegID::M_OFFSET_Y   : RegID::A_INT_GEN_THS_X);
+    case 0x09: return ((dev_addr >= CPLD_REG_IMU_DM_P_M) ? RegID::M_OFFSET_Z   : RegID::A_INT_GEN_THS_Z);
+    case 0x0f: return ((dev_addr >= CPLD_REG_IMU_DM_P_M) ? RegID::M_WHO_AM_I   : RegID::AG_WHO_AM_I);
+    case 0x20: return ((dev_addr >= CPLD_REG_IMU_DM_P_M) ? RegID::M_CTRL_REG1  : RegID::A_CTRL_REG6);
+    case 0x21: return ((dev_addr >= CPLD_REG_IMU_DM_P_M) ? RegID::M_CTRL_REG2  : RegID::A_CTRL_REG7);
+    case 0x22: return ((dev_addr >= CPLD_REG_IMU_DM_P_M) ? RegID::M_CTRL_REG3  : RegID::AG_CTRL_REG8);
+    case 0x23: return ((dev_addr >= CPLD_REG_IMU_DM_P_M) ? RegID::M_CTRL_REG4  : RegID::AG_CTRL_REG9);
+    case 0x24: return ((dev_addr >= CPLD_REG_IMU_DM_P_M) ? RegID::M_CTRL_REG5  : RegID::AG_CTRL_REG10);
+    case 0x27: return ((dev_addr >= CPLD_REG_IMU_DM_P_M) ? RegID::M_STATUS_REG : RegID::AG_STATUS_REG_ALT);
+    case 0x28: return ((dev_addr >= CPLD_REG_IMU_DM_P_M) ? RegID::M_DATA_X     : RegID::A_DATA_X);
+    case 0x2a: return ((dev_addr >= CPLD_REG_IMU_DM_P_M) ? RegID::M_DATA_Y     : RegID::A_DATA_Y);
+    case 0x2c: return ((dev_addr >= CPLD_REG_IMU_DM_P_M) ? RegID::M_DATA_Z     : RegID::A_DATA_Z);
+    case 0x30: return ((dev_addr >= CPLD_REG_IMU_DM_P_M) ? RegID::M_INT_CFG    : RegID::G_INT_GEN_CFG);
+    case 0x31: return ((dev_addr >= CPLD_REG_IMU_DM_P_M) ? RegID::M_INT_SRC    : RegID::G_INT_GEN_THS_X);
     default:   return RegID::AG_DATA_TEMP;  // Obviously wrong, but will fail a write operation.
   }
 }

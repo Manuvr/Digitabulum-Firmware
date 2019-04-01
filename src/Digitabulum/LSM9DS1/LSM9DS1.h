@@ -277,7 +277,7 @@ class LSM9DS1 {
     inline IMUState getState() {            return imu_state;                             }
     inline IMUState desiredState() {        return desired_state;                         }
 
-    inline bool present() {                 return (IMUState::STAGE_0 != getState());        }
+    inline bool present() {                 return ((0x3D == regValue(RegID::M_WHO_AM_I)) && (0x68 == regValue(RegID::AG_WHO_AM_I)));  }
     inline bool initPending() {             return ((IMUState::STAGE_1 == getState()) || (IMUState::STAGE_2 == getState()));  }
     inline bool initReadback() {            return (IMUState::STAGE_2 == getState());        }
     inline bool initComplete() {            return (IMUState::STAGE_3 <= getState());        }
