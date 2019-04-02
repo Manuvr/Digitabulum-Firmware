@@ -30,18 +30,11 @@ This is the firmware emulation test-bench.
 #include <Platform/Platform.h>
 #include <Kernel.h>
 #include <Platform/Peripherals/I2C/I2CAdapter.h>
-#include <Drivers/ADP8866/ADP8866.h>
-#include <Drivers/ATECC508/ATECC508.h>
-#include <Drivers/PMIC/BQ24155/BQ24155.h>
-#include <Drivers/PMIC/LTC294x/LTC294x.h>
 #include <XenoSession/Console/ManuvrConsole.h>
 #include <XenoSession/Manuvr/ManuvrSession.h>
-
 #include <Transports/ManuvrSocket/ManuvrTCP.h>
-#include <Transports/StandardIO/StandardIO.h>
 
-#include "Digitabulum/CPLDDriver/CPLDDriver.h"
-#include "Digitabulum/ManuLegend/ManuManager.h"
+#include "Digitabulum/Digitabulum.h"
 #include "Digitabulum/DigitabulumPMU/DigitabulumPMU-r2.h"
 
 /* This global makes this source file read better. */
@@ -77,19 +70,38 @@ const CPLDPins cpld_pins(
   255   // SPI2 MOSI
 );
 
+/* Pins assigned to LED driver */
+const ADP8866Pins adp_opts(
+  24,   // Reset
+  255,  // IRQ
+  ADP8866_OPT_IRQ_PU  // We use the internal pullup.
+);
+
 const I2CAdapterOptions i2c_opts(
   1,   // Device number
   255, // sda
-  255  // scl
+  255, // scl
+  0,      // We don't need the internal pullups.
+  100000  // 100kHz
 );
 
-const ATECC508Opts atecc_opts(
-  (uint8_t) 255
+const LTC294xOpts gas_gauge_opts(
+  255,    // N/A (Alert pin)
+  LTC294X_OPT_ADC_AUTO | LTC294X_OPT_INTEG_SENSE
 );
 
-const ADP8866Pins adp_opts(
-  24,   // Reset
-  255   // IRQ
+const PowerPlantOpts powerplant_opts(
+  255, // 2.5v select pin is driven by the CPLD.
+  12,  // Aux regulator enable pin.
+  DIGITAB_PMU_FLAG_ENABLED  // Regulator enabled @3.3v
+);
+
+const BQ24155Opts charger_opts(
+  68,  // Sense resistor is 68 mOhm.
+  255, // N/A (STAT)
+  255,  // ISEL
+  BQ24155USBCurrent::LIMIT_800,  // Hardware limits (if any) on source draw..
+  BQ24155_FLAG_ISEL_HIGH  // We want to start the ISEL pin high.
 );
 
 const BatteryOpts battery_opts (
@@ -100,21 +112,11 @@ const BatteryOpts battery_opts (
   4.2f     // Battery max (in volts)
 );
 
-const LTC294xOpts gas_gauge_opts(
-  255,    // N/A (Alert pin)
-  LTC294X_OPT_ACD_AUTO | LTC294X_OPT_INTEG_SENSE
-);
-
-const BQ24155Opts charger_opts(
-  68,   // Sense resistor is 68 mOhm.
-  255,  // N/A (STAT)
-  255   // N/A (ISEL)
-);
-
-const PowerPlantOpts powerplant_opts(
-  22,  // 2.5v select pin.
-  23,  // Aux regulator enable pin.
-  DIGITAB_PMU_FLAG_ENABLED  // Regulator enabled @3.3v
+/* Wrapped config for the sensor front-end */
+const DigitabulumOpts digitabulum_opts(
+  &cpld_pins,
+  &adp_opts,
+  1
 );
 
 
@@ -139,27 +141,14 @@ int main(int argc, const char *argv[]) {
   platform.platformPreInit(opts);
   kernel = platform.kernel();
 
-  CPLDDriver _cpld(&cpld_pins);
-  kernel->subscribe(&_cpld);
-
-  ManuManager _legend_manager(&_cpld);
-  kernel->subscribe(&_legend_manager);
-
   I2CAdapter i2c(&i2c_opts);
   kernel->subscribe((EventReceiver*) &i2c);
 
-  ATECC508 atec(&atecc_opts);
-  i2c.addSlaveDevice((I2CDevice*) &atec);
-  kernel->subscribe((EventReceiver*) &atec);
-
-  // Pins 58 and 63 are the reset and IRQ pin, respectively.
-  // This is translated to pins 10 and 13 on PortD.
-  ADP8866 leds(&adp_opts);
-  i2c.addSlaveDevice((I2CDeviceWithRegisters*) &leds);
-  kernel->subscribe((EventReceiver*) &leds);
-
   PMU pmu(&i2c, &charger_opts, &gas_gauge_opts, &powerplant_opts, &battery_opts);
   kernel->subscribe((EventReceiver*) &pmu);
+
+  Digitabulum digitabulum(&i2c, &pmu, &digitabulum_opts);
+  kernel->subscribe(&digitabulum);
 
   // Pipe strategy planning...
   const uint8_t pipe_plan_clients[] = {2, 0};
@@ -172,40 +161,38 @@ int main(int argc, const char *argv[]) {
   printf("%s: Booting Digitabulum emulator (PID %u)....\n", argv[0], getpid());
   platform.bootstrap();
 
+  //
+  // #if defined(MANUVR_SUPPORT_TCPSOCKET)
+  //   /*
+  //   * Transports that listen need to be given instructions for building software
+  //   *   pipes up to the application layer.
+  //   * This is how to use pipe-strategies to instance a console session when a
+  //   *   TCP client connects. Get a simulated connection to firmware by running...
+  //   *       nc -t 127.0.0.1 2319
+  //   */
+  //   if (opts) {
+  //     char* addr_str = (char*) "127.0.0.1";
+  //     char* port_str = (char*) "2319";
+  //     opts->getValueAs("tcp-port", &port_str);
+  //     int port_num = atoi(port_str);
+  //
+  //     if (0 == opts->getValueAs("tcp-srv", &addr_str)) {
+  //       ManuvrTCP* tcp = new ManuvrTCP((const char*) addr_str, port_num);
+  //       tcp->setPipeStrategy(pipe_plan_clients);
+  //       kernel->subscribe(tcp);
+  //       printf("%s: Listening on %s:%s (TCP)...\n", argv[0], addr_str, port_str);
+  //       tcp->listen();
+  //     }
+  //     else if (0 == opts->getValueAs("tcp-cli", &addr_str)) {
+  //       ManuvrTCP* tcp = new ManuvrTCP((const char*) addr_str, port_num);
+  //       tcp->setPipeStrategy(pipe_plan_clients);
+  //       kernel->subscribe(tcp);
+  //       printf("%s: Connecting to %s:%s (TCP)...\n", argv[0], addr_str, port_str);
+  //       tcp->connect();
+  //     }
+  //   }
+  // #endif
 
-  #if defined(MANUVR_SUPPORT_TCPSOCKET)
-    /*
-    * Transports that listen need to be given instructions for building software
-    *   pipes up to the application layer.
-    * This is how to use pipe-strategies to instance a console session when a
-    *   TCP client connects. Get a simulated connection to firmware by running...
-    *       nc -t 127.0.0.1 2319
-    */
-    if (opts) {
-      char* addr_str = (char*) "127.0.0.1";
-      char* port_str = (char*) "2319";
-      opts->getValueAs("tcp-port", &port_str);
-      int port_num = atoi(port_str);
-
-      if (0 == opts->getValueAs("tcp-srv", &addr_str)) {
-        ManuvrTCP* tcp = new ManuvrTCP((const char*) addr_str, port_num);
-        tcp->setPipeStrategy(pipe_plan_clients);
-        kernel->subscribe(tcp);
-        printf("%s: Listening on %s:%s (TCP)...\n", argv[0], addr_str, port_str);
-        tcp->listen();
-      }
-      else if (0 == opts->getValueAs("tcp-cli", &addr_str)) {
-        ManuvrTCP* tcp = new ManuvrTCP((const char*) addr_str, port_num);
-        tcp->setPipeStrategy(pipe_plan_clients);
-        kernel->subscribe(tcp);
-        printf("%s: Connecting to %s:%s (TCP)...\n", argv[0], addr_str, port_str);
-        tcp->connect();
-      }
-    }
-  #endif
-
-
-  //platform.forsakeMain();
   while (true) {
     kernel->procIdleFlags();
   }

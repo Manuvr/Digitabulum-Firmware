@@ -20,7 +20,7 @@ This is where definition of (application or device)-specific parameters ought to
 #define PLATFORM_RNG_CARRY_CAPACITY     32
 #define WITH_MBEDTLS
 //#define WITH_BLIND_CRYPTO
-//#define MANUVR_OVER_THE_WIRE
+#define MANUVR_OVER_THE_WIRE
 //#define MANUVR_SUPPORT_MQTT
 //#define MANUVR_SUPPORT_COAP
 #define MANUVR_CONSOLE_SUPPORT

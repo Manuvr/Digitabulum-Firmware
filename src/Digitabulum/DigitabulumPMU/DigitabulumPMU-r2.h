@@ -152,9 +152,9 @@ class PMU : public EventReceiver
       /* Overrides from ConsoleInterface */
       uint consoleGetCmds(ConsoleCommand**);
       inline const char* consoleName() { return getReceiverName();  };
+      void consoleCmdProc(StringBuilder* input);
     #endif  //MANUVR_CONSOLE_SUPPORT
 
-    void consoleCmdProc(StringBuilder* input);
     void printDebug(StringBuilder*);
     void printBattery(StringBuilder*);
 

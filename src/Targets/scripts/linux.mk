@@ -62,7 +62,8 @@ LDFLAGS += -L. -L$(OUTPUT_PATH)
 DRIVER_SRCS   = src/Targets/Linux/host-driver.cpp
 FIRMWARE_SRCS = src/Targets/Linux/main-emu.cpp
 
-CXX_SRCS   = src/Digitabulum/CPLDDriver/CPLDDriver.cpp
+CXX_SRCS   = src/Digitabulum/Digitabulum.cpp
+CXX_SRCS  += src/Digitabulum/CPLDDriver/CPLDDriver.cpp
 CXX_SRCS  += src/Digitabulum/LSM9DS1/LSM9DS1.cpp
 CXX_SRCS  += src/Digitabulum/LSM9DS1/RegPtrMap.cpp
 CXX_SRCS  += src/Digitabulum/ManuLegend/SensorFrame.cpp
@@ -75,14 +76,7 @@ CXX_SRCS  += src/Digitabulum/DigitabulumPMU/DigitabulumPMU-r2.cpp
 ###########################################################################
 # Option conditionals
 ###########################################################################
-MANUVR_OPTIONS += -DMANUVR_OVER_THE_WIRE
-#MANUVR_OPTIONS += -DMANUVR_SUPPORT_OSC
-MANUVR_OPTIONS += -DMANUVR_SUPPORT_TCPSOCKET
 MANUVR_OPTIONS += -D__MANUVR_LINUX
-
-# Enables ATECC provisioning-related features...
-MANUVR_OPTIONS += -DATECC508_CAPABILITY_OTP_RW
-MANUVR_OPTIONS += -DATECC508_CAPABILITY_CONFIG_UNLOCK
 
 # Debugging options...
 ifeq ($(SECURE),1)
